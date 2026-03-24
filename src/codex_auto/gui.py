@@ -13,7 +13,7 @@ from typing import Callable
 from .github_api import GitHubClient, GitHubRepository
 from .models import ProjectContext, RuntimeOptions
 from .orchestrator import Orchestrator
-from .utils import read_jsonl
+from .utils import read_json, read_jsonl
 
 
 class CodexAutoGUI:
@@ -27,6 +27,7 @@ class CodexAutoGUI:
         self.busy = False
         self.repo_index: dict[str, dict[str, object]] = {}
         self.github_repo_index: dict[str, GitHubRepository] = {}
+        self.current_project: ProjectContext | None = None
 
         self.repo_url_var = StringVar()
         self.branch_var = StringVar(value="main")
@@ -49,6 +50,12 @@ class CodexAutoGUI:
         self.input_tokens_var = StringVar(value="0")
         self.cached_tokens_var = StringVar(value="0")
         self.output_tokens_var = StringVar(value="0")
+        self.current_repo_var = StringVar(value="선택 없음")
+        self.block_progress_var = StringVar(value="0 / 0")
+        self.loop_status_var = StringVar(value="대기")
+        self.checkpoint_status_var = StringVar(value="없음")
+        self.next_action_var = StringVar(value="저장소를 선택한 뒤 실행")
+        self.timeline_caption_var = StringVar(value="준비")
 
         self._configure_style()
         self._build_layout()
@@ -66,6 +73,10 @@ class CodexAutoGUI:
         style.configure("Card.TLabelframe.Label", background="#fffaf3", foreground="#42372b", font=("Malgun Gothic", 10, "bold"))
         style.configure("Hero.TLabel", background="#25443d", foreground="#fff9ef", font=("Malgun Gothic", 20, "bold"))
         style.configure("HeroSub.TLabel", background="#25443d", foreground="#ddd4c7", font=("Malgun Gothic", 10))
+        style.configure("ProgressCard.TFrame", background="#fffaf3")
+        style.configure("ProgressTitle.TLabel", background="#fffaf3", foreground="#6b5b4d", font=("Malgun Gothic", 10, "bold"))
+        style.configure("ProgressValue.TLabel", background="#fffaf3", foreground="#1f2937", font=("Malgun Gothic", 18, "bold"))
+        style.configure("Timeline.TLabel", background="#fffaf3", foreground="#4b5563", font=("Malgun Gothic", 10))
 
     def _build_layout(self) -> None:
         root_frame = ttk.Frame(self.root, padding=14, style="App.TFrame")
@@ -180,8 +191,34 @@ class CodexAutoGUI:
         ttk.Button(frame, text="선택 저장소 적용", command=self.apply_selected_github_repository).pack(anchor=W, pady=(10, 0))
 
     def _build_right(self, parent: ttk.Frame) -> None:
+        self._build_progress_panel(parent)
         self._build_form(parent)
         self._build_output(parent)
+
+    def _build_progress_panel(self, parent: ttk.Frame) -> None:
+        frame = ttk.LabelFrame(parent, text="진행 현황", padding=12, style="Card.TLabelframe")
+        frame.pack(fill="x")
+
+        top = ttk.Frame(frame, style="ProgressCard.TFrame")
+        top.pack(fill="x")
+        for title, variable in [
+            ("저장소", self.current_repo_var),
+            ("블록", self.block_progress_var),
+            ("루프 상태", self.loop_status_var),
+            ("체크포인트", self.checkpoint_status_var),
+        ]:
+            card = ttk.Frame(top, style="ProgressCard.TFrame")
+            card.pack(side=LEFT, fill="x", expand=True, padx=(0, 10))
+            ttk.Label(card, text=title, style="ProgressTitle.TLabel").pack(anchor=W)
+            ttk.Label(card, textvariable=variable, style="ProgressValue.TLabel").pack(anchor=W, pady=(4, 0))
+
+        ttk.Label(frame, text="타임라인", style="ProgressTitle.TLabel").pack(anchor=W, pady=(12, 4))
+        self.timeline_progress = ttk.Progressbar(frame, mode="determinate", maximum=4)
+        self.timeline_progress.pack(fill="x")
+        ttk.Label(frame, text="입력 -> 초기화 -> 반복 실행 -> 체크포인트", style="Timeline.TLabel").pack(anchor=W, pady=(6, 0))
+        ttk.Label(frame, textvariable=self.timeline_caption_var, style="Timeline.TLabel").pack(anchor=W, pady=(2, 0))
+        ttk.Label(frame, text="다음 행동", style="ProgressTitle.TLabel").pack(anchor=W, pady=(12, 4))
+        ttk.Label(frame, textvariable=self.next_action_var, style="Timeline.TLabel").pack(anchor=W)
 
     def _build_form(self, parent: ttk.Frame) -> None:
         frame = ttk.LabelFrame(parent, text="실행 설정", padding=12, style="Card.TLabelframe")
