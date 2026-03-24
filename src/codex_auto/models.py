@@ -19,7 +19,9 @@ def _normalize(value: Any) -> Any:
 
 @dataclass(slots=True)
 class RuntimeOptions:
-    model: str = "gpt-5"
+    model: str = "gpt-5.4"
+    effort: str = "medium"
+    extra_prompt: str = ""
     approval_mode: str = "never"
     sandbox_mode: str = "workspace-write"
     test_cmd: str = "python -m pytest"
@@ -151,6 +153,7 @@ class CodexRunResult:
     returncode: int
     search_enabled: bool
     changed_files: list[str]
+    usage: dict[str, int] = field(default_factory=dict)
     last_message: str | None = None
 
     def to_dict(self) -> dict[str, Any]:

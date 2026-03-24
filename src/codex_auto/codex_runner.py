@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -42,6 +43,8 @@ class CodexRunner:
         command.extend(
             [
                 "exec",
+                "-c",
+                f'reasoning.effort="{context.runtime.effort}"',
                 "-s",
                 context.runtime.sandbox_mode,
                 "-m",
@@ -70,6 +73,7 @@ class CodexRunner:
         write_text(event_file, completed.stdout)
         if completed.stderr:
             write_text(block_dir / f"{pass_slug}.stderr.log", completed.stderr)
+        usage = self._extract_usage(completed.stdout)
         return CodexRunResult(
             pass_type=pass_type,
             prompt_file=prompt_file,
@@ -78,5 +82,25 @@ class CodexRunner:
             returncode=completed.returncode,
             search_enabled=search_enabled,
             changed_files=[],
+            usage=usage,
             last_message=read_text(output_file).strip() or None,
         )
+
+    def _extract_usage(self, stdout: str) -> dict[str, int]:
+        usage = {"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0}
+        for line in stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if payload.get("type") != "turn.completed":
+                continue
+            turn_usage = payload.get("usage", {})
+            for key in usage:
+                value = turn_usage.get(key)
+                if isinstance(value, int):
+                    usage[key] += value
+        return usage

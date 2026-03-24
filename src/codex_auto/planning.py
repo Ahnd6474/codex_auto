@@ -230,6 +230,14 @@ def implementation_prompt(
                 f"Write concise findings to {context.paths.research_notes_file} before or alongside implementation.",
             ]
         )
+    if context.runtime.extra_prompt.strip():
+        instructions.extend(
+            [
+                "",
+                "Additional user instructions:",
+                context.runtime.extra_prompt.strip(),
+            ]
+        )
     instructions.extend(
         [
             "",

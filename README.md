@@ -52,9 +52,19 @@ python gui_main.py
 The GUI lets you:
 
 - configure repo URL, branch, workspace root, model, sandbox, approval mode, test command, and max blocks
+- choose reasoning effort from `low`, `medium`, `high`, `xhigh`
+- add extra user prompt instructions that are appended to Codex implementation prompts
+- browse GitHub repositories from inside the app using the GitHub REST API
 - initialize, run, and resume managed repositories
 - browse managed repositories in the current workspace
 - inspect status, history, and generated reports without leaving the app
+- view aggregate Codex token usage pulled from saved JSON event logs
+
+GitHub integration notes:
+
+- public repository search works without a token
+- listing your own repositories requires a GitHub Personal Access Token
+- the GUI keeps the token in memory only; it is not persisted by this app
 
 ## Main Commands
 
@@ -65,7 +75,8 @@ python -m codex_auto init-repo \
   --repo-url https://github.com/example/project.git \
   --branch main \
   --workspace-root .codex-auto-workspace \
-  --model gpt-5 \
+  --model gpt-5.4 \
+  --effort medium \
   --approval-mode never \
   --sandbox-mode workspace-write \
   --test-cmd "python -m pytest"
@@ -78,7 +89,8 @@ python -m codex_auto run \
   --repo-url https://github.com/example/project.git \
   --branch main \
   --workspace-root .codex-auto-workspace \
-  --model gpt-5 \
+  --model gpt-5.4 \
+  --effort medium \
   --approval-mode never \
   --sandbox-mode workspace-write \
   --test-cmd "python -m pytest" \
@@ -92,7 +104,8 @@ python -m codex_auto resume \
   --repo-url https://github.com/example/project.git \
   --branch main \
   --workspace-root .codex-auto-workspace \
-  --model gpt-5 \
+  --model gpt-5.4 \
+  --effort medium \
   --approval-mode never \
   --sandbox-mode workspace-write \
   --test-cmd "python -m pytest" \
@@ -163,6 +176,8 @@ Sample planning template:
 ## Notes
 
 - `codex exec` is invoked through subprocess in non-interactive mode and JSON event streams are saved under `logs/block_*/`
+- `reasoning.effort` is passed through to Codex using `low`, `medium`, `high`, or `xhigh`
+- token usage is aggregated from `turn.completed` JSON events and surfaced in the GUI dashboard and pass logs
 - each repository gets its own isolated workspace subtree; no mutable state is shared across projects
 - local git user identity is configured in the managed clone for automated commits
 - `--allow-push` pushes safe commits to `origin` after successful blocks

@@ -5,194 +5,308 @@ import queue
 import threading
 import traceback
 from pathlib import Path
-from tkinter import BOTH, END, LEFT, RIGHT, W, filedialog, messagebox, StringVar, Tk
+from tkinter import BOTH, END, LEFT, W, filedialog, messagebox, StringVar, Tk
 from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
 from typing import Callable
 
+from .github_api import GitHubClient, GitHubRepository
 from .models import ProjectContext, RuntimeOptions
 from .orchestrator import Orchestrator
+from .utils import read_jsonl
 
 
 class CodexAutoGUI:
     def __init__(self, root: Tk) -> None:
         self.root = root
-        self.root.title("Codex Auto")
-        self.root.geometry("1400x860")
-        self.root.minsize(1100, 700)
+        self.root.title("코덱스 오토 워크스페이스")
+        self.root.geometry("1540x950")
+        self.root.minsize(1240, 780)
 
         self.queue: queue.Queue[tuple[str, object]] = queue.Queue()
         self.busy = False
         self.repo_index: dict[str, dict[str, object]] = {}
+        self.github_repo_index: dict[str, GitHubRepository] = {}
 
         self.repo_url_var = StringVar()
         self.branch_var = StringVar(value="main")
         self.workspace_root_var = StringVar(value=".codex-auto-workspace")
-        self.model_var = StringVar(value="gpt-5")
+        self.model_var = StringVar(value="gpt-5.4")
+        self.effort_var = StringVar(value="medium")
         self.approval_var = StringVar(value="never")
         self.sandbox_var = StringVar(value="workspace-write")
         self.test_cmd_var = StringVar(value="python -m pytest")
         self.max_blocks_var = StringVar(value="1")
         self.long_term_plan_var = StringVar()
         self.allow_push_var = StringVar(value="false")
+        self.github_token_var = StringVar()
+        self.github_query_var = StringVar()
 
+        self.status_var = StringVar(value="대기 중")
+        self.hero_var = StringVar(value="여러 저장소를 안전하게 관리하고, Codex 기반 개선 루프를 추적 가능하게 실행합니다.")
+        self.repo_count_var = StringVar(value="0")
+        self.ready_count_var = StringVar(value="0")
+        self.active_count_var = StringVar(value="0")
+        self.failed_count_var = StringVar(value="0")
+        self.input_tokens_var = StringVar(value="0")
+        self.cached_tokens_var = StringVar(value="0")
+        self.output_tokens_var = StringVar(value="0")
+
+        self._configure_style()
         self._build_layout()
         self._schedule_queue_poll()
         self.refresh_repositories()
 
-    def _build_layout(self) -> None:
+    def _configure_style(self) -> None:
         style = ttk.Style()
         try:
             style.theme_use("clam")
         except Exception:
             pass
+        style.configure("App.TFrame", background="#f4efe7")
+        style.configure("Card.TLabelframe", background="#fffaf3", borderwidth=1)
+        style.configure("Card.TLabelframe.Label", background="#fffaf3", foreground="#42372b", font=("Malgun Gothic", 10, "bold"))
+        style.configure("HeroTitle.TLabel", background="#25443d", foreground="#fff9ef", font=("Malgun Gothic", 22, "bold"))
+        style.configure("HeroBody.TLabel", background="#25443d", foreground="#d7d1c4", font=("Malgun Gothic", 10))
+        style.configure("StatValue.TLabel", background="#fffaf3", foreground="#25443d", font=("Malgun Gothic", 18, "bold"))
+        style.configure("StatTitle.TLabel", background="#fffaf3", foreground="#76695d", font=("Malgun Gothic", 9))
+        style.configure("Section.TLabel", background="#f4efe7", foreground="#42372b", font=("Malgun Gothic", 11, "bold"))
+        style.configure("Primary.TButton", font=("Malgun Gothic", 10, "bold"))
 
-        root_frame = ttk.Frame(self.root, padding=12)
+    def _build_layout(self) -> None:
+        root_frame = ttk.Frame(self.root, padding=14, style="App.TFrame")
         root_frame.pack(fill=BOTH, expand=True)
+        self._build_hero(root_frame)
+        self._build_stat_strip(root_frame)
+        content = ttk.Panedwindow(root_frame, orient="horizontal")
+        content.pack(fill=BOTH, expand=True, pady=(12, 0))
+        left = ttk.Frame(content, style="App.TFrame")
+        right = ttk.Frame(content, style="App.TFrame")
+        content.add(left, weight=40)
+        content.add(right, weight=60)
+        self._build_left_column(left)
+        self._build_right_column(right)
 
-        left = ttk.Frame(root_frame)
-        left.pack(side=LEFT, fill=BOTH, expand=False, padx=(0, 12))
+    def _build_hero(self, parent: ttk.Frame) -> None:
+        hero = ttk.Frame(parent, style="App.TFrame")
+        hero.pack(fill="x")
+        ttk.Label(hero, text="코덱스 오토", style="HeroTitle.TLabel", anchor="w", padding=(18, 18, 18, 6)).pack(fill="x")
+        ttk.Label(hero, textvariable=self.hero_var, style="HeroBody.TLabel", anchor="w", padding=(18, 0, 18, 18)).pack(fill="x")
 
-        right = ttk.Frame(root_frame)
-        right.pack(side=RIGHT, fill=BOTH, expand=True)
+    def _build_stat_strip(self, parent: ttk.Frame) -> None:
+        row = ttk.Frame(parent, style="App.TFrame")
+        row.pack(fill="x", pady=(10, 0))
+        for title, variable in [
+            ("관리 저장소", self.repo_count_var),
+            ("준비 완료", self.ready_count_var),
+            ("실행 중", self.active_count_var),
+            ("주의 필요", self.failed_count_var),
+            ("입력 토큰", self.input_tokens_var),
+            ("캐시 입력", self.cached_tokens_var),
+            ("출력 토큰", self.output_tokens_var),
+        ]:
+            card = ttk.LabelFrame(row, text=title, padding=10, style="Card.TLabelframe")
+            card.pack(side=LEFT, fill="x", expand=True, padx=(0, 10))
+            ttk.Label(card, textvariable=variable, style="StatValue.TLabel").pack(anchor=W)
+            ttk.Label(card, text="워크스페이스 합계", style="StatTitle.TLabel").pack(anchor=W)
 
-        self._build_repo_list(left)
-        self._build_form(right)
-        self._build_output(right)
+    def _build_left_column(self, parent: ttk.Frame) -> None:
+        notebook = ttk.Notebook(parent)
+        notebook.pack(fill=BOTH, expand=True)
+        managed_tab = ttk.Frame(notebook)
+        github_tab = ttk.Frame(notebook)
+        notebook.add(managed_tab, text="관리 중 저장소")
+        notebook.add(github_tab, text="GitHub 연동")
+        self._build_managed_repo_panel(managed_tab)
+        self._build_github_panel(github_tab)
 
-    def _build_repo_list(self, parent: ttk.Frame) -> None:
-        frame = ttk.LabelFrame(parent, text="Managed Repositories", padding=10)
+    def _build_right_column(self, parent: ttk.Frame) -> None:
+        self._build_form(parent)
+        self._build_output(parent)
+
+    def _build_managed_repo_panel(self, parent: ttk.Frame) -> None:
+        frame = ttk.LabelFrame(parent, text="관리 중 저장소 목록", padding=12, style="Card.TLabelframe")
         frame.pack(fill=BOTH, expand=True)
 
-        columns = ("slug", "branch", "status", "last_run")
-        self.repo_tree = ttk.Treeview(frame, columns=columns, show="headings", height=18)
-        self.repo_tree.heading("slug", text="Slug")
-        self.repo_tree.heading("branch", text="Branch")
-        self.repo_tree.heading("status", text="Status")
-        self.repo_tree.heading("last_run", text="Last Run")
-        self.repo_tree.column("slug", width=260, anchor=W)
-        self.repo_tree.column("branch", width=80, anchor=W)
-        self.repo_tree.column("status", width=160, anchor=W)
+        toolbar = ttk.Frame(frame)
+        toolbar.pack(fill="x", pady=(0, 10))
+        ttk.Button(toolbar, text="새로고침", command=self.refresh_repositories, style="Primary.TButton").pack(side=LEFT)
+        ttk.Button(toolbar, text="선택 불러오기", command=self.load_selected_repository).pack(side=LEFT, padx=(8, 0))
+
+        columns = ("slug", "branch", "status", "safe_revision", "last_run")
+        self.repo_tree = ttk.Treeview(frame, columns=columns, show="headings", height=22)
+        self.repo_tree.heading("slug", text="슬러그")
+        self.repo_tree.heading("branch", text="브랜치")
+        self.repo_tree.heading("status", text="상태")
+        self.repo_tree.heading("safe_revision", text="안전 리비전")
+        self.repo_tree.heading("last_run", text="마지막 실행")
+        self.repo_tree.column("slug", width=250, anchor=W)
+        self.repo_tree.column("branch", width=90, anchor=W)
+        self.repo_tree.column("status", width=140, anchor=W)
+        self.repo_tree.column("safe_revision", width=120, anchor=W)
         self.repo_tree.column("last_run", width=170, anchor=W)
         self.repo_tree.pack(fill=BOTH, expand=True)
         self.repo_tree.bind("<<TreeviewSelect>>", self._on_repo_selected)
 
-        buttons = ttk.Frame(frame)
-        buttons.pack(fill="x", pady=(10, 0))
-        ttk.Button(buttons, text="Refresh", command=self.refresh_repositories).pack(side=LEFT)
-        ttk.Button(buttons, text="Load Selected", command=self.load_selected_repository).pack(side=LEFT, padx=(8, 0))
+    def _build_github_panel(self, parent: ttk.Frame) -> None:
+        frame = ttk.LabelFrame(parent, text="GitHub 저장소 선택", padding=12, style="Card.TLabelframe")
+        frame.pack(fill=BOTH, expand=True)
+
+        token_row = ttk.Frame(frame)
+        token_row.pack(fill="x")
+        ttk.Label(token_row, text="GitHub 토큰").pack(side=LEFT)
+        ttk.Entry(token_row, textvariable=self.github_token_var, show="*", width=38).pack(side=LEFT, padx=(8, 8), fill="x", expand=True)
+        ttk.Button(token_row, text="내 저장소 불러오기", command=self.load_my_github_repos).pack(side=LEFT)
+
+        search_row = ttk.Frame(frame)
+        search_row.pack(fill="x", pady=(10, 10))
+        ttk.Label(search_row, text="검색어").pack(side=LEFT)
+        ttk.Entry(search_row, textvariable=self.github_query_var, width=38).pack(side=LEFT, padx=(8, 8), fill="x", expand=True)
+        ttk.Button(search_row, text="공개 저장소 검색", command=self.search_github_repositories).pack(side=LEFT)
+
+        ttk.Label(
+            frame,
+            text="GitHub REST API를 사용합니다. 공개 검색은 토큰 없이 가능하며, 내 저장소 조회는 토큰이 필요합니다.",
+            style="StatTitle.TLabel",
+        ).pack(anchor=W, pady=(0, 8))
+
+        columns = ("full_name", "branch", "visibility", "stars")
+        self.github_tree = ttk.Treeview(frame, columns=columns, show="headings", height=18)
+        self.github_tree.heading("full_name", text="저장소")
+        self.github_tree.heading("branch", text="기본 브랜치")
+        self.github_tree.heading("visibility", text="공개 여부")
+        self.github_tree.heading("stars", text="Stars")
+        self.github_tree.column("full_name", width=280, anchor=W)
+        self.github_tree.column("branch", width=100, anchor=W)
+        self.github_tree.column("visibility", width=90, anchor=W)
+        self.github_tree.column("stars", width=70, anchor=W)
+        self.github_tree.pack(fill=BOTH, expand=True)
+
+        action_row = ttk.Frame(frame)
+        action_row.pack(fill="x", pady=(10, 0))
+        ttk.Button(action_row, text="선택 저장소 적용", command=self.apply_selected_github_repository, style="Primary.TButton").pack(side=LEFT)
 
     def _build_form(self, parent: ttk.Frame) -> None:
-        frame = ttk.LabelFrame(parent, text="Run Configuration", padding=10)
+        frame = ttk.LabelFrame(parent, text="실행 설정", padding=12, style="Card.TLabelframe")
         frame.pack(fill="x")
 
-        def add_row(row: int, label: str, variable: StringVar, width: int = 70) -> ttk.Entry:
-            ttk.Label(frame, text=label).grid(row=row, column=0, sticky=W, padx=(0, 8), pady=4)
-            entry = ttk.Entry(frame, textvariable=variable, width=width)
-            entry.grid(row=row, column=1, sticky="ew", pady=4)
-            return entry
+        notebook = ttk.Notebook(frame)
+        notebook.pack(fill="x")
+        project_tab = ttk.Frame(notebook)
+        execution_tab = ttk.Frame(notebook)
+        prompt_tab = ttk.Frame(notebook)
+        safety_tab = ttk.Frame(notebook)
+        notebook.add(project_tab, text="프로젝트")
+        notebook.add(execution_tab, text="실행")
+        notebook.add(prompt_tab, text="프롬프트")
+        notebook.add(safety_tab, text="안전")
 
-        frame.columnconfigure(1, weight=1)
-        add_row(0, "Repo URL", self.repo_url_var)
-        add_row(1, "Branch", self.branch_var, width=28)
-
-        workspace_entry = add_row(2, "Workspace Root", self.workspace_root_var)
-        ttk.Button(frame, text="Browse", command=self._choose_workspace_root).grid(row=2, column=2, padx=(8, 0), pady=4)
-
-        add_row(3, "Model", self.model_var, width=28)
-        add_row(4, "Approval Mode", self.approval_var, width=28)
-        add_row(5, "Sandbox Mode", self.sandbox_var, width=28)
-        add_row(6, "Test Command", self.test_cmd_var)
-        add_row(7, "Max Blocks", self.max_blocks_var, width=12)
-
-        add_row(8, "Long-Term Plan", self.long_term_plan_var)
-        ttk.Button(frame, text="Browse", command=self._choose_long_term_plan).grid(row=8, column=2, padx=(8, 0), pady=4)
-
-        ttk.Label(frame, text="Allow Push").grid(row=9, column=0, sticky=W, padx=(0, 8), pady=4)
-        allow_push_box = ttk.Combobox(
-            frame,
-            textvariable=self.allow_push_var,
-            state="readonly",
-            values=["false", "true"],
-            width=10,
-        )
-        allow_push_box.grid(row=9, column=1, sticky=W, pady=4)
+        self._build_project_tab(project_tab)
+        self._build_execution_tab(execution_tab)
+        self._build_prompt_tab(prompt_tab)
+        self._build_safety_tab(safety_tab)
 
         actions = ttk.Frame(frame)
-        actions.grid(row=10, column=0, columnspan=3, sticky="ew", pady=(10, 0))
-
-        self.action_buttons: list[ttk.Button] = []
+        actions.pack(fill="x", pady=(12, 0))
+        self.action_buttons = []
         for label, handler in [
-            ("Init Repo", self.init_repo),
-            ("Run", self.run_blocks),
-            ("Resume", self.resume_run),
-            ("Status", self.show_status),
-            ("History", self.show_history),
-            ("Report", self.show_report),
+            ("저장소 초기화", self.init_repo),
+            ("블록 실행", self.run_blocks),
+            ("이어서 실행", self.resume_run),
+            ("상태 보기", self.show_status),
+            ("히스토리", self.show_history),
+            ("리포트", self.show_report),
         ]:
-            button = ttk.Button(actions, text=label, command=handler)
+            button = ttk.Button(actions, text=label, command=handler, style="Primary.TButton")
             button.pack(side=LEFT, padx=(0, 8))
             self.action_buttons.append(button)
 
-        ttk.Label(frame, text="Use GitHub URL or an accessible git remote/local path.").grid(
-            row=11, column=0, columnspan=3, sticky=W, pady=(10, 0)
-        )
-
-        workspace_entry.focus_set()
-
     def _build_output(self, parent: ttk.Frame) -> None:
-        frame = ttk.LabelFrame(parent, text="Activity", padding=10)
+        frame = ttk.LabelFrame(parent, text="실행 결과", padding=12, style="Card.TLabelframe")
         frame.pack(fill=BOTH, expand=True, pady=(12, 0))
 
-        self.status_var = StringVar(value="Idle")
-        ttk.Label(frame, textvariable=self.status_var).pack(anchor=W)
+        status_row = ttk.Frame(frame)
+        status_row.pack(fill="x")
+        ttk.Label(status_row, text="상태", style="Section.TLabel").pack(side=LEFT)
+        ttk.Label(status_row, textvariable=self.status_var).pack(side=LEFT, padx=(8, 0))
 
         self.tabs = ttk.Notebook(frame)
-        self.tabs.pack(fill=BOTH, expand=True, pady=(8, 0))
+        self.tabs.pack(fill=BOTH, expand=True, pady=(10, 0))
 
-        log_tab = ttk.Frame(self.tabs)
-        self.log_text = ScrolledText(log_tab, wrap="word", height=14)
-        self.log_text.pack(fill=BOTH, expand=True)
-        self.log_text.configure(state="disabled")
-        self.tabs.add(log_tab, text="Log")
+        summary_tab = ttk.Frame(self.tabs)
+        self.summary_text = ScrolledText(summary_tab, wrap="word", height=10)
+        self.summary_text.pack(fill=BOTH, expand=True)
+        self.summary_text.configure(state="disabled")
+        self.tabs.add(summary_tab, text="워크스페이스 요약")
 
         detail_tab = ttk.Frame(self.tabs)
-        self.detail_text = ScrolledText(detail_tab, wrap="word", height=22)
+        self.detail_text = ScrolledText(detail_tab, wrap="word", height=18)
         self.detail_text.pack(fill=BOTH, expand=True)
         self.detail_text.configure(state="disabled")
-        self.tabs.add(detail_tab, text="Details")
+        self.tabs.add(detail_tab, text="상세 정보")
 
-    def _choose_workspace_root(self) -> None:
-        chosen = filedialog.askdirectory(initialdir=str(Path.cwd()))
-        if chosen:
-            self.workspace_root_var.set(chosen)
-            self.refresh_repositories()
-
-    def _choose_long_term_plan(self) -> None:
-        chosen = filedialog.askopenfilename(
-            title="Select LONG_TERM_PLAN.md",
-            filetypes=[("Markdown", "*.md"), ("All files", "*.*")],
-        )
-        if chosen:
-            self.long_term_plan_var.set(chosen)
-
-    def _append_log(self, message: str) -> None:
-        self.log_text.configure(state="normal")
-        self.log_text.insert(END, message.rstrip() + "\n")
-        self.log_text.see(END)
+        log_tab = ttk.Frame(self.tabs)
+        self.log_text = ScrolledText(log_tab, wrap="word", height=18)
+        self.log_text.pack(fill=BOTH, expand=True)
         self.log_text.configure(state="disabled")
+        self.tabs.add(log_tab, text="활동 로그")
 
-    def _set_details(self, content: str) -> None:
-        self.detail_text.configure(state="normal")
-        self.detail_text.delete("1.0", END)
-        self.detail_text.insert("1.0", content)
-        self.detail_text.configure(state="disabled")
+    def _build_project_tab(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(1, weight=1)
 
-    def _set_busy(self, busy: bool, label: str = "Idle") -> None:
-        self.busy = busy
-        self.status_var.set(label)
-        for button in self.action_buttons:
-            button.state(["disabled"] if busy else ["!disabled"])
+        def add_entry(row: int, label: str, variable: StringVar, width: int = 72) -> None:
+            ttk.Label(parent, text=label).grid(row=row, column=0, sticky=W, padx=(0, 10), pady=6)
+            ttk.Entry(parent, textvariable=variable, width=width).grid(row=row, column=1, sticky="ew", pady=6)
+
+        add_entry(0, "저장소 URL", self.repo_url_var)
+        add_entry(1, "브랜치", self.branch_var, width=20)
+        add_entry(2, "워크스페이스 루트", self.workspace_root_var)
+        ttk.Button(parent, text="찾아보기", command=self._choose_workspace_root).grid(row=2, column=2, padx=(8, 0), pady=6)
+        add_entry(3, "장기 계획 파일", self.long_term_plan_var)
+        ttk.Button(parent, text="찾아보기", command=self._choose_long_term_plan).grid(row=3, column=2, padx=(8, 0), pady=6)
+
+    def _build_execution_tab(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(1, weight=1)
+        for row, label, variable, values in [
+            (0, "모델", self.model_var, ["gpt-5.4", "gpt-5"]),
+            (1, "추론 강도", self.effort_var, ["low", "medium", "high", "xhigh"]),
+            (2, "승인 모드", self.approval_var, ["never", "on-request", "untrusted", "on-failure"]),
+            (3, "샌드박스", self.sandbox_var, ["workspace-write", "read-only", "danger-full-access"]),
+        ]:
+            ttk.Label(parent, text=label).grid(row=row, column=0, sticky=W, padx=(0, 10), pady=6)
+            ttk.Combobox(parent, textvariable=variable, values=values, state="readonly", width=20).grid(row=row, column=1, sticky=W, pady=6)
+
+        ttk.Label(parent, text="최대 블록 수").grid(row=4, column=0, sticky=W, padx=(0, 10), pady=6)
+        ttk.Entry(parent, textvariable=self.max_blocks_var, width=10).grid(row=4, column=1, sticky=W, pady=6)
+        ttk.Label(parent, text="테스트 명령").grid(row=5, column=0, sticky=W, padx=(0, 10), pady=6)
+        ttk.Entry(parent, textvariable=self.test_cmd_var, width=72).grid(row=5, column=1, sticky="ew", pady=6)
+
+    def _build_prompt_tab(self, parent: ttk.Frame) -> None:
+        ttk.Label(parent, text="추가 프롬프트").pack(anchor=W, pady=(0, 6))
+        self.extra_prompt_text = ScrolledText(parent, height=12, wrap="word")
+        self.extra_prompt_text.pack(fill=BOTH, expand=True)
+        self.extra_prompt_text.insert(
+            "1.0",
+            "예시:\n"
+            "- 테스트 실패를 줄이기 위해 작은 변경만 해라.\n"
+            "- 문서는 구현과 테스트가 확인된 경우에만 갱신해라.\n",
+        )
+
+    def _build_safety_tab(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(1, weight=1)
+        ttk.Label(parent, text="원격 push 허용").grid(row=0, column=0, sticky=W, padx=(0, 10), pady=6)
+        ttk.Combobox(parent, textvariable=self.allow_push_var, values=["false", "true"], state="readonly", width=12).grid(row=0, column=1, sticky=W, pady=6)
+        tips = ScrolledText(parent, height=10, wrap="word")
+        tips.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
+        tips.insert(
+            "1.0",
+            "안전 규칙\n\n"
+            "- LONG_TERM_PLAN.md 는 기본적으로 잠겨 있습니다.\n"
+            "- 검증된 변경만 커밋합니다.\n"
+            "- 테스트 회귀가 나면 마지막 안전 리비전으로 롤백합니다.\n"
+            "- 토큰 사용량은 Codex JSON 이벤트에서 집계합니다.\n",
+        )
+        tips.configure(state="disabled")
 
     def _schedule_queue_poll(self) -> None:
         self.root.after(150, self._poll_queue)
@@ -207,28 +321,62 @@ class CodexAutoGUI:
                 self._append_log(str(payload))
             elif event == "done":
                 data = payload if isinstance(payload, dict) else {}
-                self._set_busy(False, data.get("status", "Idle"))
+                self._set_busy(False, data.get("status", "대기 중"))
                 if "details" in data:
                     self._set_details(str(data["details"]))
                 self.refresh_repositories()
             elif event == "error":
-                self._set_busy(False, "Failed")
+                self._set_busy(False, "실패")
                 self._append_log(str(payload))
-                messagebox.showerror("Codex Auto", str(payload))
+                messagebox.showerror("코덱스 오토", str(payload))
+            elif event == "github_results":
+                self._populate_github_results(payload if isinstance(payload, list) else [])
         self._schedule_queue_poll()
+
+    def _append_log(self, message: str) -> None:
+        self.log_text.configure(state="normal")
+        self.log_text.insert(END, message.rstrip() + "\n")
+        self.log_text.see(END)
+        self.log_text.configure(state="disabled")
+
+    def _set_details(self, content: str) -> None:
+        self.detail_text.configure(state="normal")
+        self.detail_text.delete("1.0", END)
+        self.detail_text.insert("1.0", content)
+        self.detail_text.configure(state="disabled")
+
+    def _set_summary(self, content: str) -> None:
+        self.summary_text.configure(state="normal")
+        self.summary_text.delete("1.0", END)
+        self.summary_text.insert("1.0", content)
+        self.summary_text.configure(state="disabled")
+
+    def _set_busy(self, busy: bool, label: str = "대기 중") -> None:
+        self.busy = busy
+        self.status_var.set(label)
+        for button in getattr(self, "action_buttons", []):
+            button.state(["disabled"] if busy else ["!disabled"])
 
     def _orchestrator(self) -> Orchestrator:
         workspace_root = Path(self.workspace_root_var.get().strip() or ".codex-auto-workspace")
         return Orchestrator(workspace_root)
 
+    def _github_client(self) -> GitHubClient:
+        return GitHubClient(token=self.github_token_var.get())
+
     def _runtime(self) -> RuntimeOptions:
-        max_blocks_text = self.max_blocks_var.get().strip() or "1"
+        extra_prompt = self.extra_prompt_text.get("1.0", END).strip() if hasattr(self, "extra_prompt_text") else ""
         try:
-            max_blocks = max(1, int(max_blocks_text))
+            max_blocks = max(1, int(self.max_blocks_var.get().strip() or "1"))
         except ValueError as exc:
-            raise ValueError("Max Blocks must be an integer.") from exc
+            raise ValueError("최대 블록 수는 정수여야 합니다.") from exc
+        effort = self.effort_var.get().strip().lower() or "medium"
+        if effort not in {"low", "medium", "high", "xhigh"}:
+            raise ValueError("추론 강도는 low, medium, high, xhigh 중 하나여야 합니다.")
         return RuntimeOptions(
-            model=self.model_var.get().strip() or "gpt-5",
+            model=self.model_var.get().strip() or "gpt-5.4",
+            effort=effort,
+            extra_prompt=extra_prompt,
             approval_mode=self.approval_var.get().strip() or "never",
             sandbox_mode=self.sandbox_var.get().strip() or "workspace-write",
             test_cmd=self.test_cmd_var.get().strip() or "python -m pytest",
@@ -240,52 +388,98 @@ class CodexAutoGUI:
         repo_url = self.repo_url_var.get().strip()
         branch = self.branch_var.get().strip() or "main"
         if not repo_url:
-            raise ValueError("Repo URL is required.")
+            raise ValueError("저장소 URL이 필요합니다.")
         return repo_url, branch
 
     def _long_term_path(self) -> Path | None:
         value = self.long_term_plan_var.get().strip()
         return Path(value) if value else None
 
+    def _render_result(self, result: object) -> str:
+        if isinstance(result, ProjectContext):
+            return json.dumps({"metadata": result.metadata.to_dict(), "loop_state": result.loop_state.to_dict()}, indent=2, ensure_ascii=False)
+        if isinstance(result, list):
+            return json.dumps(result, indent=2, ensure_ascii=False)
+        if isinstance(result, dict):
+            return json.dumps(result, indent=2, ensure_ascii=False)
+        return str(result)
+
     def _run_async(self, label: str, worker: Callable[[], object]) -> None:
         if self.busy:
-            messagebox.showinfo("Codex Auto", "Another operation is already running.")
+            messagebox.showinfo("코덱스 오토", "다른 작업이 이미 실행 중입니다.")
             return
-        self._set_busy(True, label)
-        self._append_log(f"[start] {label}")
+        self._set_busy(True, f"{label} 실행 중")
+        self._append_log(f"[시작] {label}")
 
         def target() -> None:
             try:
                 result = worker()
-                details = self._render_result(result)
-                self.queue.put(("done", {"status": f"{label} completed", "details": details}))
-                self.queue.put(("log", f"[done] {label}"))
+                self.queue.put(("done", {"status": f"{label} 완료", "details": self._render_result(result)}))
+                self.queue.put(("log", f"[완료] {label}"))
             except Exception as exc:
-                stack = traceback.format_exc()
-                self.queue.put(("error", f"{label} failed: {exc}\n\n{stack}"))
+                self.queue.put(("error", f"{label} 실패: {exc}\n\n{traceback.format_exc()}"))
 
         threading.Thread(target=target, daemon=True).start()
 
-    def _render_result(self, result: object) -> str:
-        if isinstance(result, ProjectContext):
-            return json.dumps(
-                {
-                    "metadata": result.metadata.to_dict(),
-                    "loop_state": result.loop_state.to_dict(),
-                },
+    def _workspace_usage_summary(self, projects: list[ProjectContext]) -> dict[str, int]:
+        usage = {"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0}
+        for project in projects:
+            for item in read_jsonl(project.paths.pass_log_file):
+                item_usage = item.get("usage", {})
+                for key in usage:
+                    value = item_usage.get(key, 0)
+                    if isinstance(value, int):
+                        usage[key] += value
+        return usage
+
+    def _format_workspace_summary(self, rows: list[dict[str, object]], usage: dict[str, int]) -> str:
+        lines = [
+            "워크스페이스 요약",
+            "",
+            f"관리 저장소 수: {len(rows)}",
+            f"준비 완료: {self.ready_count_var.get()}",
+            f"실행 중: {self.active_count_var.get()}",
+            f"주의 필요: {self.failed_count_var.get()}",
+            "",
+            "Codex 토큰 사용량 합계",
+            f"- input_tokens: {usage['input_tokens']}",
+            f"- cached_input_tokens: {usage['cached_input_tokens']}",
+            f"- output_tokens: {usage['output_tokens']}",
+            "",
+            "저장소 상태",
+        ]
+        for row in rows:
+            lines.append(f"- {row['slug']} | branch={row['branch']} | status={row['status']} | safe={row['safe_revision'] or 'n/a'}")
+        return "\n".join(lines)
+
+    def _populate_github_results(self, repos: list[GitHubRepository]) -> None:
+        self.github_repo_index = {}
+        for item in self.github_tree.get_children():
+            self.github_tree.delete(item)
+        for repo in repos:
+            self.github_repo_index[repo.full_name] = repo
+            self.github_tree.insert("", END, iid=repo.full_name, values=repo.to_display_row())
+        self._set_details(
+            json.dumps(
+                [
+                    {
+                        "full_name": repo.full_name,
+                        "clone_url": repo.clone_url,
+                        "default_branch": repo.default_branch,
+                        "description": repo.description,
+                    }
+                    for repo in repos
+                ],
                 indent=2,
+                ensure_ascii=False,
             )
-        if isinstance(result, list):
-            return json.dumps(result, indent=2)
-        if isinstance(result, dict):
-            return json.dumps(result, indent=2)
-        return str(result)
+        )
 
     def refresh_repositories(self) -> None:
         try:
             projects = self._orchestrator().list_projects()
         except Exception as exc:
-            self._append_log(f"[warn] list-repos failed: {exc}")
+            self._append_log(f"[경고] 목록 조회 실패: {exc}")
             return
 
         self.repo_index = {}
@@ -293,39 +487,46 @@ class CodexAutoGUI:
             self.repo_tree.delete(item)
 
         rows: list[dict[str, object]] = []
+        ready = 0
+        active = 0
+        failed = 0
         for project in projects:
+            status = project.metadata.current_status
+            if status == "ready":
+                ready += 1
+            elif status.startswith("running:"):
+                active += 1
+            elif status.endswith("failed") or "rollback" in status:
+                failed += 1
             row = {
                 "repo_id": project.metadata.repo_id,
                 "slug": project.metadata.slug,
                 "repo_url": project.metadata.repo_url,
                 "branch": project.metadata.branch,
-                "status": project.metadata.current_status,
+                "status": status,
                 "last_run_at": project.metadata.last_run_at,
-                "safe_revision": project.metadata.current_safe_revision,
+                "safe_revision": (project.metadata.current_safe_revision or "")[:10],
             }
             self.repo_index[project.metadata.repo_id] = row
-            self.repo_tree.insert(
-                "",
-                END,
-                iid=project.metadata.repo_id,
-                values=(
-                    project.metadata.slug,
-                    project.metadata.branch,
-                    project.metadata.current_status,
-                    project.metadata.last_run_at or "",
-                ),
-            )
+            self.repo_tree.insert("", END, iid=project.metadata.repo_id, values=(row["slug"], row["branch"], row["status"], row["safe_revision"], row["last_run_at"] or ""))
             rows.append(row)
-        self._set_details(json.dumps(rows, indent=2))
 
-    def _on_repo_selected(self, _event: object) -> None:
-        self.load_selected_repository(show_message=False)
+        usage = self._workspace_usage_summary(projects)
+        self.repo_count_var.set(str(len(rows)))
+        self.ready_count_var.set(str(ready))
+        self.active_count_var.set(str(active))
+        self.failed_count_var.set(str(failed))
+        self.input_tokens_var.set(f"{usage['input_tokens']:,}")
+        self.cached_tokens_var.set(f"{usage['cached_input_tokens']:,}")
+        self.output_tokens_var.set(f"{usage['output_tokens']:,}")
+        self._set_summary(self._format_workspace_summary(rows, usage))
+        self._set_details(json.dumps(rows, indent=2, ensure_ascii=False))
 
     def load_selected_repository(self, show_message: bool = True) -> None:
         selected = self.repo_tree.selection()
         if not selected:
             if show_message:
-                messagebox.showinfo("Codex Auto", "Select a managed repository first.")
+                messagebox.showinfo("코덱스 오토", "관리 중인 저장소를 먼저 선택하세요.")
             return
         repo_id = selected[0]
         row = self.repo_index.get(repo_id)
@@ -334,7 +535,58 @@ class CodexAutoGUI:
         self.repo_url_var.set(str(row["repo_url"]))
         self.branch_var.set(str(row["branch"]))
         if show_message:
-            self._append_log(f"[info] loaded {row['slug']}")
+            self._append_log(f"[정보] {row['slug']} 불러옴")
+
+    def _on_repo_selected(self, _event: object) -> None:
+        self.load_selected_repository(show_message=False)
+
+    def search_github_repositories(self) -> None:
+        query = self.github_query_var.get().strip()
+        if not query:
+            messagebox.showerror("코덱스 오토", "GitHub 검색어를 입력하세요.")
+            return
+
+        def worker() -> dict[str, object]:
+            repos = self._github_client().search_repositories(query)
+            self.queue.put(("github_results", repos))
+            return {"검색 결과 수": len(repos)}
+
+        self._run_async("GitHub 검색", worker)
+
+    def load_my_github_repos(self) -> None:
+        if not self.github_token_var.get().strip():
+            messagebox.showerror("코덱스 오토", "내 저장소 조회에는 GitHub 토큰이 필요합니다.")
+            return
+
+        def worker() -> dict[str, object]:
+            repos = self._github_client().list_my_repositories()
+            self.queue.put(("github_results", repos))
+            return {"내 저장소 수": len(repos)}
+
+        self._run_async("내 GitHub 저장소 조회", worker)
+
+    def apply_selected_github_repository(self) -> None:
+        selected = self.github_tree.selection()
+        if not selected:
+            messagebox.showinfo("코덱스 오토", "GitHub 저장소를 먼저 선택하세요.")
+            return
+        repo = self.github_repo_index.get(selected[0])
+        if not repo:
+            return
+        self.repo_url_var.set(repo.clone_url or repo.html_url)
+        self.branch_var.set(repo.default_branch or "main")
+        self._append_log(f"[정보] GitHub 저장소 적용: {repo.full_name}")
+
+    def _choose_workspace_root(self) -> None:
+        chosen = filedialog.askdirectory(initialdir=str(Path.cwd()))
+        if chosen:
+            self.workspace_root_var.set(chosen)
+            self.refresh_repositories()
+
+    def _choose_long_term_plan(self) -> None:
+        chosen = filedialog.askopenfilename(title="LONG_TERM_PLAN.md 선택", filetypes=[("Markdown", "*.md"), ("All files", "*.*")])
+        if chosen:
+            self.long_term_plan_var.set(chosen)
 
     def init_repo(self) -> None:
         try:
@@ -342,10 +594,10 @@ class CodexAutoGUI:
             runtime = self._runtime()
             long_term_path = self._long_term_path()
         except Exception as exc:
-            messagebox.showerror("Codex Auto", str(exc))
+            messagebox.showerror("코덱스 오토", str(exc))
             return
         self._run_async(
-            "Init Repo",
+            "저장소 초기화",
             lambda: self._orchestrator().init_repo(
                 repo_url=repo_url,
                 branch=branch,
@@ -360,10 +612,10 @@ class CodexAutoGUI:
             runtime = self._runtime()
             long_term_path = self._long_term_path()
         except Exception as exc:
-            messagebox.showerror("Codex Auto", str(exc))
+            messagebox.showerror("코덱스 오토", str(exc))
             return
         self._run_async(
-            "Run",
+            "블록 실행",
             lambda: self._orchestrator().run(
                 repo_url=repo_url,
                 branch=branch,
@@ -378,10 +630,10 @@ class CodexAutoGUI:
             repo_url, branch = self._repo_inputs()
             runtime = self._runtime()
         except Exception as exc:
-            messagebox.showerror("Codex Auto", str(exc))
+            messagebox.showerror("코덱스 오토", str(exc))
             return
         self._run_async(
-            "Resume",
+            "이어서 실행",
             lambda: self._orchestrator().resume(
                 repo_url=repo_url,
                 branch=branch,
@@ -393,43 +645,35 @@ class CodexAutoGUI:
         try:
             repo_url, branch = self._repo_inputs()
         except Exception as exc:
-            messagebox.showerror("Codex Auto", str(exc))
+            messagebox.showerror("코덱스 오토", str(exc))
             return
-        self._run_async(
-            "Status",
-            lambda: self._orchestrator().status(repo_url=repo_url, branch=branch),
-        )
+        self._run_async("상태 보기", lambda: self._orchestrator().status(repo_url=repo_url, branch=branch))
 
     def show_history(self) -> None:
         try:
             repo_url, branch = self._repo_inputs()
         except Exception as exc:
-            messagebox.showerror("Codex Auto", str(exc))
+            messagebox.showerror("코덱스 오토", str(exc))
             return
-        self._run_async(
-            "History",
-            lambda: self._orchestrator().history(repo_url=repo_url, branch=branch, limit=20),
-        )
+        self._run_async("히스토리", lambda: self._orchestrator().history(repo_url=repo_url, branch=branch, limit=20))
 
     def show_report(self) -> None:
         try:
             repo_url, branch = self._repo_inputs()
         except Exception as exc:
-            messagebox.showerror("Codex Auto", str(exc))
+            messagebox.showerror("코덱스 오토", str(exc))
             return
 
         def worker() -> dict[str, object]:
-            orchestrator = self._orchestrator()
-            path = orchestrator.report(repo_url=repo_url, branch=branch)
-            content = path.read_text(encoding="utf-8")
-            return {"report_path": str(path), "report": json.loads(content)}
+            path = self._orchestrator().report(repo_url=repo_url, branch=branch)
+            return {"report_path": str(path), "report": json.loads(path.read_text(encoding="utf-8"))}
 
-        self._run_async("Report", worker)
+        self._run_async("리포트", worker)
 
 
 def main() -> int:
     root = Tk()
     app = CodexAutoGUI(root)
-    app._append_log("GUI ready")
+    app._append_log("GUI 준비 완료")
     root.mainloop()
     return 0
