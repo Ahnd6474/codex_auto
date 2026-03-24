@@ -18,6 +18,7 @@ from .planning import (
     ensure_scope_guard,
     generate_long_term_plan,
     implementation_prompt,
+    is_long_term_plan_markdown,
     reflection_markdown,
     scan_repository_inputs,
     select_candidate,
@@ -40,6 +41,7 @@ class Orchestrator:
         branch: str,
         runtime: RuntimeOptions,
         long_term_plan_path: Path | None = None,
+        long_term_plan_input: str = "",
     ) -> ProjectContext:
         context = self.workspace.initialize_project(repo_url=repo_url, branch=branch, runtime=runtime)
         try:
@@ -51,31 +53,15 @@ class Orchestrator:
             )
             repo_inputs = scan_repository_inputs(context.paths.repo_dir)
             is_mature, maturity_details = assess_repository_maturity(context.paths.repo_dir, repo_inputs)
-            if long_term_plan_path:
-                long_term_text = Path(long_term_plan_path).read_text(encoding="utf-8")
-            elif context.paths.long_term_plan_file.exists():
-                long_term_text = read_text(context.paths.long_term_plan_file)
-            elif is_mature:
-                long_term_text = generate_long_term_plan(context, repo_inputs)
-            else:
-                if not runtime.init_plan_prompt.strip():
-                    raise RuntimeError(
-                        "This repository appears early-stage. Provide --init-plan-prompt or use the GUI initialization prompt to bootstrap LONG_TERM_PLAN.md."
-                    )
-                runner = CodexRunner(runtime.codex_path)
-                prompt = bootstrap_long_term_plan_prompt(context, repo_inputs, runtime.init_plan_prompt)
-                result = runner.run_pass(
-                    context=context,
-                    prompt=prompt,
-                    pass_type="init-long-term-plan",
-                    block_index=0,
-                    search_enabled=False,
-                )
-                long_term_text = read_text(context.paths.long_term_plan_file)
-                if result.returncode != 0 or not long_term_text.strip():
-                    raise RuntimeError(
-                        f"Codex failed to create the initial prompt-based long-term plan. maturity={maturity_details}"
-                    )
+            long_term_text = self._resolve_long_term_plan_text(
+                context=context,
+                runtime=runtime,
+                repo_inputs=repo_inputs,
+                is_mature=is_mature,
+                maturity_details=maturity_details,
+                long_term_plan_path=long_term_plan_path,
+                long_term_plan_input=long_term_plan_input,
+            )
             write_text(context.paths.long_term_plan_file, long_term_text)
             write_text(context.paths.scope_guard_file, ensure_scope_guard(context))
             mid_term_text, _ = build_mid_term_plan(long_term_text)
@@ -113,11 +99,18 @@ class Orchestrator:
         branch: str,
         runtime: RuntimeOptions,
         long_term_plan_path: Path | None = None,
+        long_term_plan_input: str = "",
         resume: bool = False,
     ) -> ProjectContext:
         existing = self.workspace.find_project(repo_url, branch)
         if existing is None:
-            context = self.init_repo(repo_url, branch, runtime, long_term_plan_path=long_term_plan_path)
+            context = self.init_repo(
+                repo_url,
+                branch,
+                runtime,
+                long_term_plan_path=long_term_plan_path,
+                long_term_plan_input=long_term_plan_input,
+            )
         else:
             context = existing
             context.runtime = runtime
@@ -127,8 +120,21 @@ class Orchestrator:
                 runtime.git_user_name,
                 runtime.git_user_email,
             )
-            if not resume and long_term_plan_path:
-                write_text(context.paths.long_term_plan_file, Path(long_term_plan_path).read_text(encoding="utf-8"))
+            if not resume:
+                repo_inputs = scan_repository_inputs(context.paths.repo_dir)
+                is_mature, maturity_details = assess_repository_maturity(context.paths.repo_dir, repo_inputs)
+                updated_plan_text = self._read_supplied_long_term_text(long_term_plan_path, long_term_plan_input)
+                if updated_plan_text:
+                    resolved_plan_text = self._resolve_long_term_plan_text(
+                        context=context,
+                        runtime=runtime,
+                        repo_inputs=repo_inputs,
+                        is_mature=is_mature,
+                        maturity_details=maturity_details,
+                        long_term_plan_path=long_term_plan_path,
+                        long_term_plan_input=long_term_plan_input,
+                    )
+                    write_text(context.paths.long_term_plan_file, resolved_plan_text)
 
         self.workspace.save_project(context)
         runner = CodexRunner(context.runtime.codex_path)
@@ -538,3 +544,65 @@ class Orchestrator:
                 break
         if changed:
             write_json(context.paths.checkpoint_state_file, data)
+
+    def _read_supplied_long_term_text(self, long_term_plan_path: Path | None, long_term_plan_input: str) -> str:
+        if long_term_plan_input.strip():
+            return long_term_plan_input.strip()
+        if long_term_plan_path:
+            return Path(long_term_plan_path).read_text(encoding="utf-8").strip()
+        return ""
+
+    def _resolve_long_term_plan_text(
+        self,
+        context: ProjectContext,
+        runtime: RuntimeOptions,
+        repo_inputs: dict[str, str],
+        is_mature: bool,
+        maturity_details: dict[str, int],
+        long_term_plan_path: Path | None,
+        long_term_plan_input: str,
+    ) -> str:
+        supplied_text = self._read_supplied_long_term_text(long_term_plan_path, long_term_plan_input)
+        if supplied_text:
+            if is_long_term_plan_markdown(supplied_text):
+                return supplied_text
+            return self._generate_long_term_plan_from_prompt(context, runtime, repo_inputs, supplied_text, maturity_details)
+        if context.paths.long_term_plan_file.exists():
+            return read_text(context.paths.long_term_plan_file)
+        if is_mature:
+            return generate_long_term_plan(context, repo_inputs)
+        if runtime.init_plan_prompt.strip():
+            return self._generate_long_term_plan_from_prompt(
+                context,
+                runtime,
+                repo_inputs,
+                runtime.init_plan_prompt,
+                maturity_details,
+            )
+        raise RuntimeError(
+            "This repository appears early-stage. Provide one long-term plan input or use --init-plan-prompt to bootstrap LONG_TERM_PLAN.md."
+        )
+
+    def _generate_long_term_plan_from_prompt(
+        self,
+        context: ProjectContext,
+        runtime: RuntimeOptions,
+        repo_inputs: dict[str, str],
+        user_prompt: str,
+        maturity_details: dict[str, int],
+    ) -> str:
+        runner = CodexRunner(runtime.codex_path)
+        prompt = bootstrap_long_term_plan_prompt(context, repo_inputs, user_prompt)
+        result = runner.run_pass(
+            context=context,
+            prompt=prompt,
+            pass_type="init-long-term-plan",
+            block_index=0,
+            search_enabled=False,
+        )
+        long_term_text = read_text(context.paths.long_term_plan_file)
+        if result.returncode != 0 or not long_term_text.strip():
+            raise RuntimeError(
+                f"Codex failed to create the initial prompt-based long-term plan. maturity={maturity_details}"
+            )
+        return long_term_text

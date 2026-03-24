@@ -72,6 +72,16 @@ def generate_long_term_plan(context: ProjectContext, repo_inputs: dict[str, str]
     )
 
 
+def is_long_term_plan_markdown(text: str) -> bool:
+    normalized = text.strip()
+    if not normalized:
+        return False
+    if normalized.lower().startswith("# long-term plan"):
+        return True
+    plan_ids = re.findall(r"\bLT\d+\b", normalized)
+    return len(plan_ids) >= 2
+
+
 def bootstrap_long_term_plan_prompt(context: ProjectContext, repo_inputs: dict[str, str], user_prompt: str) -> str:
     return "\n".join(
         [

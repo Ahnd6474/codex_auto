@@ -1,82 +1,146 @@
-<svg width="1200" height="360" viewBox="0 0 1200 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="80" y1="40" x2="1120" y2="320" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#F5F1E8"/>
-      <stop offset="1" stop-color="#E7EEF6"/>
+    <linearGradient id="bg" x1="40" y1="30" x2="1160" y2="490" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7F3EB"/>
+      <stop offset="1" stop-color="#E8F0F7"/>
     </linearGradient>
-    <linearGradient id="card1" x1="0" y1="0" x2="180" y2="120" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#1F4B99"/>
-      <stop offset="1" stop-color="#2C6CCF"/>
+    <linearGradient id="panelA" x1="0" y1="0" x2="220" y2="180" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF7ED"/>
+      <stop offset="1" stop-color="#FFEDD5"/>
     </linearGradient>
-    <linearGradient id="card2" x1="0" y1="0" x2="180" y2="120" gradientUnits="userSpaceOnUse">
+    <linearGradient id="panelB" x1="0" y1="0" x2="520" y2="320" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EFF6FF"/>
+      <stop offset="1" stop-color="#DBEAFE"/>
+    </linearGradient>
+    <linearGradient id="panelC" x1="0" y1="0" x2="300" y2="320" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F5F3FF"/>
+      <stop offset="1" stop-color="#EDE9FE"/>
+    </linearGradient>
+    <linearGradient id="cardBlue" x1="0" y1="0" x2="170" y2="90" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1D4ED8"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="cardTeal" x1="0" y1="0" x2="170" y2="90" gradientUnits="userSpaceOnUse">
       <stop stop-color="#0F766E"/>
       <stop offset="1" stop-color="#14B8A6"/>
     </linearGradient>
-    <linearGradient id="card3" x1="0" y1="0" x2="180" y2="120" gradientUnits="userSpaceOnUse">
+    <linearGradient id="cardPurple" x1="0" y1="0" x2="170" y2="90" gradientUnits="userSpaceOnUse">
       <stop stop-color="#7C3AED"/>
       <stop offset="1" stop-color="#A855F7"/>
     </linearGradient>
-    <linearGradient id="card4" x1="0" y1="0" x2="180" y2="120" gradientUnits="userSpaceOnUse">
+    <linearGradient id="cardAmber" x1="0" y1="0" x2="170" y2="90" gradientUnits="userSpaceOnUse">
       <stop stop-color="#B45309"/>
       <stop offset="1" stop-color="#F59E0B"/>
     </linearGradient>
-    <linearGradient id="card5" x1="0" y1="0" x2="180" y2="120" gradientUnits="userSpaceOnUse">
+    <linearGradient id="cardRose" x1="0" y1="0" x2="170" y2="90" gradientUnits="userSpaceOnUse">
       <stop stop-color="#BE123C"/>
       <stop offset="1" stop-color="#F43F5E"/>
     </linearGradient>
-    <filter id="shadow" x="-20" y="-20" width="240" height="180" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+    <filter id="shadow" x="-24" y="-24" width="260" height="170" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
       <feFlood flood-opacity="0" result="BackgroundImageFix"/>
       <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
       <feOffset dy="10"/>
-      <feGaussianBlur stdDeviation="10"/>
-      <feColorMatrix type="matrix" values="0 0 0 0 0.0588235 0 0 0 0 0.0941176 0 0 0 0 0.156863 0 0 0 0.12 0"/>
-      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1"/>
-      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape"/>
+      <feGaussianBlur stdDeviation="12"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.0588 0 0 0 0 0.0941 0 0 0 0 0.1568 0 0 0 0.12 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1" result="shape"/>
     </filter>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
       <path d="M0 0L10 5L0 10V0Z" fill="#355070"/>
     </marker>
   </defs>
 
-  <rect x="20" y="20" width="1160" height="320" rx="28" fill="url(#bg)"/>
-  <circle cx="110" cy="85" r="56" fill="#D7E6FB" fill-opacity="0.8"/>
-  <circle cx="1080" cy="270" r="72" fill="#F8DCC7" fill-opacity="0.55"/>
-  <path d="M170 250C270 190 350 305 450 250C550 195 620 145 710 185C805 228 890 125 1010 155" stroke="#C8D4E3" stroke-width="10" stroke-linecap="round" opacity="0.55"/>
+  <rect x="20" y="20" width="1160" height="480" rx="30" fill="url(#bg)"/>
+  <circle cx="104" cy="86" r="52" fill="#DDEAFE" fill-opacity="0.75"/>
+  <circle cx="1088" cy="420" r="64" fill="#FFE3D1" fill-opacity="0.6"/>
 
-  <g filter="url(#shadow)" transform="translate(70 110)">
-    <rect width="170" height="108" rx="24" fill="url(#card1)"/>
-    <text x="85" y="48" text-anchor="middle" fill="white" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="28" font-weight="700">초기화</text>
-    <text x="85" y="76" text-anchor="middle" fill="#D9E8FF" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="14">repo + plan</text>
+  <text x="60" y="68" fill="#1F2937" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="28" font-weight="700">codex-auto 구조</text>
+  <text x="60" y="98" fill="#4B5563" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="15">입력 → 관리 프로젝트 → 실행 루프 → 기록 / 체크포인트</text>
+
+  <g>
+    <rect x="50" y="130" width="250" height="300" rx="28" fill="url(#panelA)" stroke="#F3C38A"/>
+    <text x="80" y="170" fill="#7C2D12" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="22" font-weight="700">입력</text>
+
+    <rect x="78" y="195" width="194" height="74" rx="20" fill="white" stroke="#FDBA74"/>
+    <text x="175" y="226" text-anchor="middle" fill="#7C2D12" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="24" font-weight="700">repo</text>
+    <text x="175" y="248" text-anchor="middle" fill="#9A3412" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="13">url / branch</text>
+
+    <rect x="78" y="285" width="194" height="106" rx="20" fill="white" stroke="#FDBA74"/>
+    <text x="175" y="318" text-anchor="middle" fill="#7C2D12" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="22" font-weight="700">장기 계획</text>
+    <text x="175" y="344" text-anchor="middle" fill="#9A3412" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="13">plan 본문</text>
+    <text x="175" y="364" text-anchor="middle" fill="#9A3412" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="13">또는 생성 지시</text>
   </g>
 
-  <g filter="url(#shadow)" transform="translate(285 110)">
-    <rect width="170" height="108" rx="24" fill="url(#card2)"/>
-    <text x="85" y="48" text-anchor="middle" fill="white" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="28" font-weight="700">계획</text>
-    <text x="85" y="76" text-anchor="middle" fill="#D6FFFA" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="14">mid task</text>
+  <g>
+    <rect x="332" y="130" width="548" height="300" rx="28" fill="url(#panelB)" stroke="#93C5FD"/>
+    <text x="362" y="170" fill="#1E3A8A" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="22" font-weight="700">관리 프로젝트</text>
+    <text x="362" y="195" fill="#475569" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="14">workspace/projects/&lt;repo_slug&gt;</text>
+
+    <rect x="362" y="220" width="160" height="74" rx="20" fill="white" stroke="#93C5FD"/>
+    <text x="442" y="252" text-anchor="middle" fill="#1E3A8A" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="24" font-weight="700">repo/</text>
+    <text x="442" y="274" text-anchor="middle" fill="#475569" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="13">clone</text>
+
+    <rect x="544" y="220" width="160" height="74" rx="20" fill="white" stroke="#93C5FD"/>
+    <text x="624" y="252" text-anchor="middle" fill="#1E3A8A" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="24" font-weight="700">docs/</text>
+    <text x="624" y="274" text-anchor="middle" fill="#475569" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="13">LONG / MID / CP</text>
+
+    <rect x="726" y="220" width="126" height="74" rx="20" fill="white" stroke="#93C5FD"/>
+    <text x="789" y="252" text-anchor="middle" fill="#1E3A8A" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="24" font-weight="700">state</text>
+    <text x="789" y="274" text-anchor="middle" fill="#475569" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="13">safe rev</text>
+
+    <rect x="362" y="320" width="160" height="74" rx="20" fill="white" stroke="#93C5FD"/>
+    <text x="442" y="352" text-anchor="middle" fill="#1E3A8A" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="24" font-weight="700">memory</text>
+    <text x="442" y="374" text-anchor="middle" fill="#475569" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="13">success / fail</text>
+
+    <rect x="544" y="320" width="160" height="74" rx="20" fill="white" stroke="#93C5FD"/>
+    <text x="624" y="352" text-anchor="middle" fill="#1E3A8A" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="24" font-weight="700">logs</text>
+    <text x="624" y="374" text-anchor="middle" fill="#475569" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="13">passes / blocks</text>
+
+    <rect x="726" y="320" width="126" height="74" rx="20" fill="white" stroke="#93C5FD"/>
+    <text x="789" y="352" text-anchor="middle" fill="#1E3A8A" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="24" font-weight="700">report</text>
+    <text x="789" y="374" text-anchor="middle" fill="#475569" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="13">latest</text>
   </g>
 
-  <g filter="url(#shadow)" transform="translate(500 110)">
-    <rect width="170" height="108" rx="24" fill="url(#card3)"/>
-    <text x="85" y="48" text-anchor="middle" fill="white" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="28" font-weight="700">실행</text>
-    <text x="85" y="76" text-anchor="middle" fill="#F1E8FF" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="14">2-pass + web</text>
+  <g>
+    <rect x="912" y="130" width="238" height="300" rx="28" fill="url(#panelC)" stroke="#C4B5FD"/>
+    <text x="942" y="170" fill="#5B21B6" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="22" font-weight="700">실행 루프</text>
+
+    <g filter="url(#shadow)" transform="translate(946 195)">
+      <rect width="170" height="64" rx="20" fill="url(#cardBlue)"/>
+      <text x="85" y="40" text-anchor="middle" fill="white" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="25" font-weight="700">계획</text>
+    </g>
+    <g filter="url(#shadow)" transform="translate(946 273)">
+      <rect width="170" height="64" rx="20" fill="url(#cardPurple)"/>
+      <text x="85" y="40" text-anchor="middle" fill="white" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="25" font-weight="700">실행</text>
+    </g>
+    <g filter="url(#shadow)" transform="translate(946 351)">
+      <rect width="170" height="64" rx="20" fill="url(#cardAmber)"/>
+      <text x="85" y="40" text-anchor="middle" fill="white" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="25" font-weight="700">검증</text>
+    </g>
+
+    <path d="M1031 259V273" stroke="#5B21B6" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow)"/>
+    <path d="M1031 337V351" stroke="#5B21B6" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow)"/>
+    <path d="M946 384C912 384 908 238 946 228" stroke="#5B21B6" stroke-width="4" stroke-dasharray="8 10" marker-end="url(#arrow)"/>
+    <text x="930" y="306" fill="#6D28D9" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="15" font-weight="700">반복</text>
   </g>
 
-  <g filter="url(#shadow)" transform="translate(715 110)">
-    <rect width="170" height="108" rx="24" fill="url(#card4)"/>
-    <text x="85" y="48" text-anchor="middle" fill="white" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="28" font-weight="700">테스트</text>
-    <text x="85" y="76" text-anchor="middle" fill="#FFF0CF" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="14">검증 / 롤백</text>
+  <g>
+    <g filter="url(#shadow)" transform="translate(430 90)">
+      <rect width="150" height="64" rx="20" fill="url(#cardTeal)"/>
+      <text x="75" y="39" text-anchor="middle" fill="white" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="24" font-weight="700">초기화</text>
+    </g>
+    <g filter="url(#shadow)" transform="translate(640 90)">
+      <rect width="150" height="64" rx="20" fill="url(#cardRose)"/>
+      <text x="75" y="39" text-anchor="middle" fill="white" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="22" font-weight="700">체크포인트</text>
+    </g>
   </g>
 
-  <g filter="url(#shadow)" transform="translate(930 110)">
-    <rect width="170" height="108" rx="24" fill="url(#card5)"/>
-    <text x="85" y="48" text-anchor="middle" fill="white" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="24" font-weight="700">체크포인트</text>
-    <text x="85" y="76" text-anchor="middle" fill="#FFE0E7" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="14">승인 / 저장</text>
-  </g>
+  <path d="M300 252H348" stroke="#355070" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M300 338H430V154" stroke="#355070" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M580 122H640" stroke="#355070" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M790 154H866C894 154 894 227 938 227" stroke="#355070" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M852 357H900C922 357 922 383 938 383" stroke="#355070" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M790 122V110" stroke="#355070" stroke-width="5" stroke-linecap="round"/>
 
-  <path d="M240 164H285" stroke="#355070" stroke-width="6" stroke-linecap="round" marker-end="url(#arrow)"/>
-  <path d="M455 164H500" stroke="#355070" stroke-width="6" stroke-linecap="round" marker-end="url(#arrow)"/>
-  <path d="M670 164H715" stroke="#355070" stroke-width="6" stroke-linecap="round" marker-end="url(#arrow)"/>
-  <path d="M885 164H930" stroke="#355070" stroke-width="6" stroke-linecap="round" marker-end="url(#arrow)"/>
-  <path d="M1015 236C930 300 760 312 615 298C450 282 315 236 270 212" stroke="#355070" stroke-width="5" stroke-linecap="round" stroke-dasharray="10 12" marker-end="url(#arrow)"/>
-  <text x="647" y="332" text-anchor="middle" fill="#4B5563" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="18" font-weight="600">반복</text>
+  <text x="600" y="458" text-anchor="middle" fill="#475569" font-family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="16" font-weight="600">각 저장소는 독립된 프로젝트 폴더와 로그, 메모리, 상태를 유지</text>
 </svg>

@@ -37,7 +37,6 @@ class CodexAutoGUI:
         self.sandbox_var = StringVar(value="workspace-write")
         self.test_cmd_var = StringVar(value="python -m pytest")
         self.max_blocks_var = StringVar(value="1")
-        self.long_term_plan_var = StringVar()
         self.allow_push_var = StringVar(value="false")
         self.github_query_var = StringVar()
         self.github_url_mode_var = StringVar(value="ssh")
@@ -192,33 +191,31 @@ class CodexAutoGUI:
         notebook.pack(fill="x")
         project_tab = ttk.Frame(notebook)
         execution_tab = ttk.Frame(notebook)
-        prompt_tab = ttk.Frame(notebook)
-        init_plan_tab = ttk.Frame(notebook)
+        plan_tab = ttk.Frame(notebook)
         checkpoint_tab = ttk.Frame(notebook)
         notebook.add(project_tab, text="프로젝트")
         notebook.add(execution_tab, text="실행")
-        notebook.add(prompt_tab, text="프롬프트")
-        notebook.add(init_plan_tab, text="초기 장기 계획")
+        notebook.add(plan_tab, text="장기 계획")
         notebook.add(checkpoint_tab, text="체크포인트")
 
         self._build_project_tab(project_tab)
         self._build_execution_tab(execution_tab)
-        self._build_prompt_tab(prompt_tab)
-        self._build_init_plan_tab(init_plan_tab)
+        self._build_plan_tab(plan_tab)
         self._build_checkpoint_tab(checkpoint_tab)
+
+        ttk.Label(
+            frame,
+            text="실행 버튼 하나로 초기 설정과 블록 실행을 함께 처리합니다.",
+        ).pack(anchor=W, pady=(10, 0))
 
         actions = ttk.Frame(frame)
         actions.pack(fill="x", pady=(12, 0))
         self.action_buttons: list[ttk.Button] = []
         for label, handler in [
-            ("저장소 초기화", self.init_repo),
-            ("블록 실행", self.run_blocks),
+            ("실행", self.run_blocks),
             ("이어서 실행", self.resume_run),
-            ("체크포인트 보기", self.show_checkpoints),
             ("승인+업로드", self.approve_and_push_checkpoint),
-            ("상태 보기", self.show_status),
-            ("히스토리", self.show_history),
-            ("리포트", self.show_report),
+            ("새로고침", self.refresh_repositories),
         ]:
             button = ttk.Button(actions, text=label, command=handler)
             button.pack(side=LEFT, padx=(0, 8))
@@ -235,8 +232,6 @@ class CodexAutoGUI:
         add_row(1, "브랜치", self.branch_var)
         add_row(2, "워크스페이스 루트", self.workspace_root_var)
         ttk.Button(parent, text="찾아보기", command=self._choose_workspace_root).grid(row=2, column=2, padx=(8, 0), pady=6)
-        add_row(3, "장기 계획 파일", self.long_term_plan_var)
-        ttk.Button(parent, text="찾아보기", command=self._choose_long_term_plan).grid(row=3, column=2, padx=(8, 0), pady=6)
 
     def _build_execution_tab(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(1, weight=1)
@@ -254,19 +249,20 @@ class CodexAutoGUI:
         ttk.Label(parent, text="테스트 명령").grid(row=6, column=0, sticky=W, padx=(0, 10), pady=6)
         ttk.Entry(parent, textvariable=self.test_cmd_var, width=72).grid(row=6, column=1, sticky="ew", pady=6)
 
-    def _build_prompt_tab(self, parent: ttk.Frame) -> None:
-        ttk.Label(parent, text="추가 프롬프트").pack(anchor=W, pady=(0, 6))
-        self.extra_prompt_text = ScrolledText(parent, height=12, wrap="word")
-        self.extra_prompt_text.pack(fill=BOTH, expand=True)
-
-    def _build_init_plan_tab(self, parent: ttk.Frame) -> None:
-        ttk.Label(parent, text="초기 장기 계획 프롬프트").pack(anchor=W, pady=(0, 6))
+    def _build_plan_tab(self, parent: ttk.Frame) -> None:
         ttk.Label(
             parent,
-            text="저장소가 아직 초기 단계면, Codex가 이 프롬프트를 기반으로 LONG_TERM_PLAN.md 를 먼저 작성합니다.",
+            text="장기 계획 입력 하나만 사용합니다. 계획 markdown 전체를 붙여넣거나, 생성 방향만 짧게 써도 됩니다.",
         ).pack(anchor=W, pady=(0, 6))
-        self.init_plan_prompt_text = ScrolledText(parent, height=10, wrap="word")
-        self.init_plan_prompt_text.pack(fill=BOTH, expand=True)
+        tools = ttk.Frame(parent)
+        tools.pack(fill="x", pady=(0, 8))
+        ttk.Button(tools, text="파일 불러오기", command=self._load_long_term_plan_input).pack(side=LEFT)
+        ttk.Button(tools, text="입력 비우기", command=self._clear_long_term_plan_input).pack(side=LEFT, padx=(8, 0))
+        self.long_term_plan_text = ScrolledText(parent, height=12, wrap="word")
+        self.long_term_plan_text.pack(fill=BOTH, expand=True)
+        ttk.Label(parent, text="추가 실행 지시가 필요하면 아래에 적습니다.").pack(anchor=W, pady=(10, 6))
+        self.extra_prompt_text = ScrolledText(parent, height=8, wrap="word")
+        self.extra_prompt_text.pack(fill=BOTH, expand=True)
 
     def _build_checkpoint_tab(self, parent: ttk.Frame) -> None:
         ttk.Label(parent, text="체크포인트 승인 메모").pack(anchor=W, pady=(0, 6))
@@ -391,9 +387,8 @@ class CodexAutoGUI:
             raise ValueError("저장소 URL이 필요합니다.")
         return repo_url, branch
 
-    def _long_term_path(self) -> Path | None:
-        value = self.long_term_plan_var.get().strip()
-        return Path(value) if value else None
+    def _long_term_plan_input(self) -> str:
+        return self.long_term_plan_text.get("1.0", END).strip()
 
     def _render_result(self, result: object) -> str:
         if isinstance(result, ProjectContext):
@@ -570,34 +565,34 @@ class CodexAutoGUI:
             self.workspace_root_var.set(chosen)
             self.refresh_repositories()
 
-    def _choose_long_term_plan(self) -> None:
+    def _load_long_term_plan_input(self) -> None:
         chosen = filedialog.askopenfilename(title="LONG_TERM_PLAN.md 선택", filetypes=[("Markdown", "*.md"), ("All files", "*.*")])
         if chosen:
-            self.long_term_plan_var.set(chosen)
+            content = Path(chosen).read_text(encoding="utf-8")
+            self.long_term_plan_text.delete("1.0", END)
+            self.long_term_plan_text.insert("1.0", content)
 
-    def init_repo(self) -> None:
-        try:
-            repo_url, branch = self._repo_inputs()
-            runtime = self._runtime()
-            long_term_path = self._long_term_path()
-            orchestrator = self._orchestrator()
-        except Exception as exc:
-            messagebox.showerror("코덱스 오토", str(exc))
-            return
-        self._run_async("저장소 초기화", lambda: orchestrator.init_repo(repo_url=repo_url, branch=branch, runtime=runtime, long_term_plan_path=long_term_path))
+    def _clear_long_term_plan_input(self) -> None:
+        self.long_term_plan_text.delete("1.0", END)
 
     def run_blocks(self) -> None:
         try:
             repo_url, branch = self._repo_inputs()
             runtime = self._runtime()
-            long_term_path = self._long_term_path()
+            long_term_input = self._long_term_plan_input()
             orchestrator = self._orchestrator()
         except Exception as exc:
             messagebox.showerror("코덱스 오토", str(exc))
             return
         self._run_async(
-            "블록 실행",
-            lambda: orchestrator.run(repo_url=repo_url, branch=branch, runtime=runtime, long_term_plan_path=long_term_path, resume=False),
+            "실행",
+            lambda: orchestrator.run(
+                repo_url=repo_url,
+                branch=branch,
+                runtime=runtime,
+                long_term_plan_input=long_term_input,
+                resume=False,
+            ),
         )
 
     def resume_run(self) -> None:
@@ -609,33 +604,6 @@ class CodexAutoGUI:
             messagebox.showerror("코덱스 오토", str(exc))
             return
         self._run_async("이어서 실행", lambda: orchestrator.resume(repo_url=repo_url, branch=branch, runtime=runtime))
-
-    def show_status(self) -> None:
-        try:
-            repo_url, branch = self._repo_inputs()
-            orchestrator = self._orchestrator()
-        except Exception as exc:
-            messagebox.showerror("코덱스 오토", str(exc))
-            return
-        self._run_async("상태 보기", lambda: orchestrator.status(repo_url=repo_url, branch=branch))
-
-    def show_history(self) -> None:
-        try:
-            repo_url, branch = self._repo_inputs()
-            orchestrator = self._orchestrator()
-        except Exception as exc:
-            messagebox.showerror("코덱스 오토", str(exc))
-            return
-        self._run_async("히스토리", lambda: orchestrator.history(repo_url=repo_url, branch=branch, limit=20))
-
-    def show_checkpoints(self) -> None:
-        try:
-            repo_url, branch = self._repo_inputs()
-            orchestrator = self._orchestrator()
-        except Exception as exc:
-            messagebox.showerror("코덱스 오토", str(exc))
-            return
-        self._run_async("체크포인트 보기", lambda: orchestrator.checkpoints(repo_url=repo_url, branch=branch))
 
     def approve_and_push_checkpoint(self) -> None:
         try:
@@ -654,20 +622,6 @@ class CodexAutoGUI:
                 push=True,
             ),
         )
-
-    def show_report(self) -> None:
-        try:
-            repo_url, branch = self._repo_inputs()
-            orchestrator = self._orchestrator()
-        except Exception as exc:
-            messagebox.showerror("코덱스 오토", str(exc))
-            return
-
-        def worker() -> dict[str, object]:
-            path = orchestrator.report(repo_url=repo_url, branch=branch)
-            return {"report_path": str(path), "report": json.loads(path.read_text(encoding="utf-8"))}
-
-        self._run_async("리포트", worker)
 
 
 def main() -> int:
