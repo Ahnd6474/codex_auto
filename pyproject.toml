@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codex-auto"
+version = "0.1.0"
+description = "Production-oriented multi-repository Codex CLI orchestrator"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "OpenAI Codex" }
+]
+dependencies = []
+
+[project.scripts]
+codex-auto = "codex_auto.cli:main"
+codex-auto-gui = "codex_auto.gui:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"codex_auto" = ["templates/*.md"]
