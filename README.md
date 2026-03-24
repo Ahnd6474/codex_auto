@@ -65,6 +65,8 @@ GitHub integration notes:
 - public repository search works without a token
 - listing your own repositories requires a GitHub Personal Access Token
 - the GUI keeps the token in memory only; it is not persisted by this app
+- browser OAuth login uses GitHub OAuth web application flow with a local loopback callback
+- the GUI browser login requires a GitHub OAuth App `Client ID` and `Client Secret`
 
 ## Main Commands
 

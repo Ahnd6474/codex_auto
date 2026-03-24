@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+import secrets
 import queue
 import threading
+import time
 import traceback
+import webbrowser
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from tkinter import BOTH, END, LEFT, W, filedialog, messagebox, StringVar, Tk
 from tkinter import ttk
@@ -40,6 +44,8 @@ class CodexAutoGUI:
         self.long_term_plan_var = StringVar()
         self.allow_push_var = StringVar(value="false")
         self.github_token_var = StringVar()
+        self.github_client_id_var = StringVar()
+        self.github_client_secret_var = StringVar()
         self.github_query_var = StringVar()
 
         self.status_var = StringVar(value="대기 중")
@@ -154,6 +160,11 @@ class CodexAutoGUI:
 
         token_row = ttk.Frame(frame)
         token_row.pack(fill="x")
+        ttk.Label(token_row, text="OAuth Client ID").pack(side=LEFT)
+        ttk.Entry(token_row, textvariable=self.github_client_id_var, width=24).pack(side=LEFT, padx=(8, 8))
+        ttk.Label(token_row, text="Client Secret").pack(side=LEFT)
+        ttk.Entry(token_row, textvariable=self.github_client_secret_var, show="*", width=24).pack(side=LEFT, padx=(8, 8))
+        ttk.Button(token_row, text="브라우저 로그인", command=self.github_browser_login).pack(side=LEFT, padx=(0, 8))
         ttk.Label(token_row, text="GitHub 토큰").pack(side=LEFT)
         ttk.Entry(token_row, textvariable=self.github_token_var, show="*", width=38).pack(side=LEFT, padx=(8, 8), fill="x", expand=True)
         ttk.Button(token_row, text="내 저장소 불러오기", command=self.load_my_github_repos).pack(side=LEFT)
@@ -166,7 +177,7 @@ class CodexAutoGUI:
 
         ttk.Label(
             frame,
-            text="GitHub REST API를 사용합니다. 공개 검색은 토큰 없이 가능하며, 내 저장소 조회는 토큰이 필요합니다.",
+            text="공개 검색은 토큰 없이 가능합니다. 브라우저 OAuth 로그인은 GitHub OAuth App의 Client ID / Client Secret 과 로컬 콜백을 사용합니다.",
             style="StatTitle.TLabel",
         ).pack(anchor=W, pady=(0, 8))
 
@@ -331,6 +342,10 @@ class CodexAutoGUI:
                 messagebox.showerror("코덱스 오토", str(payload))
             elif event == "github_results":
                 self._populate_github_results(payload if isinstance(payload, list) else [])
+            elif event == "github_token":
+                self.github_token_var.set(str(payload))
+                self._append_log("[완료] GitHub 액세스 토큰이 GUI에 반영되었습니다.")
+                self.root.after(0, self.load_my_github_repos)
         self._schedule_queue_poll()
 
     def _append_log(self, message: str) -> None:
@@ -545,9 +560,10 @@ class CodexAutoGUI:
         if not query:
             messagebox.showerror("코덱스 오토", "GitHub 검색어를 입력하세요.")
             return
+        client = self._github_client()
 
         def worker() -> dict[str, object]:
-            repos = self._github_client().search_repositories(query)
+            repos = client.search_repositories(query)
             self.queue.put(("github_results", repos))
             return {"검색 결과 수": len(repos)}
 
@@ -557,9 +573,10 @@ class CodexAutoGUI:
         if not self.github_token_var.get().strip():
             messagebox.showerror("코덱스 오토", "내 저장소 조회에는 GitHub 토큰이 필요합니다.")
             return
+        client = self._github_client()
 
         def worker() -> dict[str, object]:
-            repos = self._github_client().list_my_repositories()
+            repos = client.list_my_repositories()
             self.queue.put(("github_results", repos))
             return {"내 저장소 수": len(repos)}
 
@@ -577,6 +594,75 @@ class CodexAutoGUI:
         self.branch_var.set(repo.default_branch or "main")
         self._append_log(f"[정보] GitHub 저장소 적용: {repo.full_name}")
 
+    def github_browser_login(self) -> None:
+        client_id = self.github_client_id_var.get().strip()
+        client_secret = self.github_client_secret_var.get().strip()
+        if not client_id or not client_secret:
+            messagebox.showerror("코덱스 오토", "브라우저 로그인에는 GitHub OAuth Client ID 와 Client Secret 이 필요합니다.")
+            return
+        client = self._github_client()
+
+        def worker() -> dict[str, object]:
+            callback: dict[str, str] = {}
+            state = secrets.token_urlsafe(24)
+
+            class OAuthCallbackHandler(BaseHTTPRequestHandler):
+                def do_GET(self) -> None:  # noqa: N802
+                    from urllib.parse import parse_qs, urlparse
+
+                    parsed = urlparse(self.path)
+                    params = parse_qs(parsed.query)
+                    callback["code"] = params.get("code", [""])[0]
+                    callback["state"] = params.get("state", [""])[0]
+                    callback["error"] = params.get("error", [""])[0]
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(
+                        (
+                            "<html><body><h2>GitHub 로그인 완료</h2>"
+                            "<p>이 창은 닫고 앱으로 돌아가세요.</p></body></html>"
+                        ).encode("utf-8")
+                    )
+
+                def log_message(self, format: str, *args: object) -> None:
+                    return
+
+            server = HTTPServer(("127.0.0.1", 0), OAuthCallbackHandler)
+            server.timeout = 1
+            redirect_uri = f"http://127.0.0.1:{server.server_port}/callback"
+            authorize_url = client.build_authorize_url(
+                client_id=client_id,
+                redirect_uri=redirect_uri,
+                state=state,
+            )
+            self.queue.put(("log", f"[정보] 브라우저에서 GitHub 승인을 진행합니다. 콜백 주소: {redirect_uri}"))
+            webbrowser.open(authorize_url)
+
+            deadline = time.time() + 300
+            while time.time() < deadline and "code" not in callback and "error" not in callback:
+                server.handle_request()
+            server.server_close()
+
+            if callback.get("error"):
+                raise RuntimeError(f"GitHub 승인 실패: {callback['error']}")
+            if callback.get("state") != state:
+                raise RuntimeError("GitHub OAuth state 검증에 실패했습니다.")
+            code = callback.get("code", "")
+            if not code:
+                raise RuntimeError("GitHub OAuth 승인 코드를 받지 못했습니다.")
+
+            token = client.exchange_web_flow_code(
+                client_id=client_id,
+                client_secret=client_secret,
+                code=code,
+                redirect_uri=redirect_uri,
+            )
+            self.queue.put(("github_token", token))
+            return {"login": "ok", "redirect_uri": redirect_uri}
+
+        self._run_async("GitHub 브라우저 로그인", worker)
+
     def _choose_workspace_root(self) -> None:
         chosen = filedialog.askdirectory(initialdir=str(Path.cwd()))
         if chosen:
@@ -593,12 +679,13 @@ class CodexAutoGUI:
             repo_url, branch = self._repo_inputs()
             runtime = self._runtime()
             long_term_path = self._long_term_path()
+            orchestrator = self._orchestrator()
         except Exception as exc:
             messagebox.showerror("코덱스 오토", str(exc))
             return
         self._run_async(
             "저장소 초기화",
-            lambda: self._orchestrator().init_repo(
+            lambda: orchestrator.init_repo(
                 repo_url=repo_url,
                 branch=branch,
                 runtime=runtime,
@@ -611,12 +698,13 @@ class CodexAutoGUI:
             repo_url, branch = self._repo_inputs()
             runtime = self._runtime()
             long_term_path = self._long_term_path()
+            orchestrator = self._orchestrator()
         except Exception as exc:
             messagebox.showerror("코덱스 오토", str(exc))
             return
         self._run_async(
             "블록 실행",
-            lambda: self._orchestrator().run(
+            lambda: orchestrator.run(
                 repo_url=repo_url,
                 branch=branch,
                 runtime=runtime,
@@ -629,12 +717,13 @@ class CodexAutoGUI:
         try:
             repo_url, branch = self._repo_inputs()
             runtime = self._runtime()
+            orchestrator = self._orchestrator()
         except Exception as exc:
             messagebox.showerror("코덱스 오토", str(exc))
             return
         self._run_async(
             "이어서 실행",
-            lambda: self._orchestrator().resume(
+            lambda: orchestrator.resume(
                 repo_url=repo_url,
                 branch=branch,
                 runtime=runtime,
@@ -644,28 +733,31 @@ class CodexAutoGUI:
     def show_status(self) -> None:
         try:
             repo_url, branch = self._repo_inputs()
+            orchestrator = self._orchestrator()
         except Exception as exc:
             messagebox.showerror("코덱스 오토", str(exc))
             return
-        self._run_async("상태 보기", lambda: self._orchestrator().status(repo_url=repo_url, branch=branch))
+        self._run_async("상태 보기", lambda: orchestrator.status(repo_url=repo_url, branch=branch))
 
     def show_history(self) -> None:
         try:
             repo_url, branch = self._repo_inputs()
+            orchestrator = self._orchestrator()
         except Exception as exc:
             messagebox.showerror("코덱스 오토", str(exc))
             return
-        self._run_async("히스토리", lambda: self._orchestrator().history(repo_url=repo_url, branch=branch, limit=20))
+        self._run_async("히스토리", lambda: orchestrator.history(repo_url=repo_url, branch=branch, limit=20))
 
     def show_report(self) -> None:
         try:
             repo_url, branch = self._repo_inputs()
+            orchestrator = self._orchestrator()
         except Exception as exc:
             messagebox.showerror("코덱스 오토", str(exc))
             return
 
         def worker() -> dict[str, object]:
-            path = self._orchestrator().report(repo_url=repo_url, branch=branch)
+            path = orchestrator.report(repo_url=repo_url, branch=branch)
             return {"report_path": str(path), "report": json.loads(path.read_text(encoding="utf-8"))}
 
         self._run_async("리포트", worker)
