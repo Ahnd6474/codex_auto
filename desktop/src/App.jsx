@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { CenterWorkspace } from "./components/layout/CenterWorkspace";
-import { DetailsPane } from "./components/layout/DetailsPane";
 import { BottomToolPanel } from "./components/layout/BottomToolPanel";
 import { IdeToolbar } from "./components/layout/IdeToolbar";
 import { SidebarPane } from "./components/layout/SidebarPane";
@@ -26,10 +25,6 @@ export default function App() {
       }
       if (event.key.toLowerCase() === "b") {
         controller.setBottomCollapsed((current) => !current);
-        event.preventDefault();
-      }
-      if (event.key.toLowerCase() === "\\") {
-        controller.setDetailsCollapsed((current) => !current);
         event.preventDefault();
       }
     }
@@ -65,7 +60,6 @@ export default function App() {
         onOpenConfig={() => controller.setCenterTab("config")}
         onToggleSidebar={() => controller.setSidebarCollapsed((current) => !current)}
         onToggleBottom={() => controller.setBottomCollapsed((current) => !current)}
-        onToggleDetails={() => controller.setDetailsCollapsed((current) => !current)}
       />
 
       {controller.message ? (
@@ -113,7 +107,6 @@ export default function App() {
             planDraft={controller.planDraft}
             selectedStepId={controller.selectedStepId}
             modelPresets={controller.modelPresets}
-            workspaceTree={detail?.workspace_tree}
             busy={controller.busy}
             onChangeForm={controller.setProjectForm}
             onChooseDirectory={controller.chooseDirectory}
@@ -148,15 +141,6 @@ export default function App() {
             </>
           ) : null}
         </div>
-
-        {!controller.detailsCollapsed ? (
-          <>
-            <Splitter axis="vertical" onResize={(delta) => controller.setDetailsWidth((current) => clamp(current - delta, 260, 460))} />
-            <div className="ide-pane ide-pane--details" style={{ width: `${controller.detailsWidth}px` }}>
-              <DetailsPane detail={detail} planDraft={controller.planDraft} selectedStepId={controller.selectedStepId} modelPresets={controller.modelPresets} />
-            </div>
-          </>
-        ) : null}
       </div>
     </main>
   );

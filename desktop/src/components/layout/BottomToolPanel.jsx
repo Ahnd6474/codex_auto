@@ -17,19 +17,12 @@ export function BottomToolPanel({ activeTab, onChangeTab, data }) {
     <section className="tool-window">
       <div className="tool-window__header">
         <div className="tool-tabs">
-          <ToolTab value="execution" activeTab={activeTab} onChange={onChangeTab} label="Execution Log" />
           <ToolTab value="json" activeTab={activeTab} onChange={onChangeTab} label="Event JSON" />
           <ToolTab value="tokens" activeTab={activeTab} onChange={onChangeTab} label="Token Usage" />
-          <ToolTab value="tests" activeTab={activeTab} onChange={onChangeTab} label="Test Results" />
+          <ToolTab value="tests" activeTab={activeTab} onChange={onChangeTab} label="Test Result" />
           <ToolTab value="git" activeTab={activeTab} onChange={onChangeTab} label="Git / Safe Revision" />
         </div>
       </div>
-
-      {activeTab === "execution" ? (
-        <div className="tool-window__body tool-window__body--log">
-          <pre>{(data?.execution_log_lines || ["No execution activity yet."]).join("\n")}</pre>
-        </div>
-      ) : null}
 
       {activeTab === "json" ? (
         <div className="tool-window__body tool-window__body--log">

@@ -4,8 +4,7 @@ export function ReportsView({ reports }) {
       <div className="view-header">
         <div>
           <span className="eyebrow">Reports</span>
-          <h2>Closeout And Structured Reports</h2>
-          <p>Generated artifacts stay visible in one place so the operator can inspect handoff notes, machine-readable summaries, and block review context.</p>
+          <h2>Reports</h2>
         </div>
       </div>
 

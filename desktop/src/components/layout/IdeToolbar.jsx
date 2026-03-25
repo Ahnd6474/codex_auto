@@ -18,7 +18,6 @@ export function IdeToolbar({
   onOpenConfig,
   onToggleSidebar,
   onToggleBottom,
-  onToggleDetails,
 }) {
   const status = activeJob?.status === "running" ? "running" : projectDetail?.project?.current_status || "idle";
   const checkpointPending = Boolean(projectDetail?.checkpoints?.pending);
@@ -40,7 +39,7 @@ export function IdeToolbar({
       <div className="ide-toolbar__group ide-toolbar__group--grow">
         <div className="toolbar-chip">
           <span>Workspace</span>
-          <strong>{workspaceRoot || "Loading..."}</strong>
+          <strong>{workspaceRoot || "Loading"}</strong>
         </div>
         <label className="toolbar-select">
           <span>Project</span>
@@ -55,10 +54,10 @@ export function IdeToolbar({
         </label>
         <div className={`toolbar-status toolbar-status--${statusTone(status)}`}>
           <span>Status</span>
-          <strong>{activeJob?.status === "running" ? `${activeJob.command} running` : status}</strong>
+          <strong>{activeJob?.status === "running" ? `${activeJob.command}` : status}</strong>
         </div>
         <div className="toolbar-status toolbar-status--neutral">
-          <span>Progress</span>
+          <span>Plan</span>
           <strong>{progressCaption(planDraft)}</strong>
         </div>
       </div>
@@ -81,9 +80,6 @@ export function IdeToolbar({
         </button>
         <button className="toolbar-button toolbar-button--ghost" onClick={onToggleBottom} type="button" title="Toggle tool window">
           Bottom
-        </button>
-        <button className="toolbar-button toolbar-button--ghost" onClick={onToggleDetails} type="button" title="Toggle details pane">
-          Details
         </button>
       </div>
     </header>

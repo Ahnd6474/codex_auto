@@ -33,14 +33,12 @@ export function useDesktopController() {
   const [activeJob, setActiveJob] = useState(null);
   const [message, setMessage] = useState(null);
 
-  const [centerTab, setCenterTab] = usePersistentState("codex-auto:center-tab", "dashboard");
-  const [bottomTab, setBottomTab] = usePersistentState("codex-auto:bottom-tab", "execution");
+  const [centerTab, setCenterTab] = usePersistentState("codex-auto:center-tab", "run");
+  const [bottomTab, setBottomTab] = usePersistentState("codex-auto:bottom-tab", "json");
   const [sidebarTab, setSidebarTab] = usePersistentState("codex-auto:sidebar-tab", "projects");
   const [sidebarCollapsed, setSidebarCollapsed] = usePersistentState("codex-auto:sidebar-collapsed", false);
-  const [detailsCollapsed, setDetailsCollapsed] = usePersistentState("codex-auto:details-collapsed", false);
   const [bottomCollapsed, setBottomCollapsed] = usePersistentState("codex-auto:bottom-collapsed", false);
   const [sidebarWidth, setSidebarWidth] = usePersistentState("codex-auto:sidebar-width", 300);
-  const [detailsWidth, setDetailsWidth] = usePersistentState("codex-auto:details-width", 320);
   const [bottomHeight, setBottomHeight] = usePersistentState("codex-auto:bottom-height", 250);
   const [projectFilter, setProjectFilter] = usePersistentState("codex-auto:project-filter", "");
   const [workspaceFilter, setWorkspaceFilter] = usePersistentState("codex-auto:workspace-filter", "");
@@ -262,7 +260,7 @@ export function useDesktopController() {
     setSelectedProjectId("");
     setProjectForm(blankProjectForm(defaultRuntime));
     setPlanDraft({ steps: [], project_prompt: "", closeout_status: "not_started" });
-    setCenterTab("config");
+    setCenterTab("run");
     setSidebarTab("projects");
   }
 
@@ -322,7 +320,7 @@ export function useDesktopController() {
       setActiveJobId(job.id);
       setActiveJob(job);
       setCenterTab("run");
-      setBottomTab("execution");
+      setBottomTab("json");
       setMessage(messagePayload("info", `${commandLabel(command)} started.`));
     } catch (error) {
       setMessage(messagePayload("error", String(error)));
@@ -530,10 +528,8 @@ export function useDesktopController() {
     bottomTab,
     sidebarTab,
     sidebarCollapsed,
-    detailsCollapsed,
     bottomCollapsed,
     sidebarWidth,
-    detailsWidth,
     bottomHeight,
     projectFilter,
     workspaceFilter,
@@ -546,10 +542,8 @@ export function useDesktopController() {
     setBottomTab,
     setSidebarTab,
     setSidebarCollapsed,
-    setDetailsCollapsed,
     setBottomCollapsed,
     setSidebarWidth,
-    setDetailsWidth,
     setBottomHeight,
     setProjectFilter,
     setWorkspaceFilter,

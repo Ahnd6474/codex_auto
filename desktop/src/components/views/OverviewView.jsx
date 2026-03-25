@@ -1,11 +1,10 @@
-export function OverviewView({ detail, workspaceTree }) {
+export function OverviewView({ detail }) {
   return (
     <section className="workspace-view">
       <div className="view-header">
         <div>
-          <span className="eyebrow">Project Overview</span>
+          <span className="eyebrow">Overview</span>
           <h2>Workspace Layout</h2>
-          <p>The managed project keeps repository contents separate from docs, logs, reports, state, and memory so multi-repo automation stays traceable.</p>
         </div>
       </div>
 
@@ -29,21 +28,6 @@ export function OverviewView({ detail, workspaceTree }) {
               </div>
             ))}
           </div>
-        </div>
-      </div>
-
-      <div className="content-card">
-        <div className="content-card__header">
-          <strong>Workspace Explorer Snapshot</strong>
-        </div>
-        <div className="dense-list">
-          {(workspaceTree || []).map((section) => (
-            <div className="dense-row" key={section.path}>
-              <strong>{section.label}</strong>
-              <span>{section.path}</span>
-              <span>{(section.children || []).map((child) => child.label).join(", ") || "No entries"}</span>
-            </div>
-          ))}
         </div>
       </div>
     </section>

@@ -19,7 +19,6 @@ export function DashboardView({ detail, planDraft, modelPresets, activeJob }) {
         <div>
           <span className="eyebrow">Dashboard</span>
           <h2>{detail?.project?.display_name || detail?.project?.slug || "No project selected"}</h2>
-          <p>Critical state stays front and center: run status, safe revision, pending checkpoints, remaining steps, and aggregate token usage.</p>
         </div>
       </div>
 
@@ -35,7 +34,7 @@ export function DashboardView({ detail, planDraft, modelPresets, activeJob }) {
       <div className="overview-grid">
         <div className="content-card">
           <div className="content-card__header">
-            <strong>Current Runtime</strong>
+            <strong>Runtime</strong>
           </div>
           <p>{runtimeSummary(detail?.runtime || {}, modelPresets)}</p>
           <p>Verification: {detail?.runtime?.test_cmd || "python -m pytest"}</p>
@@ -45,7 +44,7 @@ export function DashboardView({ detail, planDraft, modelPresets, activeJob }) {
 
         <div className="content-card">
           <div className="content-card__header">
-            <strong>Pending Checkpoint</strong>
+            <strong>Checkpoint</strong>
           </div>
           {detail?.checkpoints?.pending ? (
             <>

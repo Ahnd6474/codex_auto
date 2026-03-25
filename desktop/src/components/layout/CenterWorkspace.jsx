@@ -21,7 +21,6 @@ export function CenterWorkspace({
   planDraft,
   selectedStepId,
   modelPresets,
-  workspaceTree,
   busy,
   onChangeForm,
   onChooseDirectory,
@@ -44,16 +43,14 @@ export function CenterWorkspace({
   return (
     <section className="workspace-area">
       <div className="workspace-tabs">
+        <WorkspaceTab value="run" activeTab={activeTab} onChange={onChangeTab} label="Flow" />
         <WorkspaceTab value="dashboard" activeTab={activeTab} onChange={onChangeTab} label="Dashboard" />
-        <WorkspaceTab value="overview" activeTab={activeTab} onChange={onChangeTab} label="Project Overview" />
-        <WorkspaceTab value="run" activeTab={activeTab} onChange={onChangeTab} label="Run Control" />
+        <WorkspaceTab value="overview" activeTab={activeTab} onChange={onChangeTab} label="Overview" />
         <WorkspaceTab value="reports" activeTab={activeTab} onChange={onChangeTab} label="Reports" />
         <WorkspaceTab value="history" activeTab={activeTab} onChange={onChangeTab} label="History" />
-        <WorkspaceTab value="config" activeTab={activeTab} onChange={onChangeTab} label="Config Editor" />
+        <WorkspaceTab value="config" activeTab={activeTab} onChange={onChangeTab} label="Config" />
       </div>
 
-      {activeTab === "dashboard" ? <DashboardView detail={detail} planDraft={planDraft} modelPresets={modelPresets} activeJob={activeJob} /> : null}
-      {activeTab === "overview" ? <OverviewView detail={detail} workspaceTree={workspaceTree} /> : null}
       {activeTab === "run" ? (
         <RunControlView
           detail={detail}
@@ -75,6 +72,8 @@ export function CenterWorkspace({
           onMoveStep={onMoveStep}
         />
       ) : null}
+      {activeTab === "dashboard" ? <DashboardView detail={detail} planDraft={planDraft} modelPresets={modelPresets} activeJob={activeJob} /> : null}
+      {activeTab === "overview" ? <OverviewView detail={detail} /> : null}
       {activeTab === "reports" ? <ReportsView reports={detail?.reports} /> : null}
       {activeTab === "history" ? <HistoryView history={detail?.history} /> : null}
       {activeTab === "config" ? (
