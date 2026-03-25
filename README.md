@@ -193,7 +193,7 @@ Source prompt and scope templates:
 
 - `codex exec` is invoked through subprocess in non-interactive mode and JSON event streams are saved under `logs/block_*/`
 - the GUI saves both the resolved execution model slug and the selected preset in `project_config.json`; previously saved custom model slugs are still preserved
-- `reasoning.effort` is passed through to Codex using `low`, `medium`, `high`, or `xhigh`
+- `reasoning.effort` is passed through to Codex using `low`, `medium`, `high`, or `xhigh`; saved execution-plan steps can override the project default per step
 - token usage is aggregated from `turn.completed` JSON events and surfaced in the GUI dashboard and pass logs
 - each repository gets its own isolated workspace subtree; no mutable state is shared across projects
 - local git user identity is configured in the managed clone for automated commits

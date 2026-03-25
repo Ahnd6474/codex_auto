@@ -128,6 +128,7 @@ class UIBridgeTests(unittest.TestCase):
                             "codex_description": "Create a JSON bridge for the UI.",
                             "test_command": "python -m pytest",
                             "success_criteria": "The desktop bridge can load and save projects.",
+                            "reasoning_effort": "medium",
                         },
                         {
                             "step_id": "custom-2",
@@ -136,6 +137,7 @@ class UIBridgeTests(unittest.TestCase):
                             "codex_description": "Create the desktop shell with the required views.",
                             "test_command": "python -m pytest",
                             "success_criteria": "The desktop app can render the plan flow.",
+                            "reasoning_effort": "xhigh",
                         },
                     ],
                 },
@@ -146,6 +148,8 @@ class UIBridgeTests(unittest.TestCase):
 
             self.assertEqual(saved["plan"]["steps"][0]["step_id"], "ST1")
             self.assertEqual(saved["plan"]["steps"][1]["step_id"], "ST2")
+            self.assertEqual(saved["plan"]["steps"][0]["reasoning_effort"], "medium")
+            self.assertEqual(saved["plan"]["steps"][1]["reasoning_effort"], "xhigh")
             self.assertEqual(saved["stats"]["total_steps"], 2)
 
             stop_payload = run_command(

@@ -1,4 +1,4 @@
-import { canEditStep, statusTone } from "../../utils";
+import { canEditStep, REASONING_OPTIONS, reasoningEffortLabel, statusTone } from "../../utils";
 
 function FlowNode({ step, selected, onSelect }) {
   const tone = statusTone(step.status);
@@ -10,6 +10,7 @@ function FlowNode({ step, selected, onSelect }) {
       </div>
       <strong>{step.title}</strong>
       <p>{step.display_description || step.test_command || "No summary"}</p>
+      <p>Reasoning {reasoningEffortLabel(step.reasoning_effort || "high")}</p>
     </button>
   );
 }
@@ -126,6 +127,20 @@ export function RunControlView({
               <label className="field">
                 <span>Test Command</span>
                 <input value={selectedStep.test_command || ""} onChange={(event) => onUpdateStepField("test_command", event.target.value)} disabled={!editableStep} />
+              </label>
+              <label className="field">
+                <span>GPT Reasoning</span>
+                <select
+                  value={selectedStep.reasoning_effort || detail?.runtime?.effort || "high"}
+                  onChange={(event) => onUpdateStepField("reasoning_effort", event.target.value)}
+                  disabled={!editableStep}
+                >
+                  {REASONING_OPTIONS.map((effort) => (
+                    <option key={effort} value={effort}>
+                      {reasoningEffortLabel(effort)}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="field field--wide">
                 <span>Description</span>

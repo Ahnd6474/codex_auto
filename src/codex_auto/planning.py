@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from html import escape
 from pathlib import Path
 
+from .model_selection import normalize_reasoning_effort
 from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, ProjectContext
 from .utils import compact_text, now_utc_iso, read_text, similarity_score, tokenize, write_text
 
@@ -346,6 +347,7 @@ def prompt_to_execution_plan_prompt(
 def parse_execution_plan_response(
     response_text: str,
     default_test_command: str,
+    default_reasoning_effort: str,
     limit: int = 8,
 ) -> tuple[str, str, list[ExecutionStep]]:
     raw = response_text.strip()
@@ -371,6 +373,7 @@ def parse_execution_plan_response(
     if not isinstance(tasks_payload, list):
         return plan_title, summary, []
 
+    fallback_effort = normalize_reasoning_effort(default_reasoning_effort, fallback="high")
     steps: list[ExecutionStep] = []
     seen: set[str] = set()
     for index, item in enumerate(tasks_payload, start=1):
@@ -387,6 +390,10 @@ def parse_execution_plan_response(
         seen.add(dedupe_key)
         display_description = str(item.get("display_description", item.get("description", ""))).strip()
         codex_description = str(item.get("codex_description", "")).strip() or display_description or title
+        reasoning_effort = normalize_reasoning_effort(
+            str(item.get("reasoning_effort", item.get("effort", ""))),
+            fallback=fallback_effort,
+        )
         steps.append(
             ExecutionStep(
                 step_id=f"ST{len(steps) + 1}",
@@ -395,6 +402,7 @@ def parse_execution_plan_response(
                 codex_description=codex_description,
                 test_command=str(item.get("test_command", "")).strip() or default_test_command,
                 success_criteria=str(item.get("success_criteria", "")).strip(),
+                reasoning_effort=reasoning_effort,
                 status="pending",
             )
         )
@@ -671,6 +679,7 @@ def execution_plan_markdown(
                 f"- {step.step_id}: {step.title}",
                 f"  - UI description: {step.display_description or step.title}",
                 f"  - Codex instruction: {step.codex_description or step.display_description or step.title}",
+                f"  - GPT reasoning: {step.reasoning_effort or context.runtime.effort or 'high'}",
                 f"  - Verification: {step.test_command or 'Use the default test command.'}",
                 f"  - Success criteria: {step.success_criteria or 'Verification command completes successfully.'}",
             ]

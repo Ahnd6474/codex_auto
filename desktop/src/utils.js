@@ -5,6 +5,16 @@ export function cloneValue(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+export const REASONING_OPTIONS = ["low", "medium", "high", "xhigh"];
+
+export function reasoningEffortLabel(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) {
+    return "High";
+  }
+  return normalized === "xhigh" ? "XHigh" : normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
 export function basename(path) {
   return String(path || "")
     .split(/[\\/]/)
@@ -65,7 +75,7 @@ export function firstSelectableStepId(plan) {
   return pending?.step_id || steps[0]?.step_id || "";
 }
 
-export function runtimeSummary(runtime, modelPresets) {
+export function runtimeSummary(runtime, modelPresets = []) {
   const preset = modelPresets.find((item) => item.preset_id === runtime?.model_preset);
   if (preset) {
     return preset.summary;

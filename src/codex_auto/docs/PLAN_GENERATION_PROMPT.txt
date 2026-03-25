@@ -26,6 +26,7 @@ JSON shape:
 "task_title": "short stage name",
 "display_description": "one sentence or less for UI display",
 "codex_description": "one paragraph or less with the actual execution instruction for Codex",
+"reasoning_effort": "one of low, medium, high, xhigh based on expected difficulty",
 "success_criteria": "clear completion condition that can be judged locally"
 }}
 ]
@@ -38,6 +39,7 @@ Field requirements:
 - "task_title": short and actionable title for task
 - "display_description": very short user-facing explanation, no more than one sentence.
 - "codex_description": the actual instruction for Codex, no more than one paragraph, specific enough to execute.
+- "reasoning_effort": choose only `low`, `medium`, `high`, or `xhigh`. Use `low` for narrow mechanical edits, `medium` for normal implementation, `high` for multi-file or tricky work, and `xhigh` only for the hardest investigations or refactors.
 - "success_criteria": a concrete, locally judgeable done condition, describing what must be true when the block is complete.
 
 Do not include markdown fences or commentary outside the JSON.

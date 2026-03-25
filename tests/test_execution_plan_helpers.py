@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 import shutil
 import sys
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -18,6 +19,7 @@ from codex_auto.model_selection import (
     model_selection_from_runtime,
 )
 from codex_auto.models import ExecutionPlanState, ExecutionStep, RuntimeOptions
+from codex_auto.orchestrator import Orchestrator
 from codex_auto.planning import (
     FINALIZATION_PROMPT_FILENAME,
     PLAN_GENERATION_PROMPT_FILENAME,
@@ -42,18 +44,20 @@ class ExecutionPlanHelperTests(unittest.TestCase):
               "task_title": "Add the CLI flag",
               "display_description": "Expose the new flag to users.",
               "codex_description": "Inspect the CLI parser, add the flag, and cover it with tests.",
+              "reasoning_effort": "medium",
               "success_criteria": "CLI parsing succeeds."
             },
             {
               "task_title": "Wire the backend",
               "display_description": "Connect the new option to execution.",
               "codex_description": "Review the execution path, add targeted tests, and wire the backend.",
+              "reasoning_effort": "high",
               "success_criteria": "Backend path is covered."
             }
           ]
         }
         """
-        plan_title, summary, steps = parse_execution_plan_response(response, "python -m unittest", limit=4)
+        plan_title, summary, steps = parse_execution_plan_response(response, "python -m unittest", "low", limit=4)
 
         self.assertEqual(plan_title, "CLI rollout")
         self.assertEqual(summary, "Build the feature in small verified steps.")
@@ -62,8 +66,28 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(steps[0].display_description, "Expose the new flag to users.")
         self.assertIn("CLI parser", steps[0].codex_description)
         self.assertEqual(steps[0].test_command, "python -m unittest")
+        self.assertEqual(steps[0].reasoning_effort, "medium")
         self.assertEqual(steps[1].step_id, "ST2")
         self.assertEqual(steps[1].test_command, "python -m unittest")
+        self.assertEqual(steps[1].reasoning_effort, "high")
+
+    def test_parse_execution_plan_response_defaults_reasoning_effort(self) -> None:
+        response = """
+        {
+          "tasks": [
+            {
+              "task_title": "Small fix",
+              "display_description": "Keep the fallback effort.",
+              "codex_description": "Apply the fix without an explicit effort."
+            }
+          ]
+        }
+        """
+
+        _title, _summary, steps = parse_execution_plan_response(response, "python -m unittest", "xhigh", limit=2)
+
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0].reasoning_effort, "xhigh")
 
     def test_execution_step_from_dict_accepts_legacy_description(self) -> None:
         step = ExecutionStep.from_dict(
@@ -78,6 +102,17 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(step.display_description, "Old UI description")
         self.assertEqual(step.codex_description, "Old UI description")
         self.assertEqual(step.success_criteria, "Still works.")
+
+    def test_execution_step_from_dict_reads_reasoning_effort(self) -> None:
+        step = ExecutionStep.from_dict(
+            {
+                "step_id": "ST1",
+                "title": "Reasoning task",
+                "reasoning_effort": "xhigh",
+            }
+        )
+
+        self.assertEqual(step.reasoning_effort, "xhigh")
 
     def test_execution_plan_state_reads_closeout_fields(self) -> None:
         state = ExecutionPlanState.from_dict(
@@ -95,6 +130,66 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(state.closeout_status, "completed")
         self.assertEqual(state.closeout_commit_hash, "abc123")
         self.assertEqual(state.closeout_notes, "final tests passed")
+
+    def test_run_saved_execution_step_uses_step_reasoning_effort(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_step_reasoning_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="low", test_cmd="python -m pytest")
+        observed_efforts: list[str] = []
+
+        def fake_run_single_block(*args, **kwargs) -> None:
+            context = kwargs["context"]
+            observed_efforts.append(context.runtime.effort)
+            append_jsonl(
+                context.paths.block_log_file,
+                {
+                    "block_index": 0,
+                    "status": "completed",
+                    "commit_hashes": ["abc123"],
+                    "test_summary": "step passed",
+                },
+            )
+
+        try:
+            with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch.object(
+                orchestrator,
+                "_run_single_block",
+                side_effect=fake_run_single_block,
+            ):
+                orchestrator.update_execution_plan(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    plan_state=ExecutionPlanState(
+                        plan_title="Reasoning Demo",
+                        default_test_command="python -m pytest",
+                        steps=[
+                            ExecutionStep(
+                                step_id="custom-1",
+                                title="Hard checkpoint",
+                                codex_description="Use deeper reasoning for this step.",
+                                test_command="python -m pytest",
+                                success_criteria="The step completes successfully.",
+                                reasoning_effort="xhigh",
+                            )
+                        ],
+                    ),
+                )
+                _context, _plan_state, step = orchestrator.run_saved_execution_step(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    step_id="ST1",
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(observed_efforts, ["xhigh"])
+        self.assertEqual(step.status, "completed")
+        self.assertEqual(step.reasoning_effort, "xhigh")
+        self.assertEqual(step.commit_hash, "abc123")
 
     def test_execution_plan_svg_includes_step_statuses(self) -> None:
         svg = execution_plan_svg(

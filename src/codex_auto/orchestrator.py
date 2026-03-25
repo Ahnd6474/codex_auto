@@ -7,6 +7,7 @@ from .environment import ensure_gitignore, ensure_virtualenv
 from .codex_runner import CodexRunner
 from .git_ops import GitOps
 from .memory import MemoryStore
+from .model_selection import normalize_reasoning_effort
 from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, ProjectContext, RuntimeOptions, TestRunResult
 from .planning import (
     FINALIZATION_PROMPT_FILENAME,
@@ -148,7 +149,12 @@ class Orchestrator:
         summary = ""
         steps: list[ExecutionStep] = []
         if result.returncode == 0:
-            plan_title, summary, steps = parse_execution_plan_response(result.last_message or "", runtime.test_cmd, limit=max_steps)
+            plan_title, summary, steps = parse_execution_plan_response(
+                result.last_message or "",
+                runtime.test_cmd,
+                runtime.effort,
+                limit=max_steps,
+            )
         if not steps:
             steps = [
                 ExecutionStep(
@@ -158,6 +164,7 @@ class Orchestrator:
                     codex_description=project_prompt.strip() or "Implement the requested improvement safely.",
                     test_command=runtime.test_cmd,
                     success_criteria="Run the configured verification command successfully.",
+                    reasoning_effort=normalize_reasoning_effort(runtime.effort, fallback="high"),
                 )
             ]
             summary = summary or "Fallback execution plan created because Codex did not return a machine-readable breakdown."
@@ -187,6 +194,9 @@ class Orchestrator:
         state = ExecutionPlanState.from_dict(payload)
         if not state.default_test_command:
             state.default_test_command = context.runtime.test_cmd
+        fallback_effort = normalize_reasoning_effort(context.runtime.effort, fallback="high")
+        for step in state.steps:
+            step.reasoning_effort = normalize_reasoning_effort(step.reasoning_effort, fallback=fallback_effort)
         return state
 
     def update_execution_plan(
@@ -206,6 +216,7 @@ class Orchestrator:
 
     def save_execution_plan_state(self, context: ProjectContext, plan_state: ExecutionPlanState) -> ExecutionPlanState:
         normalized_steps: list[ExecutionStep] = []
+        fallback_effort = normalize_reasoning_effort(context.runtime.effort, fallback="high")
         for index, step in enumerate(plan_state.steps, start=1):
             normalized_steps.append(
                 ExecutionStep(
@@ -215,6 +226,7 @@ class Orchestrator:
                     codex_description=step.codex_description.strip() or step.display_description.strip() or step.title.strip(),
                     test_command=step.test_command.strip() or plan_state.default_test_command or context.runtime.test_cmd,
                     success_criteria=step.success_criteria.strip(),
+                    reasoning_effort=normalize_reasoning_effort(step.reasoning_effort, fallback=fallback_effort),
                     status=step.status if step.status else "pending",
                     started_at=step.started_at,
                     completed_at=step.completed_at,
@@ -304,6 +316,10 @@ class Orchestrator:
             **{
                 **previous_runtime.to_dict(),
                 "test_cmd": target_step.test_command or runtime.test_cmd,
+                "effort": normalize_reasoning_effort(
+                    target_step.reasoning_effort,
+                    fallback=normalize_reasoning_effort(runtime.effort, fallback="high"),
+                ),
                 "max_blocks": 1,
                 "allow_push": True,
                 "approval_mode": runtime.approval_mode,

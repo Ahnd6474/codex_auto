@@ -227,6 +227,7 @@ class ExecutionStep:
     codex_description: str = ""
     test_command: str = ""
     success_criteria: str = ""
+    reasoning_effort: str = ""
     status: str = "pending"
     started_at: str | None = None
     completed_at: str | None = None
@@ -248,6 +249,7 @@ class ExecutionStep:
             codex_description=codex_description,
             test_command=str(data.get("test_command", "")).strip(),
             success_criteria=str(data.get("success_criteria", "")).strip(),
+            reasoning_effort=str(data.get("reasoning_effort", data.get("effort", ""))).strip().lower(),
             status=str(data.get("status", "pending")).strip() or "pending",
             started_at=data.get("started_at"),
             completed_at=data.get("completed_at"),

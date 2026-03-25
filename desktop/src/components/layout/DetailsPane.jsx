@@ -1,4 +1,4 @@
-import { runtimeSummary, statusTone } from "../../utils";
+import { reasoningEffortLabel, runtimeSummary, statusTone } from "../../utils";
 
 export function DetailsPane({ detail, planDraft, selectedStepId, modelPresets }) {
   const selectedStep = (planDraft?.steps || []).find((step) => step.step_id === selectedStepId) || null;
@@ -44,6 +44,7 @@ export function DetailsPane({ detail, planDraft, selectedStepId, modelPresets })
           <div className="details-text">
             <strong>{selectedStep.step_id}: {selectedStep.title}</strong>
             <p>{selectedStep.display_description}</p>
+            <p>GPT reasoning: {reasoningEffortLabel(selectedStep.reasoning_effort || detail?.runtime?.effort || "high")}</p>
             <p>{selectedStep.success_criteria}</p>
           </div>
         ) : (

@@ -456,6 +456,7 @@ export function useDesktopController() {
       codex_description: "Describe the implementation work Codex should perform for this checkpoint.",
       test_command: projectForm.runtime?.test_cmd || "python -m pytest",
       success_criteria: "Run the configured verification command successfully.",
+      reasoning_effort: projectForm.runtime?.effort || "high",
       status: "pending",
       notes: "",
     };

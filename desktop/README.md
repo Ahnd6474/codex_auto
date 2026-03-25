@@ -18,6 +18,7 @@ From the repository root:
 ```bash
 cd desktop
 npm.cmd install
+npm.cmd run test
 npm.cmd run tauri:dev
 ```
 
@@ -26,6 +27,13 @@ Build the desktop app:
 ```bash
 cd desktop
 npm.cmd run tauri:build
+```
+
+Run the desktop unit tests:
+
+```bash
+cd desktop
+npm.cmd run test
 ```
 
 ## Architecture
