@@ -407,7 +407,8 @@ h1 {
 .callout-grid article,
 .workflow-card,
 .showcase-card,
-.release-card {
+.release-card,
+.privacy-card {
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
 }
@@ -545,6 +546,28 @@ h1 {
   gap: 12px;
 }
 
+.privacy-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.privacy-card {
+  padding: 20px;
+  border-radius: 22px;
+}
+
+.privacy-card strong {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.privacy-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.72;
+}
+
 .release-card.primary {
   background: linear-gradient(135deg, rgba(103, 168, 255, 0.12), rgba(134, 241, 198, 0.08));
 }
@@ -584,12 +607,74 @@ h1 {
   font-weight: 700;
 }
 
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 8px 0;
+  color: var(--muted);
+}
+
+.footer p {
+  margin: 0;
+}
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+}
+
+.footer-button {
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.consent-banner {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 30;
+  width: min(460px, calc(100% - 24px));
+  padding: 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 24px;
+  background: rgba(11, 14, 20, 0.96);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+.consent-copy strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.consent-copy p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.consent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
 @media (max-width: 1120px) {
   .hero,
   .callout,
   .workflow-grid,
   .showcase-grid,
   .release-grid,
+  .privacy-grid,
   .block-strip,
   .ops-grid {
     grid-template-columns: 1fr;
@@ -620,7 +705,8 @@ h1 {
   }
 
   .topbar,
-  .contact-card {
+  .contact-card,
+  .footer {
     flex-direction: column;
     align-items: flex-start;
     border-radius: 28px;

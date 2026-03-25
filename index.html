@@ -12,6 +12,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=SUIT:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="site.css">
+  <script>
+    window.CodexAutoAnalytics = {
+      gaMeasurementId: "G-ZD7MP818RD"
+    };
+  </script>
+  <script src="site.js" defer></script>
 </head>
 <body>
   <div class="bg-orb orb-a"></div>
@@ -256,7 +262,47 @@
           </div>
         </div>
       </section>
+
+      <section class="section privacy">
+        <div class="section-header">
+          <p class="eyebrow">Privacy</p>
+          <h2>방문 통계와 UX 개선을 위해 분석 도구를 사용합니다.</h2>
+        </div>
+        <div class="privacy-grid">
+          <article class="privacy-card">
+            <strong>Google Analytics 4</strong>
+            <p>방문 수, 유입 경로, 주요 버튼 클릭 같은 사이트 성과를 확인하는 데 사용합니다.</p>
+          </article>
+          <article class="privacy-card">
+            <strong>동의 기반 로딩</strong>
+            <p>분석 스크립트는 사용자가 허용한 경우에만 로드되며, 선택은 이 브라우저에 저장됩니다.</p>
+          </article>
+          <article class="privacy-card">
+            <strong>사이트 정보</strong>
+            <p>GitHub Pages 배포 주소는 `ahnd6474.github.io/codex_auto`이며 현재 GA4 측정 ID는 `G-ZD7MP818RD`입니다.</p>
+          </article>
+        </div>
+      </section>
     </main>
+
+    <footer class="footer">
+      <p>codex-auto</p>
+      <div class="footer-links">
+        <button class="footer-button" type="button" data-open-consent>쿠키 설정</button>
+        <a href="mailto:ahnd6474@gmail.com">ahnd6474@gmail.com</a>
+      </div>
+    </footer>
+  </div>
+
+  <div class="consent-banner" data-consent-banner hidden>
+    <div class="consent-copy">
+      <strong>분석 도구 사용 안내</strong>
+      <p>이 페이지는 방문 통계 확인을 위해 Google Analytics 4를 사용할 수 있습니다.</p>
+    </div>
+    <div class="consent-actions">
+      <button class="button button-secondary" type="button" data-consent-decline>거부</button>
+      <button class="button button-primary" type="button" data-consent-accept>허용</button>
+    </div>
   </div>
 </body>
 </html>
