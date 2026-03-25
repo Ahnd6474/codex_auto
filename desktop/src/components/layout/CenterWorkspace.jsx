@@ -1,5 +1,4 @@
 import { DashboardView } from "../views/DashboardView";
-import { OverviewView } from "../views/OverviewView";
 import { RunControlView } from "../views/RunControlView";
 import { ReportsView } from "../views/ReportsView";
 import { HistoryView } from "../views/HistoryView";
@@ -45,7 +44,6 @@ export function CenterWorkspace({
       <div className="workspace-tabs">
         <WorkspaceTab value="run" activeTab={activeTab} onChange={onChangeTab} label="Flow" />
         <WorkspaceTab value="dashboard" activeTab={activeTab} onChange={onChangeTab} label="Dashboard" />
-        <WorkspaceTab value="overview" activeTab={activeTab} onChange={onChangeTab} label="Overview" />
         <WorkspaceTab value="reports" activeTab={activeTab} onChange={onChangeTab} label="Reports" />
         <WorkspaceTab value="history" activeTab={activeTab} onChange={onChangeTab} label="History" />
         <WorkspaceTab value="config" activeTab={activeTab} onChange={onChangeTab} label="Config" />
@@ -73,7 +71,6 @@ export function CenterWorkspace({
         />
       ) : null}
       {activeTab === "dashboard" ? <DashboardView detail={detail} planDraft={planDraft} modelPresets={modelPresets} activeJob={activeJob} /> : null}
-      {activeTab === "overview" ? <OverviewView detail={detail} /> : null}
       {activeTab === "reports" ? <ReportsView reports={detail?.reports} /> : null}
       {activeTab === "history" ? <HistoryView history={detail?.history} /> : null}
       {activeTab === "config" ? (

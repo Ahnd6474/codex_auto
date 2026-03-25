@@ -36,9 +36,7 @@ export function useDesktopController() {
   const [centerTab, setCenterTab] = usePersistentState("codex-auto:center-tab", "run");
   const [bottomTab, setBottomTab] = usePersistentState("codex-auto:bottom-tab", "json");
   const [sidebarTab, setSidebarTab] = usePersistentState("codex-auto:sidebar-tab", "projects");
-  const [sidebarCollapsed, setSidebarCollapsed] = usePersistentState("codex-auto:sidebar-collapsed", false);
   const [bottomCollapsed, setBottomCollapsed] = usePersistentState("codex-auto:bottom-collapsed", false);
-  const [sidebarWidth, setSidebarWidth] = usePersistentState("codex-auto:sidebar-width", 300);
   const [bottomHeight, setBottomHeight] = usePersistentState("codex-auto:bottom-height", 250);
   const [projectFilter, setProjectFilter] = usePersistentState("codex-auto:project-filter", "");
   const [workspaceFilter, setWorkspaceFilter] = usePersistentState("codex-auto:workspace-filter", "");
@@ -58,9 +56,15 @@ export function useDesktopController() {
       [project.display_name, project.slug, project.status, project.detail, project.repo_path]
         .join(" ")
         .toLowerCase()
-        .includes(query),
+      .includes(query),
     );
   }, [projectFilter, projects]);
+
+  useEffect(() => {
+    if (centerTab === "overview") {
+      setCenterTab("run");
+    }
+  }, [centerTab, setCenterTab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -527,9 +531,7 @@ export function useDesktopController() {
     centerTab,
     bottomTab,
     sidebarTab,
-    sidebarCollapsed,
     bottomCollapsed,
-    sidebarWidth,
     bottomHeight,
     projectFilter,
     workspaceFilter,
@@ -541,9 +543,7 @@ export function useDesktopController() {
     setCenterTab,
     setBottomTab,
     setSidebarTab,
-    setSidebarCollapsed,
     setBottomCollapsed,
-    setSidebarWidth,
     setBottomHeight,
     setProjectFilter,
     setWorkspaceFilter,

@@ -18,8 +18,8 @@ export default function App() {
       if (!(event.ctrlKey || event.metaKey)) {
         return;
       }
-      if (event.key >= "1" && event.key <= "6") {
-        const tabs = ["dashboard", "overview", "run", "reports", "history", "config"];
+      if (event.key >= "1" && event.key <= "5") {
+        const tabs = ["run", "dashboard", "reports", "history", "config"];
         controller.setCenterTab(tabs[Number.parseInt(event.key, 10) - 1]);
         event.preventDefault();
       }
@@ -38,27 +38,15 @@ export default function App() {
   return (
     <main className="ide-shell">
       <IdeToolbar
-        workspaceRoot={controller.workspaceRoot}
-        projects={controller.projects}
-        selectedProjectId={controller.selectedProjectId}
         projectDetail={detail}
         planDraft={controller.planDraft}
         busy={controller.busy}
         activeJob={controller.activeJob}
-        onSelectProject={(repoId) => {
-          controller.setSelectedProjectId(repoId);
-          if (repoId) {
-            controller.loadProject(repoId);
-          }
-        }}
-        onNewProject={controller.startNewProject}
         onRefresh={() => (controller.selectedProjectId ? controller.reloadProject() : controller.refreshProjects())}
         onGeneratePlan={controller.generatePlan}
         onRunPlan={controller.runPlan}
         onRunCloseout={controller.runCloseout}
         onApproveCheckpoint={controller.approveCheckpoint}
-        onOpenConfig={() => controller.setCenterTab("config")}
-        onToggleSidebar={() => controller.setSidebarCollapsed((current) => !current)}
         onToggleBottom={() => controller.setBottomCollapsed((current) => !current)}
       />
 
@@ -72,31 +60,27 @@ export default function App() {
       ) : null}
 
       <div className="ide-body">
-        {!controller.sidebarCollapsed ? (
-          <>
-            <div className="ide-pane ide-pane--sidebar" style={{ width: `${controller.sidebarWidth}px` }}>
-              <SidebarPane
-                activeTab={controller.sidebarTab}
-                onChangeTab={controller.setSidebarTab}
-                projects={controller.filteredProjects}
-                selectedProjectId={controller.selectedProjectId}
-                selectedProjectSummary={controller.selectedProjectSummary}
-                projectFilter={controller.projectFilter}
-                workspaceFilter={controller.workspaceFilter}
-                onProjectFilterChange={controller.setProjectFilter}
-                onWorkspaceFilterChange={controller.setWorkspaceFilter}
-                onSelectProject={(repoId) => {
-                  controller.setSelectedProjectId(repoId);
-                  controller.loadProject(repoId);
-                }}
-                workspaceTree={detail?.workspace_tree}
-                checkpoints={detail?.checkpoints}
-                github={detail?.github}
-              />
-            </div>
-            <Splitter axis="vertical" onResize={(delta) => controller.setSidebarWidth((current) => clamp(current + delta, 220, 520))} />
-          </>
-        ) : null}
+        <div className="ide-pane ide-pane--sidebar">
+          <SidebarPane
+            activeTab={controller.sidebarTab}
+            onChangeTab={controller.setSidebarTab}
+            projects={controller.filteredProjects}
+            selectedProjectId={controller.selectedProjectId}
+            selectedProjectSummary={controller.selectedProjectSummary}
+            projectFilter={controller.projectFilter}
+            workspaceFilter={controller.workspaceFilter}
+            onProjectFilterChange={controller.setProjectFilter}
+            onWorkspaceFilterChange={controller.setWorkspaceFilter}
+            onSelectProject={(repoId) => {
+              controller.setSelectedProjectId(repoId);
+              controller.loadProject(repoId);
+            }}
+            onNewProject={controller.startNewProject}
+            workspaceTree={detail?.workspace_tree}
+            checkpoints={detail?.checkpoints}
+            github={detail?.github}
+          />
+        </div>
 
         <div className="ide-main">
           <CenterWorkspace

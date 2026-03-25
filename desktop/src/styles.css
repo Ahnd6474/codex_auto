@@ -254,6 +254,11 @@ pre {
   background: var(--bg-elevated);
 }
 
+.ide-pane--sidebar {
+  width: 312px;
+  flex: 0 0 312px;
+}
+
 .ide-pane--bottom {
   background: var(--bg-panel);
 }
@@ -291,6 +296,12 @@ pre {
   height: 100%;
   padding: 10px;
   overflow: auto;
+}
+
+.ide-sidebar {
+  display: flex;
+  gap: 10px;
+  overflow: hidden;
 }
 
 .workspace-area {
@@ -332,6 +343,38 @@ pre {
 .tool-tab.active {
   color: var(--text);
   background: var(--bg-active);
+  border-color: var(--border-strong);
+}
+
+.sidebar-rail {
+  width: 44px;
+  flex: 0 0 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-icon {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border);
+  background: #2d3036;
+  color: var(--text-muted);
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sidebar-icon:hover {
+  background: var(--bg-panel-hover);
+}
+
+.sidebar-icon.active {
+  background: var(--bg-active);
+  color: var(--text);
   border-color: var(--border-strong);
 }
 
@@ -454,7 +497,18 @@ pre {
 }
 
 .sidebar-panel {
-  margin-top: 10px;
+  flex: 1;
+  min-width: 0;
+  margin-top: 0;
+  padding: 2px 0;
+  overflow: auto;
+}
+
+.sidebar-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .sidebar-search {
@@ -627,45 +681,50 @@ pre {
 }
 
 .run-flow {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px 18px;
-  align-items: start;
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  overflow-x: auto;
+  padding-bottom: 6px;
 }
 
 .run-flow__item {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   gap: 8px;
+  min-width: 0;
+  flex: 1 1 0;
 }
 
 .run-flow__connector {
-  height: 24px;
-  width: 100%;
+  width: 28px;
+  min-width: 28px;
+  height: 100%;
   position: relative;
 }
 
 .run-flow__connector::before {
   content: "";
   position: absolute;
-  left: 50%;
-  top: 0;
-  width: 2px;
-  height: 16px;
-  transform: translateX(-50%);
-  background: linear-gradient(180deg, rgba(95, 151, 214, 0.55), rgba(95, 151, 214, 0.1));
+  left: 3px;
+  right: 10px;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  background: linear-gradient(90deg, rgba(95, 151, 214, 0.2), rgba(95, 151, 214, 0.65));
 }
 
 .run-flow__connector::after {
   content: "";
   position: absolute;
-  left: 50%;
-  bottom: 2px;
+  right: 1px;
+  top: 50%;
   width: 8px;
   height: 8px;
   border-right: 2px solid rgba(95, 151, 214, 0.55);
-  border-bottom: 2px solid rgba(95, 151, 214, 0.55);
-  transform: translateX(-50%) rotate(45deg);
+  border-top: 2px solid rgba(95, 151, 214, 0.55);
+  transform: translateY(-50%) rotate(45deg);
 }
 
 .run-node {
@@ -673,6 +732,8 @@ pre {
   flex-direction: column;
   gap: 8px;
   min-height: 146px;
+  min-width: 170px;
+  width: 100%;
   border: 1px solid var(--border);
   text-align: left;
   transition:
@@ -801,6 +862,15 @@ pre {
   .step-editor-grid {
     grid-template-columns: 1fr;
   }
+
+  .run-flow {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
+  .run-flow__item {
+    flex: 1 1 calc(50% - 12px);
+  }
 }
 
 @media (max-width: 920px) {
@@ -819,5 +889,56 @@ pre {
   .ide-pane--sidebar,
   .ide-pane--details {
     width: 100% !important;
+  }
+
+  .ide-sidebar {
+    flex-direction: column;
+  }
+
+  .sidebar-rail {
+    width: auto;
+    flex-direction: row;
+  }
+
+  .sidebar-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .run-flow {
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .run-flow__item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .run-flow__connector {
+    width: 100%;
+    min-width: 0;
+    height: 24px;
+  }
+
+  .run-flow__connector::before {
+    left: 50%;
+    right: auto;
+    top: 0;
+    width: 2px;
+    height: 16px;
+    transform: translateX(-50%);
+    background: linear-gradient(180deg, rgba(95, 151, 214, 0.2), rgba(95, 151, 214, 0.65));
+  }
+
+  .run-flow__connector::after {
+    left: 50%;
+    right: auto;
+    top: auto;
+    bottom: 2px;
+    border-top: 0;
+    border-right: 2px solid rgba(95, 151, 214, 0.55);
+    border-bottom: 2px solid rgba(95, 151, 214, 0.55);
+    transform: translateX(-50%) rotate(45deg);
   }
 }
