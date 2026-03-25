@@ -21,6 +21,8 @@
 12. **문제 발생 시 PR 로그/리포트 자동 보고**
 13. **Git 충돌 발생 시 코드 선택 정책/절차**
 14. **예상 실행 시간(레벨별/실행중 동적) 표시**
+15. **OpenCDK 연동 API 지원 추가**
+16. **API 비용(토큰 사용/CLI API 사용 시) 예상 금액 표시**
 
 ---
 
@@ -315,11 +317,62 @@
 
 ---
 
+## 15) OpenCDK 연동 API 지원 추가
+
+### 목표
+- OpenCDK 기반 워크플로우와 codex-auto를 연동해 외부 시스템에서도 자동화 실행/조회 API를 사용할 수 있게 한다.
+
+### 요구사항
+- 인증 방식(API Key/OAuth 등)과 권한 스코프 정의
+- 실행 트리거 API(작업 시작/중지/재시작) 제공
+- 상태 조회 API(진행률/최근 로그/실패 원인 요약) 제공
+- 버전 호환성 정책(최소 지원 OpenCDK 버전) 문서화
+
+### 스켈레톤(예시 함수/모듈)
+- `register_opencdk_provider(config) -> OpenCDKProvider`
+- `start_run_via_opencdk(request) -> RunHandle`
+- `get_run_status_via_opencdk(run_id) -> OpenCDKRunStatus`
+- `map_opencdk_error(error) -> RetryableError | FatalError`
+
+### 완료 기준
+- OpenCDK 연동 환경에서 최소 1개 샘플 파이프라인이 시작→완료까지 정상 동작.
+
+---
+
+## 16) API 금액 예상치 표시 (API 직접 사용 / Codex CLI API 사용)
+
+### 목표
+- 실행 전에 예상 비용을 보여주고, 실행 중/종료 후 실제 비용 추정치를 제공해 운영비 예측 가능성을 높인다.
+
+### 요구사항
+- 입력 토큰/출력 토큰/캐시 토큰(해당 시) 기준 비용 계산
+- 모드(개발자/일반인), 추론 레벨, 모델 고정값(`gpt-5.4`) 반영
+- 비교 표시:
+  - API 직접 호출 예상 금액
+  - Codex CLI API 경유 예상 금액
+- 실행 중 누적 비용 및 종료 후 최종 비용 리포트 표시
+- 요금표 업데이트 시점/버전 기록(계산 근거 추적성 확보)
+
+### 스켈레톤(예시 함수/모듈)
+- `load_pricing_table(source, effective_date) -> PricingTable`
+- `estimate_run_cost(usage_plan, pricing_table) -> CostEstimate`
+- `compare_api_vs_cli_cost(task_ctx, usage_forecast) -> CostComparison`
+- `accumulate_runtime_cost(usage_events, pricing_table) -> CostSummary`
+- `render_cost_breakdown(summary, locale) -> str`
+
+### 테스트 아이디어
+- 고정된 토큰 사용량 입력에 대해 비용 계산 회귀 테스트
+- 요금표 버전 변경 시 예상 금액 재계산 테스트
+- API 직접 사용 vs CLI API 비교 출력 정확도 테스트
+
+---
+
 ## 제안 일정 (초안)
 - **1주차**: 1, 2, 3번 설계/프로토타입
 - **2주차**: 4, 5번(국제화/복구) 핵심 구현
 - **3주차**: 6, 7, 14번(산출물/병렬/ETA)
 - **4주차**: 8, 9, 10, 11, 12, 13번 및 통합 테스트
+- **5주차**: 15, 16번(OpenCDK 연동/API 비용 추정) 및 운영 문서화
 
 ## 메모
 - `auto`는 설명 가능성(왜 medium/high/xhigh가 선택됐는지)을 함께 기록하면 운영/디버깅에 유리.
