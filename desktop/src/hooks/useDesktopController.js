@@ -67,6 +67,12 @@ export function useDesktopController() {
   }, [centerTab, setCenterTab]);
 
   useEffect(() => {
+    if (sidebarTab === "github") {
+      setSidebarTab("projects");
+    }
+  }, [sidebarTab, setSidebarTab]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function initialize() {

@@ -1,11 +1,11 @@
+import { useEffect, useState } from "react";
 import { statusTone } from "../../utils";
 
 function SidebarSectionTabs({ activeTab, onChange }) {
   const tabs = [
-    ["projects", "P", "Projects"],
+    ["projects", "P", "Project"],
     ["workspace", "F", "Explorer"],
     ["plans", "C", "Checkpoints"],
-    ["github", "G", "GitHub"],
   ];
   return (
     <div className="sidebar-rail">
@@ -24,26 +24,63 @@ function SidebarSectionTabs({ activeTab, onChange }) {
   );
 }
 
+function filterTree(node, query) {
+  const normalized = query.trim().toLowerCase();
+  const sortedChildren = [...(node.children || [])].sort((left, right) => {
+    const leftFolder = left.kind === "dir" || left.kind === "directory" || Boolean((left.children || []).length);
+    const rightFolder = right.kind === "dir" || right.kind === "directory" || Boolean((right.children || []).length);
+    if (leftFolder !== rightFolder) {
+      return leftFolder ? -1 : 1;
+    }
+    return String(left.label || "").localeCompare(String(right.label || ""));
+  });
+  if (!normalized) {
+    return {
+      ...node,
+      children: sortedChildren,
+    };
+  }
+  const children = sortedChildren
+    .map((child) => filterTree(child, normalized))
+    .filter(Boolean);
+  const selfMatch = node.label.toLowerCase().includes(normalized) || String(node.path || "").toLowerCase().includes(normalized);
+  if (selfMatch || children.length) {
+    return {
+      ...node,
+      children,
+    };
+  }
+  return null;
+}
+
 function TreeNode({ node, depth = 0, filter = "" }) {
   const query = filter.trim().toLowerCase();
-  const matches = !query || node.label.toLowerCase().includes(query) || String(node.path || "").toLowerCase().includes(query);
-  const children = (node.children || []).filter((child) => {
-    if (!query) {
-      return true;
-    }
-    return child.label.toLowerCase().includes(query) || String(child.path || "").toLowerCase().includes(query);
-  });
+  const [open, setOpen] = useState(depth < 1);
+  const isFolder = node.kind === "dir" || node.kind === "directory" || Boolean((node.children || []).length);
+  const children = node.children || [];
+  const visible = query ? true : open;
 
-  if (!matches && !children.length) {
-    return null;
-  }
+  useEffect(() => {
+    if (query) {
+      setOpen(true);
+    }
+  }, [query]);
 
   return (
     <div className="tree-node" style={{ "--tree-depth": depth }}>
-      <div className={`tree-node__row tree-node__row--${node.kind || "file"}`}>
+      <button
+        className={`tree-node__row tree-node__row--${node.kind || "file"} ${isFolder ? "tree-node__row--folder" : ""}`}
+        onClick={() => {
+          if (isFolder && !query) {
+            setOpen((current) => !current);
+          }
+        }}
+        type="button"
+      >
+        <span className="tree-node__prefix">{isFolder ? (visible ? "-" : "+") : "·"}</span>
         <span>{node.label}</span>
-      </div>
-      {children.length ? (
+      </button>
+      {children.length && visible ? (
         <div className="tree-node__children">
           {children.map((child) => (
             <TreeNode key={`${child.path}-${child.label}`} node={child} depth={depth + 1} filter={filter} />
@@ -70,6 +107,8 @@ export function SidebarPane({
   checkpoints,
   github,
 }) {
+  const filteredWorkspaceTree = (workspaceTree || []).map((node) => filterTree(node, workspaceFilter)).filter(Boolean);
+
   return (
     <aside className="ide-sidebar">
       <SidebarSectionTabs activeTab={activeTab} onChange={onChangeTab} />
@@ -78,7 +117,7 @@ export function SidebarPane({
         {activeTab === "projects" ? (
           <>
             <div className="sidebar-panel__header">
-              <strong>Projects</strong>
+              <strong>Project</strong>
               <button className="toolbar-button toolbar-button--ghost" onClick={onNewProject} type="button">
                 New
               </button>
@@ -112,6 +151,21 @@ export function SidebarPane({
               <span>Selected summary</span>
               <pre>{selectedProjectSummary || "Pick a project to inspect its managed state."}</pre>
             </div>
+            <div className="sidebar-item">
+              <div className="sidebar-item__title">
+                <strong>Repository Link</strong>
+                <span className={`status-badge status-badge--${github?.connected ? "success" : "neutral"}`}>{github?.connected ? "connected" : "local-only"}</span>
+              </div>
+              <span>{github?.origin_url || "No GitHub origin configured for this project."}</span>
+            </div>
+            <div className="sidebar-item">
+              <strong>Branch</strong>
+              <span>{github?.branch || "Unknown"}</span>
+            </div>
+            <div className="sidebar-item">
+              <strong>Repo URL</strong>
+              <span>{github?.repo_url || "Unavailable"}</span>
+            </div>
           </>
         ) : null}
 
@@ -125,7 +179,7 @@ export function SidebarPane({
               <input value={workspaceFilter} onChange={(event) => onWorkspaceFilterChange(event.target.value)} placeholder="Search files" />
             </label>
             <div className="sidebar-tree">
-              {workspaceTree?.length ? workspaceTree.map((node) => <TreeNode key={node.path} node={node} filter={workspaceFilter} />) : <div className="empty-block">No workspace tree yet.</div>}
+              {filteredWorkspaceTree.length ? filteredWorkspaceTree.map((node) => <TreeNode key={node.path} node={node} filter={workspaceFilter} />) : <div className="empty-block">No workspace tree yet.</div>}
             </div>
           </>
         ) : null}
@@ -152,33 +206,6 @@ export function SidebarPane({
                   <div className="empty-block">No checkpoints recorded.</div>
                 )}
               </div>
-            </div>
-            <div className="sidebar-summary">
-              <span>Timeline</span>
-              <pre>{checkpoints?.timeline_markdown || "No checkpoint timeline yet."}</pre>
-            </div>
-          </>
-        ) : null}
-
-        {activeTab === "github" ? (
-          <>
-            <div className="sidebar-panel__header">
-              <strong>GitHub</strong>
-            </div>
-            <div className="sidebar-item">
-              <div className="sidebar-item__title">
-                <strong>Repository Link</strong>
-                <span className={`status-badge status-badge--${github?.connected ? "success" : "neutral"}`}>{github?.connected ? "connected" : "local-only"}</span>
-              </div>
-              <span>{github?.origin_url || "No GitHub origin configured for this project."}</span>
-            </div>
-            <div className="sidebar-item">
-              <strong>Branch</strong>
-              <span>{github?.branch || "Unknown"}</span>
-            </div>
-            <div className="sidebar-item">
-              <strong>Repo URL</strong>
-              <span>{github?.repo_url || "Unavailable"}</span>
             </div>
           </>
         ) : null}

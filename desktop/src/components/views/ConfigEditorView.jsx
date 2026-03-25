@@ -77,6 +77,113 @@ export function ConfigEditorView({
               disabled={busy}
             />
           </label>
+
+          <div className="subsection">
+            <div className="subsection__header">
+              <strong>Developer Mode</strong>
+              <span>Advanced runtime controls for debugging and custom execution.</span>
+            </div>
+            <label className="field">
+              <span>Custom Model Slug</span>
+              <input
+                value={runtime.model_slug_input || runtime.model || ""}
+                onChange={(event) =>
+                  onChangeForm((current) => ({
+                    ...current,
+                    runtime: {
+                      ...current.runtime,
+                      model_selection_mode: "slug",
+                      model_slug_input: event.target.value,
+                      model: event.target.value,
+                    },
+                  }))
+                }
+                disabled={busy}
+              />
+            </label>
+            <label className="field field--wide">
+              <span>Extra Prompt</span>
+              <textarea
+                value={runtime.extra_prompt || ""}
+                onChange={(event) => onChangeForm((current) => ({ ...current, runtime: { ...current.runtime, extra_prompt: event.target.value } }))}
+                disabled={busy}
+              />
+            </label>
+            <div className="choice-grid">
+              <label className="field">
+                <span>Approval Mode</span>
+                <select
+                  value={runtime.approval_mode || "never"}
+                  onChange={(event) => onChangeForm((current) => ({ ...current, runtime: { ...current.runtime, approval_mode: event.target.value } }))}
+                  disabled={busy}
+                >
+                  <option value="never">never</option>
+                  <option value="on-failure">on-failure</option>
+                  <option value="untrusted">untrusted</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>Sandbox Mode</span>
+                <select
+                  value={runtime.sandbox_mode || "danger-full-access"}
+                  onChange={(event) => onChangeForm((current) => ({ ...current, runtime: { ...current.runtime, sandbox_mode: event.target.value } }))}
+                  disabled={busy}
+                >
+                  <option value="danger-full-access">danger-full-access</option>
+                  <option value="workspace-write">workspace-write</option>
+                  <option value="read-only">read-only</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>Checkpoint Interval</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={runtime.checkpoint_interval_blocks || 1}
+                  onChange={(event) =>
+                    onChangeForm((current) => ({
+                      ...current,
+                      runtime: { ...current.runtime, checkpoint_interval_blocks: Math.max(1, Number.parseInt(event.target.value || "1", 10) || 1) },
+                    }))
+                  }
+                  disabled={busy}
+                />
+              </label>
+              <label className="field">
+                <span>Codex Path</span>
+                <input
+                  value={runtime.codex_path || "codex.cmd"}
+                  onChange={(event) => onChangeForm((current) => ({ ...current, runtime: { ...current.runtime, codex_path: event.target.value } }))}
+                  disabled={busy}
+                />
+              </label>
+            </div>
+            <div className="choice-list">
+              <label className="choice-radio">
+                <input
+                  type="checkbox"
+                  checked={Boolean(runtime.allow_push)}
+                  onChange={(event) => onChangeForm((current) => ({ ...current, runtime: { ...current.runtime, allow_push: event.target.checked } }))}
+                  disabled={busy}
+                />
+                <span>Allow push after safe runs</span>
+              </label>
+              <label className="choice-radio">
+                <input
+                  type="checkbox"
+                  checked={Boolean(runtime.require_checkpoint_approval)}
+                  onChange={(event) =>
+                    onChangeForm((current) => ({
+                      ...current,
+                      runtime: { ...current.runtime, require_checkpoint_approval: event.target.checked },
+                    }))
+                  }
+                  disabled={busy}
+                />
+                <span>Require checkpoint approval</span>
+              </label>
+            </div>
+          </div>
         </div>
 
         <div className="form-section">
