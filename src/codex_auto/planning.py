@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from importlib import resources
@@ -185,6 +186,31 @@ def build_mid_term_plan(long_term_text: str, limit: int = 5) -> tuple[str, list[
     return "\n".join(lines), chosen
 
 
+def build_mid_term_plan_from_user_items(items: list[str]) -> tuple[str, list[PlanItem]]:
+    cleaned = [item.strip() for item in items if item.strip()]
+    plan_items = [PlanItem(item_id=f"UT{index}", text=item) for index, item in enumerate(cleaned, start=1)]
+    return build_mid_term_plan_from_plan_items(
+        plan_items,
+        "This plan was provided or edited by the user and is used as the current block sequence.",
+    )
+
+
+def build_mid_term_plan_from_plan_items(items: list[PlanItem], description: str) -> tuple[str, list[PlanItem]]:
+    lines = [
+        "# Mid-Term Plan",
+        "",
+        description,
+        "",
+    ]
+    if not items:
+        lines.append("- [ ] MT1: Establish a verified, low-risk maintenance task based on the current repository state.")
+        return "\n".join(lines) + "\n", []
+    for index, item in enumerate(items, start=1):
+        lines.append(f"- [ ] MT{index} -> {item.item_id}: {item.text}")
+    lines.append("")
+    return "\n".join(lines), items
+
+
 def validate_mid_term_subset(mid_term_text: str, long_term_text: str) -> tuple[bool, list[str]]:
     long_term_ids = {item.item_id for item in extract_plan_items(long_term_text)}
     violations: list[str] = []
@@ -220,6 +246,88 @@ def candidate_tasks_from_mid_term(mid_items: list[PlanItem], memory_context: str
             )
         )
     return tasks
+
+
+def work_breakdown_prompt(
+    context: ProjectContext,
+    repo_inputs: dict[str, str],
+    long_term_text: str,
+    memory_context: str,
+    max_items: int,
+) -> str:
+    return "\n".join(
+        [
+            f"You are planning work for the managed repository at {context.paths.repo_dir}.",
+            "Follow any AGENTS.md rules in the repository.",
+            "Break the work into small, implementation-oriented blocks that stay within the current repository.",
+            "Prefer tasks that can be completed with strict verification and a rollback-safe commit.",
+            "Do not propose broad roadmap items or vague research-only work.",
+            f"Return exactly one JSON object with a top-level 'tasks' array containing at most {max(1, max_items)} items.",
+            "Each task must be an object with:",
+            '- "title": short actionable task title',
+            '- "primary_ref": matching LT id such as LT1 when possible, otherwise use ""',
+            '- "reason": one short sentence',
+            "Do not include markdown fences or any text outside the JSON object.",
+            "",
+            "Repository summary:",
+            f"README:\n{repo_inputs['readme']}",
+            "",
+            f"AGENTS:\n{repo_inputs['agents']}",
+            "",
+            f"Docs:\n{repo_inputs['docs']}",
+            "",
+            "Long-term plan:",
+            compact_text(long_term_text, 5000),
+            "",
+            "Memory context:",
+            compact_text(memory_context, 2500),
+        ]
+    )
+
+
+def parse_work_breakdown_response(response_text: str, limit: int = 6) -> list[PlanItem]:
+    raw = response_text.strip()
+    if not raw:
+        return []
+    fenced = re.search(r"```(?:json)?\s*(.+?)\s*```", raw, re.DOTALL)
+    if fenced:
+        raw = fenced.group(1).strip()
+    payload: object
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if isinstance(payload, dict):
+        tasks_payload = payload.get("tasks", [])
+    elif isinstance(payload, list):
+        tasks_payload = payload
+    else:
+        return []
+    if not isinstance(tasks_payload, list):
+        return []
+
+    items: list[PlanItem] = []
+    seen_titles: set[str] = set()
+    for index, entry in enumerate(tasks_payload, start=1):
+        if len(items) >= max(1, limit):
+            break
+        title = ""
+        item_id = ""
+        if isinstance(entry, str):
+            title = entry.strip()
+        elif isinstance(entry, dict):
+            title = str(entry.get("title", "")).strip()
+            item_id = str(entry.get("primary_ref", "")).strip().upper()
+        if len(tokenize(title)) < 2:
+            continue
+        key = title.lower()
+        if key in seen_titles:
+            continue
+        seen_titles.add(key)
+        if not re.fullmatch(r"[A-Z]{2,}\d+", item_id):
+            item_id = f"WB{index}"
+        items.append(PlanItem(item_id=item_id, text=title))
+    return items
 
 
 def select_candidate(tasks: list[CandidateTask]) -> CandidateTask:

@@ -151,6 +151,7 @@ class WorkspaceManager:
             current_safe_revision=loop_state_data.get("current_safe_revision"),
             long_term_plan_locked=loop_state_data.get("long_term_plan_locked", True),
             stop_reason=loop_state_data.get("stop_reason"),
+            stop_requested=loop_state_data.get("stop_requested", False),
             current_checkpoint_id=loop_state_data.get("current_checkpoint_id"),
             pending_checkpoint_approval=loop_state_data.get("pending_checkpoint_approval", False),
             counters=replace(LoopCounters(), **counters_data),

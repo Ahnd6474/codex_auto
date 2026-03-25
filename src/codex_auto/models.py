@@ -77,6 +77,7 @@ class LoopState:
     current_safe_revision: str | None = None
     long_term_plan_locked: bool = True
     stop_reason: str | None = None
+    stop_requested: bool = False
     current_checkpoint_id: str | None = None
     pending_checkpoint_approval: bool = False
     counters: LoopCounters = field(default_factory=LoopCounters)

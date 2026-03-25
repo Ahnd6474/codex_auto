@@ -5,7 +5,7 @@ import queue
 import threading
 import traceback
 from pathlib import Path
-from tkinter import BOTH, END, LEFT, W, filedialog, messagebox, StringVar, Tk
+from tkinter import BOTH, END, LEFT, W, Canvas, filedialog, messagebox, StringVar, Tk
 from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
 from typing import Callable
@@ -28,6 +28,8 @@ class CodexAutoGUI:
         self.repo_index: dict[str, dict[str, object]] = {}
         self.github_repo_index: dict[str, GitHubRepository] = {}
         self.current_project: ProjectContext | None = None
+        self.current_plan_steps: list[dict[str, object]] = []
+        self.left_panel_visible = True
 
         self.repo_url_var = StringVar()
         self.branch_var = StringVar(value="main")
@@ -38,9 +40,10 @@ class CodexAutoGUI:
         self.sandbox_var = StringVar(value="workspace-write")
         self.test_cmd_var = StringVar(value="python -m pytest")
         self.max_blocks_var = StringVar(value="1")
-        self.allow_push_var = StringVar(value="false")
+        self.allow_push_var = StringVar(value="true")
         self.github_query_var = StringVar()
         self.github_url_mode_var = StringVar(value="ssh")
+        self.model_choices = ["gpt-5.4", "gpt-5"]
 
         self.status_var = StringVar(value="대기 중")
         self.repo_count_var = StringVar(value="0")
@@ -53,9 +56,10 @@ class CodexAutoGUI:
         self.current_repo_var = StringVar(value="선택 없음")
         self.block_progress_var = StringVar(value="0 / 0")
         self.loop_status_var = StringVar(value="대기")
+        self.codex_status_var = StringVar(value="대기")
         self.checkpoint_status_var = StringVar(value="없음")
-        self.next_action_var = StringVar(value="저장소를 선택한 뒤 실행")
         self.timeline_caption_var = StringVar(value="준비")
+        self.stop_button: ttk.Button | None = None
 
         self._configure_style()
         self._build_layout()
@@ -97,8 +101,11 @@ class CodexAutoGUI:
 
         content = ttk.Panedwindow(root_frame, orient="horizontal")
         content.pack(fill=BOTH, expand=True, pady=(12, 0))
+        self.content_pane = content
         left = ttk.Frame(content, style="App.TFrame")
         right = ttk.Frame(content, style="App.TFrame")
+        self.left_panel = left
+        self.right_panel = right
         content.add(left, weight=38)
         content.add(right, weight=62)
 
@@ -141,6 +148,7 @@ class CodexAutoGUI:
         tools.pack(fill="x", pady=(0, 10))
         ttk.Button(tools, text="새로고침", command=self.refresh_repositories).pack(side=LEFT)
         ttk.Button(tools, text="선택 불러오기", command=self.load_selected_repository).pack(side=LEFT, padx=(8, 0))
+        ttk.Button(tools, text="패널 접기", command=self.toggle_left_panel).pack(side=LEFT, padx=(8, 0))
 
         columns = ("slug", "branch", "status", "safe_revision", "last_run")
         self.repo_tree = ttk.Treeview(frame, columns=columns, show="headings", height=20)
@@ -163,7 +171,7 @@ class CodexAutoGUI:
         search_row = ttk.Frame(frame)
         search_row.pack(fill="x", pady=(0, 10))
         ttk.Label(search_row, text="검색어").pack(side=LEFT)
-        ttk.Entry(search_row, textvariable=self.github_query_var, width=38).pack(side=LEFT, padx=(8, 8), fill="x", expand=True)
+        ttk.Entry(search_row, textvariable=self.github_query_var, width=24).pack(side=LEFT, padx=(8, 8), fill="x", expand=True)
         ttk.Button(search_row, text="검색", command=self.search_github_repositories).pack(side=LEFT)
 
         mode_row = ttk.Frame(frame)
@@ -191,34 +199,116 @@ class CodexAutoGUI:
         ttk.Button(frame, text="선택 저장소 적용", command=self.apply_selected_github_repository).pack(anchor=W, pady=(10, 0))
 
     def _build_right(self, parent: ttk.Frame) -> None:
-        self._build_progress_panel(parent)
-        self._build_form(parent)
-        self._build_output(parent)
+        content = ttk.Panedwindow(parent, orient="vertical")
+        content.pack(fill=BOTH, expand=True)
+        top = ttk.Frame(content, style="App.TFrame")
+        bottom = ttk.Frame(content, style="App.TFrame")
+        content.add(top, weight=42)
+        content.add(bottom, weight=58)
+        self._build_right_top(top)
+        self._build_output(bottom)
+
+    def _build_right_top(self, parent: ttk.Frame) -> None:
+        outer = ttk.Frame(parent, style="App.TFrame")
+        outer.pack(fill=BOTH, expand=True)
+        canvas = Canvas(outer, bg="#f4efe7", highlightthickness=0)
+        scrollbar = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side=LEFT, fill="y")
+        canvas.pack(side=LEFT, fill=BOTH, expand=True)
+
+        content = ttk.Frame(canvas, style="App.TFrame")
+        window_id = canvas.create_window((0, 0), window=content, anchor="nw")
+
+        def on_configure(_event: object) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def on_canvas_configure(event: object) -> None:
+            width = getattr(event, "width", 0)
+            if width:
+                canvas.itemconfigure(window_id, width=width)
+
+        content.bind("<Configure>", on_configure)
+        canvas.bind("<Configure>", on_canvas_configure)
+
+        self._build_progress_panel(content)
+        self._build_form(content)
 
     def _build_progress_panel(self, parent: ttk.Frame) -> None:
         frame = ttk.LabelFrame(parent, text="진행 현황", padding=12, style="Card.TLabelframe")
         frame.pack(fill="x")
 
-        top = ttk.Frame(frame, style="ProgressCard.TFrame")
-        top.pack(fill="x")
-        for title, variable in [
+        actions = ttk.Frame(frame, style="ProgressCard.TFrame")
+        actions.pack(fill="x", pady=(0, 12))
+        self.action_buttons = []
+        for label, handler in [
+            ("실행", self.run_blocks),
+            ("중지", self.stop_run),
+            ("새로고침", self.refresh_repositories),
+        ]:
+            button = ttk.Button(actions, text=label, command=handler)
+            button.pack(side=LEFT, padx=(0, 8))
+            self.action_buttons.append(button)
+            if label == "중지":
+                self.stop_button = button
+        ttk.Button(actions, text="저장소 접기", command=self.toggle_left_panel).pack(side=LEFT, padx=(0, 8))
+        ttk.Button(actions, text="종료", command=self.root.destroy).pack(side=LEFT, padx=(0, 8))
+
+        runtime_row = ttk.Frame(frame, style="ProgressCard.TFrame")
+        runtime_row.pack(fill="x", pady=(0, 12))
+        ttk.Label(runtime_row, text="모델", style="ProgressTitle.TLabel").pack(side=LEFT)
+        ttk.Combobox(runtime_row, textvariable=self.model_var, values=self.model_choices, width=18).pack(side=LEFT, padx=(8, 12))
+        ttk.Label(runtime_row, text="추론 강도", style="ProgressTitle.TLabel").pack(side=LEFT)
+        ttk.Combobox(
+            runtime_row,
+            textvariable=self.effort_var,
+            values=["low", "medium", "high", "xhigh"],
+            state="readonly",
+            width=10,
+        ).pack(side=LEFT, padx=(8, 12))
+        ttk.Label(runtime_row, text="모델 직접 입력 가능", style="Timeline.TLabel").pack(side=LEFT)
+
+        top_row = ttk.Frame(frame, style="ProgressCard.TFrame")
+        top_row.pack(fill="x")
+        bottom_row = ttk.Frame(frame, style="ProgressCard.TFrame")
+        bottom_row.pack(fill="x", pady=(8, 0))
+        cards = [
             ("저장소", self.current_repo_var),
             ("블록", self.block_progress_var),
+            ("Codex", self.codex_status_var),
             ("루프 상태", self.loop_status_var),
             ("체크포인트", self.checkpoint_status_var),
-        ]:
-            card = ttk.Frame(top, style="ProgressCard.TFrame")
+        ]
+        for index, (title, variable) in enumerate(cards):
+            row = top_row if index < 3 else bottom_row
+            card = ttk.Frame(row, style="ProgressCard.TFrame")
             card.pack(side=LEFT, fill="x", expand=True, padx=(0, 10))
             ttk.Label(card, text=title, style="ProgressTitle.TLabel").pack(anchor=W)
             ttk.Label(card, textvariable=variable, style="ProgressValue.TLabel").pack(anchor=W, pady=(4, 0))
 
-        ttk.Label(frame, text="타임라인", style="ProgressTitle.TLabel").pack(anchor=W, pady=(12, 4))
+        controls = ttk.Frame(frame, style="ProgressCard.TFrame")
+        controls.pack(fill="x", pady=(12, 4))
+        ttk.Label(controls, text="타임라인 / 일 배분", style="ProgressTitle.TLabel").pack(side=LEFT)
+        ttk.Button(controls, text="Codex 배분", command=self.plan_work_distribution).pack(side=LEFT, padx=(12, 0))
+
         self.timeline_progress = ttk.Progressbar(frame, mode="determinate", maximum=4)
         self.timeline_progress.pack(fill="x")
-        ttk.Label(frame, text="입력 -> 초기화 -> 반복 실행 -> 체크포인트", style="Timeline.TLabel").pack(anchor=W, pady=(6, 0))
-        ttk.Label(frame, textvariable=self.timeline_caption_var, style="Timeline.TLabel").pack(anchor=W, pady=(2, 0))
-        ttk.Label(frame, text="다음 행동", style="ProgressTitle.TLabel").pack(anchor=W, pady=(12, 4))
-        ttk.Label(frame, textvariable=self.next_action_var, style="Timeline.TLabel").pack(anchor=W)
+        ttk.Label(frame, textvariable=self.timeline_caption_var, style="Timeline.TLabel").pack(anchor=W, pady=(6, 0))
+        ttk.Label(frame, text="검증: 각 pass 후 test, 실패 시 rollback", style="Timeline.TLabel").pack(anchor=W, pady=(6, 0))
+        ttk.Label(frame, text="동기화: 블록 완료 후 GitHub 자동 push", style="Timeline.TLabel").pack(anchor=W, pady=(2, 0))
+        canvas_wrap = ttk.Frame(frame)
+        canvas_wrap.pack(fill="x", pady=(10, 0))
+        self.plan_canvas = Canvas(canvas_wrap, height=150, bg="#fffaf3", highlightthickness=0)
+        h_scroll = ttk.Scrollbar(canvas_wrap, orient="horizontal", command=self.plan_canvas.xview)
+        v_scroll = ttk.Scrollbar(canvas_wrap, orient="vertical", command=self.plan_canvas.yview)
+        self.plan_canvas.configure(xscrollcommand=h_scroll.set, yscrollcommand=v_scroll.set)
+        self.plan_canvas.pack(side=LEFT, fill="x", expand=True)
+        v_scroll.pack(side=LEFT, fill="y")
+        h_scroll.pack(fill="x")
+        ttk.Label(frame, text="일 배분 편집", style="ProgressTitle.TLabel").pack(anchor=W, pady=(10, 4))
+        self.work_items_text = ScrolledText(frame, height=4, wrap="word")
+        self.work_items_text.pack(fill="x")
+        self.work_items_text.bind("<<Modified>>", self._on_work_items_modified)
 
     def _build_form(self, parent: ttk.Frame) -> None:
         frame = ttk.LabelFrame(parent, text="실행 설정", padding=12, style="Card.TLabelframe")
@@ -245,19 +335,6 @@ class CodexAutoGUI:
             text="실행 버튼 하나로 초기 설정과 블록 실행을 함께 처리합니다.",
         ).pack(anchor=W, pady=(10, 0))
 
-        actions = ttk.Frame(frame)
-        actions.pack(fill="x", pady=(12, 0))
-        self.action_buttons: list[ttk.Button] = []
-        for label, handler in [
-            ("실행", self.run_blocks),
-            ("이어서 실행", self.resume_run),
-            ("승인+업로드", self.approve_and_push_checkpoint),
-            ("새로고침", self.refresh_repositories),
-        ]:
-            button = ttk.Button(actions, text=label, command=handler)
-            button.pack(side=LEFT, padx=(0, 8))
-            self.action_buttons.append(button)
-
     def _build_project_tab(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(1, weight=1)
 
@@ -273,18 +350,22 @@ class CodexAutoGUI:
     def _build_execution_tab(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(1, weight=1)
         for row, label, variable, values in [
-            (0, "모델", self.model_var, ["gpt-5.4", "gpt-5"]),
+            (0, "모델", self.model_var, self.model_choices),
             (1, "추론 강도", self.effort_var, ["low", "medium", "high", "xhigh"]),
             (2, "승인 모드", self.approval_var, ["never", "on-request", "untrusted", "on-failure"]),
-            (3, "샌드박스", self.sandbox_var, ["workspace-write", "read-only", "danger-full-access"]),
-            (4, "원격 push", self.allow_push_var, ["false", "true"]),
         ]:
             ttk.Label(parent, text=label).grid(row=row, column=0, sticky=W, padx=(0, 10), pady=6)
-            ttk.Combobox(parent, textvariable=variable, values=values, state="readonly", width=20).grid(row=row, column=1, sticky=W, pady=6)
-        ttk.Label(parent, text="최대 블록 수").grid(row=5, column=0, sticky=W, padx=(0, 10), pady=6)
-        ttk.Entry(parent, textvariable=self.max_blocks_var, width=10).grid(row=5, column=1, sticky=W, pady=6)
-        ttk.Label(parent, text="테스트 명령").grid(row=6, column=0, sticky=W, padx=(0, 10), pady=6)
-        ttk.Entry(parent, textvariable=self.test_cmd_var, width=72).grid(row=6, column=1, sticky="ew", pady=6)
+            state = "readonly" if label != "모델" else "normal"
+            ttk.Combobox(parent, textvariable=variable, values=values, state=state, width=20).grid(row=row, column=1, sticky=W, pady=6)
+        ttk.Label(parent, text="모델은 직접 입력, 강도는 선택").grid(row=3, column=1, sticky=W, pady=(0, 6))
+        ttk.Label(parent, text="권한 범위").grid(row=4, column=0, sticky=W, padx=(0, 10), pady=6)
+        ttk.Label(parent, text="managed workspace only").grid(row=4, column=1, sticky=W, pady=6)
+        ttk.Label(parent, text="GitHub 동기화").grid(row=5, column=0, sticky=W, padx=(0, 10), pady=6)
+        ttk.Label(parent, text="각 블록 완료 후 자동 push").grid(row=5, column=1, sticky=W, pady=6)
+        ttk.Label(parent, text="최대 블록 수").grid(row=6, column=0, sticky=W, padx=(0, 10), pady=6)
+        ttk.Entry(parent, textvariable=self.max_blocks_var, width=10).grid(row=6, column=1, sticky=W, pady=6)
+        ttk.Label(parent, text="테스트 명령").grid(row=7, column=0, sticky=W, padx=(0, 10), pady=6)
+        ttk.Entry(parent, textvariable=self.test_cmd_var, width=72).grid(row=7, column=1, sticky="ew", pady=6)
 
     def _build_plan_tab(self, parent: ttk.Frame) -> None:
         ttk.Label(
@@ -303,6 +384,7 @@ class CodexAutoGUI:
 
     def _build_checkpoint_tab(self, parent: ttk.Frame) -> None:
         ttk.Label(parent, text="체크포인트 승인 메모").pack(anchor=W, pady=(0, 6))
+        ttk.Button(parent, text="승인+업로드", command=self.approve_and_push_checkpoint).pack(anchor=W, pady=(0, 8))
         self.checkpoint_notes_text = ScrolledText(parent, height=10, wrap="word")
         self.checkpoint_notes_text.pack(fill=BOTH, expand=True)
         self.checkpoint_notes_text.insert(
@@ -365,6 +447,8 @@ class CodexAutoGUI:
                 messagebox.showerror("코덱스 오토", str(payload))
             elif event == "github_results":
                 self._populate_github_results(payload if isinstance(payload, list) else [])
+            elif event == "plan_distribution":
+                self._render_work_distribution(payload if isinstance(payload, dict) else None)
         self._schedule_queue_poll()
 
     def _append_log(self, message: str) -> None:
@@ -390,8 +474,13 @@ class CodexAutoGUI:
         self.status_var.set(label)
         for button in self.action_buttons:
             button.state(["disabled"] if busy else ["!disabled"])
+        if self.stop_button is not None:
+            self.stop_button.state(["!disabled"] if busy else ["disabled"])
         if busy:
             self.loop_status_var.set(label)
+            self.codex_status_var.set("실행 중")
+        else:
+            self.codex_status_var.set("대기")
 
     def _set_progress_from_context(self, context: ProjectContext | None) -> None:
         self.current_project = context
@@ -399,8 +488,8 @@ class CodexAutoGUI:
             self.current_repo_var.set("선택 없음")
             self.block_progress_var.set("0 / 0")
             self.loop_status_var.set("대기")
+            self.codex_status_var.set("대기")
             self.checkpoint_status_var.set("없음")
-            self.next_action_var.set("저장소를 선택한 뒤 실행")
             self.timeline_caption_var.set("준비")
             self.timeline_progress.configure(value=0)
             return
@@ -409,12 +498,23 @@ class CodexAutoGUI:
         current_block = min(context.loop_state.block_index, max_blocks)
         self.current_repo_var.set(context.metadata.slug)
         self.block_progress_var.set(f"{current_block} / {max_blocks}")
+        self.codex_status_var.set(self._codex_status(context))
         self.loop_status_var.set(self._human_status(context))
         self.checkpoint_status_var.set(self._checkpoint_summary(context))
-        self.next_action_var.set(self._next_action(context, max_blocks))
         timeline_value, caption = self._timeline_state(context)
         self.timeline_progress.configure(value=timeline_value)
         self.timeline_caption_var.set(caption)
+
+    def _codex_status(self, context: ProjectContext) -> str:
+        if self.busy or context.metadata.current_status.startswith("running:"):
+            return "실행 중"
+        if context.loop_state.stop_requested:
+            return "중지 대기"
+        if context.metadata.current_status == "init_failed":
+            return "오류"
+        if context.loop_state.pending_checkpoint_approval:
+            return "대기 중"
+        return "유휴"
 
     def _human_status(self, context: ProjectContext) -> str:
         status = context.metadata.current_status
@@ -422,6 +522,8 @@ class CodexAutoGUI:
             return "준비 완료"
         if status == "init_failed":
             return "초기화 실패"
+        if context.loop_state.stop_requested:
+            return "중지 요청됨"
         if status == "awaiting_checkpoint_approval":
             return "체크포인트 승인 대기"
         if status.startswith("running:block:"):
@@ -443,19 +545,6 @@ class CodexAutoGUI:
             return f"{waiting.get('checkpoint_id', 'CP')} 승인 대기"
         return f"{approved} / {total} 승인"
 
-    def _next_action(self, context: ProjectContext, max_blocks: int) -> str:
-        if context.loop_state.pending_checkpoint_approval:
-            return "승인+업로드 버튼으로 체크포인트를 처리"
-        if context.metadata.current_status == "init_failed":
-            return "장기 계획 입력이나 저장소 설정을 수정 후 다시 실행"
-        if context.metadata.current_status.startswith("running:"):
-            return "현재 블록 진행 중"
-        if context.loop_state.block_index >= max_blocks:
-            return "필요하면 최대 블록 수를 늘리거나 이어서 실행"
-        if context.loop_state.stop_reason:
-            return f"중단 원인 확인: {context.loop_state.stop_reason}"
-        return "실행 또는 이어서 실행 가능"
-
     def _timeline_state(self, context: ProjectContext) -> tuple[int, str]:
         if context.metadata.current_status == "init_failed":
             return 1, "초기화 단계에서 멈춤"
@@ -468,6 +557,141 @@ class CodexAutoGUI:
         if context.metadata.current_safe_revision:
             return 2, "초기화 완료"
         return 1, "입력 확인 중"
+
+    def _render_work_distribution(self, payload: dict[str, object] | None) -> None:
+        self.work_items_text.delete("1.0", END)
+        if not payload:
+            self._sync_work_items_to_plan_preview()
+            return
+
+        steps = payload.get("steps", [])
+        if not isinstance(steps, list) or not steps:
+            self._sync_work_items_to_plan_preview()
+            return
+
+        for index, step in enumerate(steps):
+            self.work_items_text.insert("end", f"{step.get('title')}\n")
+        self.work_items_text.edit_modified(False)
+        self._sync_work_items_to_plan_preview()
+
+    def _read_work_items(self) -> list[str]:
+        return [line.strip() for line in self.work_items_text.get("1.0", END).splitlines() if line.strip()]
+
+    def _on_work_items_modified(self, _event: object) -> None:
+        if not self.work_items_text.edit_modified():
+            return
+        self.work_items_text.edit_modified(False)
+        self._sync_work_items_to_plan_preview()
+
+    def _sync_work_items_to_plan_preview(self) -> None:
+        items = self._read_work_items()
+        if items:
+            self.max_blocks_var.set(str(len(items)))
+            current_index = self.current_project.loop_state.block_index if self.current_project else 0
+            payload = {
+                "steps": [
+                    {
+                        "label": f"일{chr(64 + index)}",
+                        "title": item,
+                        "state": "done" if index <= current_index else "current" if index == current_index + 1 else "pending",
+                    }
+                    for index, item in enumerate(items, start=1)
+                ]
+            }
+            self._draw_plan_steps(payload)
+            return
+        self._draw_plan_steps(None)
+
+    def _draw_plan_steps(self, payload: dict[str, object] | None) -> None:
+        self.plan_canvas.delete("all")
+        if not payload:
+            self.plan_canvas.create_text(
+                24,
+                24,
+                text="자동 배분을 누르거나 아래에 작업을 한 줄씩 입력하세요.",
+                anchor="w",
+                fill="#64748B",
+                font=("Malgun Gothic", 10),
+            )
+            self.plan_canvas.configure(scrollregion=(0, 0, 900, 150))
+            return
+
+        steps = payload.get("steps", [])
+        if not isinstance(steps, list) or not steps:
+            self.plan_canvas.configure(scrollregion=(0, 0, 900, 150))
+            return
+
+        viewport_width = max(self.plan_canvas.winfo_width(), 700)
+        gap_x = 16
+        gap_y = 18
+        arrow_width = 150
+        height = 54
+        start_x = 24
+        start_y = 20
+        row_capacity = max(1, min(4, int((viewport_width - start_x * 2 + gap_x) / (arrow_width + gap_x))))
+        total_rows = (len(steps) + row_capacity - 1) // row_capacity
+        canvas_height = max(120, total_rows * (height + gap_y) + 34)
+        content_width = max(viewport_width, start_x * 2 + min(len(steps), row_capacity) * arrow_width + max(0, min(len(steps), row_capacity) - 1) * gap_x + 30)
+        self.plan_canvas.configure(height=canvas_height, scrollregion=(0, 0, content_width, canvas_height))
+        colors = {"done": "#2CB67D", "current": "#2563EB", "pending": "#CBD5E1"}
+        text_colors = {"done": "white", "current": "white", "pending": "#1F2937"}
+        for index, step in enumerate(steps):
+            row = index // row_capacity
+            col = index % row_capacity
+            x = start_x + col * (arrow_width + gap_x)
+            y = start_y + row * (height + gap_y)
+            state = str(step.get("state", "pending"))
+            fill = colors.get(state, "#CBD5E1")
+            text_fill = text_colors.get(state, "#1F2937")
+            points = [
+                x, y,
+                x + arrow_width - 26, y,
+                x + arrow_width, y + height / 2,
+                x + arrow_width - 26, y + height,
+                x, y + height,
+                x + 18, y + height / 2,
+            ]
+            self.plan_canvas.create_polygon(points, fill=fill, outline="")
+            progress_text = "완료" if state == "done" else "진행 중" if state == "current" else "대기"
+            self.plan_canvas.create_text(
+                x + arrow_width / 2 - 6,
+                y - 10,
+                text=progress_text,
+                fill="#475569",
+                font=("Malgun Gothic", 9, "bold"),
+            )
+            self.plan_canvas.create_text(
+                x + arrow_width / 2 - 6,
+                y + 17,
+                text=str(step.get("label", f"일{index+1}")),
+                fill=text_fill,
+                font=("Malgun Gothic", 12, "bold"),
+            )
+            self.plan_canvas.create_text(
+                x + arrow_width / 2 - 6,
+                y + 36,
+                text=str(step.get("title", ""))[:24],
+                fill=text_fill,
+                font=("Malgun Gothic", 9),
+            )
+            if col < row_capacity - 1 and index + 1 < len(steps) and (index + 1) // row_capacity == row:
+                self.plan_canvas.create_line(
+                    x + arrow_width + 2,
+                    y + height / 2,
+                    x + arrow_width + gap_x - 2,
+                    y + height / 2,
+                    fill="#94A3B8",
+                    width=3,
+                    arrow="last",
+                )
+
+    def toggle_left_panel(self) -> None:
+        if self.left_panel_visible:
+            self.content_pane.forget(self.left_panel)
+            self.left_panel_visible = False
+            return
+        self.content_pane.insert(0, self.left_panel, weight=38)
+        self.left_panel_visible = True
 
     def _orchestrator(self) -> Orchestrator:
         return Orchestrator(Path(self.workspace_root_var.get().strip() or ".codex-auto-workspace"))
@@ -489,10 +713,10 @@ class CodexAutoGUI:
             extra_prompt=self.extra_prompt_text.get("1.0", END).strip(),
             init_plan_prompt="",
             approval_mode=self.approval_var.get().strip() or "never",
-            sandbox_mode=self.sandbox_var.get().strip() or "workspace-write",
+            sandbox_mode="workspace-write",
             test_cmd=self.test_cmd_var.get().strip() or "python -m pytest",
             max_blocks=max_blocks,
-            allow_push=self.allow_push_var.get().strip().lower() == "true",
+            allow_push=True,
         )
 
     def _repo_inputs(self) -> tuple[str, str]:
@@ -662,6 +886,7 @@ class CodexAutoGUI:
         self.branch_var.set(str(row["branch"]))
         self.current_project = self._orchestrator().find_project(str(row["repo_url"]), str(row["branch"]))
         self._set_progress_from_context(self.current_project)
+        self._render_work_distribution(None)
         if show_message:
             self._append_log(f"[정보] {row['slug']} 불러옴")
 
@@ -712,11 +937,34 @@ class CodexAutoGUI:
     def _clear_long_term_plan_input(self) -> None:
         self.long_term_plan_text.delete("1.0", END)
 
+    def plan_work_distribution(self) -> None:
+        try:
+            repo_url, branch = self._repo_inputs()
+            runtime = self._runtime()
+            long_term_input = self._long_term_plan_input()
+            orchestrator = self._orchestrator()
+        except Exception as exc:
+            messagebox.showerror("코덱스 오토", str(exc))
+            return
+
+        def worker() -> dict[str, object]:
+            result = orchestrator.plan_work(
+                repo_url=repo_url,
+                branch=branch,
+                runtime=runtime,
+                long_term_plan_input=long_term_input,
+            )
+            self.queue.put(("plan_distribution", result))
+            return result
+
+        self._run_async("일 배분", worker)
+
     def run_blocks(self) -> None:
         try:
             repo_url, branch = self._repo_inputs()
             runtime = self._runtime()
             long_term_input = self._long_term_plan_input()
+            work_items = self._read_work_items()
             orchestrator = self._orchestrator()
         except Exception as exc:
             messagebox.showerror("코덱스 오토", str(exc))
@@ -728,19 +976,21 @@ class CodexAutoGUI:
                 branch=branch,
                 runtime=runtime,
                 long_term_plan_input=long_term_input,
+                work_items=work_items,
                 resume=False,
             ),
         )
 
-    def resume_run(self) -> None:
+    def stop_run(self) -> None:
         try:
             repo_url, branch = self._repo_inputs()
-            runtime = self._runtime()
             orchestrator = self._orchestrator()
         except Exception as exc:
             messagebox.showerror("코덱스 오토", str(exc))
             return
-        self._run_async("이어서 실행", lambda: orchestrator.resume(repo_url=repo_url, branch=branch, runtime=runtime))
+        result = orchestrator.request_stop(repo_url=repo_url, branch=branch)
+        self._append_log(f"[정보] 중지 요청: {result['status']}")
+        self.refresh_repositories()
 
     def approve_and_push_checkpoint(self) -> None:
         try:

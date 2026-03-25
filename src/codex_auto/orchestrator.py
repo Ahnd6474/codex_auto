@@ -11,6 +11,8 @@ from .planning import (
     attempt_history_entry,
     assess_repository_maturity,
     build_mid_term_plan,
+    build_mid_term_plan_from_plan_items,
+    build_mid_term_plan_from_user_items,
     build_checkpoint_timeline,
     bootstrap_long_term_plan_prompt,
     candidate_tasks_from_mid_term,
@@ -19,10 +21,12 @@ from .planning import (
     generate_long_term_plan,
     implementation_prompt,
     is_long_term_plan_markdown,
+    parse_work_breakdown_response,
     reflection_markdown,
     scan_repository_inputs,
     select_candidate,
     validate_mid_term_subset,
+    work_breakdown_prompt,
     write_active_task,
 )
 from .reporting import Reporter
@@ -62,13 +66,7 @@ class Orchestrator:
                 long_term_plan_path=long_term_plan_path,
                 long_term_plan_input=long_term_plan_input,
             )
-            write_text(context.paths.long_term_plan_file, long_term_text)
-            write_text(context.paths.scope_guard_file, ensure_scope_guard(context))
-            mid_term_text, _ = build_mid_term_plan(long_term_text)
-            write_text(context.paths.mid_term_plan_file, mid_term_text)
-            checkpoints = build_checkpoint_timeline(long_term_text, runtime.checkpoint_interval_blocks)
-            write_text(context.paths.checkpoint_timeline_file, checkpoint_timeline_markdown(checkpoints))
-            write_json(context.paths.checkpoint_state_file, {"checkpoints": [checkpoint.to_dict() for checkpoint in checkpoints]})
+            self._write_planning_state(context, runtime, long_term_text)
 
             for file_path, starter in [
                 (context.paths.active_task_file, "# Active Task\n\nNo active task selected yet.\n"),
@@ -100,6 +98,7 @@ class Orchestrator:
         runtime: RuntimeOptions,
         long_term_plan_path: Path | None = None,
         long_term_plan_input: str = "",
+        work_items: list[str] | None = None,
         resume: bool = False,
     ) -> ProjectContext:
         existing = self.workspace.find_project(repo_url, branch)
@@ -134,15 +133,20 @@ class Orchestrator:
                         long_term_plan_path=long_term_plan_path,
                         long_term_plan_input=long_term_plan_input,
                     )
-                    write_text(context.paths.long_term_plan_file, resolved_plan_text)
+                    self._write_planning_state(context, runtime, resolved_plan_text)
 
         self.workspace.save_project(context)
         runner = CodexRunner(context.runtime.codex_path)
         memory = MemoryStore(context.paths)
         reporter = Reporter(context)
+        context.loop_state.stop_requested = False
 
         block_limit = max(1, context.runtime.max_blocks)
         for _ in range(block_limit):
+            if context.loop_state.stop_requested:
+                context.loop_state.stop_reason = "user stop requested"
+                context.metadata.current_status = "ready"
+                break
             if context.loop_state.pending_checkpoint_approval:
                 context.metadata.current_status = "awaiting_checkpoint_approval"
                 context.loop_state.stop_reason = "checkpoint approval required"
@@ -151,7 +155,7 @@ class Orchestrator:
             if stop_reason:
                 context.loop_state.stop_reason = stop_reason
                 break
-            self._run_single_block(context, runner, memory, reporter)
+            self._run_single_block(context, runner, memory, reporter, work_items=work_items)
             self.workspace.save_project(context)
             if context.loop_state.stop_reason:
                 break
@@ -160,8 +164,8 @@ class Orchestrator:
         self.workspace.save_project(context)
         return context
 
-    def resume(self, repo_url: str, branch: str, runtime: RuntimeOptions) -> ProjectContext:
-        return self.run(repo_url=repo_url, branch=branch, runtime=runtime, resume=True)
+    def resume(self, repo_url: str, branch: str, runtime: RuntimeOptions, work_items: list[str] | None = None) -> ProjectContext:
+        return self.run(repo_url=repo_url, branch=branch, runtime=runtime, work_items=work_items, resume=True)
 
     def list_projects(self) -> list[ProjectContext]:
         return self.workspace.list_projects()
@@ -179,6 +183,84 @@ class Orchestrator:
     def report(self, repo_url: str, branch: str) -> Path:
         context = self.status(repo_url, branch)
         return Reporter(context).write_status_report()
+
+    def plan_work(
+        self,
+        repo_url: str,
+        branch: str,
+        runtime: RuntimeOptions,
+        long_term_plan_path: Path | None = None,
+        long_term_plan_input: str = "",
+    ) -> dict[str, object]:
+        existing = self.workspace.find_project(repo_url, branch)
+        if existing is None:
+            context = self.init_repo(
+                repo_url=repo_url,
+                branch=branch,
+                runtime=runtime,
+                long_term_plan_path=long_term_plan_path,
+                long_term_plan_input=long_term_plan_input,
+            )
+        else:
+            context = existing
+            context.runtime = runtime
+            self.git.clone_or_update(repo_url, branch, context.paths.repo_dir)
+            self.git.configure_local_identity(
+                context.paths.repo_dir,
+                runtime.git_user_name,
+                runtime.git_user_email,
+            )
+            repo_inputs = scan_repository_inputs(context.paths.repo_dir)
+            is_mature, maturity_details = assess_repository_maturity(context.paths.repo_dir, repo_inputs)
+            long_term_text = self._resolve_long_term_plan_text(
+                context=context,
+                runtime=runtime,
+                repo_inputs=repo_inputs,
+                is_mature=is_mature,
+                maturity_details=maturity_details,
+                long_term_plan_path=long_term_plan_path,
+                long_term_plan_input=long_term_plan_input,
+            )
+            self._write_planning_state(context, runtime, long_term_text)
+            self.workspace.save_project(context)
+
+        long_term_text = read_text(context.paths.long_term_plan_file)
+        runner = CodexRunner(context.runtime.codex_path)
+        mid_items, mid_term_text = self._plan_block_items(
+            context=context,
+            runner=runner,
+            long_term_text=long_term_text,
+            work_items=None,
+            max_items=max(3, min(context.runtime.max_blocks, 6)),
+        )
+        write_text(context.paths.mid_term_plan_file, mid_term_text)
+        current_step = context.loop_state.block_index + (1 if context.metadata.current_status.startswith("running:") else 0)
+        steps: list[dict[str, object]] = []
+        for index, item in enumerate(mid_items, start=1):
+            state = "pending"
+            if current_step <= 0 and index == 1:
+                state = "current"
+            elif index <= context.loop_state.block_index:
+                state = "done"
+            elif index == current_step:
+                state = "current"
+            steps.append(
+                {
+                    "index": index,
+                    "label": f"B{index}",
+                    "title": item.text,
+                    "refs": [item.item_id] if item.item_id.startswith("LT") else [],
+                    "state": state,
+                }
+            )
+        return {
+            "repo_slug": context.metadata.slug,
+            "current_status": context.metadata.current_status,
+            "block_index": context.loop_state.block_index,
+            "max_blocks": context.runtime.max_blocks,
+            "strict_validation": "각 pass 후 테스트, 실패 시 즉시 rollback, safe revision만 유지",
+            "steps": steps,
+        }
 
     def checkpoints(self, repo_url: str, branch: str) -> dict:
         context = self.status(repo_url, branch)
@@ -214,10 +296,18 @@ class Orchestrator:
             target["pushed"] = True
         write_json(context.paths.checkpoint_state_file, data)
         context.loop_state.pending_checkpoint_approval = False
+        context.loop_state.stop_requested = False
         context.loop_state.stop_reason = None
         context.metadata.current_status = "ready"
         self.workspace.save_project(context)
         return target
+
+    def request_stop(self, repo_url: str, branch: str) -> dict[str, str]:
+        context = self.status(repo_url, branch)
+        context.loop_state.stop_requested = True
+        context.loop_state.stop_reason = "user stop requested"
+        self.workspace.save_project(context)
+        return {"status": "stop_requested"}
 
     def _run_single_block(
         self,
@@ -225,6 +315,7 @@ class Orchestrator:
         runner: CodexRunner,
         memory: MemoryStore,
         reporter: Reporter,
+        work_items: list[str] | None = None,
     ) -> None:
         context.loop_state.block_index += 1
         block_index = context.loop_state.block_index
@@ -233,10 +324,14 @@ class Orchestrator:
         safe_revision = context.metadata.current_safe_revision or self.git.current_revision(context.paths.repo_dir)
 
         long_term_text = read_text(context.paths.long_term_plan_file)
-        mid_term_text, mid_items = build_mid_term_plan(long_term_text)
-        valid_subset, violations = validate_mid_term_subset(mid_term_text, long_term_text)
-        if not valid_subset:
-            raise RuntimeError(f"Mid-term plan violated long-term scope: {violations}")
+        remaining_limit = max(1, context.runtime.max_blocks - block_index + 1)
+        mid_items, mid_term_text = self._plan_block_items(
+            context=context,
+            runner=runner,
+            long_term_text=long_term_text,
+            work_items=work_items,
+            max_items=min(remaining_limit, 6),
+        )
         write_text(context.paths.mid_term_plan_file, mid_term_text)
 
         memory_context = memory.render_context(mid_term_text)
@@ -251,6 +346,10 @@ class Orchestrator:
         selected_task = selected.title
 
         for pass_name in ["block-a-pass-1", "block-a-pass-2"]:
+            if context.loop_state.stop_requested:
+                context.loop_state.stop_reason = "user stop requested"
+                context.metadata.current_status = "ready"
+                return
             pass_result, test_result, commit_hash = self._execute_pass(
                 context=context,
                 runner=runner,
@@ -300,6 +399,10 @@ class Orchestrator:
                 safe_revision = commit_hash
 
         research_memory = memory.render_context(selected_task)
+        if context.loop_state.stop_requested:
+            context.loop_state.stop_reason = "user stop requested"
+            context.metadata.current_status = "ready"
+            return
         research_pass, research_tests, research_commit = self._execute_pass(
             context=context,
             runner=runner,
@@ -579,9 +682,7 @@ class Orchestrator:
                 runtime.init_plan_prompt,
                 maturity_details,
             )
-        raise RuntimeError(
-            "This repository appears early-stage. Provide one long-term plan input or use --init-plan-prompt to bootstrap LONG_TERM_PLAN.md."
-        )
+        return generate_long_term_plan(context, repo_inputs)
 
     def _generate_long_term_plan_from_prompt(
         self,
@@ -606,3 +707,74 @@ class Orchestrator:
                 f"Codex failed to create the initial prompt-based long-term plan. maturity={maturity_details}"
             )
         return long_term_text
+
+    def _write_planning_state(self, context: ProjectContext, runtime: RuntimeOptions, long_term_text: str) -> None:
+        write_text(context.paths.long_term_plan_file, long_term_text)
+        write_text(context.paths.scope_guard_file, ensure_scope_guard(context))
+        mid_term_text, _ = build_mid_term_plan(long_term_text)
+        write_text(context.paths.mid_term_plan_file, mid_term_text)
+        checkpoints = build_checkpoint_timeline(long_term_text, runtime.checkpoint_interval_blocks)
+        write_text(context.paths.checkpoint_timeline_file, checkpoint_timeline_markdown(checkpoints))
+        write_json(context.paths.checkpoint_state_file, {"checkpoints": [checkpoint.to_dict() for checkpoint in checkpoints]})
+
+    def _plan_block_items(
+        self,
+        context: ProjectContext,
+        runner: CodexRunner,
+        long_term_text: str,
+        work_items: list[str] | None,
+        max_items: int,
+    ) -> tuple[list, str]:
+        if work_items:
+            remaining_items = work_items[max(0, context.loop_state.block_index - 1):]
+            mid_term_text, mid_items = build_mid_term_plan_from_user_items(remaining_items or work_items)
+            return mid_items, mid_term_text
+
+        planned_items = self._generate_codex_work_items(
+            context=context,
+            runner=runner,
+            long_term_text=long_term_text,
+            max_items=max_items,
+        )
+        if planned_items:
+            mid_term_text, mid_items = build_mid_term_plan_from_plan_items(
+                planned_items,
+                "This plan was generated by Codex from the current repository state and long-term plan.",
+            )
+            valid_subset, violations = validate_mid_term_subset(mid_term_text, long_term_text)
+            if valid_subset:
+                return mid_items, mid_term_text
+            write_text(context.paths.reports_dir / "plan_scope_violation.txt", "\n".join(violations) + "\n")
+
+        mid_term_text, mid_items = build_mid_term_plan(long_term_text)
+        valid_subset, violations = validate_mid_term_subset(mid_term_text, long_term_text)
+        if not valid_subset:
+            raise RuntimeError(f"Mid-term plan violated long-term scope: {violations}")
+        return mid_items, mid_term_text
+
+    def _generate_codex_work_items(
+        self,
+        context: ProjectContext,
+        runner: CodexRunner,
+        long_term_text: str,
+        max_items: int,
+    ) -> list:
+        repo_inputs = scan_repository_inputs(context.paths.repo_dir)
+        memory_context = MemoryStore(context.paths).render_context(long_term_text)
+        prompt = work_breakdown_prompt(
+            context=context,
+            repo_inputs=repo_inputs,
+            long_term_text=long_term_text,
+            memory_context=memory_context,
+            max_items=max_items,
+        )
+        result = runner.run_pass(
+            context=context,
+            prompt=prompt,
+            pass_type="plan-work-breakdown",
+            block_index=max(0, context.loop_state.block_index),
+            search_enabled=False,
+        )
+        if result.returncode != 0:
+            return []
+        return parse_work_breakdown_response(result.last_message or "", limit=max_items)
