@@ -10,7 +10,7 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager, State};
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 struct JobSnapshot {
     id: String,
     command: String,
@@ -146,13 +146,60 @@ fn run_bridge_command(
     parse_bridge_output(output.status.success(), &output.stdout, &output.stderr)
 }
 
-fn update_job(app: &AppHandle, job_id: &str, mutate: impl FnOnce(&mut JobSnapshot)) {
-    if let Ok(mut jobs) = app.state::<AppState>().jobs.lock() {
+fn register_job_start(state: &AppState, command: &str) -> Result<JobSnapshot, String> {
+    let mut jobs = state
+        .jobs
+        .lock()
+        .map_err(|_| "Failed to lock job state.".to_string())?;
+    if jobs.values().any(|job| job.status == "running") {
+        return Err("Another background task is already running.".to_string());
+    }
+
+    let started_at = now_ms();
+    let snapshot = JobSnapshot {
+        id: format!("job-{}-{}", command, started_at),
+        command: command.to_string(),
+        status: "running".to_string(),
+        error: None,
+        result: None,
+        updated_at_ms: started_at,
+    };
+    jobs.insert(snapshot.id.clone(), snapshot.clone());
+    Ok(snapshot)
+}
+
+fn update_job_state(state: &AppState, job_id: &str, mutate: impl FnOnce(&mut JobSnapshot)) {
+    if let Ok(mut jobs) = state.jobs.lock() {
         if let Some(job) = jobs.get_mut(job_id) {
             mutate(job);
             job.updated_at_ms = now_ms();
         }
     }
+}
+
+fn update_job<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    job_id: &str,
+    mutate: impl FnOnce(&mut JobSnapshot),
+) {
+    let state = app.state::<AppState>();
+    update_job_state(state.inner(), job_id, mutate);
+}
+
+fn get_job_snapshot(state: &AppState, job_id: &str) -> Option<JobSnapshot> {
+    state
+        .jobs
+        .lock()
+        .ok()
+        .and_then(|jobs| jobs.get(job_id).cloned())
+}
+
+fn list_job_snapshots(state: &AppState) -> Vec<JobSnapshot> {
+    state
+        .jobs
+        .lock()
+        .map(|jobs| jobs.values().cloned().collect())
+        .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -165,38 +212,15 @@ fn bridge_request(
 }
 
 #[tauri::command]
-fn start_bridge_job(
-    app: AppHandle,
+fn start_bridge_job<R: tauri::Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AppState>,
     command: String,
     payload: Option<Value>,
     workspace_root: Option<String>,
 ) -> Result<JobSnapshot, String> {
-    {
-        let jobs = state
-            .jobs
-            .lock()
-            .map_err(|_| "Failed to lock job state.".to_string())?;
-        if jobs.values().any(|job| job.status == "running") {
-            return Err("Another background task is already running.".to_string());
-        }
-    }
-
-    let job_id = format!("job-{}-{}", command, now_ms());
-    let snapshot = JobSnapshot {
-        id: job_id.clone(),
-        command: command.clone(),
-        status: "running".to_string(),
-        error: None,
-        result: None,
-        updated_at_ms: now_ms(),
-    };
-
-    state
-        .jobs
-        .lock()
-        .map_err(|_| "Failed to record background job.".to_string())?
-        .insert(job_id.clone(), snapshot.clone());
+    let snapshot = register_job_start(state.inner(), &command)?;
+    let job_id = snapshot.id.clone();
 
     std::thread::spawn(move || {
         let result = run_bridge_command(&command, payload, workspace_root);
@@ -219,20 +243,12 @@ fn start_bridge_job(
 
 #[tauri::command]
 fn get_bridge_job(job_id: String, state: State<'_, AppState>) -> Option<JobSnapshot> {
-    state
-        .jobs
-        .lock()
-        .ok()
-        .and_then(|jobs| jobs.get(&job_id).cloned())
+    get_job_snapshot(state.inner(), &job_id)
 }
 
 #[tauri::command]
 fn list_bridge_jobs(state: State<'_, AppState>) -> Vec<JobSnapshot> {
-    state
-        .jobs
-        .lock()
-        .map(|jobs| jobs.values().cloned().collect())
-        .unwrap_or_default()
+    list_job_snapshots(state.inner())
 }
 
 pub fn run() {
@@ -252,8 +268,10 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use std::fs;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::Duration;
 
     static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -288,6 +306,25 @@ mod tests {
             fs::create_dir_all(parent).expect("create parent directories");
         }
         fs::write(path, b"").expect("create file");
+    }
+
+    fn sample_job(id: &str, command: &str, status: &str) -> JobSnapshot {
+        JobSnapshot {
+            id: id.to_string(),
+            command: command.to_string(),
+            status: status.to_string(),
+            error: None,
+            result: Some(json!({"ok": true, "command": command})),
+            updated_at_ms: 123,
+        }
+    }
+
+    fn insert_job(state: &AppState, job: JobSnapshot) {
+        state
+            .jobs
+            .lock()
+            .expect("lock app state")
+            .insert(job.id.clone(), job);
     }
 
     #[test]
@@ -385,5 +422,96 @@ mod tests {
         let error = parse_bridge_output(true, b"{not-json}", b"").expect_err("invalid JSON");
 
         assert!(error.contains("Failed to parse bridge JSON"));
+    }
+
+    #[test]
+    fn register_job_start_records_running_snapshot_for_command_state() {
+        let state = AppState::default();
+
+        let snapshot = register_job_start(&state, "bootstrap").expect("register running job");
+        let stored = get_job_snapshot(&state, &snapshot.id).expect("stored job");
+
+        assert!(snapshot.id.starts_with("job-bootstrap-"));
+        assert_eq!(snapshot.command, "bootstrap");
+        assert_eq!(snapshot.status, "running");
+        assert_eq!(snapshot.error, None);
+        assert_eq!(snapshot.result, None);
+        assert_eq!(stored.id, snapshot.id);
+        assert_eq!(stored.updated_at_ms, snapshot.updated_at_ms);
+    }
+
+    #[test]
+    fn register_job_start_rejects_when_command_state_already_has_running_job() {
+        let state = AppState::default();
+        insert_job(&state, sample_job("job-running", "bootstrap", "running"));
+
+        let error = register_job_start(&state, "list-projects").expect_err("reject second run");
+
+        assert_eq!(error, "Another background task is already running.");
+    }
+
+    #[test]
+    fn get_job_snapshot_returns_seeded_job_for_command_lookup() {
+        let state = AppState::default();
+        insert_job(&state, sample_job("job-one", "bootstrap", "completed"));
+
+        let response = get_job_snapshot(&state, "job-one").expect("get job snapshot");
+
+        assert_eq!(response.id, "job-one");
+        assert_eq!(response.command, "bootstrap");
+        assert_eq!(response.status, "completed");
+        assert_eq!(
+            response.result,
+            Some(json!({"ok": true, "command": "bootstrap"}))
+        );
+    }
+
+    #[test]
+    fn get_job_snapshot_returns_none_for_unknown_job() {
+        let state = AppState::default();
+
+        let response = get_job_snapshot(&state, "missing-job");
+
+        assert!(response.is_none());
+    }
+
+    #[test]
+    fn list_job_snapshots_returns_all_jobs_for_command_listing() {
+        let state = AppState::default();
+        insert_job(&state, sample_job("job-b", "bootstrap", "completed"));
+        insert_job(&state, sample_job("job-a", "list-projects", "failed"));
+
+        let mut ids = list_job_snapshots(&state)
+            .into_iter()
+            .map(|job| job.id)
+            .collect::<Vec<_>>();
+        ids.sort();
+
+        assert_eq!(ids, vec!["job-a".to_string(), "job-b".to_string()]);
+    }
+
+    #[test]
+    fn update_job_state_applies_completion_result_for_command_state() {
+        let state = AppState::default();
+        let snapshot = register_job_start(&state, "bootstrap").expect("register running job");
+
+        while now_ms() <= snapshot.updated_at_ms {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+
+        update_job_state(&state, &snapshot.id, |job| {
+            job.status = "completed".to_string();
+            job.result = Some(json!({"workspace_root": "temp-workspace"}));
+            job.error = None;
+        });
+
+        let updated = get_job_snapshot(&state, &snapshot.id).expect("updated job");
+        assert_eq!(updated.status, "completed");
+        assert_eq!(updated.error, None);
+        assert_eq!(
+            updated.result,
+            Some(json!({"workspace_root": "temp-workspace"}))
+        );
+        assert!(updated.updated_at_ms > snapshot.updated_at_ms);
     }
 }

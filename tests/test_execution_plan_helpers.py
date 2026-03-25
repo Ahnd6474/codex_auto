@@ -89,6 +89,33 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(len(steps), 1)
         self.assertEqual(steps[0].reasoning_effort, "xhigh")
 
+    def test_parse_execution_plan_response_recovers_json_from_noisy_text(self) -> None:
+        response = """
+        Here is the execution plan JSON.
+
+        {
+          "title": "Recovery rollout",
+          "summary": "Recover the machine-readable plan.",
+          "tasks": [
+            {
+              "task_title": "Retry the parser",
+              "display_description": "Recover from prefixed prose.",
+              "codex_description": "Read through the noisy response and keep the JSON payload.",
+              "reasoning_effort": "medium"
+            }
+          ]
+        }
+
+        Keep the work incremental.
+        """
+
+        plan_title, summary, steps = parse_execution_plan_response(response, "python -m unittest", "high", limit=3)
+
+        self.assertEqual(plan_title, "Recovery rollout")
+        self.assertEqual(summary, "Recover the machine-readable plan.")
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0].title, "Retry the parser")
+
     def test_execution_step_from_dict_accepts_legacy_description(self) -> None:
         step = ExecutionStep.from_dict(
             {
@@ -304,6 +331,20 @@ class ExecutionPlanHelperTests(unittest.TestCase):
 
         self.assertEqual([item["index"] for item in tail], [4, 5])
         self.assertEqual(last, {"index": 5})
+
+    def test_jsonl_tail_helpers_skip_malformed_lines(self) -> None:
+        temp_dir = Path(__file__).resolve().parents[1] / ".tmp_jsonl_tail_test_invalid"
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        log_file = temp_dir / "events.jsonl"
+        log_file.write_text('{"index": 1}\nUnexpected token < in JSON\n{"index": 2}\n', encoding="utf-8")
+
+        tail = read_jsonl_tail(log_file, 5)
+        last = read_last_jsonl(log_file)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+        self.assertEqual([item["index"] for item in tail], [1, 2])
+        self.assertEqual(last, {"index": 2})
 
 
 if __name__ == "__main__":

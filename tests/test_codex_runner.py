@@ -1,0 +1,111 @@
+from __future__ import annotations
+
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from codex_auto.codex_runner import CodexRunner
+from codex_auto.models import RuntimeOptions
+from codex_auto.workspace import WorkspaceManager
+
+
+class CodexRunnerTests(unittest.TestCase):
+    def _context(self, temp_root: Path):
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        manager = WorkspaceManager(temp_root / "workspace")
+        return manager.initialize_local_project(
+            project_dir=repo_dir,
+            branch="main",
+            runtime=RuntimeOptions(model="gpt-5.4", effort="medium"),
+        )
+
+    def test_run_pass_retries_unexpected_token_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_temp:
+            temp_root = Path(raw_temp)
+            context = self._context(temp_root)
+            runner = CodexRunner("codex.cmd")
+            attempts = {"count": 0}
+
+            def fake_run(command, input, capture_output, check):
+                attempts["count"] += 1
+                output_file = Path(command[command.index("-o") + 1])
+                if attempts["count"] == 1:
+                    return subprocess.CompletedProcess(
+                        command,
+                        1,
+                        stdout=b"",
+                        stderr=b"SyntaxError: Unexpected token < in JSON at position 0",
+                    )
+                output_file.write_text("Recovered response", encoding="utf-8")
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout=b'{"type":"turn.completed","usage":{"input_tokens":7,"output_tokens":3}}\n',
+                    stderr=b"",
+                )
+
+            with mock.patch("codex_auto.codex_runner.subprocess.run", side_effect=fake_run), mock.patch(
+                "codex_auto.codex_runner.time.sleep"
+            ):
+                result = runner.run_pass(
+                    context=context,
+                    prompt="Apply a safe fix",
+                    pass_type="demo pass",
+                    block_index=1,
+                    search_enabled=False,
+                )
+
+            block_dir = context.paths.logs_dir / "block_0001"
+            self.assertEqual(attempts["count"], 2)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.attempt_count, 2)
+            self.assertEqual(result.last_message, "Recovered response")
+            self.assertEqual(result.usage["input_tokens"], 7)
+            self.assertEqual(result.usage["output_tokens"], 3)
+            self.assertTrue(result.diagnostics["unexpected_token_detected"])
+            self.assertTrue(result.diagnostics["recovered_after_retry"])
+            self.assertTrue((block_dir / "demo_pass.attempt_1.stderr.log").exists())
+            self.assertTrue((block_dir / "demo_pass.diagnostics.json").exists())
+
+    def test_run_pass_does_not_retry_other_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_temp:
+            temp_root = Path(raw_temp)
+            context = self._context(temp_root)
+            runner = CodexRunner("codex.cmd")
+            attempts = {"count": 0}
+
+            def fake_run(command, input, capture_output, check):
+                attempts["count"] += 1
+                return subprocess.CompletedProcess(
+                    command,
+                    1,
+                    stdout=b"",
+                    stderr=b"authentication failed",
+                )
+
+            with mock.patch("codex_auto.codex_runner.subprocess.run", side_effect=fake_run), mock.patch(
+                "codex_auto.codex_runner.time.sleep"
+            ) as mocked_sleep:
+                result = runner.run_pass(
+                    context=context,
+                    prompt="Apply a safe fix",
+                    pass_type="demo pass",
+                    block_index=1,
+                    search_enabled=False,
+                )
+
+            self.assertEqual(attempts["count"], 1)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.attempt_count, 1)
+            self.assertFalse(result.diagnostics["unexpected_token_detected"])
+            mocked_sleep.assert_not_called()
+
+
+if __name__ == "__main__":
+    unittest.main()

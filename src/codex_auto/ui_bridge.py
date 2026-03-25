@@ -10,7 +10,7 @@ from typing import Any
 from .model_selection import DEFAULT_MODEL_PRESET_ID, MODEL_PRESETS, model_preset_by_id
 from .models import ExecutionPlanState, ProjectContext, RuntimeOptions
 from .orchestrator import Orchestrator
-from .utils import append_jsonl, compact_text, now_utc_iso, read_json, read_jsonl_tail, read_last_jsonl, read_text, write_json
+from .utils import append_jsonl, compact_text, now_utc_iso, parse_json_text, read_json, read_jsonl_tail, read_last_jsonl, read_text, write_json
 
 
 DEFAULT_GUI_WORKSPACE_DIRNAME = ".codex-auto-workspace"
@@ -727,7 +727,7 @@ def load_stdin_payload() -> dict[str, Any]:
     raw = sys.stdin.read().strip()
     if not raw:
         return {}
-    payload = json.loads(raw)
+    payload = parse_json_text(raw)
     if not isinstance(payload, dict):
         raise ValueError("Bridge stdin payload must be a JSON object.")
     return payload

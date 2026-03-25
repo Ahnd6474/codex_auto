@@ -188,9 +188,9 @@ class CodexRunner:
         stderr: str,
         last_message: str,
     ) -> None:
-        attempt_prefix = block_dir / f"{pass_slug}.attempt_{attempt_index}"
-        write_text(attempt_prefix.with_suffix(".events.jsonl"), stdout)
+        attempt_basename = f"{pass_slug}.attempt_{attempt_index}"
+        write_text(block_dir / f"{attempt_basename}.events.jsonl", stdout)
         if stderr:
-            write_text(attempt_prefix.with_suffix(".stderr.log"), stderr)
+            write_text(block_dir / f"{attempt_basename}.stderr.log", stderr)
         if last_message:
-            write_text(attempt_prefix.with_suffix(".last_message.txt"), last_message)
+            write_text(block_dir / f"{attempt_basename}.last_message.txt", last_message)
