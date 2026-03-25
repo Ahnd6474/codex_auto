@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .model_selection import normalize_reasoning_effort
 from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, ProjectContext
-from .utils import compact_text, now_utc_iso, read_text, similarity_score, tokenize, write_text
+from .utils import compact_text, now_utc_iso, parse_json_text, read_text, similarity_score, tokenize, write_text
 
 
 @dataclass(slots=True)
@@ -353,11 +353,8 @@ def parse_execution_plan_response(
     raw = response_text.strip()
     if not raw:
         return "", "", []
-    fenced = re.search(r"```(?:json)?\s*(.+?)\s*```", raw, re.DOTALL)
-    if fenced:
-        raw = fenced.group(1).strip()
     try:
-        payload = json.loads(raw)
+        payload = parse_json_text(raw)
     except json.JSONDecodeError:
         return "", "", []
 
@@ -413,12 +410,9 @@ def parse_work_breakdown_response(response_text: str, limit: int = 6) -> list[Pl
     raw = response_text.strip()
     if not raw:
         return []
-    fenced = re.search(r"```(?:json)?\s*(.+?)\s*```", raw, re.DOTALL)
-    if fenced:
-        raw = fenced.group(1).strip()
     payload: object
     try:
-        payload = json.loads(raw)
+        payload = parse_json_text(raw)
     except json.JSONDecodeError:
         return []
     if isinstance(payload, dict):

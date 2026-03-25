@@ -176,6 +176,8 @@ class CodexRunResult:
     changed_files: list[str]
     usage: dict[str, int] = field(default_factory=dict)
     last_message: str | None = None
+    attempt_count: int = 1
+    diagnostics: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return _normalize(self)

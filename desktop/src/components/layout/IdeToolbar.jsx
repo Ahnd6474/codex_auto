@@ -19,7 +19,7 @@ export function IdeToolbar({
   return (
     <header className="ide-toolbar">
       <div className="ide-toolbar__group">
-        <button className="toolbar-button toolbar-button--ghost" onClick={onRefresh} type="button" disabled={busy}>
+        <button className="toolbar-button toolbar-button--ghost" onClick={onRefresh} type="button">
           Refresh
         </button>
       </div>

@@ -26,41 +26,17 @@ export function HistoryView({ history }) {
     </div>
   ));
 
-  const passes = (history?.passes || []).map((pass, index) => (
-    <div className="dense-row" key={`pass-${index}`}>
-      <div className="dense-row__title">
-        <strong>{pass.pass_type || "pass"}</strong>
-        <span>{pass.returncode === 0 ? "ok" : `exit ${pass.returncode}`}</span>
-      </div>
-      <span>{(pass.changed_files || []).join(", ") || "No changed files recorded"}</span>
-      <span>{pass.last_message || "No final message recorded"}</span>
-    </div>
-  ));
-
-  const events = (history?.ui_events || []).map((event, index) => (
-    <div className="dense-row" key={`event-${index}`}>
-      <div className="dense-row__title">
-        <strong>{event.event_type}</strong>
-        <span>{event.timestamp}</span>
-      </div>
-      <span>{event.message}</span>
-    </div>
-  ));
-
   return (
     <section className="workspace-view">
       <div className="view-header">
         <div>
           <span className="eyebrow">History</span>
           <h2>Recent Activity</h2>
-          <p>Runs, passes, and UI events stay browseable as dense operational history rather than disappearing behind transient banners.</p>
         </div>
       </div>
 
-      <div className="history-grid">
+      <div className="history-grid history-grid--single">
         <HistoryRow title="Recent Blocks" tone="info" lines={blocks} />
-        <HistoryRow title="Recent Passes" tone="neutral" lines={passes} />
-        <HistoryRow title="UI Events" tone="neutral" lines={events} />
       </div>
     </section>
   );

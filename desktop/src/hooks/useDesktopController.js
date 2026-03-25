@@ -67,6 +67,12 @@ export function useDesktopController() {
   }, [centerTab, setCenterTab]);
 
   useEffect(() => {
+    if (sidebarTab === "github") {
+      setSidebarTab("projects");
+    }
+  }, [sidebarTab, setSidebarTab]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function initialize() {
@@ -179,6 +185,45 @@ export function useDesktopController() {
     setWorkspaceStats(listing.workspace || null);
     if (!selectedProjectId && listing.projects?.length) {
       setSelectedProjectId(listing.projects[0].repo_id);
+    }
+  }
+
+  async function forceRefresh() {
+    try {
+      if (activeJobId) {
+        const job = await getBridgeJob(activeJobId);
+        if (job) {
+          setActiveJob(job);
+          if (job.status !== "running") {
+            setActiveJobId("");
+          }
+        }
+      }
+
+      const listing = await bridgeRequest("list-projects", null, workspaceRoot || null);
+      setProjects(listing.projects || []);
+      setWorkspaceStats(listing.workspace || null);
+
+      if (selectedProjectId) {
+        const detail = await bridgeRequest("load-project", { repo_id: selectedProjectId }, workspaceRoot || null);
+        setProjectDetail(detail);
+        setProjectForm((current) => {
+          if (current.project_dir && planDirty) {
+            return current;
+          }
+          return projectFormFromDetail(detail, defaultRuntime);
+        });
+        if (!planDirty) {
+          setPlanDraft(cloneValue(detail.plan));
+          setSelectedStepId((current) => current || firstSelectableStepId(detail.plan));
+        }
+      } else if (listing.projects?.length) {
+        setSelectedProjectId(listing.projects[0].repo_id);
+      }
+
+      setMessage(messagePayload("info", activeJobId ? "Run state refreshed." : "Project state refreshed."));
+    } catch (error) {
+      setMessage(messagePayload("error", String(error)));
     }
   }
 
@@ -551,6 +596,7 @@ export function useDesktopController() {
     syncPlan,
     updateSelectedStep,
     chooseDirectory,
+    forceRefresh,
     refreshProjects,
     loadProject,
     saveProject,

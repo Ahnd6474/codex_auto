@@ -38,6 +38,7 @@ export function RunControlView({
   const selectedStep = steps.find((step) => step.step_id === selectedStepId) || null;
   const editableStep = canEditStep(selectedStep, busy);
   const completedCount = steps.filter((step) => step.status === "completed").length;
+  const flowColumns = 3;
 
   return (
     <section className="workspace-view">
@@ -96,7 +97,14 @@ export function RunControlView({
             steps.map((step, index) => (
               <div className="run-flow__item" key={step.step_id}>
                 <FlowNode step={step} selected={step.step_id === selectedStepId} onSelect={onSelectStep} />
-                {index < steps.length - 1 ? <div className="run-flow__connector" aria-hidden="true" /> : null}
+                {index < steps.length - 1 ? (
+                  <div
+                    className={`run-flow__connector ${
+                      (index + 1) % flowColumns === 0 ? "run-flow__connector--down" : "run-flow__connector--right"
+                    }`}
+                    aria-hidden="true"
+                  />
+                ) : null}
               </div>
             ))
           ) : (
@@ -120,13 +128,9 @@ export function RunControlView({
           </div>
           {selectedStep ? (
             <div className="step-editor-grid">
-              <label className="field">
+              <label className="field field--wide">
                 <span>Title</span>
                 <input value={selectedStep.title || ""} onChange={(event) => onUpdateStepField("title", event.target.value)} disabled={!editableStep} />
-              </label>
-              <label className="field">
-                <span>Test Command</span>
-                <input value={selectedStep.test_command || ""} onChange={(event) => onUpdateStepField("test_command", event.target.value)} disabled={!editableStep} />
               </label>
               <label className="field">
                 <span>GPT Reasoning</span>

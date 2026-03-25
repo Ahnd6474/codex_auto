@@ -64,6 +64,86 @@ def read_json(path: Path, default: Any = None) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _balanced_json_fragment(text: str, start: int) -> str | None:
+    opening = text[start]
+    if opening not in "{[":
+        return None
+    expected_closer = "}" if opening == "{" else "]"
+    stack = [expected_closer]
+    in_string = False
+    escaped = False
+    for index in range(start + 1, len(text)):
+        char = text[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+            continue
+        if char == "{":
+            stack.append("}")
+            continue
+        if char == "[":
+            stack.append("]")
+            continue
+        if char in "}]":
+            if not stack or char != stack[-1]:
+                return None
+            stack.pop()
+            if not stack:
+                return text[start : index + 1]
+    return None
+
+
+def _json_text_candidates(text: str) -> list[str]:
+    raw = text.strip()
+    if not raw:
+        return []
+    candidates: list[str] = [raw]
+    fenced = re.search(r"```(?:json)?\s*(.+?)\s*```", raw, re.DOTALL)
+    if fenced:
+        fenced_text = fenced.group(1).strip()
+        if fenced_text and fenced_text not in candidates:
+            candidates.append(fenced_text)
+    for source in list(candidates):
+        for index, char in enumerate(source):
+            if char not in "{[":
+                continue
+            fragment = _balanced_json_fragment(source, index)
+            if fragment and fragment not in candidates:
+                candidates.append(fragment)
+    return candidates
+
+
+def parse_json_text(text: str) -> Any:
+    candidates = _json_text_candidates(text)
+    last_error: json.JSONDecodeError | None = None
+    for candidate in candidates:
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            last_error = exc
+    if last_error is not None:
+        raise last_error
+    return json.loads(text)
+
+
+def _parse_jsonl_line(line: str) -> dict[str, Any] | None:
+    raw = line.strip()
+    if not raw:
+        return None
+    try:
+        payload = parse_json_text(raw)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def append_jsonl(path: Path, data: dict[str, Any]) -> None:
     ensure_dir(path.parent)
     with path.open("a", encoding="utf-8") as handle:
@@ -76,8 +156,9 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
         return []
     entries: list[dict[str, Any]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            entries.append(json.loads(line))
+        payload = _parse_jsonl_line(line)
+        if payload is not None:
+            entries.append(payload)
     return entries
 
 
@@ -87,8 +168,9 @@ def read_jsonl_tail(path: Path, limit: int) -> list[dict[str, Any]]:
     tail: deque[dict[str, Any]] = deque(maxlen=limit)
     with path.open("r", encoding="utf-8") as handle:
         for line in handle:
-            if line.strip():
-                tail.append(json.loads(line))
+            payload = _parse_jsonl_line(line)
+            if payload is not None:
+                tail.append(payload)
     return list(tail)
 
 

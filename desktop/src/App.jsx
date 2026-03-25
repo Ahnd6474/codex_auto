@@ -42,7 +42,7 @@ export default function App() {
         planDraft={controller.planDraft}
         busy={controller.busy}
         activeJob={controller.activeJob}
-        onRefresh={() => (controller.selectedProjectId ? controller.reloadProject() : controller.refreshProjects())}
+        onRefresh={controller.forceRefresh}
         onGeneratePlan={controller.generatePlan}
         onRunPlan={controller.runPlan}
         onRunCloseout={controller.runCloseout}
