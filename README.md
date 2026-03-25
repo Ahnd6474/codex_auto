@@ -2,16 +2,11 @@
 
 `codex-auto` is a production-oriented Python CLI for managing multiple repositories inside an isolated workspace and repeatedly running a traceable Codex-driven improvement loop against them.
 
-It is designed around two planning layers:
+It is designed around a saved project plan:
 
-- `docs/LONG_TERM_PLAN.md`: created once or seeded from a user-provided file; treated as immutable unless explicitly changed by the user
-- `docs/MID_TERM_PLAN.md`: regenerated at block boundaries and kept as a strict subset of the long-term plan
-- `docs/CHECKPOINT_TIMELINE.md`: derived from the long-term plan and used for review/approval boundaries
-
-Initialization rule:
-
-- if the target repository is already somewhat mature, the initial long-term plan is derived from the repository itself
-- if the target repository is early-stage, Codex must first create the long-term plan from a user-provided initialization prompt
+- `docs/PLAN.md`: stores the current project plan or reviewed execution plan snapshot
+- `docs/MID_TERM_PLAN.md`: regenerated at block boundaries and kept as a strict subset of the saved plan
+- `docs/CHECKPOINT_TIMELINE.md`: derived from the saved plan and used for review boundaries
 
 ## Flow
 
@@ -67,7 +62,7 @@ The GUI lets you:
 - run Codex with `approval=never` and `sandbox=danger-full-access` from the GUI
 - choose the runtime model either as a direct slug or as a Codex slug built from editable slug parts
 - generate a test-driven execution plan from a free-form prompt
-- edit the Codex plan-generation and step-execution prompt templates in `src/codex_auto/docs/*.txt`
+- edit the Codex prompt templates in `src/codex_auto/docs/`
 - review a setup-stage runtime flow chart and an interactive flow chart of the generated steps
 - edit pending steps, including add/delete/reorder, UI descriptions, Codex instructions, and per-step test commands
 - execute the remaining steps sequentially and show progress directly in the flow chart
@@ -89,7 +84,7 @@ python -m codex_auto init-repo \
   --workspace-root .codex-auto-workspace \
   --model gpt-5.4 \
   --effort medium \
-  --init-plan-prompt "Build a safe long-term plan for this new repository focused on a narrow MVP and strong tests." \
+  --plan-prompt "Build a safe project plan for this repository focused on a narrow MVP and strong tests." \
   --approval-mode never \
   --sandbox-mode workspace-write \
   --test-cmd "python -m pytest"
@@ -146,31 +141,29 @@ Initialization:
 1. Creates an isolated project directory under the workspace
 2. Clones or updates the target repository into `repo/`
 3. Scans `README.md`, `AGENTS.md`, and `repo/docs/**`
-4. If the repository is mature enough, derives `docs/LONG_TERM_PLAN.md` from repository context
-5. If the repository is early-stage, requires an initialization prompt and has Codex draft `docs/LONG_TERM_PLAN.md` from that prompt
-6. Creates `docs/SCOPE_GUARD.md`, `docs/MID_TERM_PLAN.md`, memory files, and loop state
-5. Builds a checkpoint timeline from the long-term plan
-6. Records the current safe git revision
+4. Creates or refreshes `docs/PLAN.md` from repository context or an optional plan prompt
+5. Creates `docs/SCOPE_GUARD.md`, `docs/MID_TERM_PLAN.md`, memory files, and loop state
+6. Builds a checkpoint timeline from the saved plan
+7. Records the current safe git revision
 
 Each run block:
 
 1. Retrieves relevant memory from prior attempts
-2. Rebuilds a mid-term plan from the long-term plan
+2. Rebuilds a mid-term plan from the saved plan
 3. Generates 2-3 candidate tasks and selects one
-4. Runs two implementation passes with `codex exec --json`
-5. Runs a research-backed pass with Codex web search enabled
-6. Runs tests after each pass
-7. Commits only safe validated changes
-8. Stops at checkpoint boundaries for user review when approval is required
-9. Pushes to GitHub when the user approves a checkpoint in the GUI
-10. Rolls back to the previous safe revision on regression
-11. Saves structured logs, reports, block review, and memory summaries
+4. Runs one search-enabled Codex pass for the selected block
+5. Runs tests after the pass
+6. Commits only safe validated changes
+7. Stops at checkpoint boundaries for user review when approval is required
+8. Pushes to GitHub when the user approves a checkpoint in the GUI
+9. Rolls back to the previous safe revision on regression
+10. Saves structured logs, reports, block review, and memory summaries
 
 ## Repository Files Managed Per Project
 
 The tool creates or maintains these files for each managed repository project:
 
-- `docs/LONG_TERM_PLAN.md`
+- `docs/PLAN.md`
 - `docs/MID_TERM_PLAN.md`
 - `docs/SCOPE_GUARD.md`
 - `docs/ACTIVE_TASK.md`
@@ -190,9 +183,12 @@ The tool creates or maintains these files for each managed repository project:
 - `metadata.json`
 - `project_config.json`
 
-Sample planning template:
+Source prompt and scope templates:
 
-- `src/codex_auto/templates/LONG_TERM_PLAN.sample.md`
+- `src/codex_auto/docs/PLAN_GENERATION_PROMPT.txt`
+- `src/codex_auto/docs/STEP_EXECUTION_PROMPT.txt`
+- `src/codex_auto/docs/FINALIZATION_PROMPT.txt`
+- `src/codex_auto/docs/SCOPE_GUARD_TEMPLATE.md`
 
 ## Notes
 

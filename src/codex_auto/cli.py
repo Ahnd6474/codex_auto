@@ -26,16 +26,16 @@ def build_parser() -> argparse.ArgumentParser:
         target.add_argument("--effort", default="medium", help="Reasoning effort override: low, medium, high, xhigh")
         target.add_argument("--extra-prompt", default="", help="Additional user instructions appended to Codex prompts")
         target.add_argument(
-            "--init-plan-prompt",
+            "--plan-prompt",
             default="",
-            help="Required for immature repositories; used by Codex to draft the initial long-term plan",
+            help="Optional prompt used by Codex to draft the initial project plan",
         )
         target.add_argument("--approval-mode", default="never", help="Codex approval mode")
         target.add_argument("--sandbox-mode", default="workspace-write", help="Codex sandbox mode")
         target.add_argument("--test-cmd", default="python -m pytest", help="Validation command to run after passes")
         target.add_argument("--max-blocks", type=int, default=1, help="Maximum blocks to execute in one run")
         target.add_argument("--allow-push", action="store_true", help="Push safe commits to origin")
-        target.add_argument("--long-term-plan", type=Path, help="Optional path to seed LONG_TERM_PLAN.md")
+        target.add_argument("--plan-file", type=Path, help="Optional path to seed PLAN.md")
         target.add_argument("--resume", action="store_true", help="Resume an existing managed repository")
 
     init_parser = subparsers.add_parser("init-repo", help="Initialize and register a managed repository")
@@ -69,7 +69,7 @@ def runtime_from_args(args: argparse.Namespace) -> RuntimeOptions:
         model=args.model,
         effort=args.effort,
         extra_prompt=args.extra_prompt,
-        init_plan_prompt=args.init_plan_prompt,
+        init_plan_prompt=args.plan_prompt,
         approval_mode=args.approval_mode,
         sandbox_mode=args.sandbox_mode,
         test_cmd=args.test_cmd,
@@ -108,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
                 repo_url=args.repo_url,
                 branch=args.branch,
                 runtime=runtime,
-                long_term_plan_path=args.long_term_plan,
+                plan_path=args.plan_file,
             )
             print(json.dumps(context.metadata.to_dict(), indent=2))
             return 0
@@ -118,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
                 repo_url=args.repo_url,
                 branch=args.branch,
                 runtime=runtime,
-                long_term_plan_path=args.long_term_plan,
+                plan_path=args.plan_file,
                 resume=args.resume,
             )
             print(json.dumps(context.loop_state.to_dict(), indent=2))

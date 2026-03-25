@@ -18,7 +18,7 @@ from .planning import (
     build_mid_term_plan_from_plan_items,
     build_mid_term_plan_from_user_items,
     build_checkpoint_timeline,
-    bootstrap_long_term_plan_prompt,
+    bootstrap_plan_prompt,
     candidate_tasks_from_mid_term,
     checkpoint_timeline_markdown,
     execution_plan_markdown,
@@ -26,9 +26,9 @@ from .planning import (
     execution_steps_to_plan_items,
     finalization_prompt,
     ensure_scope_guard,
-    generate_long_term_plan,
+    generate_project_plan,
     implementation_prompt,
-    is_long_term_plan_markdown,
+    is_plan_markdown,
     parse_execution_plan_response,
     parse_work_breakdown_response,
     prompt_to_execution_plan_prompt,
@@ -150,7 +150,7 @@ class Orchestrator:
         if not steps:
             steps = [
                 ExecutionStep(
-                    step_id="LT1",
+                    step_id="ST1",
                     title=project_prompt.strip() or "Implement the requested improvement safely",
                     display_description="Define the first safe implementation checkpoint.",
                     codex_description=project_prompt.strip() or "Implement the requested improvement safely.",
@@ -207,7 +207,7 @@ class Orchestrator:
         for index, step in enumerate(plan_state.steps, start=1):
             normalized_steps.append(
                 ExecutionStep(
-                    step_id=f"LT{index}",
+                    step_id=f"ST{index}",
                     title=step.title.strip(),
                     display_description=step.display_description.strip(),
                     codex_description=step.codex_description.strip() or step.display_description.strip() or step.title.strip(),
@@ -247,7 +247,7 @@ class Orchestrator:
         )
         write_json(context.paths.execution_plan_file, state.to_dict())
         write_text(
-            context.paths.long_term_plan_file,
+            context.paths.plan_file,
             execution_plan_markdown(context, state.plan_title, state.project_prompt, state.summary, state.steps),
         )
         mid_term_text, _ = build_mid_term_plan_from_plan_items(
@@ -321,7 +321,7 @@ class Orchestrator:
             candidate_id=target_step.step_id,
             title=target_step.title,
             rationale=self._execution_step_rationale(target_step, context.runtime.test_cmd),
-            long_term_refs=[target_step.step_id],
+            plan_refs=[target_step.step_id],
             score=1.0,
         )
         target_step = next(step for step in plan_state.steps if step.step_id == target_step.step_id)
@@ -520,8 +520,8 @@ class Orchestrator:
         repo_url: str,
         branch: str,
         runtime: RuntimeOptions,
-        long_term_plan_path: Path | None = None,
-        long_term_plan_input: str = "",
+        plan_path: Path | None = None,
+        plan_input: str = "",
     ) -> ProjectContext:
         context = self.workspace.initialize_project(repo_url=repo_url, branch=branch, runtime=runtime)
         try:
@@ -533,16 +533,16 @@ class Orchestrator:
             )
             repo_inputs = scan_repository_inputs(context.paths.repo_dir)
             is_mature, maturity_details = assess_repository_maturity(context.paths.repo_dir, repo_inputs)
-            long_term_text = self._resolve_long_term_plan_text(
+            plan_text = self._resolve_plan_text(
                 context=context,
                 runtime=runtime,
                 repo_inputs=repo_inputs,
                 is_mature=is_mature,
                 maturity_details=maturity_details,
-                long_term_plan_path=long_term_plan_path,
-                long_term_plan_input=long_term_plan_input,
+                plan_path=plan_path,
+                plan_input=plan_input,
             )
-            self._write_planning_state(context, runtime, long_term_text)
+            self._write_planning_state(context, runtime, plan_text)
             self._ensure_project_documents(context)
 
             safe_revision = self.git.current_revision(context.paths.repo_dir)
@@ -564,8 +564,8 @@ class Orchestrator:
         repo_url: str,
         branch: str,
         runtime: RuntimeOptions,
-        long_term_plan_path: Path | None = None,
-        long_term_plan_input: str = "",
+        plan_path: Path | None = None,
+        plan_input: str = "",
         work_items: list[str] | None = None,
         resume: bool = False,
     ) -> ProjectContext:
@@ -575,8 +575,8 @@ class Orchestrator:
                 repo_url,
                 branch,
                 runtime,
-                long_term_plan_path=long_term_plan_path,
-                long_term_plan_input=long_term_plan_input,
+                plan_path=plan_path,
+                plan_input=plan_input,
             )
         else:
             context = existing
@@ -590,16 +590,16 @@ class Orchestrator:
             if not resume:
                 repo_inputs = scan_repository_inputs(context.paths.repo_dir)
                 is_mature, maturity_details = assess_repository_maturity(context.paths.repo_dir, repo_inputs)
-                updated_plan_text = self._read_supplied_long_term_text(long_term_plan_path, long_term_plan_input)
+                updated_plan_text = self._read_supplied_plan_text(plan_path, plan_input)
                 if updated_plan_text:
-                    resolved_plan_text = self._resolve_long_term_plan_text(
+                    resolved_plan_text = self._resolve_plan_text(
                         context=context,
                         runtime=runtime,
                         repo_inputs=repo_inputs,
                         is_mature=is_mature,
                         maturity_details=maturity_details,
-                        long_term_plan_path=long_term_plan_path,
-                        long_term_plan_input=long_term_plan_input,
+                        plan_path=plan_path,
+                        plan_input=plan_input,
                     )
                     self._write_planning_state(context, runtime, resolved_plan_text)
 
@@ -660,8 +660,8 @@ class Orchestrator:
         repo_url: str,
         branch: str,
         runtime: RuntimeOptions,
-        long_term_plan_path: Path | None = None,
-        long_term_plan_input: str = "",
+        plan_path: Path | None = None,
+        plan_input: str = "",
     ) -> dict[str, object]:
         existing = self.workspace.find_project(repo_url, branch)
         if existing is None:
@@ -669,8 +669,8 @@ class Orchestrator:
                 repo_url=repo_url,
                 branch=branch,
                 runtime=runtime,
-                long_term_plan_path=long_term_plan_path,
-                long_term_plan_input=long_term_plan_input,
+                plan_path=plan_path,
+                plan_input=plan_input,
             )
         else:
             context = existing
@@ -683,24 +683,24 @@ class Orchestrator:
             )
             repo_inputs = scan_repository_inputs(context.paths.repo_dir)
             is_mature, maturity_details = assess_repository_maturity(context.paths.repo_dir, repo_inputs)
-            long_term_text = self._resolve_long_term_plan_text(
+            plan_text = self._resolve_plan_text(
                 context=context,
                 runtime=runtime,
                 repo_inputs=repo_inputs,
                 is_mature=is_mature,
                 maturity_details=maturity_details,
-                long_term_plan_path=long_term_plan_path,
-                long_term_plan_input=long_term_plan_input,
+                plan_path=plan_path,
+                plan_input=plan_input,
             )
-            self._write_planning_state(context, runtime, long_term_text)
+            self._write_planning_state(context, runtime, plan_text)
             self.workspace.save_project(context)
 
-        long_term_text = read_text(context.paths.long_term_plan_file)
+        plan_text = read_text(context.paths.plan_file)
         runner = CodexRunner(context.runtime.codex_path)
         mid_items, mid_term_text = self._plan_block_items(
             context=context,
             runner=runner,
-            long_term_text=long_term_text,
+            plan_text=plan_text,
             work_items=None,
             max_items=max(3, min(context.runtime.max_blocks, 6)),
         )
@@ -720,7 +720,7 @@ class Orchestrator:
                     "index": index,
                     "label": f"B{index}",
                     "title": item.text,
-                    "refs": [item.item_id] if item.item_id.startswith("LT") else [],
+                    "refs": [item.item_id] if item.item_id.startswith("PL") else [],
                     "state": state,
                 }
             )
@@ -737,7 +737,7 @@ class Orchestrator:
         context = self.status(repo_url, branch)
         data = read_json(context.paths.checkpoint_state_file, default=None)
         if data is None:
-            checkpoints = build_checkpoint_timeline(read_text(context.paths.long_term_plan_file), context.runtime.checkpoint_interval_blocks)
+            checkpoints = build_checkpoint_timeline(read_text(context.paths.plan_file), context.runtime.checkpoint_interval_blocks)
             data = {"checkpoints": [checkpoint.to_dict() for checkpoint in checkpoints]}
             write_json(context.paths.checkpoint_state_file, data)
             write_text(context.paths.checkpoint_timeline_file, checkpoint_timeline_markdown(checkpoints))
@@ -838,7 +838,7 @@ class Orchestrator:
                 Checkpoint(
                     checkpoint_id=f"CP{index}",
                     title=step.title,
-                    long_term_refs=[step.step_id],
+                    plan_refs=[step.step_id],
                     target_block=index,
                     status=status,
                     created_at=step.started_at or now_utc_iso(),
@@ -868,12 +868,12 @@ class Orchestrator:
         safe_revision = context.metadata.current_safe_revision or self.git.current_revision(context.paths.repo_dir)
 
         if candidate_override is None:
-            long_term_text = read_text(context.paths.long_term_plan_file)
+            plan_text = read_text(context.paths.plan_file)
             remaining_limit = max(1, context.runtime.max_blocks - block_index + 1)
             mid_items, mid_term_text = self._plan_block_items(
                 context=context,
                 runner=runner,
-                long_term_text=long_term_text,
+                plan_text=plan_text,
                 work_items=work_items,
                 max_items=min(remaining_limit, 6),
             )
@@ -888,7 +888,7 @@ class Orchestrator:
                 execution_steps_to_plan_items(
                     [
                         ExecutionStep(
-                            step_id=selected.long_term_refs[0] if selected.long_term_refs else f"LT{block_index}",
+                            step_id=selected.plan_refs[0] if selected.plan_refs else f"ST{block_index}",
                             title=selected.title,
                             test_command=context.runtime.test_cmd,
                         )
@@ -1159,43 +1159,43 @@ class Orchestrator:
         if changed:
             write_json(context.paths.checkpoint_state_file, data)
 
-    def _read_supplied_long_term_text(self, long_term_plan_path: Path | None, long_term_plan_input: str) -> str:
-        if long_term_plan_input.strip():
-            return long_term_plan_input.strip()
-        if long_term_plan_path:
-            return Path(long_term_plan_path).read_text(encoding="utf-8").strip()
+    def _read_supplied_plan_text(self, plan_path: Path | None, plan_input: str) -> str:
+        if plan_input.strip():
+            return plan_input.strip()
+        if plan_path:
+            return Path(plan_path).read_text(encoding="utf-8").strip()
         return ""
 
-    def _resolve_long_term_plan_text(
+    def _resolve_plan_text(
         self,
         context: ProjectContext,
         runtime: RuntimeOptions,
         repo_inputs: dict[str, str],
         is_mature: bool,
         maturity_details: dict[str, int],
-        long_term_plan_path: Path | None,
-        long_term_plan_input: str,
+        plan_path: Path | None,
+        plan_input: str,
     ) -> str:
-        supplied_text = self._read_supplied_long_term_text(long_term_plan_path, long_term_plan_input)
+        supplied_text = self._read_supplied_plan_text(plan_path, plan_input)
         if supplied_text:
-            if is_long_term_plan_markdown(supplied_text):
+            if is_plan_markdown(supplied_text):
                 return supplied_text
-            return self._generate_long_term_plan_from_prompt(context, runtime, repo_inputs, supplied_text, maturity_details)
-        if context.paths.long_term_plan_file.exists():
-            return read_text(context.paths.long_term_plan_file)
+            return self._generate_plan_from_prompt(context, runtime, repo_inputs, supplied_text, maturity_details)
+        if context.paths.plan_file.exists():
+            return read_text(context.paths.plan_file)
         if is_mature:
-            return generate_long_term_plan(context, repo_inputs)
+            return generate_project_plan(context, repo_inputs)
         if runtime.init_plan_prompt.strip():
-            return self._generate_long_term_plan_from_prompt(
+            return self._generate_plan_from_prompt(
                 context,
                 runtime,
                 repo_inputs,
                 runtime.init_plan_prompt,
                 maturity_details,
             )
-        return generate_long_term_plan(context, repo_inputs)
+        return generate_project_plan(context, repo_inputs)
 
-    def _generate_long_term_plan_from_prompt(
+    def _generate_plan_from_prompt(
         self,
         context: ProjectContext,
         runtime: RuntimeOptions,
@@ -1204,27 +1204,27 @@ class Orchestrator:
         maturity_details: dict[str, int],
     ) -> str:
         runner = CodexRunner(runtime.codex_path)
-        prompt = bootstrap_long_term_plan_prompt(context, repo_inputs, user_prompt)
+        prompt = bootstrap_plan_prompt(context, repo_inputs, user_prompt)
         result = runner.run_pass(
             context=context,
             prompt=prompt,
-            pass_type="init-long-term-plan",
+            pass_type="init-project-plan",
             block_index=0,
             search_enabled=False,
         )
-        long_term_text = read_text(context.paths.long_term_plan_file)
-        if result.returncode != 0 or not long_term_text.strip():
+        plan_text = read_text(context.paths.plan_file)
+        if result.returncode != 0 or not plan_text.strip():
             raise RuntimeError(
-                f"Codex failed to create the initial prompt-based long-term plan. maturity={maturity_details}"
+                f"Codex failed to create the initial prompt-based project plan. maturity={maturity_details}"
             )
-        return long_term_text
+        return plan_text
 
-    def _write_planning_state(self, context: ProjectContext, runtime: RuntimeOptions, long_term_text: str) -> None:
-        write_text(context.paths.long_term_plan_file, long_term_text)
+    def _write_planning_state(self, context: ProjectContext, runtime: RuntimeOptions, plan_text: str) -> None:
+        write_text(context.paths.plan_file, plan_text)
         write_text(context.paths.scope_guard_file, ensure_scope_guard(context))
-        mid_term_text, _ = build_mid_term_plan(long_term_text)
+        mid_term_text, _ = build_mid_term_plan(plan_text)
         write_text(context.paths.mid_term_plan_file, mid_term_text)
-        checkpoints = build_checkpoint_timeline(long_term_text, runtime.checkpoint_interval_blocks)
+        checkpoints = build_checkpoint_timeline(plan_text, runtime.checkpoint_interval_blocks)
         write_text(context.paths.checkpoint_timeline_file, checkpoint_timeline_markdown(checkpoints))
         write_json(context.paths.checkpoint_state_file, {"checkpoints": [checkpoint.to_dict() for checkpoint in checkpoints]})
 
@@ -1232,7 +1232,7 @@ class Orchestrator:
         self,
         context: ProjectContext,
         runner: CodexRunner,
-        long_term_text: str,
+        plan_text: str,
         work_items: list[str] | None,
         max_items: int,
     ) -> tuple[list, str]:
@@ -1244,38 +1244,38 @@ class Orchestrator:
         planned_items = self._generate_codex_work_items(
             context=context,
             runner=runner,
-            long_term_text=long_term_text,
+            plan_text=plan_text,
             max_items=max_items,
         )
         if planned_items:
             mid_term_text, mid_items = build_mid_term_plan_from_plan_items(
                 planned_items,
-                "This plan was generated by Codex from the current repository state and long-term plan.",
+                "This plan was generated by Codex from the current repository state and saved project plan.",
             )
-            valid_subset, violations = validate_mid_term_subset(mid_term_text, long_term_text)
+            valid_subset, violations = validate_mid_term_subset(mid_term_text, plan_text)
             if valid_subset:
                 return mid_items, mid_term_text
             write_text(context.paths.reports_dir / "plan_scope_violation.txt", "\n".join(violations) + "\n")
 
-        mid_term_text, mid_items = build_mid_term_plan(long_term_text)
-        valid_subset, violations = validate_mid_term_subset(mid_term_text, long_term_text)
+        mid_term_text, mid_items = build_mid_term_plan(plan_text)
+        valid_subset, violations = validate_mid_term_subset(mid_term_text, plan_text)
         if not valid_subset:
-            raise RuntimeError(f"Mid-term plan violated long-term scope: {violations}")
+            raise RuntimeError(f"Mid-term plan violated saved plan scope: {violations}")
         return mid_items, mid_term_text
 
     def _generate_codex_work_items(
         self,
         context: ProjectContext,
         runner: CodexRunner,
-        long_term_text: str,
+        plan_text: str,
         max_items: int,
     ) -> list:
         repo_inputs = scan_repository_inputs(context.paths.repo_dir)
-        memory_context = MemoryStore(context.paths).render_context(long_term_text)
+        memory_context = MemoryStore(context.paths).render_context(plan_text)
         prompt = work_breakdown_prompt(
             context=context,
             repo_inputs=repo_inputs,
-            long_term_text=long_term_text,
+            plan_text=plan_text,
             memory_context=memory_context,
             max_items=max_items,
         )

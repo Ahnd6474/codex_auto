@@ -24,4 +24,4 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-"codex_auto" = ["templates/*.md", "docs/*.txt"]
+"codex_auto" = ["docs/*.txt", "docs/*.md"]

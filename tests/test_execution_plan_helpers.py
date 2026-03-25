@@ -19,6 +19,7 @@ from codex_auto.models import ExecutionPlanState, ExecutionStep, RuntimeOptions
 from codex_auto.planning import (
     FINALIZATION_PROMPT_FILENAME,
     PLAN_GENERATION_PROMPT_FILENAME,
+    SCOPE_GUARD_TEMPLATE_FILENAME,
     STEP_EXECUTION_PROMPT_FILENAME,
     execution_plan_svg,
     load_source_prompt_template,
@@ -55,17 +56,17 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(plan_title, "CLI rollout")
         self.assertEqual(summary, "Build the feature in small verified steps.")
         self.assertEqual(len(steps), 2)
-        self.assertEqual(steps[0].step_id, "LT1")
+        self.assertEqual(steps[0].step_id, "ST1")
         self.assertEqual(steps[0].display_description, "Expose the new flag to users.")
         self.assertIn("CLI parser", steps[0].codex_description)
         self.assertEqual(steps[0].test_command, "python -m unittest")
-        self.assertEqual(steps[1].step_id, "LT2")
+        self.assertEqual(steps[1].step_id, "ST2")
         self.assertEqual(steps[1].test_command, "python -m unittest")
 
     def test_execution_step_from_dict_accepts_legacy_description(self) -> None:
         step = ExecutionStep.from_dict(
             {
-                "step_id": "LT1",
+                "step_id": "ST1",
                 "title": "Legacy task",
                 "description": "Old UI description",
                 "success_criteria": "Still works.",
@@ -97,27 +98,27 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         svg = execution_plan_svg(
             "demo flow",
             [
-                ExecutionStep(step_id="LT1", title="First", test_command="pytest a", status="completed"),
-                ExecutionStep(step_id="LT2", title="Second", test_command="pytest b", status="pending"),
+                ExecutionStep(step_id="ST1", title="First", test_command="pytest a", status="completed"),
+                ExecutionStep(step_id="ST2", title="Second", test_command="pytest b", status="pending"),
             ],
         )
 
         self.assertIn("<svg", svg)
         self.assertIn("demo flow", svg)
-        self.assertIn("LT1", svg)
-        self.assertIn("LT2", svg)
+        self.assertIn("ST1", svg)
+        self.assertIn("ST2", svg)
         self.assertIn("#0f766e", svg)
         self.assertIn("#cbd5e1", svg)
 
     def test_plan_state_with_running_step_marks_selected_step_immediately(self) -> None:
         original = ExecutionPlanState(
             steps=[
-                ExecutionStep(step_id="LT1", title="First", status="pending"),
-                ExecutionStep(step_id="LT2", title="Second", status="running"),
-                ExecutionStep(step_id="LT3", title="Third", status="pending"),
+                ExecutionStep(step_id="ST1", title="First", status="pending"),
+                ExecutionStep(step_id="ST2", title="Second", status="running"),
+                ExecutionStep(step_id="ST3", title="Third", status="pending"),
             ]
         )
-        updated = _plan_state_with_running_step(original, "LT3")
+        updated = _plan_state_with_running_step(original, "ST3")
 
         self.assertEqual(original.steps[1].status, "running")
         self.assertEqual(updated.steps[0].status, "pending")
@@ -155,10 +156,12 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         plan_template = load_source_prompt_template(PLAN_GENERATION_PROMPT_FILENAME)
         step_template = load_source_prompt_template(STEP_EXECUTION_PROMPT_FILENAME)
         final_template = load_source_prompt_template(FINALIZATION_PROMPT_FILENAME)
+        scope_template = load_source_prompt_template(SCOPE_GUARD_TEMPLATE_FILENAME)
 
         self.assertTrue(source_prompt_template_path(PLAN_GENERATION_PROMPT_FILENAME).exists())
         self.assertTrue(source_prompt_template_path(STEP_EXECUTION_PROMPT_FILENAME).exists())
         self.assertTrue(source_prompt_template_path(FINALIZATION_PROMPT_FILENAME).exists())
+        self.assertTrue(source_prompt_template_path(SCOPE_GUARD_TEMPLATE_FILENAME).exists())
         self.assertIn("{repo_dir}", plan_template)
         self.assertIn("{user_prompt}", plan_template)
         self.assertIn("{max_steps}", plan_template)
@@ -166,9 +169,11 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("{display_description}", step_template)
         self.assertIn("{codex_description}", step_template)
         self.assertIn("{success_criteria}", step_template)
+        self.assertIn("{plan_snapshot}", step_template)
         self.assertIn("{completed_steps}", final_template)
         self.assertIn("{closeout_report_file}", final_template)
         self.assertIn("{test_command}", final_template)
+        self.assertIn("{repo_url}", scope_template)
 
     def test_ensure_gitignore_adds_missing_entries_once(self) -> None:
         project_dir = Path(__file__).resolve().parents[1] / ".tmp_gitignore_test"

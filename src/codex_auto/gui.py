@@ -1404,7 +1404,7 @@ class CodexAutoGUI:
                     insert_at = index + 1
                     break
         new_step = ExecutionStep(
-            step_id=f"LT{len(self.current_plan.steps) + 1}",
+            step_id=f"ST{len(self.current_plan.steps) + 1}",
             title="New pending step",
             display_description="Describe the checkpoint for the user.",
             codex_description="Describe the implementation work Codex should perform for this checkpoint.",

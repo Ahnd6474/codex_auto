@@ -239,7 +239,7 @@ class ExecutionStep:
         display_description = str(data.get("display_description", "")).strip() or legacy_description
         codex_description = str(data.get("codex_description", "")).strip() or legacy_description or display_description
         return cls(
-            step_id=str(data.get("step_id", "")).strip() or "LT1",
+            step_id=str(data.get("step_id", "")).strip() or "ST1",
             title=str(data.get("title", data.get("task_title", ""))).strip(),
             display_description=display_description,
             codex_description=codex_description,
