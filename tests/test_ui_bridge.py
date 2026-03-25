@@ -66,6 +66,12 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(detail["project"]["display_name"], "Demo Project")
             self.assertEqual(detail["runtime"]["test_cmd"], "python -m unittest")
             self.assertEqual(detail["run_control"]["stop_after_current_step"], False)
+            self.assertIn("workspace_tree", detail)
+            self.assertIn("reports", detail)
+            self.assertIn("history", detail)
+            self.assertIn("checkpoints", detail)
+            self.assertIn("bottom_panels", detail)
+            self.assertIn("github", detail)
 
             listing = run_command("list-projects", workspace_root)
             self.assertEqual(len(listing["projects"]), 1)
