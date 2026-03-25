@@ -10,7 +10,7 @@ from typing import Any
 from .model_selection import DEFAULT_MODEL_PRESET_ID, MODEL_PRESETS, model_preset_by_id
 from .models import ExecutionPlanState, ProjectContext, RuntimeOptions
 from .orchestrator import Orchestrator
-from .utils import append_jsonl, compact_text, now_utc_iso, read_json, read_jsonl_tail, read_last_jsonl, write_json
+from .utils import append_jsonl, compact_text, now_utc_iso, read_json, read_jsonl_tail, read_last_jsonl, read_text, write_json
 
 
 DEFAULT_GUI_WORKSPACE_DIRNAME = ".codex-auto-workspace"
@@ -231,6 +231,142 @@ def workspace_snapshot(projects: list[ProjectContext]) -> dict[str, Any]:
     }
 
 
+def safe_json(path: Path, default: Any = None) -> Any:
+    try:
+        return read_json(path, default=default)
+    except Exception:
+        return default
+
+
+def safe_text(path: Path, default: str = "") -> str:
+    try:
+        return read_text(path, default=default)
+    except Exception:
+        return default
+
+
+def preview_text(path: Path, default: str = "", max_chars: int = 12_000) -> str:
+    return compact_text(safe_text(path, default=default), max_chars=max_chars)
+
+
+def preview_tree(path: Path, max_entries: int = 16) -> list[dict[str, Any]]:
+    if not path.exists() or not path.is_dir():
+        return []
+    entries: list[dict[str, Any]] = []
+    children = sorted(path.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
+    for child in children[:max_entries]:
+        item = {
+            "label": child.name,
+            "path": str(child),
+            "kind": "dir" if child.is_dir() else "file",
+        }
+        if child.is_dir():
+            item["children"] = [
+                {
+                    "label": grandchild.name,
+                    "path": str(grandchild),
+                    "kind": "dir" if grandchild.is_dir() else "file",
+                }
+                for grandchild in sorted(child.iterdir(), key=lambda entry: (not entry.is_dir(), entry.name.lower()))[:8]
+            ]
+        entries.append(item)
+    if len(children) > max_entries:
+        entries.append({"label": f"+{len(children) - max_entries} more", "path": str(path), "kind": "meta"})
+    return entries
+
+
+def managed_workspace_tree(context: ProjectContext) -> list[dict[str, Any]]:
+    sections = [
+        ("Repository", context.paths.repo_dir),
+        ("Docs", context.paths.docs_dir),
+        ("Reports", context.paths.reports_dir),
+        ("State", context.paths.state_dir),
+        ("Logs", context.paths.logs_dir),
+        ("Memory", context.paths.memory_dir),
+    ]
+    return [
+        {
+            "label": label,
+            "path": str(path),
+            "kind": "dir",
+            "children": preview_tree(path),
+        }
+        for label, path in sections
+    ]
+
+
+def report_payload(context: ProjectContext) -> dict[str, Any]:
+    return {
+        "latest_report_json": safe_json(context.paths.reports_dir / "latest_report.json", default={}) or {},
+        "closeout_report_text": preview_text(
+            context.paths.closeout_report_file,
+            default="# Closeout Report\n\nNo closeout has been run yet.\n",
+        ),
+        "block_review_text": preview_text(context.paths.block_review_file, default="No block review recorded yet.\n"),
+        "attempt_history_text": preview_text(context.paths.attempt_history_file, default="No attempt history recorded yet.\n"),
+    }
+
+
+def history_payload(context: ProjectContext) -> dict[str, Any]:
+    return {
+        "ui_events": read_jsonl_tail(context.paths.ui_event_log_file, 40),
+        "blocks": read_jsonl_tail(context.paths.block_log_file, 20),
+        "passes": read_jsonl_tail(context.paths.pass_log_file, 30),
+        "test_runs": read_jsonl_tail(context.paths.logs_dir / "test_runs.jsonl", 20),
+    }
+
+
+def checkpoint_payload(context: ProjectContext) -> dict[str, Any]:
+    raw = safe_json(context.paths.checkpoint_state_file, default={"checkpoints": []})
+    checkpoints = raw.get("checkpoints", []) if isinstance(raw, dict) else []
+    pending = next((item for item in checkpoints if item.get("status") == "awaiting_review"), None)
+    if pending is None and context.loop_state.current_checkpoint_id:
+        pending = next(
+            (item for item in checkpoints if item.get("checkpoint_id") == context.loop_state.current_checkpoint_id),
+            None,
+        )
+    return {
+        "items": checkpoints,
+        "pending": pending,
+        "timeline_markdown": preview_text(context.paths.checkpoint_timeline_file, default="No checkpoints recorded yet.\n"),
+    }
+
+
+def config_payload(context: ProjectContext) -> dict[str, Any]:
+    return {
+        "metadata_json": safe_json(context.paths.metadata_file, default={}) or {},
+        "runtime_json": safe_json(context.paths.project_config_file, default={}) or {},
+        "loop_state_json": safe_json(context.paths.loop_state_file, default={}) or {},
+        "run_control_json": safe_json(context.paths.ui_control_file, default={}) or {},
+    }
+
+
+def bottom_panel_payload(context: ProjectContext, plan_state: ExecutionPlanState) -> dict[str, Any]:
+    latest_block = read_last_jsonl(context.paths.block_log_file) or {}
+    latest_pass = read_last_jsonl(context.paths.pass_log_file) or {}
+    return {
+        "execution_log_lines": build_activity_lines(context, plan_state),
+        "event_json": {
+            "latest_block": latest_block,
+            "latest_pass": latest_pass,
+            "run_control": safe_json(context.paths.ui_control_file, default={}) or {},
+            "loop_state": safe_json(context.paths.loop_state_file, default={}) or {},
+        },
+        "token_usage": recent_usage(context),
+        "test_runs": read_jsonl_tail(context.paths.logs_dir / "test_runs.jsonl", 12),
+        "git_status": {
+            "branch": context.metadata.branch,
+            "repo_kind": context.metadata.repo_kind,
+            "origin_url": context.metadata.origin_url,
+            "current_status": context.metadata.current_status,
+            "safe_revision": context.metadata.current_safe_revision,
+            "last_commit_hash": context.loop_state.last_commit_hash,
+            "current_checkpoint_id": context.loop_state.current_checkpoint_id,
+            "pending_checkpoint_approval": context.loop_state.pending_checkpoint_approval,
+        },
+    }
+
+
 def recent_usage(context: ProjectContext) -> dict[str, int]:
     usage: dict[str, int] = {
         "input_tokens": 0,
@@ -306,6 +442,12 @@ def project_detail_payload(orchestrator: Orchestrator, project: ProjectContext) 
     recent_blocks = read_jsonl_tail(project.paths.block_log_file, 8)
     recent_passes = read_jsonl_tail(project.paths.pass_log_file, 12)
     control = load_run_control(project)
+    reports = report_payload(project)
+    history = history_payload(project)
+    checkpoints = checkpoint_payload(project)
+    config = config_payload(project)
+    workspace_tree = managed_workspace_tree(project)
+    bottom_panels = bottom_panel_payload(project, plan_state)
     snapshot = {
         "project": project.metadata.to_dict(),
         "runtime": project.runtime.to_dict(),
@@ -331,12 +473,24 @@ def project_detail_payload(orchestrator: Orchestrator, project: ProjectContext) 
         "run_control": control,
         "recent_blocks": recent_blocks,
         "recent_passes": recent_passes,
+        "workspace_tree": workspace_tree,
+        "reports": reports,
+        "history": history,
+        "checkpoints": checkpoints,
+        "config": config,
         "files": {
             "project_root": str(project.paths.project_root),
             "repo_dir": str(project.paths.repo_dir),
             "execution_plan_file": str(project.paths.execution_plan_file),
             "ui_control_file": str(project.paths.ui_control_file),
             "ui_event_log_file": str(project.paths.ui_event_log_file),
+        },
+        "bottom_panels": bottom_panels,
+        "github": {
+            "connected": bool(project.metadata.origin_url),
+            "origin_url": project.metadata.origin_url,
+            "repo_url": project.metadata.repo_url,
+            "branch": project.metadata.branch,
         },
     }
 
@@ -454,6 +608,20 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
             "project_dir": str(project.metadata.repo_path),
             "run_control": control,
         }
+
+    if command == "approve-checkpoint":
+        project = resolve_project(orchestrator, payload)
+        review_notes = str(payload.get("review_notes", "")).strip()
+        push = bool(payload.get("push", True))
+        orchestrator.approve_checkpoint(
+            project.metadata.repo_url,
+            project.metadata.branch,
+            review_notes=review_notes,
+            push=push,
+        )
+        latest_project = orchestrator.workspace.load_project_by_id(project.metadata.repo_id)
+        append_ui_event(latest_project, "checkpoint-approved", "Approved the pending checkpoint.", {"push": push})
+        return project_detail_payload(orchestrator, latest_project)
 
     if command == "run-plan":
         project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(payload)
