@@ -61,24 +61,16 @@ python gui_main.py
 
 The GUI lets you:
 
-- configure repo URL, branch, workspace root, model, sandbox, approval mode, test command, and max blocks
-- choose reasoning effort from `low`, `medium`, `high`, `xhigh`
-- add extra user prompt instructions that are appended to Codex implementation prompts
-- provide an initialization prompt for immature repositories so Codex can create the first long-term plan
-- browse GitHub repositories from inside the app using the GitHub REST API
-- initialize, run, and resume managed repositories
-- review checkpoint timelines and approve checkpoint uploads from the GUI
-- browse managed repositories in the current workspace
-- inspect status, history, and generated reports without leaving the app
-- view aggregate Codex token usage pulled from saved JSON event logs
-- apply selected GitHub repositories as SSH clone URLs by default
-
-GitHub integration notes:
-
-- public repository search works without a token
-- the GUI can fill in repository URLs using `ssh` or `https`
-- default GUI behavior is to use SSH clone URLs such as `git@github.com:OWNER/REPO.git`
-- for private repositories, paste the SSH URL directly if the repository does not appear in public search
+- stage the workflow into two screens: environment setup first, prompt-driven execution second
+- choose the local project directory that Codex will work in
+- prepare the project directory with `.venv` and `.gitignore`
+- run Codex with `approval=never` and `sandbox=danger-full-access` from the GUI
+- generate a test-driven execution plan from a free-form prompt
+- review an interactive flow chart of the generated steps
+- edit pending steps, including add/delete/reorder and per-step test commands
+- execute the remaining steps sequentially and show progress directly in the flow chart
+- treat each completed step as a checkpoint and push after verification when `origin` is configured
+- return to the setup screen and open any previously managed project flow later
 
 ## Main Commands
 
