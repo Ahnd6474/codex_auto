@@ -8,8 +8,8 @@ MODEL_MODE_SLUG = "slug"
 MODEL_MODE_CODEX = "codex"
 VALID_MODEL_MODES = {MODEL_MODE_SLUG, MODEL_MODE_CODEX}
 VALID_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
-DEFAULT_MODEL_SLUG = "gpt-5.3-codex"
-DEFAULT_CODEX_BASE_SLUG = "gpt-5.3"
+DEFAULT_MODEL_SLUG = "gpt-5.4"
+DEFAULT_CODEX_BASE_SLUG = "gpt-5.4"
 DEFAULT_CODEX_VARIANT_SLUG = "codex"
 
 
@@ -27,28 +27,35 @@ class ModelPreset:
 
 MODEL_PRESETS: tuple[ModelPreset, ...] = (
     ModelPreset(
-        preset_id="recommended",
-        label="Recommended",
-        model="gpt-5.3-codex",
+        preset_id="low",
+        label="Low",
+        model="gpt-5.4",
+        effort="low",
+        description="Fastest reasoning level for lighter edits and quick checks.",
+    ),
+    ModelPreset(
+        preset_id="medium",
+        label="Medium",
+        model="gpt-5.4",
+        effort="medium",
+        description="Balanced reasoning for everyday coding work.",
+    ),
+    ModelPreset(
+        preset_id="high",
+        label="High",
+        model="gpt-5.4",
         effort="high",
-        description="Strongest default for long-running coding work.",
+        description="Stronger reasoning for larger changes and trickier code paths.",
     ),
     ModelPreset(
-        preset_id="balanced",
-        label="Balanced",
-        model="gpt-5.2-codex",
-        effort="medium",
-        description="Lower cost while keeping strong long-horizon coding behavior.",
-    ),
-    ModelPreset(
-        preset_id="fast",
-        label="Fast",
-        model="gpt-5.1-codex-mini",
-        effort="medium",
-        description="Faster preset for smaller changes and quick verification loops.",
+        preset_id="xhigh",
+        label="XHigh",
+        model="gpt-5.4",
+        effort="xhigh",
+        description="Deepest reasoning for the hardest investigations and refactors.",
     ),
 )
-DEFAULT_MODEL_PRESET_ID = MODEL_PRESETS[0].preset_id
+DEFAULT_MODEL_PRESET_ID = "high"
 
 
 def normalize_model_mode(value: str, fallback: str = MODEL_MODE_SLUG) -> str:

@@ -565,7 +565,18 @@ def load_stdin_payload() -> dict[str, Any]:
     return payload
 
 
+def configure_stdio() -> None:
+    # Force UTF-8 for the desktop bridge so Windows locale encodings do not
+    # break JSON payloads or error messages coming from the Python process.
+    for stream_name in ("stdin", "stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 def main(argv: list[str] | None = None) -> int:
+    configure_stdio()
     args = parse_args(argv)
     try:
         payload = load_stdin_payload()

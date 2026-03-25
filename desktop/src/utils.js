@@ -71,7 +71,7 @@ export function runtimeSummary(runtime, modelPresets) {
     return preset.summary;
   }
   if (runtime?.model) {
-    return `Saved custom model ${runtime.model} | reasoning ${runtime.effort || "high"}`;
+    return `${runtime.model} | reasoning ${runtime.effort || "high"}`;
   }
   return "No model selected";
 }

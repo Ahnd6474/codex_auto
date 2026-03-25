@@ -19,8 +19,8 @@ def _normalize(value: Any) -> Any:
 
 @dataclass(slots=True)
 class RuntimeOptions:
-    model: str = "gpt-5.3-codex"
-    model_preset: str = "recommended"
+    model: str = "gpt-5.4"
+    model_preset: str = "high"
     model_selection_mode: str = "slug"
     model_slug_input: str = ""
     codex_base_slug: str = ""

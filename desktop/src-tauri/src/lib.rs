@@ -79,6 +79,8 @@ fn run_bridge_command(command: &str, payload: Option<Value>, workspace_root: Opt
         .arg(command)
         .current_dir(&root)
         .env("PYTHONPATH", pythonpath)
+        .env("PYTHONIOENCODING", "utf-8")
+        .env("PYTHONUTF8", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());

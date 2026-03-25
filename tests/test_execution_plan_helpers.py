@@ -113,31 +113,31 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("#cbd5e1", svg)
 
     def test_model_selection_resolves_direct_slug_without_builder(self) -> None:
-        selection = ModelSelection(mode=MODEL_MODE_SLUG, direct_slug="gpt-5.3-codex", effort="high")
+        selection = ModelSelection(mode=MODEL_MODE_SLUG, direct_slug="gpt-5.4", effort="high")
 
-        self.assertEqual(selection.resolved_slug(), "gpt-5.3-codex")
-        self.assertEqual(selection.summary(), "Model gpt-5.3-codex | Direct slug | reasoning high")
+        self.assertEqual(selection.resolved_slug(), "gpt-5.4")
+        self.assertEqual(selection.summary(), "Model gpt-5.4 | Direct slug | reasoning high")
 
     def test_model_selection_resolves_codex_slug_from_slug_parts(self) -> None:
         selection = ModelSelection(
             mode=MODEL_MODE_CODEX,
             direct_slug="ignored",
-            codex_base_slug="gpt-5.1",
-            codex_variant_slug="codex-max",
+            codex_base_slug="gpt-5.4",
+            codex_variant_slug="codex",
             effort="medium",
         )
 
-        self.assertEqual(selection.resolved_slug(), "gpt-5.1-codex-max")
+        self.assertEqual(selection.resolved_slug(), "gpt-5.4-codex")
 
     def test_model_selection_from_runtime_infers_codex_builder_inputs(self) -> None:
-        runtime = RuntimeOptions(model="gpt-5.1-codex-max", effort="low")
+        runtime = RuntimeOptions(model="gpt-5.4-codex", effort="low")
 
         selection = model_selection_from_runtime(runtime)
 
         self.assertEqual(selection.mode, MODEL_MODE_CODEX)
-        self.assertEqual(selection.codex_base_slug, "gpt-5.1")
-        self.assertEqual(selection.codex_variant_slug, "codex-max")
-        self.assertEqual(selection.direct_slug, "gpt-5.1-codex-max")
+        self.assertEqual(selection.codex_base_slug, "gpt-5.4")
+        self.assertEqual(selection.codex_variant_slug, "codex")
+        self.assertEqual(selection.direct_slug, "gpt-5.4-codex")
 
     def test_model_preset_helpers_match_runtime(self) -> None:
         preset = model_preset_by_id(DEFAULT_MODEL_PRESET_ID)
@@ -147,7 +147,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
 
         self.assertIsNotNone(resolved)
         self.assertEqual(resolved.preset_id, preset.preset_id)
-        self.assertEqual(resolved.model, "gpt-5.3-codex")
+        self.assertEqual(resolved.model, "gpt-5.4")
 
     def test_model_preset_helpers_return_none_for_custom_runtime(self) -> None:
         runtime = RuntimeOptions(model="custom-preview-model", model_preset="", effort="medium")

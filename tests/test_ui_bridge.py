@@ -36,7 +36,8 @@ class UIBridgeTests(unittest.TestCase):
 
         self.assertEqual(payload["workspace_root"], str(temp_dir.resolve()))
         self.assertTrue(payload["model_presets"])
-        self.assertEqual(payload["model_presets"][0]["preset_id"], "recommended")
+        self.assertEqual(payload["default_runtime"]["model"], "gpt-5.4")
+        self.assertEqual(payload["default_runtime"]["model_preset"], "high")
         self.assertEqual(payload["default_runtime"]["sandbox_mode"], "danger-full-access")
 
     def test_project_setup_and_load_round_trip(self) -> None:
@@ -51,8 +52,8 @@ class UIBridgeTests(unittest.TestCase):
                 "branch": "main",
                 "origin_url": "",
                 "runtime": {
-                    "model": "gpt-5.3-codex",
-                    "model_preset": "recommended",
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
                     "effort": "high",
                     "test_cmd": "python -m unittest",
                     "max_blocks": 5,
@@ -92,8 +93,8 @@ class UIBridgeTests(unittest.TestCase):
                 "branch": "main",
                 "origin_url": "",
                 "runtime": {
-                    "model": "gpt-5.3-codex",
-                    "model_preset": "recommended",
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
                     "effort": "high",
                     "test_cmd": "python -m pytest",
                     "max_blocks": 4,

@@ -27,12 +27,12 @@ function ProjectCard({ project, selected, onSelect }) {
   );
 }
 
-function ModelOption({ preset, checked, onSelect, disabled }) {
+function EffortOption({ preset, checked, onSelect, disabled }) {
   return (
     <button className={`model-option ${checked ? "selected" : ""}`} onClick={onSelect} type="button" disabled={disabled}>
       <div className="model-option__headline">
         <strong>{preset.label}</strong>
-        <span>{preset.model}</span>
+        <span>{preset.effort}</span>
       </div>
       <p>{preset.description}</p>
     </button>
@@ -61,8 +61,6 @@ export function SetupStage({
   const formVisible = setupMode !== "welcome";
   const isCreate = setupMode === "create";
   const currentRuntime = form.runtime || {};
-  const presetIds = new Set(modelPresets.map((item) => item.preset_id));
-  const showCustomModel = currentRuntime.model && !presetIds.has(currentRuntime.model_preset);
 
   return (
     <div className="stage-layout stage-layout--setup">
@@ -236,9 +234,13 @@ export function SetupStage({
                 <strong>Execution Model</strong>
                 <span>{runtimeSummary(currentRuntime, modelPresets)}</span>
               </div>
+              <label className="field field--wide">
+                <span>Model</span>
+                <input value={currentRuntime.model || "gpt-5.4"} disabled />
+              </label>
               <div className="model-grid">
                 {modelPresets.map((preset) => (
-                  <ModelOption
+                  <EffortOption
                     key={preset.preset_id}
                     preset={preset}
                     checked={currentRuntime.model_preset === preset.preset_id}
@@ -258,30 +260,6 @@ export function SetupStage({
                     disabled={busy}
                   />
                 ))}
-                {showCustomModel ? (
-                  <button
-                    className={`model-option ${!currentRuntime.model_preset ? "selected" : ""}`}
-                    onClick={() =>
-                      onChangeForm((current) => ({
-                        ...current,
-                        runtime: {
-                          ...current.runtime,
-                          model_preset: "",
-                          model_selection_mode: "slug",
-                          model_slug_input: current.runtime.model,
-                        },
-                      }))
-                    }
-                    type="button"
-                    disabled={busy}
-                  >
-                    <div className="model-option__headline">
-                      <strong>Saved Custom Model</strong>
-                      <span>{currentRuntime.model}</span>
-                    </div>
-                    <p>This project already uses a custom runtime slug. The desktop shell preserves it but does not compose new ones.</p>
-                  </button>
-                ) : null}
               </div>
             </div>
 

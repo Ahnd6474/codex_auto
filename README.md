@@ -79,7 +79,7 @@ python -m codex_auto init-repo \
   --repo-url https://github.com/example/project.git \
   --branch main \
   --workspace-root .codex-auto-workspace \
-  --model gpt-5.3-codex \
+  --model gpt-5.4 \
   --effort high \
   --plan-prompt "Build a safe project plan for this repository focused on a narrow MVP and strong tests." \
   --approval-mode never \
@@ -94,7 +94,7 @@ python -m codex_auto run \
   --repo-url https://github.com/example/project.git \
   --branch main \
   --workspace-root .codex-auto-workspace \
-  --model gpt-5.3-codex \
+  --model gpt-5.4 \
   --effort high \
   --approval-mode never \
   --sandbox-mode workspace-write \
@@ -109,7 +109,7 @@ python -m codex_auto resume \
   --repo-url https://github.com/example/project.git \
   --branch main \
   --workspace-root .codex-auto-workspace \
-  --model gpt-5.3-codex \
+  --model gpt-5.4 \
   --effort high \
   --approval-mode never \
   --sandbox-mode workspace-write \
