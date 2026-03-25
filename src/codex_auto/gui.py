@@ -128,6 +128,8 @@ class CodexAutoGUI:
         self.queue: queue.Queue[tuple[str, object]] = queue.Queue()
         self.busy = False
         self.stop_after_step_event = threading.Event()
+        self._log_buffer: list[str] = []
+        self._latest_snapshot_text = ""
 
         self.workspace_root = _default_gui_workspace_root()
         self.project_name_var = StringVar()
@@ -142,8 +144,9 @@ class CodexAutoGUI:
         self.max_steps_var = StringVar(value="5")
         self.status_var = StringVar(value="Ready")
         self.setup_form_title_var = StringVar(value="Create Managed Project")
-        self.setup_form_hint_var = StringVar(value="Pick a directory, give it a simple name, choose the GitHub link mode, and open the flow.")
-        self.primary_action_var = StringVar(value="Create Project And Open Flow")
+        self.setup_form_hint_var = StringVar(value="Pick a directory, give it a simple name, choose the GitHub link mode, then use Next to open the flow.")
+        self.primary_action_var = StringVar(value="Create Project")
+        self.next_action_var = StringVar(value="Next: Create Project And Open Flow")
         self.current_project_label_var = StringVar(value="No project selected")
         self.current_step_label_var = StringVar(value="No plan loaded")
         self.selected_step_id_var = StringVar(value="")
@@ -242,33 +245,26 @@ class CodexAutoGUI:
         root_frame = ttk.Frame(self.root, padding=18, style="App.TFrame")
         root_frame.pack(fill=BOTH, expand=True)
 
-        main = ttk.Panedwindow(root_frame, orient="vertical")
-        main.pack(fill=BOTH, expand=True)
-
-        self.stage_container = ttk.Frame(main, style="App.TFrame")
-        bottom = ttk.Frame(main, style="App.TFrame")
-        main.add(self.stage_container, weight=72)
-        main.add(bottom, weight=28)
+        self.stage_container = ttk.Frame(root_frame, style="App.TFrame")
+        self.stage_container.pack(fill=BOTH, expand=True)
 
         self.setup_stage = ttk.Frame(self.stage_container, style="App.TFrame")
         self.flow_stage = ttk.Frame(self.stage_container, style="App.TFrame")
         self._build_setup_stage(self.setup_stage)
         self._build_flow_stage(self.flow_stage)
 
-        self._build_bottom_panel(bottom)
-
     def _build_setup_stage(self, parent: ttk.Frame) -> None:
         split = ttk.Panedwindow(parent, orient="horizontal")
         split.pack(fill=BOTH, expand=True)
 
         left = ttk.LabelFrame(split, text="Managed Projects", padding=12, style="Card.TLabelframe")
-        right = ttk.LabelFrame(split, text="Project Setup", padding=12, style="Card.TLabelframe")
+        self.setup_detail_card = ttk.LabelFrame(split, text="Choose Next Step", padding=12, style="Card.TLabelframe")
         split.add(left, weight=44)
-        split.add(right, weight=56)
+        split.add(self.setup_detail_card, weight=56)
 
         ttk.Label(
             left,
-            text="Create a new managed project first, or reopen an existing one from the list below.",
+            text="Click an existing project to open its flow, or use Create New to register another directory.",
             style="CardMuted.TLabel",
             anchor="w",
         ).pack(fill=X, pady=(0, 10))
@@ -276,6 +272,7 @@ class CodexAutoGUI:
         project_actions = ttk.Frame(left, style="Card.TFrame")
         project_actions.pack(fill=X, pady=(10, 0))
         ttk.Button(project_actions, text="Create New", command=self.start_new_project, style="Primary.TButton").pack(side=LEFT)
+        ttk.Button(project_actions, text="Edit Selected", command=self.load_selected_project_into_form, style="Secondary.TButton").pack(side=LEFT, padx=(8, 0))
         ttk.Button(project_actions, text="Refresh", command=self.refresh_projects, style="Secondary.TButton").pack(side=LEFT, padx=(8, 0))
 
         browser_wrap = ttk.Frame(left, style="Card.TFrame")
@@ -296,9 +293,25 @@ class CodexAutoGUI:
         self.project_summary_text = ScrolledText(left, height=10, wrap="word")
         self.project_summary_text.pack(fill=BOTH, expand=False, pady=(12, 0))
         self._configure_text_surface(self.project_summary_text)
-        self.project_summary_text.insert("1.0", "Select a managed project to see its summary.")
+        self.project_summary_text.insert("1.0", "Click a managed project to open its flow, or use Create New to register a new one.")
 
-        form = ttk.Frame(right, style="Card.TFrame")
+        self.setup_detail_container = ttk.Frame(self.setup_detail_card, style="Card.TFrame")
+        self.setup_detail_container.pack(fill=BOTH, expand=True)
+
+        self.setup_empty_panel = ttk.Frame(self.setup_detail_container, style="Card.TFrame")
+        ttk.Label(self.setup_empty_panel, text="Projects First", style="Section.TLabel", anchor="w").pack(fill=X)
+        ttk.Label(
+            self.setup_empty_panel,
+            text="The create form stays hidden until you press Create New. Existing projects open the next stage directly when clicked.",
+            style="CardMuted.TLabel",
+            anchor="w",
+            justify=LEFT,
+            wraplength=560,
+        ).pack(fill=X, pady=(6, 0))
+        ttk.Button(self.setup_empty_panel, text="Create New Project", command=self.start_new_project, style="Primary.TButton").pack(anchor="w", pady=(18, 0))
+
+        form = ttk.Frame(self.setup_detail_container, style="Card.TFrame")
+        self.setup_form_panel = form
         form.pack(fill=BOTH, expand=True)
         form.columnconfigure(1, weight=1)
         ttk.Label(form, textvariable=self.setup_form_title_var, style="Section.TLabel", anchor="w").grid(
@@ -382,9 +395,11 @@ class CodexAutoGUI:
 
         setup_actions = ttk.Frame(form, style="Card.TFrame")
         setup_actions.grid(row=7, column=0, columnspan=3, sticky="w", pady=(18, 0))
-        ttk.Button(setup_actions, textvariable=self.primary_action_var, command=self.save_project_setup, style="Primary.TButton").pack(side=LEFT)
-        ttk.Button(setup_actions, text="Open Selected Flow", command=self.open_selected_project, style="Secondary.TButton").pack(side=LEFT, padx=(8, 0))
-        ttk.Button(setup_actions, text="Reset Form", command=self.start_new_project, style="Quiet.TButton").pack(side=LEFT, padx=(8, 0))
+        ttk.Button(setup_actions, textvariable=self.primary_action_var, command=self.save_project_setup, style="Secondary.TButton").pack(side=LEFT)
+        ttk.Button(setup_actions, textvariable=self.next_action_var, command=self.advance_from_setup, style="Primary.TButton").pack(side=LEFT, padx=(8, 0))
+        ttk.Button(setup_actions, text="Cancel", command=self.close_setup_form, style="Quiet.TButton").pack(side=LEFT, padx=(8, 0))
+
+        self._show_setup_detail("welcome")
 
     def _build_flow_stage(self, parent: ttk.Frame) -> None:
         prompt_frame = ttk.LabelFrame(parent, text="Prompt And Plan", padding=12, style="Card.TLabelframe")
@@ -668,8 +683,9 @@ class CodexAutoGUI:
         self.test_cmd_var.set(project.runtime.test_cmd)
         self.max_steps_var.set(str(max(project.runtime.max_blocks, 1)))
         self.setup_form_title_var.set("Project Settings")
-        self.setup_form_hint_var.set("Adjust the saved name, directory, GitHub link mode, or runtime preset before opening the flow again.")
-        self.primary_action_var.set("Save Project And Open Flow")
+        self.setup_form_hint_var.set("Adjust the saved name, directory, GitHub link mode, or runtime preset, then use Next to reopen the flow.")
+        self.primary_action_var.set("Save Project")
+        self.next_action_var.set("Next: Save And Open Flow")
 
     def start_new_project(self) -> None:
         self.selected_project_id = None
@@ -683,8 +699,9 @@ class CodexAutoGUI:
         self._custom_model_choice = None
         self.model_preset_var.set(DEFAULT_MODEL_PRESET_ID)
         self.setup_form_title_var.set("Create Managed Project")
-        self.setup_form_hint_var.set("Pick a directory, give it a simple name, choose the GitHub link mode, and open the flow.")
-        self.primary_action_var.set("Create Project And Open Flow")
+        self.setup_form_hint_var.set("Pick a directory, give it a simple name, choose the GitHub link mode, then use Next to open the flow.")
+        self.primary_action_var.set("Create Project")
+        self.next_action_var.set("Next: Create Project And Open Flow")
         self.project_summary_text.delete("1.0", END)
         self.project_summary_text.insert("1.0", "Create a new managed project or select one from the list.")
         self._render_project_list(list(self.project_rows.values()))
@@ -694,16 +711,23 @@ class CodexAutoGUI:
         self.status_var.set(status_text)
 
     def _append_log(self, text: str) -> None:
-        self.log_text.insert(END, text.rstrip() + "\n")
-        self.log_text.see(END)
+        line = text.rstrip()
+        self._log_buffer.append(line)
+        if len(self._log_buffer) > 1000:
+            self._log_buffer = self._log_buffer[-1000:]
+        if hasattr(self, "log_text"):
+            self.log_text.insert(END, line + "\n")
+            self.log_text.see(END)
 
     def _set_snapshot(self, payload: object) -> None:
         if isinstance(payload, str):
             text = payload
         else:
             text = json.dumps(payload, indent=2, ensure_ascii=False)
-        self.snapshot_text.delete("1.0", END)
-        self.snapshot_text.insert("1.0", text)
+        self._latest_snapshot_text = text
+        if hasattr(self, "snapshot_text"):
+            self.snapshot_text.delete("1.0", END)
+            self.snapshot_text.insert("1.0", text)
 
     def _schedule_queue_poll(self) -> None:
         self.root.after(75, self._poll_queue)
@@ -937,6 +961,12 @@ class CodexAutoGUI:
         return ""
 
     def save_project_setup(self) -> None:
+        self._persist_project_setup(switch_to_flow=False)
+
+    def advance_from_setup(self) -> None:
+        self._persist_project_setup(switch_to_flow=True)
+
+    def _persist_project_setup(self, switch_to_flow: bool) -> None:
         try:
             project_dir = self._project_dir()
             runtime = self._runtime()
@@ -958,11 +988,12 @@ class CodexAutoGUI:
                 display_name=display_name,
             )
             plan_state = orchestrator.load_execution_plan_state(project)
-            self.queue.put(("loaded_project", (project, plan_state, True)))
+            self.queue.put(("loaded_project", (project, plan_state, switch_to_flow)))
             self.queue.put(("project_row", project))
             self.queue.put(("snapshot", self._project_summary(project, plan_state)))
 
-        self._run_async("Save project setup", worker)
+        action_label = "Save project setup and open flow" if switch_to_flow else "Save project setup"
+        self._run_async(action_label, worker)
 
     def generate_plan(self) -> None:
         if self.current_project is None:
