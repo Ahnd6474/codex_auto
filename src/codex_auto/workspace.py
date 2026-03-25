@@ -57,6 +57,7 @@ class WorkspaceManager:
             checkpoint_state_file=state_dir / "CHECKPOINTS.json",
             execution_plan_file=state_dir / "EXECUTION_PLAN.json",
             execution_flow_svg_file=docs_dir / "EXECUTION_FLOW.svg",
+            closeout_report_file=docs_dir / "CLOSEOUT_REPORT.md",
         )
 
     def initialize_project(

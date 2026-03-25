@@ -7,7 +7,7 @@ from html import escape
 from importlib import resources
 from pathlib import Path
 
-from .models import CandidateTask, Checkpoint, ExecutionStep, ProjectContext
+from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, ProjectContext
 from .utils import compact_text, now_utc_iso, read_text, similarity_score, tokenize, write_text
 
 
@@ -19,6 +19,7 @@ class PlanItem:
 
 PLAN_GENERATION_PROMPT_FILENAME = "PLAN_GENERATION_PROMPT.txt"
 STEP_EXECUTION_PROMPT_FILENAME = "STEP_EXECUTION_PROMPT.txt"
+FINALIZATION_PROMPT_FILENAME = "FINALIZATION_PROMPT.txt"
 
 
 def load_template(name: str) -> str:
@@ -500,6 +501,39 @@ def implementation_prompt(
         )
     except KeyError as exc:
         raise ValueError(f"Unknown placeholder in step execution prompt template: {exc.args[0]}") from exc
+
+
+def finalization_prompt(
+    context: ProjectContext,
+    plan_state: ExecutionPlanState,
+    repo_inputs: dict[str, str],
+    template_text: str | None = None,
+) -> str:
+    template = template_text or load_source_prompt_template(FINALIZATION_PROMPT_FILENAME)
+    completed_steps = "\n".join(
+        [
+            f"- {step.step_id}: {step.title} :: {step.success_criteria or 'Completed'}"
+            for step in plan_state.steps
+            if step.status == "completed"
+        ]
+    ).strip() or "- No completed steps recorded."
+    try:
+        return template.format(
+            repo_dir=context.paths.repo_dir,
+            docs_dir=context.paths.docs_dir,
+            plan_title=plan_state.plan_title.strip() or context.metadata.display_name or context.metadata.slug,
+            project_prompt=plan_state.project_prompt.strip() or "No prompt recorded.",
+            plan_summary=plan_state.summary.strip() or "No execution summary recorded.",
+            test_command=plan_state.default_test_command.strip() or context.runtime.test_cmd,
+            completed_steps=completed_steps,
+            readme=repo_inputs["readme"],
+            agents=repo_inputs["agents"],
+            docs=repo_inputs["docs"],
+            closeout_report_file=context.paths.closeout_report_file,
+            extra_prompt=context.runtime.extra_prompt.strip() or "None.",
+        )
+    except KeyError as exc:
+        raise ValueError(f"Unknown placeholder in finalization prompt template: {exc.args[0]}") from exc
 
 
 def reflection_markdown(task: str, test_summary: str, changed_files: list[str], commit_hashes: list[str]) -> str:

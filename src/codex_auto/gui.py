@@ -45,7 +45,43 @@ def _plan_state_with_running_step(plan_state: ExecutionPlanState, step_id: str) 
         summary=plan_state.summary,
         default_test_command=plan_state.default_test_command,
         last_updated_at=plan_state.last_updated_at,
+        closeout_status=plan_state.closeout_status,
+        closeout_started_at=plan_state.closeout_started_at,
+        closeout_completed_at=plan_state.closeout_completed_at,
+        closeout_commit_hash=plan_state.closeout_commit_hash,
+        closeout_notes=plan_state.closeout_notes,
         steps=updated_steps,
+    )
+
+
+def _plan_state_with_closeout_status(plan_state: ExecutionPlanState, status: str) -> ExecutionPlanState:
+    return ExecutionPlanState(
+        plan_title=plan_state.plan_title,
+        project_prompt=plan_state.project_prompt,
+        summary=plan_state.summary,
+        default_test_command=plan_state.default_test_command,
+        last_updated_at=plan_state.last_updated_at,
+        closeout_status=status,
+        closeout_started_at=plan_state.closeout_started_at,
+        closeout_completed_at=plan_state.closeout_completed_at,
+        closeout_commit_hash=plan_state.closeout_commit_hash,
+        closeout_notes=plan_state.closeout_notes,
+        steps=[
+            ExecutionStep(
+                step_id=step.step_id,
+                title=step.title,
+                display_description=step.display_description,
+                codex_description=step.codex_description,
+                test_command=step.test_command,
+                success_criteria=step.success_criteria,
+                status=step.status,
+                started_at=step.started_at,
+                completed_at=step.completed_at,
+                commit_hash=step.commit_hash,
+                notes=step.notes,
+            )
+            for step in plan_state.steps
+        ],
     )
 
 
@@ -234,6 +270,7 @@ class CodexAutoGUI:
         ttk.Button(prompt_actions, text="Save Edited Plan", command=self.save_plan).pack(side=LEFT, padx=(8, 0))
         ttk.Button(prompt_actions, text="Reset Plan", command=self.reset_plan).pack(side=LEFT, padx=(8, 0))
         ttk.Button(prompt_actions, text="Run Remaining Steps", command=self.run_plan).pack(side=LEFT, padx=(8, 0))
+        ttk.Button(prompt_actions, text="Run Closeout", command=self.run_closeout).pack(side=LEFT, padx=(8, 0))
         ttk.Button(prompt_actions, text="Stop After Current Step", command=self.stop_after_current_step).pack(side=LEFT, padx=(8, 0))
         ttk.Button(prompt_actions, text="Reload Project", command=self.reload_current_project).pack(side=LEFT, padx=(8, 0))
 
@@ -458,9 +495,9 @@ class CodexAutoGUI:
             status = project.metadata.current_status
             if status.startswith("running:"):
                 running += 1
-            elif status in {"setup_ready", "plan_ready", "plan_completed", "ready"}:
+            elif status in {"setup_ready", "plan_ready", "plan_completed", "closed_out", "ready"}:
                 ready += 1
-            elif status.endswith("failed") or status == "failed":
+            elif status.endswith("failed") or status in {"failed", "closeout_failed"}:
                 failed += 1
         return {
             "workspace_root": str(Path(self.workspace_root_var.get().strip() or ".codex-auto-workspace").resolve()),
@@ -531,6 +568,9 @@ class CodexAutoGUI:
                 "status": project.metadata.current_status,
                 "safe_revision": project.metadata.current_safe_revision,
                 "default_test_command": plan.default_test_command or project.runtime.test_cmd,
+                "closeout_status": plan.closeout_status,
+                "closeout_report": str(project.paths.closeout_report_file),
+                "closeout_commit_hash": plan.closeout_commit_hash,
                 "remaining_steps": remaining,
                 "recent_blocks": recent_blocks,
                 "flow_svg": str(project.paths.execution_flow_svg_file),
@@ -782,6 +822,52 @@ class CodexAutoGUI:
 
         self._run_async("Run remaining steps", worker)
 
+    def run_closeout(self) -> None:
+        if self.current_project is None:
+            messagebox.showinfo("codex-auto", "Open a project first.")
+            return
+        try:
+            plan_state = self._plan_from_widgets()
+            if not plan_state.steps:
+                raise ValueError("Create and complete the execution plan before running closeout.")
+            if any(step.status != "completed" for step in plan_state.steps):
+                raise ValueError("Closeout can run only after all steps are completed.")
+            runtime = self._runtime()
+            project_dir = Path(self.current_project.metadata.repo_path)
+            branch = self.current_project.metadata.branch
+            origin_url = self.current_project.metadata.origin_url or self.origin_url_var.get().strip()
+        except Exception as exc:
+            messagebox.showerror("codex-auto", str(exc))
+            return
+        if not messagebox.askyesno(
+            "codex-auto",
+            "Run final closeout now? This will do final cleanup, verification, optional runnable smoke checks, and docs handoff work.",
+        ):
+            return
+
+        orchestrator = self._orchestrator()
+
+        def worker() -> None:
+            running_project = deepcopy(self.current_project) if self.current_project is not None else None
+            if running_project is not None:
+                running_project.metadata.current_status = "running:closeout"
+                self.queue.put(("loaded_project", (running_project, _plan_state_with_closeout_status(plan_state, "running"), True)))
+                self.queue.put(("project_row", running_project))
+            self.queue.put(("status", "Running project closeout"))
+            self.queue.put(("log", "[run] project closeout"))
+            project, saved = orchestrator.run_execution_closeout(
+                project_dir=project_dir,
+                runtime=runtime,
+                branch=branch,
+                origin_url=origin_url,
+            )
+            self.queue.put(("loaded_project", (project, saved, True)))
+            self.queue.put(("project_row", project))
+            self.queue.put(("snapshot", self._project_summary(project, saved)))
+            self.queue.put(("log", f"[closeout] {saved.closeout_status}"))
+
+        self._run_async("Run closeout", worker)
+
     def stop_after_current_step(self) -> None:
         if not self.busy:
             self._append_log("[info] No active execution is running.")
@@ -842,6 +928,14 @@ class CodexAutoGUI:
         total = len(plan_state.steps)
         if total == 0:
             return "No plan yet"
+        if completed == total:
+            if plan_state.closeout_status == "completed":
+                return f"Completed {completed}/{total} steps, closeout completed"
+            if plan_state.closeout_status == "running":
+                return f"Completed {completed}/{total} steps, closeout running"
+            if plan_state.closeout_status == "failed":
+                return f"Completed {completed}/{total} steps, closeout failed"
+            return f"Completed {completed}/{total} steps, closeout pending"
         next_step = next((step.step_id for step in plan_state.steps if step.status != "completed"), "done")
         return f"Completed {completed}/{total} steps, next: {next_step}"
 
@@ -856,6 +950,11 @@ class CodexAutoGUI:
             summary=self.current_plan.summary.strip(),
             default_test_command=self.test_cmd_var.get().strip() or "python -m pytest",
             last_updated_at=self.current_plan.last_updated_at,
+            closeout_status=self.current_plan.closeout_status,
+            closeout_started_at=self.current_plan.closeout_started_at,
+            closeout_completed_at=self.current_plan.closeout_completed_at,
+            closeout_commit_hash=self.current_plan.closeout_commit_hash,
+            closeout_notes=self.current_plan.closeout_notes,
             steps=cleaned_steps,
         )
 

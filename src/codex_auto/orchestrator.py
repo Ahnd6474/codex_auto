@@ -9,6 +9,7 @@ from .git_ops import GitOps
 from .memory import MemoryStore
 from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, ProjectContext, RuntimeOptions, TestRunResult
 from .planning import (
+    FINALIZATION_PROMPT_FILENAME,
     PLAN_GENERATION_PROMPT_FILENAME,
     STEP_EXECUTION_PROMPT_FILENAME,
     attempt_history_entry,
@@ -23,6 +24,7 @@ from .planning import (
     execution_plan_markdown,
     execution_plan_svg,
     execution_steps_to_plan_items,
+    finalization_prompt,
     ensure_scope_guard,
     generate_long_term_plan,
     implementation_prompt,
@@ -195,7 +197,7 @@ class Orchestrator:
     ) -> tuple[ProjectContext, ExecutionPlanState]:
         context = self.setup_local_project(project_dir=project_dir, runtime=runtime, branch=branch, origin_url=origin_url)
         saved = self.save_execution_plan_state(context, plan_state)
-        context.metadata.current_status = "plan_ready" if saved.steps else "setup_ready"
+        context.metadata.current_status = self._status_from_plan_state(saved)
         context.metadata.last_run_at = now_utc_iso()
         self.workspace.save_project(context)
         return context, saved
@@ -218,12 +220,29 @@ class Orchestrator:
                     notes=step.notes.strip(),
                 )
             )
+        closeout_ready = self._all_steps_completed(normalized_steps)
+        closeout_status = plan_state.closeout_status.strip() or "not_started"
+        closeout_started_at = plan_state.closeout_started_at
+        closeout_completed_at = plan_state.closeout_completed_at
+        closeout_commit_hash = plan_state.closeout_commit_hash
+        closeout_notes = plan_state.closeout_notes.strip()
+        if not closeout_ready:
+            closeout_status = "not_started"
+            closeout_started_at = None
+            closeout_completed_at = None
+            closeout_commit_hash = None
+            closeout_notes = ""
         state = ExecutionPlanState(
             plan_title=plan_state.plan_title.strip() or context.metadata.display_name or context.metadata.slug,
             project_prompt=plan_state.project_prompt.strip(),
             summary=plan_state.summary.strip(),
             default_test_command=plan_state.default_test_command.strip() or context.runtime.test_cmd,
             last_updated_at=now_utc_iso(),
+            closeout_status=closeout_status,
+            closeout_started_at=closeout_started_at,
+            closeout_completed_at=closeout_completed_at,
+            closeout_commit_hash=closeout_commit_hash,
+            closeout_notes=closeout_notes,
             steps=normalized_steps,
         )
         write_json(context.paths.execution_plan_file, state.to_dict())
@@ -327,7 +346,7 @@ class Orchestrator:
                 if isinstance(commit_hashes, list) and commit_hashes:
                     target_step.commit_hash = str(commit_hashes[-1])
                 target_step.notes = str(latest_block.get("test_summary", "")).strip()
-                context.metadata.current_status = "plan_completed" if self._all_steps_completed(plan_state.steps) else "plan_ready"
+                context.metadata.current_status = self._status_from_plan_state(plan_state)
             else:
                 target_step.status = "failed"
                 target_step.notes = str(context.loop_state.stop_reason or "Step execution failed.").strip()
@@ -343,6 +362,158 @@ class Orchestrator:
             self.workspace.save_project(context)
 
         return context, plan_state, target_step
+
+    def run_execution_closeout(
+        self,
+        project_dir: Path,
+        runtime: RuntimeOptions,
+        branch: str = "main",
+        origin_url: str = "",
+    ) -> tuple[ProjectContext, ExecutionPlanState]:
+        context = self.setup_local_project(project_dir=project_dir, runtime=runtime, branch=branch, origin_url=origin_url)
+        plan_state = self.load_execution_plan_state(context)
+        if not plan_state.steps:
+            raise RuntimeError("No saved execution plan exists for this project.")
+        if not self._all_steps_completed(plan_state.steps):
+            raise RuntimeError("Closeout can run only after all execution tasks are completed.")
+        if plan_state.closeout_status == "running":
+            raise RuntimeError("Closeout is already running.")
+
+        previous_runtime = context.runtime
+        context.runtime = RuntimeOptions(
+            **{
+                **previous_runtime.to_dict(),
+                "test_cmd": plan_state.default_test_command or runtime.test_cmd,
+                "allow_push": True,
+                "approval_mode": runtime.approval_mode,
+                "sandbox_mode": runtime.sandbox_mode,
+                "require_checkpoint_approval": False,
+                "checkpoint_interval_blocks": 1,
+            }
+        )
+        closeout_started_at = now_utc_iso()
+        plan_state.closeout_status = "running"
+        plan_state.closeout_started_at = closeout_started_at
+        plan_state.closeout_completed_at = None
+        plan_state.closeout_commit_hash = None
+        plan_state.closeout_notes = ""
+        context.metadata.current_status = "running:closeout"
+        context.metadata.last_run_at = closeout_started_at
+        context.loop_state.current_task = "Project closeout"
+        self.save_execution_plan_state(context, plan_state)
+        self.workspace.save_project(context)
+
+        runner = CodexRunner(context.runtime.codex_path)
+        reporter = Reporter(context)
+        repo_inputs = scan_repository_inputs(context.paths.repo_dir)
+        prompt = finalization_prompt(
+            context=context,
+            plan_state=plan_state,
+            repo_inputs=repo_inputs,
+            template_text=load_source_prompt_template(FINALIZATION_PROMPT_FILENAME),
+        )
+        safe_revision = context.metadata.current_safe_revision or self.git.current_revision(context.paths.repo_dir)
+        latest_logged_block = read_last_jsonl(context.paths.block_log_file)
+        latest_logged_block_index = int(latest_logged_block.get("block_index", 0)) if latest_logged_block else 0
+        closeout_block_index = max(1, context.loop_state.block_index + 1, latest_logged_block_index + 1)
+        closeout_task = "Project closeout"
+        run_result = runner.run_pass(
+            context=context,
+            prompt=prompt,
+            pass_type="project-closeout-pass",
+            block_index=closeout_block_index,
+            search_enabled=False,
+        )
+        run_result.changed_files = self.git.changed_files(context.paths.repo_dir)
+
+        commit_hash: str | None = None
+        rollback_status = "not_needed"
+        test_result: TestRunResult | None = None
+        changed_files = sorted(set(run_result.changed_files))
+
+        try:
+            if run_result.returncode != 0:
+                self.git.hard_reset(context.paths.repo_dir, safe_revision)
+                rollback_status = "rolled_back_to_safe_revision"
+                plan_state.closeout_status = "failed"
+                plan_state.closeout_notes = "Closeout Codex pass failed and changes were rolled back."
+            else:
+                test_result = self._run_test_command(context, closeout_block_index, "project-closeout-pass")
+                reporter.save_test_result(closeout_block_index, "project-closeout-pass", test_result)
+                if test_result.returncode != 0:
+                    self.git.hard_reset(context.paths.repo_dir, safe_revision)
+                    rollback_status = "rolled_back_to_safe_revision"
+                    test_result = None
+                    plan_state.closeout_status = "failed"
+                    plan_state.closeout_notes = "Closeout verification failed and changes were rolled back."
+                else:
+                    if self.git.has_changes(context.paths.repo_dir):
+                        commit_hash = self.git.commit_all(
+                            context.paths.repo_dir,
+                            self._commit_message(closeout_block_index, "project-closeout-pass", closeout_task),
+                        )
+                    if commit_hash:
+                        context.metadata.current_safe_revision = commit_hash
+                        context.loop_state.current_safe_revision = commit_hash
+                        if context.runtime.allow_push and self.git.remote_url(context.paths.repo_dir, "origin"):
+                            self.git.push(context.paths.repo_dir, context.metadata.branch)
+                    plan_state.closeout_status = "completed"
+                    plan_state.closeout_completed_at = now_utc_iso()
+                    plan_state.closeout_commit_hash = commit_hash
+                    plan_state.closeout_notes = test_result.summary
+        except Exception as exc:
+            plan_state.closeout_status = "failed"
+            plan_state.closeout_notes = str(exc).strip() or "Closeout failed."
+            raise
+        finally:
+            reporter.log_pass(
+                {
+                    "repository_id": context.metadata.repo_id,
+                    "repository_slug": context.metadata.slug,
+                    "block_index": closeout_block_index,
+                    "pass_type": "project-closeout-pass",
+                    "selected_task": closeout_task,
+                    "changed_files": changed_files,
+                    "test_results": test_result.to_dict() if test_result else None,
+                    "usage": run_result.usage,
+                    "codex_return_code": run_result.returncode,
+                    "commit_hash": commit_hash,
+                    "rollback_status": rollback_status,
+                    "search_enabled": False,
+                }
+            )
+            reporter.log_block(
+                {
+                    "repository_id": context.metadata.repo_id,
+                    "repository_slug": context.metadata.slug,
+                    "block_index": closeout_block_index,
+                    "status": "closeout_completed" if plan_state.closeout_status == "completed" else "closeout_failed",
+                    "selected_task": closeout_task,
+                    "changed_files": changed_files,
+                    "test_summary": plan_state.closeout_notes,
+                    "commit_hashes": [commit_hash] if commit_hash else [],
+                    "rollback_status": rollback_status,
+                }
+            )
+            reporter.write_block_review(
+                reflection_markdown(closeout_task, plan_state.closeout_notes or "No closeout summary recorded.", changed_files, [commit_hash] if commit_hash else [])
+            )
+            reporter.append_attempt_history(
+                attempt_history_entry(
+                    closeout_block_index,
+                    closeout_task,
+                    "closeout completed" if plan_state.closeout_status == "completed" else "closeout failed",
+                    [commit_hash] if commit_hash else [],
+                )
+            )
+            context.runtime = previous_runtime
+            context.metadata.current_status = self._status_from_plan_state(plan_state)
+            context.metadata.last_run_at = now_utc_iso()
+            self.save_execution_plan_state(context, plan_state)
+            self.workspace.save_project(context)
+            reporter.write_status_report()
+
+        return context, plan_state
 
     def init_repo(
         self,
@@ -615,6 +786,7 @@ class Orchestrator:
             (context.paths.block_review_file, "# Block Review\n\nNo completed blocks yet.\n"),
             (context.paths.research_notes_file, "# Research Notes\n\nNo research notes recorded yet.\n"),
             (context.paths.attempt_history_file, "# Attempt History\n\n"),
+            (context.paths.closeout_report_file, "# Closeout Report\n\nNo closeout has been run yet.\n"),
         ]:
             if not file_path.exists():
                 write_text(file_path, starter)
@@ -638,6 +810,19 @@ class Orchestrator:
 
     def _all_steps_completed(self, steps: list[ExecutionStep]) -> bool:
         return bool(steps) and all(step.status == "completed" for step in steps)
+
+    def _status_from_plan_state(self, plan_state: ExecutionPlanState) -> str:
+        if not plan_state.steps:
+            return "setup_ready"
+        if not self._all_steps_completed(plan_state.steps):
+            return "plan_ready"
+        if plan_state.closeout_status == "completed":
+            return "closed_out"
+        if plan_state.closeout_status == "running":
+            return "running:closeout"
+        if plan_state.closeout_status == "failed":
+            return "closeout_failed"
+        return "plan_completed"
 
     def _checkpoints_from_execution_steps(self, steps: list[ExecutionStep]) -> list[Checkpoint]:
         checkpoints: list[Checkpoint] = []

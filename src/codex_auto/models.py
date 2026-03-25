@@ -119,6 +119,7 @@ class ProjectPaths:
     checkpoint_state_file: Path
     execution_plan_file: Path
     execution_flow_svg_file: Path
+    closeout_report_file: Path
 
     def to_dict(self) -> dict[str, Any]:
         return _normalize(self)
@@ -255,6 +256,11 @@ class ExecutionPlanState:
     summary: str = ""
     default_test_command: str = "python -m pytest"
     last_updated_at: str | None = None
+    closeout_status: str = "not_started"
+    closeout_started_at: str | None = None
+    closeout_completed_at: str | None = None
+    closeout_commit_hash: str | None = None
+    closeout_notes: str = ""
     steps: list[ExecutionStep] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -274,5 +280,10 @@ class ExecutionPlanState:
             summary=str(data.get("summary", "")).strip(),
             default_test_command=str(data.get("default_test_command", "python -m pytest")).strip() or "python -m pytest",
             last_updated_at=data.get("last_updated_at"),
+            closeout_status=str(data.get("closeout_status", "not_started")).strip() or "not_started",
+            closeout_started_at=data.get("closeout_started_at"),
+            closeout_completed_at=data.get("closeout_completed_at"),
+            closeout_commit_hash=data.get("closeout_commit_hash"),
+            closeout_notes=str(data.get("closeout_notes", "")).strip(),
             steps=steps,
         )

@@ -70,6 +70,7 @@ The GUI lets you:
 - review an interactive flow chart of the generated steps
 - edit pending steps, including add/delete/reorder, UI descriptions, Codex instructions, and per-step test commands
 - execute the remaining steps sequentially and show progress directly in the flow chart
+- run a final closeout pass after all steps complete to optimize, verify, smoke-test when feasible, and write a handoff report
 - execute each step with one search-enabled Codex pass instead of multiple implementation passes
 - treat each completed step as a checkpoint and push after verification when `origin` is configured
 - return to the setup screen and open any previously managed project flow later
@@ -172,6 +173,7 @@ The tool creates or maintains these files for each managed repository project:
 - `docs/ACTIVE_TASK.md`
 - `docs/BLOCK_REVIEW.md`
 - `docs/CHECKPOINT_TIMELINE.md`
+- `docs/CLOSEOUT_REPORT.md`
 - `docs/RESEARCH_NOTES.md`
 - `docs/attempt_history.md`
 - `state/LOOP_STATE.json`

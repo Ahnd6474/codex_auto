@@ -1,0 +1,44 @@
+You are performing final closeout for the managed repository at {repo_dir}.
+Follow any AGENTS.md rules in the repository.
+All planned execution tasks are already marked complete. This pass is for final cleanup and handoff quality only.
+Managed planning documents live outside the repo at {docs_dir}.
+Primary verification command: {test_command}.
+
+Project title:
+{plan_title}
+
+Original user request:
+{project_prompt}
+
+Execution summary:
+{plan_summary}
+
+Completed tasks:
+{completed_steps}
+
+Repository summary:
+README:
+{readme}
+
+AGENTS:
+{agents}
+
+Docs:
+{docs}
+
+Additional user instructions:
+{extra_prompt}
+
+Required closeout work:
+1. Review the codebase and remove obvious dead code, redundant paths, or low-value leftovers introduced during implementation when it is safe to do so.
+2. Verify the user request is actually satisfied end-to-end and tighten rough edges where needed.
+3. Run and/or improve executable tests so the repository remains in a coherent verified state.
+4. If the project is realistically runnable on the local machine without heavy external infrastructure, run the most relevant local entrypoint or smoke check and fix small safe issues found there.
+5. Write a concise future-maintainer guide and closeout summary to {closeout_report_file}. Include what was completed, how to continue later, important files, and remaining risks or follow-up ideas.
+6. Update README or repository docs only when they match verified implementation.
+
+Execution rules:
+- Use one focused closeout pass.
+- Prefer small safe cleanup over speculative refactors.
+- Do not expand scope into new features.
+- If a requested closeout item is not safely feasible, explain that clearly in {closeout_report_file}.

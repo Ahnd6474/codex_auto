@@ -11,6 +11,7 @@ from codex_auto.environment import ensure_gitignore
 from codex_auto.gui import _plan_state_with_running_step
 from codex_auto.models import ExecutionPlanState, ExecutionStep
 from codex_auto.planning import (
+    FINALIZATION_PROMPT_FILENAME,
     PLAN_GENERATION_PROMPT_FILENAME,
     STEP_EXECUTION_PROMPT_FILENAME,
     execution_plan_svg,
@@ -69,6 +70,23 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(step.codex_description, "Old UI description")
         self.assertEqual(step.success_criteria, "Still works.")
 
+    def test_execution_plan_state_reads_closeout_fields(self) -> None:
+        state = ExecutionPlanState.from_dict(
+            {
+                "plan_title": "demo",
+                "closeout_status": "completed",
+                "closeout_started_at": "2026-01-01T00:00:00+00:00",
+                "closeout_completed_at": "2026-01-01T01:00:00+00:00",
+                "closeout_commit_hash": "abc123",
+                "closeout_notes": "final tests passed",
+                "steps": [],
+            }
+        )
+
+        self.assertEqual(state.closeout_status, "completed")
+        self.assertEqual(state.closeout_commit_hash, "abc123")
+        self.assertEqual(state.closeout_notes, "final tests passed")
+
     def test_execution_plan_svg_includes_step_statuses(self) -> None:
         svg = execution_plan_svg(
             "demo flow",
@@ -103,9 +121,11 @@ class ExecutionPlanHelperTests(unittest.TestCase):
     def test_source_prompt_templates_exist_and_keep_expected_placeholders(self) -> None:
         plan_template = load_source_prompt_template(PLAN_GENERATION_PROMPT_FILENAME)
         step_template = load_source_prompt_template(STEP_EXECUTION_PROMPT_FILENAME)
+        final_template = load_source_prompt_template(FINALIZATION_PROMPT_FILENAME)
 
         self.assertTrue(source_prompt_template_path(PLAN_GENERATION_PROMPT_FILENAME).exists())
         self.assertTrue(source_prompt_template_path(STEP_EXECUTION_PROMPT_FILENAME).exists())
+        self.assertTrue(source_prompt_template_path(FINALIZATION_PROMPT_FILENAME).exists())
         self.assertIn("{repo_dir}", plan_template)
         self.assertIn("{user_prompt}", plan_template)
         self.assertIn("{max_steps}", plan_template)
@@ -113,6 +133,9 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("{display_description}", step_template)
         self.assertIn("{codex_description}", step_template)
         self.assertIn("{success_criteria}", step_template)
+        self.assertIn("{completed_steps}", final_template)
+        self.assertIn("{closeout_report_file}", final_template)
+        self.assertIn("{test_command}", final_template)
 
     def test_ensure_gitignore_adds_missing_entries_once(self) -> None:
         project_dir = Path(__file__).resolve().parents[1] / ".tmp_gitignore_test"
