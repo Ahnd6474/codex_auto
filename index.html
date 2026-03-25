@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>codex-auto | Codex 자동화 워크스페이스</title>
+  <meta
+    name="description"
+    content="codex-auto는 여러 저장소를 안전하게 관리하고, Codex가 작업을 쪼개고 검증하며 반복 개선하도록 돕는 자동화 워크스페이스입니다."
+  >
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <div class="noise"></div>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="#top">
+        <span class="brand-dot"></span>
+        codex-auto
+      </a>
+      <nav class="nav">
+        <a href="#product">제품</a>
+        <a href="#workflow">워크플로우</a>
+        <a href="#readiness">배포 준비</a>
+        <a href="#contact">문의</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Codex Automation Workspace</p>
+          <h1>저장소 개선을<br>실행 가능한 블록으로<br>바꾸는 운영 레이어</h1>
+          <p class="hero-text">
+            codex-auto는 장기 계획, 작업 분해, 블록 실행, 테스트, 롤백, 체크포인트 기록을 하나의 흐름으로 연결합니다.
+            나중에 앱으로 배포해도 흔들리지 않도록, 자동화보다 운영 구조를 먼저 설계한 도구입니다.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="README.md">문서 보기</a>
+            <a class="button button-secondary" href="mailto:ahnd6474@gmail.com">연락하기</a>
+          </div>
+          <div class="hero-metrics">
+            <article>
+              <strong>Multi-repo</strong>
+              <span>저장소별 독립 상태</span>
+            </article>
+            <article>
+              <strong>Codex-planned</strong>
+              <span>작업 배분 자동 생성</span>
+            </article>
+            <article>
+              <strong>Strict validation</strong>
+              <span>테스트 실패 시 rollback</span>
+            </article>
+          </div>
+        </div>
+
+        <div class="hero-preview" id="product">
+          <div class="window">
+            <div class="window-bar">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div class="window-body">
+              <aside class="preview-sidebar">
+                <p class="sidebar-label">Managed Repositories</p>
+                <div class="repo-pill active">core-service</div>
+                <div class="repo-pill">desktop-gui</div>
+                <div class="repo-pill">docs-site</div>
+              </aside>
+              <div class="preview-main">
+                <div class="preview-header">
+                  <div>
+                    <p class="panel-label">Run Timeline</p>
+                    <h2>Codex가 어디까지 왔는지 바로 보입니다</h2>
+                  </div>
+                  <div class="status-badge">Running</div>
+                </div>
+
+                <div class="timeline-track">
+                  <div class="timeline-node done">입력</div>
+                  <div class="timeline-node done">계획</div>
+                  <div class="timeline-node current">실행</div>
+                  <div class="timeline-node pending">검증</div>
+                  <div class="timeline-node pending">체크포인트</div>
+                </div>
+
+                <div class="task-panel">
+                  <div class="task-card emphasis">
+                    <span class="task-step">B2</span>
+                    <strong>테스트 안정화</strong>
+                    <p>실패 케이스 재현 후 회귀 테스트 추가</p>
+                  </div>
+                  <div class="task-card">
+                    <span class="task-step">B3</span>
+                    <strong>GUI 정리</strong>
+                    <p>실행 흐름 단순화와 상태 표시 개선</p>
+                  </div>
+                  <div class="task-card">
+                    <span class="task-step">B4</span>
+                    <strong>문서 반영</strong>
+                    <p>검증된 동작만 문서에 반영</p>
+                  </div>
+                </div>
+
+                <div class="info-grid">
+                  <article>
+                    <span>모델</span>
+                    <strong>gpt-5.4</strong>
+                  </article>
+                  <article>
+                    <span>추론 강도</span>
+                    <strong>high</strong>
+                  </article>
+                  <article>
+                    <span>검증</span>
+                    <strong>pass마다 test</strong>
+                  </article>
+                  <article>
+                    <span>동기화</span>
+                    <strong>블록 완료 후 GitHub</strong>
+                  </article>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section split" id="workflow">
+        <div class="section-copy">
+          <p class="eyebrow">Workflow</p>
+          <h2>사용자는 방향을 주고, Codex는 블록으로 쪼개고, 시스템은 엄격하게 검증합니다.</h2>
+          <p>
+            장기 프롬프트 또는 저장소를 입력으로 받아, Codex가 실행 가능한 작업 목록을 만들고 각 블록이 끝날 때까지 반복 수행합니다.
+            실패한 pass는 즉시 되돌리고, 성공한 변경만 안전 revision으로 남깁니다.
+          </p>
+        </div>
+        <div class="flow-list">
+          <article>
+            <span>01</span>
+            <div>
+              <strong>입력 확보</strong>
+              <p>장기 프롬프트나 현재 저장소 상태를 읽습니다.</p>
+            </div>
+          </article>
+          <article>
+            <span>02</span>
+            <div>
+              <strong>Codex 작업 분해</strong>
+              <p>실행 가능한 블록과 우선순위를 생성합니다.</p>
+            </div>
+          </article>
+          <article>
+            <span>03</span>
+            <div>
+              <strong>구현과 테스트</strong>
+              <p>각 pass 뒤 테스트를 돌리고, 회귀 시 rollback 합니다.</p>
+            </div>
+          </article>
+          <article>
+            <span>04</span>
+            <div>
+              <strong>체크포인트와 기록</strong>
+              <p>상태, 로그, 메모리, 보고서를 남기고 GitHub와 동기화합니다.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section features">
+        <div class="section-heading">
+          <p class="eyebrow">Core Value</p>
+          <h2>앱으로 발전시키기 쉬운 구조</h2>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <strong>운영 추적성</strong>
+            <p>LONG_TERM_PLAN, MID_TERM_PLAN, ACTIVE_TASK, BLOCK_REVIEW가 남습니다.</p>
+          </article>
+          <article class="feature-card">
+            <strong>안전한 실행 루프</strong>
+            <p>테스트 실패 시 즉시 rollback 하고 safe revision만 유지합니다.</p>
+          </article>
+          <article class="feature-card">
+            <strong>멀티 저장소 설계</strong>
+            <p>repo, docs, logs, memory, state가 저장소별로 분리됩니다.</p>
+          </article>
+          <article class="feature-card">
+            <strong>GUI 중심 확장성</strong>
+            <p>지금은 데스크톱 GUI, 이후에는 배포용 앱 UX로 옮기기 좋습니다.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section readiness" id="readiness">
+        <div class="section-copy">
+          <p class="eyebrow">Release Readiness</p>
+          <h2>배포 전에도 필요한 정보가 정리되어 있습니다</h2>
+        </div>
+        <div class="readiness-grid">
+          <article class="readiness-card">
+            <span>Workspace</span>
+            <strong>repo / docs / memory / logs / state / reports</strong>
+          </article>
+          <article class="readiness-card">
+            <span>Execution</span>
+            <strong>모델 선택, 추론 강도, 블록 수, 테스트 명령 제어</strong>
+          </article>
+          <article class="readiness-card">
+            <span>Review</span>
+            <strong>체크포인트 승인, 상태 요약, 진행 타임라인 제공</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="section contact-section" id="contact">
+        <div class="contact-card">
+          <div class="contact-copy">
+            <p class="eyebrow">Contact</p>
+            <h2>협업, 도입 문의, 제품화 논의</h2>
+            <p>
+              codex-auto를 내부 자동화 도구나 배포 가능한 앱으로 확장하려면,
+              아래 메일로 연락할 수 있습니다.
+            </p>
+          </div>
+          <div class="contact-actions">
+            <a class="contact-link" href="mailto:ahnd6474@gmail.com">ahnd6474@gmail.com</a>
+            <a class="button button-primary" href="mailto:ahnd6474@gmail.com?subject=codex-auto%20문의">메일 보내기</a>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
