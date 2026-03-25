@@ -15,7 +15,6 @@ dependencies = []
 
 [project.scripts]
 codex-auto = "codex_auto.cli:main"
-codex-auto-gui = "codex_auto.gui:main"
 codex-auto-ui-bridge = "codex_auto.ui_bridge:main"
 
 [tool.setuptools]

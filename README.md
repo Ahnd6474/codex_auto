@@ -34,48 +34,9 @@ workspace_root/
 python -m pip install -e .
 ```
 
-## GUI
+## Desktop UI
 
-Launch the desktop GUI:
-
-```bash
-codex-auto-gui
-```
-
-Or:
-
-```bash
-python -m codex_auto.gui
-```
-
-Without installing the package first:
-
-```bash
-python gui_main.py
-```
-
-The GUI lets you:
-
-- start from a simplified project screen: choose a working directory, a display name, and a GitHub connection mode
-- keep managed projects in a reusable list with a folder-style icon and user-defined display name
-- create or reopen a managed project without exposing the workspace root in the UI
-- prepare the project directory with `.venv` and `.gitignore` automatically when the project is saved
-- run Codex with `approval=never` and `sandbox=danger-full-access` from the GUI
-- choose from a small set of verified coding model presets instead of composing arbitrary Codex slugs
-- generate a test-driven execution plan from a free-form prompt
-- edit the Codex prompt templates in `src/codex_auto/docs/`
-- edit pending steps, including add/delete/reorder, UI descriptions, Codex instructions, and per-step test commands
-- execute the remaining steps sequentially and show progress directly in the flow chart
-- run a final closeout pass after all steps complete to optimize, verify, smoke-test when feasible, and write a handoff report
-- execute each step with one search-enabled Codex pass instead of multiple implementation passes
-- treat each completed step as a checkpoint and push after verification when `origin` is configured
-- return to the setup screen and open any previously managed project flow later
-
-Static website assets are kept separately under `website/`.
-
-## React + Tauri Desktop
-
-The Tkinter GUI remains available, but the same two-stage workflow now also has a React + Tauri desktop shell under `desktop/`.
+The current desktop UI lives under `desktop/` as a React + Tauri app.
 
 Development prerequisites:
 
@@ -95,8 +56,19 @@ The Tauri shell keeps the Python orchestration backend and adds:
 
 - a React setup screen for managed projects, GitHub link mode, model preset selection, and verification commands
 - a flow screen with prompt editing, plan generation, step editing, run control, closeout, and stop-after-step requests
-- background job polling through a Python JSON bridge instead of keeping Tkinter state in memory
+- background job polling through a Python JSON bridge instead of keeping UI execution state only in memory
 - desktop UI trace files under each managed project for stop requests and UI event history
+
+The desktop app lets you:
+
+- start from a managed project screen with working directory, display name, GitHub connection mode, and verification command inputs
+- keep managed projects in a reusable list with saved status, summaries, and runtime settings
+- generate, edit, reorder, and persist execution-plan steps
+- run the remaining steps sequentially and inspect activity/snapshot traces
+- request stop-after-step and run closeout after all plan steps complete
+- keep the Python orchestration backend, workspace layout, logs, reports, and rollback behavior intact
+
+Static website assets are kept separately under `website/`.
 
 ## Main Commands
 

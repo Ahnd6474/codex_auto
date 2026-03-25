@@ -8,7 +8,6 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from codex_auto.environment import ensure_gitignore
-from codex_auto.gui import _plan_state_with_running_step, _project_initials
 from codex_auto.model_selection import (
     DEFAULT_MODEL_PRESET_ID,
     MODEL_MODE_CODEX,
@@ -112,25 +111,6 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("ST2", svg)
         self.assertIn("#0f766e", svg)
         self.assertIn("#cbd5e1", svg)
-
-    def test_plan_state_with_running_step_marks_selected_step_immediately(self) -> None:
-        original = ExecutionPlanState(
-            steps=[
-                ExecutionStep(step_id="ST1", title="First", status="pending"),
-                ExecutionStep(step_id="ST2", title="Second", status="running"),
-                ExecutionStep(step_id="ST3", title="Third", status="pending"),
-            ]
-        )
-        updated = _plan_state_with_running_step(original, "ST3")
-
-        self.assertEqual(original.steps[1].status, "running")
-        self.assertEqual(updated.steps[0].status, "pending")
-        self.assertEqual(updated.steps[1].status, "paused")
-        self.assertEqual(updated.steps[2].status, "running")
-
-    def test_project_initials_prefers_first_two_tokens(self) -> None:
-        self.assertEqual(_project_initials("Alpha Beta"), "AB")
-        self.assertEqual(_project_initials("solo"), "SO")
 
     def test_model_selection_resolves_direct_slug_without_builder(self) -> None:
         selection = ModelSelection(mode=MODEL_MODE_SLUG, direct_slug="gpt-5.3-codex", effort="high")

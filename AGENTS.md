@@ -12,7 +12,7 @@ This repository builds and maintains `codex-auto`, a multi-repository automation
 6. Do not make `LONG_TERM_PLAN.md` mutable by default.
 7. Keep README examples aligned with the actual CLI.
 8. Add tests when practical, but avoid fake or non-executable pseudo-tests.
-9. Preserve the Tkinter GUI entrypoint unless there is a strong reason to replace it.
+9. Preserve the React + Tauri desktop entrypoint and the Python UI bridge unless there is a strong reason to replace them.
 
 ## Implementation Bias
 

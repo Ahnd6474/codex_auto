@@ -107,7 +107,7 @@ export function SetupStage({
           ) : (
             <div className="empty-state">
               <strong>No managed projects yet</strong>
-              <p>Create a new managed directory to start using the desktop shell.</p>
+              <p>Create a new managed directory to start using the desktop app.</p>
             </div>
           )}
         </div>
@@ -299,8 +299,8 @@ export function SetupStage({
             <span className="eyebrow">Desktop Shell</span>
             <h2>React + Tauri Workspace</h2>
             <p>
-              The Python orchestration backend stays intact. This shell replaces the Tkinter surface with a
-              desktop-friendly setup screen and a flow editor that can keep polling long-running work.
+              The Python orchestration backend stays intact. This app provides a desktop-friendly setup screen and
+              a flow editor that can keep polling long-running work.
             </p>
             <div className="welcome-notes">
               <div>

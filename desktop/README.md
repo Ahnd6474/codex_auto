@@ -34,4 +34,4 @@ npm.cmd run tauri:build
 - `src-tauri/`: Tauri shell and background job manager
 - `src/codex_auto/ui_bridge.py`: JSON bridge used by the desktop shell
 
-The desktop shell keeps one background job at a time, matching the original Tkinter `busy` behavior.
+The desktop shell keeps one background job at a time so project execution stays predictable.

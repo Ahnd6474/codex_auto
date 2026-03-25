@@ -177,9 +177,7 @@ export function FlowStage({
             </div>
             <div className={`status-pill status-pill--${statusTone(selectedStep?.status)}`}>{selectedStep?.status || "unselected"}</div>
           </div>
-          <p className="panel-copy">
-            Match the original Tkinter editor: titles, descriptions, Codex instructions, test commands, and success criteria are all editable for pending steps only.
-          </p>
+          <p className="panel-copy">Titles, descriptions, Codex instructions, test commands, and success criteria are all editable for pending steps only.</p>
           <div className="editor-grid">
             <label className="field">
               <span>Title</span>
