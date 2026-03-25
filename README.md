@@ -73,6 +73,31 @@ The GUI lets you:
 
 Static website assets are kept separately under `website/`.
 
+## React + Tauri Desktop
+
+The Tkinter GUI remains available, but the same two-stage workflow now also has a React + Tauri desktop shell under `desktop/`.
+
+Development prerequisites:
+
+- Node.js 20+
+- Rust toolchain with Tauri prerequisites for your OS
+- Python 3.11+ available to the Tauri shell so it can call `python -m codex_auto.ui_bridge`
+
+Run the desktop shell in development:
+
+```bash
+cd desktop
+npm.cmd install
+npm.cmd run tauri:dev
+```
+
+The Tauri shell keeps the Python orchestration backend and adds:
+
+- a React setup screen for managed projects, GitHub link mode, model preset selection, and verification commands
+- a flow screen with prompt editing, plan generation, step editing, run control, closeout, and stop-after-step requests
+- background job polling through a Python JSON bridge instead of keeping Tkinter state in memory
+- desktop UI trace files under each managed project for stop requests and UI event history
+
 ## Main Commands
 
 Initialize a managed repository:
@@ -179,9 +204,11 @@ The tool creates or maintains these files for each managed repository project:
 - `memory/task_summaries.jsonl`
 - `logs/passes.jsonl`
 - `logs/blocks.jsonl`
+- `logs/ui_events.jsonl`
 - `reports/latest_report.json`
 - `metadata.json`
 - `project_config.json`
+- `state/UI_RUN_CONTROL.json`
 
 Source prompt and scope templates:
 

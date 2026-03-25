@@ -123,6 +123,8 @@ class ProjectPaths:
     block_log_file: Path
     checkpoint_state_file: Path
     execution_plan_file: Path
+    ui_control_file: Path
+    ui_event_log_file: Path
     execution_flow_svg_file: Path
     closeout_report_file: Path
 

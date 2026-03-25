@@ -56,6 +56,8 @@ class WorkspaceManager:
             block_log_file=logs_dir / "blocks.jsonl",
             checkpoint_state_file=state_dir / "CHECKPOINTS.json",
             execution_plan_file=state_dir / "EXECUTION_PLAN.json",
+            ui_control_file=state_dir / "UI_RUN_CONTROL.json",
+            ui_event_log_file=logs_dir / "ui_events.jsonl",
             execution_flow_svg_file=docs_dir / "EXECUTION_FLOW.svg",
             closeout_report_file=docs_dir / "CLOSEOUT_REPORT.md",
         )
