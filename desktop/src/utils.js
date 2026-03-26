@@ -335,14 +335,10 @@ export function runtimeSummary(runtime, modelPresets = [], language = "en", mode
       String(runtime?.effort_selection_mode || "").trim().toLowerCase() === AUTO_REASONING_OPTION
         ? reasoningEffortLabel(AUTO_REASONING_OPTION, language)
         : reasoningEffortLabel(runtime.effort || "high", language);
-    if (normalizeLanguage(language) === "ko") {
-      const summary = translate("ko", "runtime.modelSummary", {
-        model: label,
-        effort: effortLabel,
-      });
-      return runtime?.use_fast_mode ? `${summary} | /fast` : summary;
-    }
-    const summary = `${label} | reasoning ${effortLabel}`;
+    const summary = translate(language, "runtime.modelSummaryGeneric", {
+      model: label,
+      effort: effortLabel,
+    });
     return runtime?.use_fast_mode ? `${summary} | /fast` : summary;
   }
   return translate(language, "runtime.noModelSelected");
@@ -352,34 +348,27 @@ export function progressCaption(plan, language = "en") {
   const steps = plan?.steps || [];
   const completed = steps.filter((step) => step.status === "completed").length;
   const total = steps.length;
-  const locale = normalizeLanguage(language);
   if (!total) {
-    return locale === "ko" ? "아직 계획이 없습니다" : "No plan yet";
+    return translate(language, "progress.noPlanYet");
   }
   if (completed === total) {
     if (plan?.closeout_status === "completed") {
-      return locale === "ko"
-        ? `${completed}/${total}단계 완료, 마감 완료`
-        : `Completed ${completed}/${total} steps, closeout completed`;
+      return translate(language, "progress.closeoutCompleted", { completed, total });
     }
     if (plan?.closeout_status === "running") {
-      return locale === "ko"
-        ? `${completed}/${total}단계 완료, 마감 실행 중`
-        : `Completed ${completed}/${total} steps, closeout running`;
+      return translate(language, "progress.closeoutRunning", { completed, total });
     }
     if (plan?.closeout_status === "failed") {
-      return locale === "ko"
-        ? `${completed}/${total}단계 완료, 마감 실패`
-        : `Completed ${completed}/${total} steps, closeout failed`;
+      return translate(language, "progress.closeoutFailed", { completed, total });
     }
-    return locale === "ko"
-      ? `${completed}/${total}단계 완료, 마감 대기`
-      : `Completed ${completed}/${total} steps, closeout pending`;
+    return translate(language, "progress.closeoutPending", { completed, total });
   }
   const nextStep = steps.find((step) => step.status !== "completed");
-  return locale === "ko"
-    ? `${completed}/${total}단계 완료, 다음: ${nextStep?.step_id || "완료"}`
-    : `Completed ${completed}/${total} steps, next: ${nextStep?.step_id || "done"}`;
+  return translate(language, "progress.doneNext", {
+    completed,
+    total,
+    next: nextStep?.step_id || translate(language, "run.done"),
+  });
 }
 
 export function canEditStep(step, busy) {
@@ -396,7 +385,7 @@ export function commandLabel(command, language = "en") {
     case "run-closeout":
       return translate(locale, "action.closeout");
     default:
-      return String(command || (locale === "ko" ? "백그라운드 작업" : "Background Job"))
+      return String(command || translate(locale, "action.backgroundJob"))
         .split("-")
         .join(" ");
   }

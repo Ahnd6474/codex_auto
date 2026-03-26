@@ -364,10 +364,22 @@ const translations = {
   },
 };
 
-const allTranslations = {
-  ...translations,
-  ...(window.JakalFlowGeneratedTranslations || {}),
-};
+const allTranslations = Object.fromEntries(
+  Array.from(
+    new Set([
+      ...Object.keys(translations),
+      ...Object.keys(window.JakalFlowGeneratedTranslations || {}),
+      ...Object.keys(window.JakalFlowManualTranslations || {}),
+    ]),
+  ).map((language) => [
+    language,
+    {
+      ...(translations[language] || {}),
+      ...((window.JakalFlowGeneratedTranslations || {})[language] || {}),
+      ...((window.JakalFlowManualTranslations || {})[language] || {}),
+    },
+  ]),
+);
 
 const supportedLanguages = [
   { value: "ko", label: "한국어", translation: "ko" },

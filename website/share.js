@@ -1,6 +1,17 @@
-const shareTranslations = window.JakalFlowGeneratedShareTranslations || {
-  en: {},
-};
+const shareTranslations = Object.fromEntries(
+  Array.from(
+    new Set([
+      ...Object.keys(window.JakalFlowGeneratedShareTranslations || { en: {} }),
+      ...Object.keys(window.JakalFlowManualShareTranslations || {}),
+    ]),
+  ).map((language) => [
+    language,
+    {
+      ...((window.JakalFlowGeneratedShareTranslations || { en: {} })[language] || {}),
+      ...((window.JakalFlowManualShareTranslations || {})[language] || {}),
+    },
+  ]),
+);
 
 const shareLanguageAliases = {
   zh: "zh-CN",

@@ -250,7 +250,7 @@ export function ConfigEditorView({
                   </option>
                 ))}
                 {additionalModels.length ? (
-                  <optgroup label={language === "ko" ? "기타 지원 모델" : "Additional Models"}>
+                  <optgroup label={t("config.additionalModels")}>
                     {additionalModels.map((item) => (
                       <option key={item.model} value={item.model}>
                         {item.display_name}

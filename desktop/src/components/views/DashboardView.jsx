@@ -38,7 +38,7 @@ export function DashboardView({ detail, planDraft, form, busy, modelPresets, mod
         <Stat label={t("dashboard.checkpointPending")} value={detail?.checkpoints?.pending ? t("common.yes") : t("common.no")} tone={detail?.checkpoints?.pending ? "warning" : "neutral"} />
         <Stat label={t("dashboard.inputTokens")} value={usage.input_tokens ?? 0} />
         <Stat label={t("dashboard.outputTokens")} value={usage.output_tokens ?? 0} />
-        <Stat label={language === "ko" ? "Codex 요금제" : "Codex Plan"} value={account.plan_type || t("common.unavailable")} tone="neutral" />
+        <Stat label={t("dashboard.codexPlan")} value={account.plan_type || t("common.unavailable")} tone="neutral" />
         {usageBuckets.map((bucket) => (
           <Stat
             key={bucket.key}
@@ -61,12 +61,12 @@ export function DashboardView({ detail, planDraft, form, busy, modelPresets, mod
 
         <div className="content-card">
           <div className="content-card__header">
-            <strong>{language === "ko" ? "Codex 사용량" : "Codex Usage"}</strong>
+            <strong>{t("dashboard.codexUsage")}</strong>
           </div>
           {(usageBuckets || []).some((bucket) => bucket.window) ? (
             <>
-              <p>{language === "ko" ? "인증 방식" : "Auth"}: {account.type || t("common.unavailable")}</p>
-              <p>{language === "ko" ? "계정" : "Account"}: {account.email || t("common.unavailable")}</p>
+              <p>{t("common.auth")}: {account.type || t("common.unavailable")}</p>
+              <p>{t("common.account")}: {account.email || t("common.unavailable")}</p>
               {usageBuckets.map((bucket) => (
                 <p key={bucket.key}>{bucket.label}: {rateLimitWindowSummary(bucket.window, language)}</p>
               ))}

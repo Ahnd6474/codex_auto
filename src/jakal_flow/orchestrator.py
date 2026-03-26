@@ -1074,6 +1074,12 @@ class Orchestrator:
     def _all_steps_completed(self, steps: list[ExecutionStep]) -> bool:
         return bool(steps) and all(step.status == "completed" for step in steps)
 
+    def _normalize_execution_mode(self, value: str | None) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized == "parallel":
+            return "parallel"
+        return "serial"
+
     def _status_from_plan_state(self, plan_state: ExecutionPlanState) -> str:
         if not plan_state.steps:
             return "setup_ready"

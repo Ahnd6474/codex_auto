@@ -1,4 +1,5 @@
 import { GENERATED_STRINGS } from "./generated_locale_data.js";
+import { MANUAL_LOCALE_OVERRIDES } from "./manual_locale_overrides.js";
 
 export const DEFAULT_LANGUAGE = "en";
 export const SUPPORTED_LANGUAGES = [
@@ -586,6 +587,19 @@ STRINGS.en["message.allProjectsDeleted"] = "All projects removed from jakal-flow
 STRINGS.en["option.generateWordReport"] = "Word Report Creation";
 STRINGS.en["option.lightMode"] = "Light Mode";
 STRINGS.en["option.developerMode"] = "Developer Mode";
+STRINGS.en["dashboard.codexPlan"] = "Codex Plan";
+STRINGS.en["dashboard.codexUsage"] = "Codex Usage";
+STRINGS.en["common.auth"] = "Auth";
+STRINGS.en["common.account"] = "Account";
+STRINGS.en["config.additionalModels"] = "Additional Models";
+STRINGS.en["runtime.modelSummaryGeneric"] = "{model} | reasoning {effort}";
+STRINGS.en["progress.noPlanYet"] = "No plan yet";
+STRINGS.en["progress.doneNext"] = "Completed {completed}/{total} steps, next: {next}";
+STRINGS.en["progress.closeoutCompleted"] = "Completed {completed}/{total} steps, closeout completed";
+STRINGS.en["progress.closeoutRunning"] = "Completed {completed}/{total} steps, closeout running";
+STRINGS.en["progress.closeoutFailed"] = "Completed {completed}/{total} steps, closeout failed";
+STRINGS.en["progress.closeoutPending"] = "Completed {completed}/{total} steps, closeout pending";
+STRINGS.en["action.backgroundJob"] = "Background Job";
 STRINGS.en["prompt.confirmDeleteAllProjects"] =
   "Remove all projects from jakal-flow? The managed docs, logs, and state will be deleted, but the original repository folders will stay in place.";
 STRINGS.en["sidebar.projectContextDelete"] = "Right-click to open project actions";
@@ -597,16 +611,30 @@ STRINGS.ko["message.allProjectsDeleted"] = "모든 프로젝트를 제거했습�
 STRINGS.ko["option.generateWordReport"] = "Word 보고서 제작";
 STRINGS.ko["option.lightMode"] = "밝은 모드";
 STRINGS.ko["option.developerMode"] = "개발자 모드";
+STRINGS.ko["dashboard.codexPlan"] = "Codex 요금제";
+STRINGS.ko["dashboard.codexUsage"] = "Codex 사용량";
+STRINGS.ko["common.auth"] = "인증 방식";
+STRINGS.ko["common.account"] = "계정";
+STRINGS.ko["config.additionalModels"] = "추가 지원 모델";
+STRINGS.ko["runtime.modelSummaryGeneric"] = "{model} | 추론 {effort}";
+STRINGS.ko["progress.noPlanYet"] = "아직 계획이 없습니다";
+STRINGS.ko["progress.doneNext"] = "{completed}/{total}단계 완료, 다음: {next}";
+STRINGS.ko["progress.closeoutCompleted"] = "{completed}/{total}단계 완료, 마감 완료";
+STRINGS.ko["progress.closeoutRunning"] = "{completed}/{total}단계 완료, 마감 진행 중";
+STRINGS.ko["progress.closeoutFailed"] = "{completed}/{total}단계 완료, 마감 실패";
+STRINGS.ko["progress.closeoutPending"] = "{completed}/{total}단계 완료, 마감 대기";
+STRINGS.ko["action.backgroundJob"] = "백그라운드 작업";
 STRINGS.ko["prompt.confirmDeleteAllProjects"] =
   "모든 프로젝트를 삭제할까요? 관리 중인 문서, 로그, 상태만 삭제되고 원본 저장소 폴더는 그대로 유지됩니다.";
 STRINGS.ko["sidebar.projectContextDelete"] = "우클릭으로 프로젝트 메뉴 열기";
 
 const ALL_STRINGS = Object.fromEntries(
-  Array.from(new Set([...Object.keys(STRINGS), ...Object.keys(GENERATED_STRINGS)])).map((language) => [
+  Array.from(new Set([...Object.keys(STRINGS), ...Object.keys(GENERATED_STRINGS), ...Object.keys(MANUAL_LOCALE_OVERRIDES)])).map((language) => [
     language,
     {
       ...(STRINGS[language] || {}),
       ...(GENERATED_STRINGS[language] || {}),
+      ...(MANUAL_LOCALE_OVERRIDES[language] || {}),
     },
   ]),
 );
