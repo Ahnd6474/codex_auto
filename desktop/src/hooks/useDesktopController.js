@@ -12,6 +12,7 @@ import {
   firstSelectableStepId,
   projectFormFromDetail,
   shouldKeepUnsavedPlan,
+  shouldReplaceVisibleProject,
 } from "../utils";
 import { usePersistentState } from "./usePersistentState";
 
@@ -164,7 +165,7 @@ export function useDesktopController() {
           return;
         }
         setActiveJobId("");
-        if (job.result?.project) {
+        if (job.result?.project && shouldReplaceVisibleProject(selectedProjectId, job.result.project.repo_id)) {
           applyProjectDetail(job.result, { preserveDirtyPlan: false });
         }
         const listing = await bridgeRequest("list-projects", null, workspaceRoot || null);

@@ -17,6 +17,7 @@ import {
   runtimeSummary,
   selectedConfigReasoning,
   shouldKeepUnsavedPlan,
+  shouldReplaceVisibleProject,
   statusTone,
 } from "../src/utils.js";
 
@@ -117,6 +118,13 @@ test("shouldKeepUnsavedPlan only preserves local edits for the same project", ()
   assert.equal(shouldKeepUnsavedPlan("repo-a", "repo-b", true), false);
   assert.equal(shouldKeepUnsavedPlan("repo-a", "", true), false);
   assert.equal(shouldKeepUnsavedPlan("repo-a", "repo-a", false), false);
+});
+
+test("shouldReplaceVisibleProject only accepts a completed job for the visible project", () => {
+  assert.equal(shouldReplaceVisibleProject("", "repo-a"), true);
+  assert.equal(shouldReplaceVisibleProject("repo-a", "repo-a"), true);
+  assert.equal(shouldReplaceVisibleProject("repo-a", "repo-b"), false);
+  assert.equal(shouldReplaceVisibleProject("repo-a", ""), false);
 });
 
 test("buildProjectPayload trims fields, blanks origin_url for existing repos, and clones plan data", () => {

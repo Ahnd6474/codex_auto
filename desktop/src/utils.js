@@ -75,6 +75,15 @@ export function shouldKeepUnsavedPlan(currentProjectId, nextProjectId, planDirty
   return Boolean(current) && current === next;
 }
 
+export function shouldReplaceVisibleProject(selectedProjectId, nextProjectId) {
+  const selected = String(selectedProjectId || "").trim();
+  const next = String(nextProjectId || "").trim();
+  if (!next) {
+    return false;
+  }
+  return !selected || selected === next;
+}
+
 export function buildProjectPayload(form, plan = null) {
   const payload = {
     project_dir: form.project_dir.trim(),
