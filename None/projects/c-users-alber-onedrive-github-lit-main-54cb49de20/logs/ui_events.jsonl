@@ -1,0 +1,4 @@
+{"details": {}, "event_type": "project-saved", "message": "Saved project setup from the desktop shell.", "timestamp": "2026-03-26T13:15:04+00:00"}
+{"details": {"max_steps": 5}, "event_type": "plan-generated", "message": "Generated a new execution plan with 5 step(s).", "timestamp": "2026-03-26T13:25:00+00:00"}
+{"details": {}, "event_type": "run-started", "message": "Started running the remaining execution steps.", "timestamp": "2026-03-26T13:25:31+00:00"}
+{"details": {"step_id": "ST1", "title": "Stabilize Core Repository Spine"}, "event_type": "step-started", "message": "Running ST1: Stabilize Core Repository Spine", "timestamp": "2026-03-26T13:25:31+00:00"}

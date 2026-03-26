@@ -1,3 +1,13 @@
 {
-  "projects": {}
+  "projects": {
+    "54cb49de202ec7df13e43069c1f910205bff0b8f": {
+      "branch": "main",
+      "project_root": "C:\\Users\\alber\\OneDrive\\\ubb38\uc11c\\GitHub\\codex_auto\\None\\projects\\c-users-alber-onedrive-github-lit-main-54cb49de20",
+      "repo_id": "54cb49de202ec7df13e43069c1f910205bff0b8f",
+      "repo_kind": "local",
+      "repo_path": "C:\\Users\\alber\\OneDrive\\\ubb38\uc11c\\GitHub\\lit",
+      "repo_url": "https://github.com/Ahnd6474/lit.git",
+      "slug": "c-users-alber-onedrive-github-lit-main-54cb49de20"
+    }
+  }
 }
