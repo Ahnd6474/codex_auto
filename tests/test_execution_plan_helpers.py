@@ -55,18 +55,23 @@ class ExecutionPlanHelperTests(unittest.TestCase):
           "summary": "Build the feature in small verified steps.",
           "tasks": [
             {
+              "step_id": "ST1",
               "task_title": "Add the CLI flag",
               "display_description": "Expose the new flag to users.",
               "codex_description": "Inspect the CLI parser, add the flag, and cover it with tests.",
               "reasoning_effort": "medium",
-              "parallel_group": "PG1",
+              "depends_on": [],
+              "owned_paths": ["src/cli.py", "tests/test_cli.py"],
               "success_criteria": "CLI parsing succeeds."
             },
             {
+              "step_id": "ST2",
               "task_title": "Wire the backend",
               "display_description": "Connect the new option to execution.",
               "codex_description": "Review the execution path, add targeted tests, and wire the backend.",
               "reasoning_effort": "high",
+              "depends_on": ["ST1"],
+              "owned_paths": ["src/backend.py"],
               "success_criteria": "Backend path is covered."
             }
           ]
@@ -82,10 +87,12 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("CLI parser", steps[0].codex_description)
         self.assertEqual(steps[0].test_command, "python -m unittest")
         self.assertEqual(steps[0].reasoning_effort, "medium")
-        self.assertEqual(steps[0].parallel_group, "PG1")
+        self.assertEqual(steps[0].depends_on, [])
+        self.assertEqual(steps[0].owned_paths, ["src/cli.py", "tests/test_cli.py"])
         self.assertEqual(steps[1].step_id, "ST2")
         self.assertEqual(steps[1].test_command, "python -m unittest")
         self.assertEqual(steps[1].reasoning_effort, "high")
+        self.assertEqual(steps[1].depends_on, ["ST1"])
 
     def test_parse_execution_plan_response_defaults_reasoning_effort(self) -> None:
         response = """
@@ -152,12 +159,14 @@ class ExecutionPlanHelperTests(unittest.TestCase):
                 "step_id": "ST1",
                 "title": "Reasoning task",
                 "reasoning_effort": "xhigh",
-                "parallel_group": "PG2",
+                "depends_on": "ST0, ST2",
+                "owned_paths": "src/app.py,\nsrc/lib.py",
             }
         )
 
         self.assertEqual(step.reasoning_effort, "xhigh")
-        self.assertEqual(step.parallel_group, "PG2")
+        self.assertEqual(step.depends_on, ["ST0", "ST2"])
+        self.assertEqual(step.owned_paths, ["src/app.py", "src/lib.py"])
 
     def test_execution_plan_state_reads_closeout_fields(self) -> None:
         state = ExecutionPlanState.from_dict(
@@ -178,25 +187,39 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(state.closeout_commit_hash, "abc123")
         self.assertEqual(state.closeout_notes, "final tests passed")
 
-    def test_pending_execution_batches_groups_contiguous_parallel_steps(self) -> None:
+    def test_pending_execution_batches_uses_dependency_ready_waves(self) -> None:
         orchestrator = Orchestrator(Path.cwd() / ".tmp_pending_batches_workspace")
         plan_state = ExecutionPlanState(
             execution_mode="parallel",
             steps=[
-                ExecutionStep(step_id="ST1", title="A", parallel_group="PG1"),
-                ExecutionStep(step_id="ST2", title="B", parallel_group="PG1"),
-                ExecutionStep(step_id="ST3", title="C", parallel_group=""),
-                ExecutionStep(step_id="ST4", title="D", parallel_group="PG2", status="completed"),
-                ExecutionStep(step_id="ST5", title="E", parallel_group="PG3"),
-                ExecutionStep(step_id="ST6", title="F", parallel_group="PG3"),
+                ExecutionStep(step_id="ST1", title="Root", status="completed"),
+                ExecutionStep(step_id="ST2", title="Frontend", depends_on=["ST1"], owned_paths=["desktop/src"]),
+                ExecutionStep(step_id="ST3", title="Backend", depends_on=["ST1"], owned_paths=["src/jakal_flow"]),
+                ExecutionStep(step_id="ST4", title="Finalize", depends_on=["ST2", "ST3"], owned_paths=["docs"]),
             ],
         )
 
         batches = orchestrator.pending_execution_batches(plan_state)
 
-        self.assertEqual([[step.step_id for step in batch] for batch in batches], [["ST1", "ST2"], ["ST3"], ["ST5", "ST6"]])
+        self.assertEqual([[step.step_id for step in batch] for batch in batches], [["ST2", "ST3"]])
 
-    def test_save_execution_plan_state_clears_parallel_group_in_serial_mode(self) -> None:
+    def test_pending_execution_batches_splits_conflicting_owned_paths(self) -> None:
+        orchestrator = Orchestrator(Path.cwd() / ".tmp_pending_batches_workspace")
+        plan_state = ExecutionPlanState(
+            execution_mode="parallel",
+            steps=[
+                ExecutionStep(step_id="ST1", title="Root", status="completed"),
+                ExecutionStep(step_id="ST2", title="A", depends_on=["ST1"], owned_paths=["src/shared"]),
+                ExecutionStep(step_id="ST3", title="B", depends_on=["ST1"], owned_paths=["src/shared/utils"]),
+                ExecutionStep(step_id="ST4", title="C", depends_on=["ST1"], owned_paths=["tests"]),
+            ],
+        )
+
+        batches = orchestrator.pending_execution_batches(plan_state)
+
+        self.assertEqual([[step.step_id for step in batch] for batch in batches], [["ST2"], ["ST3", "ST4"]])
+
+    def test_save_execution_plan_state_clears_dag_fields_in_serial_mode(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_serial_parallel_group_test"
         shutil.rmtree(temp_root, ignore_errors=True)
         workspace_root = temp_root / "workspace"
@@ -217,7 +240,8 @@ class ExecutionPlanHelperTests(unittest.TestCase):
                             ExecutionStep(
                                 step_id="custom-1",
                                 title="Serialized step",
-                                parallel_group="PG1",
+                                depends_on=["custom-2"],
+                                owned_paths=["src/serial.py"],
                             )
                         ],
                     ),
@@ -228,6 +252,8 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(context.runtime.execution_mode, "serial")
         self.assertEqual(plan_state.execution_mode, "serial")
         self.assertEqual(plan_state.steps[0].parallel_group, "")
+        self.assertEqual(plan_state.steps[0].depends_on, [])
+        self.assertEqual(plan_state.steps[0].owned_paths, [])
 
     def test_run_saved_execution_step_uses_step_reasoning_effort(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_step_reasoning_test"
@@ -370,12 +396,17 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("{user_prompt}", plan_template)
         self.assertIn("{max_steps}", plan_template)
         self.assertIn("{execution_mode}", plan_template)
+        self.assertIn('"step_id": "stable id like ST1"', plan_template)
+        self.assertIn('"depends_on": ["step ids that must complete first"]', plan_template)
+        self.assertIn('"owned_paths": ["repo-relative paths or directories this step primarily owns"]', plan_template)
         self.assertIn("{reference_notes}", plan_template)
         self.assertIn("src/jakal_flow/docs/REFERENCE_GUIDE.md", plan_template)
         self.assertIn("{task_title}", step_template)
         self.assertIn("{display_description}", step_template)
         self.assertIn("{codex_description}", step_template)
         self.assertIn("{success_criteria}", step_template)
+        self.assertIn("{depends_on}", step_template)
+        self.assertIn("{owned_paths}", step_template)
         self.assertIn("{plan_snapshot}", step_template)
         self.assertIn("{completed_steps}", final_template)
         self.assertIn("{closeout_report_file}", final_template)

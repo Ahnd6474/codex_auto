@@ -1,4 +1,5 @@
 import { DashboardView } from "../views/DashboardView";
+import { ParallelRunControlView } from "../views/ParallelRunControlView";
 import { RunControlView } from "../views/RunControlView";
 import { ReportsView } from "../views/ReportsView";
 import { HistoryView } from "../views/HistoryView";
@@ -51,6 +52,9 @@ export function CenterWorkspace({
 }) {
   const { t } = useI18n();
   const developerMode = Boolean(programSettings?.developer_mode);
+  const executionMode = String(form?.runtime?.execution_mode || planDraft?.execution_mode || detail?.runtime?.execution_mode || "serial")
+    .trim()
+    .toLowerCase();
 
   const visibleTabs = [
     ["run", t("tab.flow")],
@@ -73,30 +77,56 @@ export function CenterWorkspace({
       </div>
 
       {activeTab === "run" ? (
-        <RunControlView
-          detail={detail}
-          planDraft={planDraft}
-          shareSettings={shareSettings}
-          selectedStepId={selectedStepId}
-          busy={busy}
-          onPromptChange={onPromptChange}
-          onGeneratePlan={onGeneratePlan}
-          onSavePlan={onSavePlan}
-          onResetPlan={onResetPlan}
-          onRunPlan={onRunPlan}
-          onRunCloseout={onRunCloseout}
-          onRequestStop={onRequestStop}
-          onGenerateShareLink={onGenerateShareLink}
-          onCopyShareLink={onCopyShareLink}
-          onRevokeShareLink={onRevokeShareLink}
-          onChangeShareSettings={onChangeShareSettings}
-          onSelectStep={onSelectStep}
-          onUpdateStepField={onUpdateStepField}
-          onSaveStepLocal={onSaveStepLocal}
-          onAddStep={onAddStep}
-          onDeleteStep={onDeleteStep}
-          onMoveStep={onMoveStep}
-        />
+        executionMode === "parallel" ? (
+          <ParallelRunControlView
+            detail={detail}
+            planDraft={planDraft}
+            shareSettings={shareSettings}
+            selectedStepId={selectedStepId}
+            busy={busy}
+            onPromptChange={onPromptChange}
+            onGeneratePlan={onGeneratePlan}
+            onSavePlan={onSavePlan}
+            onResetPlan={onResetPlan}
+            onRunPlan={onRunPlan}
+            onRunCloseout={onRunCloseout}
+            onRequestStop={onRequestStop}
+            onGenerateShareLink={onGenerateShareLink}
+            onCopyShareLink={onCopyShareLink}
+            onRevokeShareLink={onRevokeShareLink}
+            onChangeShareSettings={onChangeShareSettings}
+            onSelectStep={onSelectStep}
+            onUpdateStepField={onUpdateStepField}
+            onSaveStepLocal={onSaveStepLocal}
+            onAddStep={onAddStep}
+            onDeleteStep={onDeleteStep}
+          />
+        ) : (
+          <RunControlView
+            detail={detail}
+            planDraft={planDraft}
+            shareSettings={shareSettings}
+            selectedStepId={selectedStepId}
+            busy={busy}
+            onPromptChange={onPromptChange}
+            onGeneratePlan={onGeneratePlan}
+            onSavePlan={onSavePlan}
+            onResetPlan={onResetPlan}
+            onRunPlan={onRunPlan}
+            onRunCloseout={onRunCloseout}
+            onRequestStop={onRequestStop}
+            onGenerateShareLink={onGenerateShareLink}
+            onCopyShareLink={onCopyShareLink}
+            onRevokeShareLink={onRevokeShareLink}
+            onChangeShareSettings={onChangeShareSettings}
+            onSelectStep={onSelectStep}
+            onUpdateStepField={onUpdateStepField}
+            onSaveStepLocal={onSaveStepLocal}
+            onAddStep={onAddStep}
+            onDeleteStep={onDeleteStep}
+            onMoveStep={onMoveStep}
+          />
+        )
       ) : null}
       {activeTab === "dashboard" ? (
         <DashboardView

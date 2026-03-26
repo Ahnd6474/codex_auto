@@ -426,7 +426,7 @@ def parse_execution_plan_response(
         parallel_group = str(item.get("parallel_group", "")).strip()
         steps.append(
             ExecutionStep(
-                step_id=f"ST{len(steps) + 1}",
+                step_id=str(item.get("step_id", item.get("node_id", ""))).strip() or f"ST{len(steps) + 1}",
                 title=title,
                 display_description=display_description,
                 codex_description=codex_description,
@@ -434,6 +434,8 @@ def parse_execution_plan_response(
                 success_criteria=str(item.get("success_criteria", "")).strip(),
                 reasoning_effort=reasoning_effort,
                 parallel_group=parallel_group,
+                depends_on=item.get("depends_on", []),
+                owned_paths=item.get("owned_paths", []),
                 status="pending",
             )
         )
@@ -535,6 +537,8 @@ def implementation_prompt(
         if execution_step and execution_step.success_criteria.strip()
         else f"The verification command `{test_command}` exits successfully."
     )
+    depends_on = ", ".join(execution_step.depends_on) if execution_step and execution_step.depends_on else "none"
+    owned_paths = "\n".join(f"- {path}" for path in execution_step.owned_paths) if execution_step and execution_step.owned_paths else "- none declared"
     try:
         return template.format(
             repo_dir=context.paths.repo_dir,
@@ -545,6 +549,8 @@ def implementation_prompt(
             display_description=display_description,
             codex_description=codex_description,
             success_criteria=success_criteria,
+            depends_on=depends_on,
+            owned_paths=owned_paths,
             candidate_rationale=candidate.rationale,
             memory_context=memory_context,
             plan_snapshot=compact_text(plan_text, 4000),
@@ -677,6 +683,7 @@ def execution_plan_markdown(
     plan_title: str,
     project_prompt: str,
     summary: str,
+    execution_mode: str,
     steps: list[ExecutionStep],
 ) -> str:
     lines = [
@@ -698,7 +705,7 @@ def execution_plan_markdown(
         summary.strip() or "Codex-generated execution plan for the current repository state.",
         "",
         "## Execution Mode",
-        context.runtime.execution_mode.strip().lower() or "serial",
+        execution_mode.strip().lower() or "serial",
         "",
         "## Planned Steps",
     ]
@@ -712,6 +719,8 @@ def execution_plan_markdown(
                 f"  - Codex instruction: {step.codex_description or step.display_description or step.title}",
                 f"  - GPT reasoning: {step.reasoning_effort or context.runtime.effort or 'high'}",
                 f"  - Parallel group: {step.parallel_group or 'none'}",
+                f"  - Depends on: {', '.join(step.depends_on) if step.depends_on else 'none'}",
+                f"  - Owned paths: {', '.join(step.owned_paths) if step.owned_paths else 'none declared'}",
                 f"  - Verification: {step.test_command or 'Use the default test command.'}",
                 f"  - Success criteria: {step.success_criteria or 'Verification command completes successfully.'}",
             ]
@@ -725,7 +734,7 @@ def execution_plan_markdown(
             "",
             "## Operating Constraints",
             "- Treat each planned step as a checkpoint.",
-            "- Only steps with the same non-empty parallel group may run together in parallel mode.",
+            "- In parallel mode, only dependency-ready steps with disjoint owned paths may run together.",
             "- Commit and push after a verified step when an origin remote is configured.",
             "- Users may edit only steps that have not started yet.",
             "",
@@ -738,7 +747,31 @@ def execution_steps_to_plan_items(steps: list[ExecutionStep]) -> list[PlanItem]:
     return [PlanItem(item_id=step.step_id, text=step.title) for step in steps if step.title.strip()]
 
 
-def execution_plan_svg(title: str, steps: list[ExecutionStep]) -> str:
+def _execution_graph_levels(steps: list[ExecutionStep]) -> list[list[ExecutionStep]]:
+    if not steps:
+        return []
+    step_ids = [step.step_id for step in steps]
+    step_by_id = {step.step_id: step for step in steps}
+    visited: set[str] = set()
+    levels: list[list[ExecutionStep]] = []
+    while len(visited) < len(step_ids):
+        ready = [
+            step_by_id[step_id]
+            for step_id in step_ids
+            if step_id not in visited
+            and all(dep in visited for dep in step_by_id[step_id].depends_on if dep in step_by_id)
+        ]
+        if not ready:
+            for step_id in step_ids:
+                if step_id not in visited:
+                    ready = [step_by_id[step_id]]
+                    break
+        levels.append(ready)
+        visited.update(step.step_id for step in ready)
+    return levels
+
+
+def execution_plan_svg(title: str, steps: list[ExecutionStep], execution_mode: str = "serial") -> str:
     width = 1180
     box_width = 220
     box_height = 120
@@ -761,6 +794,78 @@ def execution_plan_svg(title: str, steps: list[ExecutionStep]) -> str:
         '<rect width="100%" height="100%" fill="#f8fafc" />',
         f'<text x="{margin_x}" y="34" fill="#0f172a" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="24" font-weight="700">{escape(title)}</text>',
     ]
+    uses_dag = execution_mode.strip().lower() == "parallel" and any(step.depends_on or step.owned_paths for step in steps)
+    if uses_dag:
+        levels = _execution_graph_levels(steps)
+        dag_margin_x = 48
+        dag_margin_y = 68
+        dag_box_width = 220
+        dag_box_height = 112
+        dag_gap_x = 92
+        dag_gap_y = 28
+        dag_width = max(
+            width,
+            dag_margin_x * 2 + len(levels) * dag_box_width + max(0, len(levels) - 1) * dag_gap_x,
+        )
+        dag_height = max(
+            height,
+            dag_margin_y * 2 + max((len(level) for level in levels), default=1) * dag_box_height + max(0, max((len(level) for level in levels), default=1) - 1) * dag_gap_y + 40,
+        )
+        parts = [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{dag_width}" height="{dag_height}" viewBox="0 0 {dag_width} {dag_height}" role="img">',
+            '<rect width="100%" height="100%" fill="#f8fafc" />',
+            f'<text x="{dag_margin_x}" y="34" fill="#0f172a" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="24" font-weight="700">{escape(title)}</text>',
+        ]
+        positions: dict[str, tuple[float, float]] = {}
+        for level_index, level in enumerate(levels):
+            x = dag_margin_x + level_index * (dag_box_width + dag_gap_x)
+            parts.append(
+                f'<text x="{x}" y="56" fill="#475569" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="13" font-weight="600">Layer {level_index + 1}</text>'
+            )
+            for row_index, step in enumerate(level):
+                y = dag_margin_y + row_index * (dag_box_height + dag_gap_y)
+                positions[step.step_id] = (x, y)
+        for step in steps:
+            if step.step_id not in positions:
+                continue
+            target_x, target_y = positions[step.step_id]
+            for dependency in step.depends_on:
+                if dependency not in positions:
+                    continue
+                source_x, source_y = positions[dependency]
+                start_x = source_x + dag_box_width
+                start_y = source_y + dag_box_height / 2
+                end_x = target_x
+                end_y = target_y + dag_box_height / 2
+                control_x = start_x + (end_x - start_x) / 2
+                parts.extend(
+                    [
+                        f'<path d="M {start_x} {start_y} C {control_x} {start_y}, {control_x} {end_y}, {end_x - 12} {end_y}" stroke="#94a3b8" stroke-width="3" fill="none" stroke-linecap="round" />',
+                        f'<polygon points="{end_x - 20},{end_y - 7} {end_x - 4},{end_y} {end_x - 20},{end_y + 7}" fill="#94a3b8" />',
+                    ]
+                )
+        for step in steps:
+            if step.step_id not in positions:
+                continue
+            x, y = positions[step.step_id]
+            status = step.status if step.status in palette else "pending"
+            fill, text_fill = palette[status]
+            title_text = compact_text(step.title, 70)
+            detail_source = step.display_description or (", ".join(step.depends_on) if step.depends_on else "")
+            if not detail_source and step.owned_paths:
+                detail_source = f"{len(step.owned_paths)} owned path(s)"
+            detail_text = compact_text(detail_source or "no DAG metadata", 58)
+            parts.extend(
+                [
+                    f'<rect x="{x}" y="{y}" rx="20" ry="20" width="{dag_box_width}" height="{dag_box_height}" fill="{fill}" />',
+                    f'<text x="{x + 18}" y="{y + 26}" fill="{text_fill}" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="14" font-weight="700">{escape(step.step_id)}</text>',
+                    f'<text x="{x + 18}" y="{y + 50}" fill="{text_fill}" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="13">{escape(title_text)}</text>',
+                    f'<text x="{x + 18}" y="{y + 76}" fill="{text_fill}" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="11">{escape(detail_text)}</text>',
+                    f'<text x="{x + 18}" y="{y + 96}" fill="{text_fill}" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="11">{escape(status)}</text>',
+                ]
+            )
+        parts.append("</svg>")
+        return "\n".join(parts)
     for index, step in enumerate(steps):
         row = index // per_row
         col = index % per_row
