@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
-import subprocess
 import shutil
 from pathlib import Path
 from uuid import uuid4
@@ -48,7 +47,8 @@ from .planning import (
     load_source_prompt_template,
 )
 from .reporting import Reporter
-from .utils import decode_process_output, ensure_dir, now_utc_iso, read_json, read_last_jsonl, read_text, write_json, write_text
+from .utils import ensure_dir, now_utc_iso, read_json, read_last_jsonl, read_text, write_json, write_text
+from .verification import VerificationRunner
 from .workspace import WorkspaceManager
 
 
@@ -56,6 +56,7 @@ class Orchestrator:
     def __init__(self, workspace_root: Path) -> None:
         self.workspace = WorkspaceManager(workspace_root)
         self.git = GitOps()
+        self.verification = VerificationRunner()
 
     def setup_local_project(
         self,
@@ -2087,26 +2088,11 @@ class Orchestrator:
         return run_result, test_result, commit_hash
 
     def _run_test_command(self, context: ProjectContext, block_index: int, label: str) -> TestRunResult:
-        block_dir = context.paths.logs_dir / f"block_{block_index:04d}"
-        stdout_file = block_dir / f"{label}.test.stdout.log"
-        stderr_file = block_dir / f"{label}.test.stderr.log"
-        completed = subprocess.run(
-            context.runtime.test_cmd,
-            cwd=context.paths.repo_dir,
-            shell=True,
-            capture_output=True,
-            check=False,
-        )
-        stdout = decode_process_output(completed.stdout)
-        stderr = decode_process_output(completed.stderr)
-        write_text(stdout_file, stdout)
-        write_text(stderr_file, stderr)
-        return TestRunResult(
+        return self.verification.run(
+            context=context,
+            block_index=block_index,
+            label=label,
             command=context.runtime.test_cmd,
-            returncode=completed.returncode,
-            stdout_file=stdout_file,
-            stderr_file=stderr_file,
-            summary=f"{context.runtime.test_cmd} exited with {completed.returncode}",
         )
 
     def _commit_message(self, block_index: int, pass_name: str, task: str) -> str:

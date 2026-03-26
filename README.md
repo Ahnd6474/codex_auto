@@ -164,6 +164,7 @@ Each run block:
 3. Generates 2-3 candidate tasks and selects one
 4. Runs one search-enabled Codex pass for the selected block
 5. Runs tests after the pass
+   If the repository tree, verification command, and environment fingerprint exactly match a prior validated run, `jakal-flow` replays the cached verification result instead of rerunning the same suite.
 6. Commits only safe validated changes
 7. Stops at checkpoint boundaries for user review when approval is required
 8. Pushes to GitHub when the user approves a checkpoint in the GUI
@@ -187,6 +188,7 @@ The tool creates or maintains these files for each managed repository project:
 - `docs/attempt_history.md`
 - `state/LOOP_STATE.json`
 - `state/CHECKPOINTS.json`
+- `state/verification_cache/*.json`
 - `state/share_sessions.json`
 - `memory/success_patterns.jsonl`
 - `memory/failure_patterns.jsonl`

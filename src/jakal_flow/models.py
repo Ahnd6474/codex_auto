@@ -225,6 +225,11 @@ class TestRunResult:
     stdout_file: Path
     stderr_file: Path
     summary: str
+    duration_seconds: float = 0.0
+    source_duration_seconds: float = 0.0
+    cache_hit: bool = False
+    state_fingerprint: str | None = None
+    cache_key: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return _normalize(self)
