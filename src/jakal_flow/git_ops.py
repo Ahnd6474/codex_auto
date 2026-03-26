@@ -13,9 +13,22 @@ class GitCommandError(RuntimeError):
 
 
 class GitOps:
+    def _safe_directory_args(self, cwd: Path) -> list[str]:
+        resolved = cwd.resolve()
+        args: list[str] = []
+        seen: set[str] = set()
+        for candidate in (resolved, *resolved.parents):
+            normalized = candidate.as_posix()
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            args.extend(["-c", f"safe.directory={normalized}"])
+        return args
+
     def run(self, args: list[str], cwd: Path, check: bool = True) -> CommandResult:
+        command = ["git", *self._safe_directory_args(cwd), *args]
         completed = subprocess.run(
-            ["git", *args],
+            command,
             cwd=cwd,
             capture_output=True,
             check=False,
@@ -23,7 +36,7 @@ class GitOps:
         stdout = decode_process_output(completed.stdout)
         stderr = decode_process_output(completed.stderr)
         result = CommandResult(
-            command=["git", *args],
+            command=command,
             returncode=completed.returncode,
             stdout=stdout,
             stderr=stderr,
@@ -53,6 +66,9 @@ class GitOps:
             self.run(["init"], cwd=repo_dir)
             created = True
         if branch:
+            current_branch = self.current_branch(repo_dir)
+            if current_branch == branch:
+                return created
             branch_check = self.run(["rev-parse", "--verify", branch], cwd=repo_dir, check=False)
             if branch_check.returncode == 0:
                 self.run(["checkout", branch], cwd=repo_dir)
