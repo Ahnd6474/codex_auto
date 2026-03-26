@@ -20,6 +20,7 @@ function FlowNode({ step, selected, onSelect, language, t }) {
 export function RunControlView({
   detail,
   planDraft,
+  shareSettings,
   selectedStepId,
   busy,
   onPromptChange,
@@ -32,6 +33,7 @@ export function RunControlView({
   onGenerateShareLink,
   onCopyShareLink,
   onRevokeShareLink,
+  onChangeShareSettings,
   onSelectStep,
   onUpdateStepField,
   onSaveStepLocal,
@@ -138,6 +140,39 @@ export function RunControlView({
           </div>
           <p>{t("run.shareDescription")}</p>
           <p>{t("run.sharePoll")}</p>
+          <div className="share-panel">
+            <label className="field">
+              <span>{t("run.shareBindHost")}</span>
+              <select
+                value={shareSettings?.bind_host || "127.0.0.1"}
+                onChange={(event) =>
+                  onChangeShareSettings((current) => ({
+                    ...(current || {}),
+                    bind_host: event.target.value,
+                  }))
+                }
+                disabled={busy}
+              >
+                <option value="127.0.0.1">{t("run.shareBindLocal")}</option>
+                <option value="0.0.0.0">{t("run.shareBindNetwork")}</option>
+              </select>
+            </label>
+            <label className="field field--wide">
+              <span>{t("run.sharePublicBaseUrl")}</span>
+              <input
+                value={shareSettings?.public_base_url || ""}
+                onChange={(event) =>
+                  onChangeShareSettings((current) => ({
+                    ...(current || {}),
+                    public_base_url: event.target.value,
+                  }))
+                }
+                placeholder="https://your-public-share.example"
+                disabled={busy}
+              />
+            </label>
+            <p className="muted">{t("run.shareExternalHint")}</p>
+          </div>
           {activeShare?.share_url ? (
             <div className="share-panel">
               <label className="field field--wide">
@@ -148,6 +183,12 @@ export function RunControlView({
                 <span>{t("run.shareExpires", { expiresAt: activeShare.expires_at || t("common.unavailable") })}</span>
                 <span>{t("run.shareServerAddress", { address: shareServer?.base_url || t("common.unavailable") })}</span>
               </div>
+              {activeShare?.local_url && activeShare.local_url !== activeShare.share_url ? (
+                <label className="field field--wide">
+                  <span>{t("run.shareLocalLink")}</span>
+                  <input value={activeShare.local_url} readOnly />
+                </label>
+              ) : null}
               <div className="action-row">
                 <button className="toolbar-button toolbar-button--accent" onClick={onCopyShareLink} type="button" disabled={busy}>
                   {t("action.copyLink")}

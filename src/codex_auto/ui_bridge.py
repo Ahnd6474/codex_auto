@@ -10,17 +10,23 @@ import sys
 import time
 from typing import Any
 
-from .model_selection import DEFAULT_MODEL_PRESET_ID, MODEL_PRESETS, model_preset_by_id
+from .codex_app_server import AUTO_MODEL_SLUG, fetch_codex_backend_snapshot
+from .model_selection import DEFAULT_MODEL_PRESET_ID, MODEL_PRESETS, model_preset_by_id, normalize_reasoning_effort
 from .models import ExecutionPlanState, ProjectContext, RuntimeOptions
 from .orchestrator import Orchestrator
 from .share import (
     DEFAULT_SHARE_HOST,
     DEFAULT_SHARE_PORT,
+    DEFAULT_SHARE_PUBLIC_BASE_URL,
     DEFAULT_SHARE_TTL_MINUTES,
+    ShareServerConfig,
     create_share_session,
+    load_share_server_config,
+    load_share_server_state,
     project_share_payload,
     public_session_summary,
     revoke_share_session,
+    save_share_server_config,
     share_server_status_payload,
 )
 from .utils import append_jsonl, compact_text, now_utc_iso, parse_json_text, read_json, read_jsonl_tail, read_last_jsonl, read_text, write_json
@@ -41,6 +47,7 @@ def default_workspace_root() -> Path:
 
 
 def bootstrap_payload(workspace_root: Path) -> dict[str, Any]:
+    codex_status = fetch_codex_backend_snapshot()
     return {
         "workspace_root": str(workspace_root),
         "model_presets": [
@@ -54,6 +61,8 @@ def bootstrap_payload(workspace_root: Path) -> dict[str, Any]:
             }
             for preset in MODEL_PRESETS
         ],
+        "model_catalog": codex_status.model_catalog,
+        "codex_status": codex_status.to_dict(),
         "default_runtime": runtime_from_payload({}).to_dict(),
     }
 
@@ -74,8 +83,41 @@ def build_pythonpath(root: Path) -> str:
     return os.pathsep.join(items)
 
 
-def start_share_server_process(workspace_root: Path, host: str = DEFAULT_SHARE_HOST, port: int = DEFAULT_SHARE_PORT) -> dict[str, Any]:
+def start_share_server_process(
+    workspace_root: Path,
+    host: str | None = None,
+    port: int | None = None,
+    public_base_url: str | None = None,
+) -> dict[str, Any]:
+    current_config = load_share_server_config(workspace_root)
+    updated_config = save_share_server_config(
+        workspace_root,
+        ShareServerConfig(
+            bind_host=(host or current_config.bind_host or DEFAULT_SHARE_HOST),
+            preferred_port=current_config.preferred_port if port is None else max(0, int(port)),
+            public_base_url=(
+                current_config.public_base_url
+                if public_base_url is None
+                else str(public_base_url).strip()
+            ),
+        ),
+    )
+    current_state = load_share_server_state(workspace_root)
     current = share_server_status_payload(workspace_root)
+    should_restart = bool(
+        current.get("running")
+        and current_state is not None
+        and (
+            current_state.host != updated_config.bind_host
+            or (
+                updated_config.preferred_port > 0
+                and int(current_state.port) != int(updated_config.preferred_port)
+            )
+        )
+    )
+    if should_restart:
+        stop_share_server_process(workspace_root)
+        current = share_server_status_payload(workspace_root)
     if current.get("running"):
         return current
 
@@ -91,9 +133,9 @@ def start_share_server_process(workspace_root: Path, host: str = DEFAULT_SHARE_H
         "--workspace-root",
         str(workspace_root),
         "--host",
-        host,
+        updated_config.bind_host,
         "--port",
-        str(max(0, int(port))),
+        str(updated_config.preferred_port),
     ]
     creationflags = 0
     if os.name == "nt":
@@ -214,17 +256,23 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
         False,
     )
     merged["test_cmd"] = str(merged.get("test_cmd", "python -m pytest")).strip() or "python -m pytest"
-    merged["model"] = str(merged.get("model", "")).strip()
-    merged["model_preset"] = str(merged.get("model_preset", "")).strip()
-    merged["effort"] = str(merged.get("effort", "")).strip()
+    merged["model"] = str(merged.get("model", "")).strip().lower()
+    merged["model_preset"] = str(merged.get("model_preset", "")).strip().lower()
+    raw_effort = str(merged.get("effort", "")).strip()
+    merged["effort"] = raw_effort.lower()
 
     if not merged["model"]:
         preset = model_preset_by_id(merged["model_preset"] or DEFAULT_MODEL_PRESET_ID)
         merged["model"] = preset.model
+    preset = model_preset_by_id(merged["model_preset"] or DEFAULT_MODEL_PRESET_ID)
     if not merged["effort"]:
-        preset = model_preset_by_id(merged["model_preset"] or DEFAULT_MODEL_PRESET_ID)
         merged["effort"] = preset.effort
+    merged["effort"] = normalize_reasoning_effort(merged["effort"], fallback=preset.effort)
     if merged["model_preset"] not in {preset.preset_id for preset in MODEL_PRESETS}:
+        merged["model_preset"] = ""
+    if merged["model"] == AUTO_MODEL_SLUG:
+        merged["model_preset"] = "auto" if merged["effort"] == "medium" else f"auto-{merged['effort']}"
+    elif merged["model_preset"].startswith("auto"):
         merged["model_preset"] = ""
     merged["model_selection_mode"] = str(merged.get("model_selection_mode", "slug")).strip() or "slug"
     merged["model_slug_input"] = str(merged.get("model_slug_input", merged["model"])).strip() or merged["model"]
@@ -499,7 +547,7 @@ def config_payload(context: ProjectContext) -> dict[str, Any]:
     }
 
 
-def bottom_panel_payload(context: ProjectContext, plan_state: ExecutionPlanState) -> dict[str, Any]:
+def bottom_panel_payload(context: ProjectContext, plan_state: ExecutionPlanState, codex_status: dict[str, Any]) -> dict[str, Any]:
     latest_block = read_last_jsonl(context.paths.block_log_file) or {}
     latest_pass = read_last_jsonl(context.paths.pass_log_file) or {}
     return {
@@ -511,6 +559,7 @@ def bottom_panel_payload(context: ProjectContext, plan_state: ExecutionPlanState
             "loop_state": safe_json(context.paths.loop_state_file, default={}) or {},
         },
         "token_usage": recent_usage(context),
+        "codex_status": codex_status,
         "test_runs": read_jsonl_tail(context.paths.logs_dir / "test_runs.jsonl", 12),
         "git_status": {
             "branch": context.metadata.branch,
@@ -528,7 +577,9 @@ def bottom_panel_payload(context: ProjectContext, plan_state: ExecutionPlanState
 def recent_usage(context: ProjectContext) -> dict[str, int]:
     usage: dict[str, int] = {
         "input_tokens": 0,
+        "cached_input_tokens": 0,
         "output_tokens": 0,
+        "reasoning_output_tokens": 0,
         "total_tokens": 0,
     }
     for item in read_jsonl_tail(context.paths.pass_log_file, 25):
@@ -539,6 +590,8 @@ def recent_usage(context: ProjectContext) -> dict[str, int]:
             value = raw.get(key, 0)
             if isinstance(value, int):
                 usage[key] += value
+    if usage["total_tokens"] <= 0:
+        usage["total_tokens"] = usage["input_tokens"] + usage["output_tokens"] + usage["reasoning_output_tokens"]
     return usage
 
 
@@ -605,7 +658,8 @@ def project_detail_payload(orchestrator: Orchestrator, project: ProjectContext) 
     checkpoints = checkpoint_payload(project)
     config = config_payload(project)
     workspace_tree = managed_workspace_tree(project)
-    bottom_panels = bottom_panel_payload(project, plan_state)
+    codex_status = fetch_codex_backend_snapshot(project.runtime.codex_path).to_dict()
+    bottom_panels = bottom_panel_payload(project, plan_state, codex_status)
     snapshot = {
         "project": project.metadata.to_dict(),
         "runtime": project.runtime.to_dict(),
@@ -614,6 +668,7 @@ def project_detail_payload(orchestrator: Orchestrator, project: ProjectContext) 
         "recent_blocks": recent_blocks,
         "recent_passes": recent_passes,
         "recent_usage": recent_usage(project),
+        "codex_status": codex_status,
         "run_control": control,
         "latest_block": read_last_jsonl(project.paths.block_log_file),
         "latest_pass": read_last_jsonl(project.paths.pass_log_file),
@@ -626,6 +681,7 @@ def project_detail_payload(orchestrator: Orchestrator, project: ProjectContext) 
         "summary": project_summary(orchestrator, project, plan_state),
         "progress": progress_caption(plan_state),
         "stats": project_stats(plan_state),
+        "codex_status": codex_status,
         "activity": build_activity_lines(project, plan_state),
         "snapshot": snapshot,
         "run_control": control,
@@ -694,10 +750,28 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
     if command == "get_share_server_status":
         return share_server_status_payload(workspace_root)
 
+    if command == "save_share_server_config":
+        config = save_share_server_config(
+            workspace_root,
+            ShareServerConfig(
+                bind_host=str(payload.get("bind_host", DEFAULT_SHARE_HOST)).strip() or DEFAULT_SHARE_HOST,
+                preferred_port=coerce_positive_int(payload.get("preferred_port", DEFAULT_SHARE_PORT), default=DEFAULT_SHARE_PORT, minimum=0),
+                public_base_url=str(payload.get("public_base_url", DEFAULT_SHARE_PUBLIC_BASE_URL)).strip(),
+            ),
+        )
+        result = share_server_status_payload(workspace_root)
+        result["config"] = config.to_dict()
+        return result
+
     if command == "start_share_server":
-        host = str(payload.get("host", DEFAULT_SHARE_HOST)).strip() or DEFAULT_SHARE_HOST
-        port = coerce_positive_int(payload.get("port", DEFAULT_SHARE_PORT), default=DEFAULT_SHARE_PORT, minimum=0)
-        return start_share_server_process(workspace_root, host=host, port=port)
+        host = str(payload.get("host", "")).strip() or None
+        port = (
+            coerce_positive_int(payload.get("port", DEFAULT_SHARE_PORT), default=DEFAULT_SHARE_PORT, minimum=0)
+            if "port" in payload
+            else None
+        )
+        public_base_url = str(payload.get("public_base_url", "")).strip() if "public_base_url" in payload else None
+        return start_share_server_process(workspace_root, host=host, port=port, public_base_url=public_base_url)
 
     if command == "stop_share_server":
         return stop_share_server_process(workspace_root)
@@ -785,7 +859,19 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
             payload.get("expires_in_minutes", DEFAULT_SHARE_TTL_MINUTES),
             default=DEFAULT_SHARE_TTL_MINUTES,
         )
-        start_share_server_process(workspace_root)
+        bind_host = str(payload.get("bind_host", "")).strip() or None
+        preferred_port = (
+            coerce_positive_int(payload.get("preferred_port", DEFAULT_SHARE_PORT), default=DEFAULT_SHARE_PORT, minimum=0)
+            if "preferred_port" in payload
+            else None
+        )
+        public_base_url = str(payload.get("public_base_url", "")).strip() if "public_base_url" in payload else None
+        start_share_server_process(
+            workspace_root,
+            host=bind_host,
+            port=preferred_port,
+            public_base_url=public_base_url,
+        )
         session = create_share_session(
             project,
             expires_in_minutes=expires_in_minutes,

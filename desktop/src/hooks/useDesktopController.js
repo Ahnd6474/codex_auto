@@ -18,11 +18,19 @@ function messagePayload(tone, text) {
   return text ? { tone, text } : null;
 }
 
+function shareSettingsFromDetail(detail) {
+  return {
+    bind_host: detail?.share?.server?.config?.bind_host || "127.0.0.1",
+    public_base_url: detail?.share?.server?.config?.public_base_url || "",
+  };
+}
+
 export function useDesktopController() {
   const { language } = useI18n();
   const [workspaceRoot, setWorkspaceRoot] = useState("");
   const [defaultRuntime, setDefaultRuntime] = useState(null);
   const [modelPresets, setModelPresets] = useState([]);
+  const [modelCatalog, setModelCatalog] = useState([]);
   const [projects, setProjects] = useState([]);
   const [workspaceStats, setWorkspaceStats] = useState(null);
   const [selectedProjectId, setSelectedProjectId] = usePersistentState("codex-auto:selected-project", "");
@@ -35,6 +43,10 @@ export function useDesktopController() {
   const [activeJobId, setActiveJobId] = useState("");
   const [activeJob, setActiveJob] = useState(null);
   const [message, setMessage] = useState(null);
+  const [shareSettings, setShareSettings] = useState({
+    bind_host: "127.0.0.1",
+    public_base_url: "",
+  });
 
   const [centerTab, setCenterTab] = usePersistentState("codex-auto:center-tab", "run");
   const [bottomTab, setBottomTab] = usePersistentState("codex-auto:bottom-tab", "json");
@@ -87,6 +99,7 @@ export function useDesktopController() {
         setWorkspaceRoot(bootstrap.workspace_root);
         setDefaultRuntime(bootstrap.default_runtime);
         setModelPresets(bootstrap.model_presets || []);
+        setModelCatalog(bootstrap.model_catalog || []);
         setProjectForm(blankProjectForm(bootstrap.default_runtime));
         const listing = await bridgeRequest("list-projects", null, bootstrap.workspace_root);
         if (cancelled) {
@@ -126,6 +139,8 @@ export function useDesktopController() {
         setActiveJobId("");
         if (job.result?.project) {
           setProjectDetail(job.result);
+          setModelCatalog(job.result?.codex_status?.model_catalog || []);
+          setShareSettings(shareSettingsFromDetail(job.result));
           setProjectForm(projectFormFromDetail(job.result, defaultRuntime));
           setPlanDraft(cloneValue(job.result.plan));
           setSelectedStepId(firstSelectableStepId(job.result.plan));
@@ -181,6 +196,8 @@ export function useDesktopController() {
           return;
         }
         setProjectDetail(detail);
+        setModelCatalog(detail?.codex_status?.model_catalog || []);
+        setShareSettings(shareSettingsFromDetail(detail));
         setProjectForm((current) => {
           if (current.project_dir && planDirty) {
             return current;
@@ -239,6 +256,8 @@ export function useDesktopController() {
       if (selectedProjectId) {
         const detail = await bridgeRequest("load-project", { repo_id: selectedProjectId }, workspaceRoot || null);
         setProjectDetail(detail);
+        setModelCatalog(detail?.codex_status?.model_catalog || []);
+        setShareSettings(shareSettingsFromDetail(detail));
         setProjectForm((current) => {
           if (current.project_dir && planDirty) {
             return current;
@@ -265,6 +284,8 @@ export function useDesktopController() {
       const detail = await bridgeRequest("load-project", { repo_id: repoId }, workspaceRoot || null);
       setSelectedProjectId(repoId);
       setProjectDetail(detail);
+      setModelCatalog(detail?.codex_status?.model_catalog || []);
+      setShareSettings(shareSettingsFromDetail(detail));
       setProjectForm(projectFormFromDetail(detail, defaultRuntime));
       if (!planDirty) {
         setPlanDraft(cloneValue(detail.plan));
@@ -341,6 +362,7 @@ export function useDesktopController() {
     setSelectedProjectId("");
     setProjectForm(blankProjectForm(defaultRuntime));
     setPlanDraft({ steps: [], project_prompt: "", closeout_status: "not_started" });
+    setShareSettings({ bind_host: "127.0.0.1", public_base_url: "" });
     setCenterTab("run");
     setSidebarTab("projects");
   }
@@ -349,6 +371,8 @@ export function useDesktopController() {
     await withPending("save-project-setup", async () => {
       const detail = await bridgeRequest("save-project-setup", buildProjectPayload(projectForm), workspaceRoot || null);
       setProjectDetail(detail);
+      setModelCatalog(detail?.codex_status?.model_catalog || []);
+      setShareSettings(shareSettingsFromDetail(detail));
       setSelectedProjectId(detail.project.repo_id);
       setProjectForm(projectFormFromDetail(detail, defaultRuntime));
       setPlanDraft(cloneValue(detail.plan));
@@ -367,6 +391,8 @@ export function useDesktopController() {
     await withPending("save-plan", async () => {
       const detail = await bridgeRequest("save-plan", buildProjectPayload(projectForm, planDraft), workspaceRoot || null);
       setProjectDetail(detail);
+      setModelCatalog(detail?.codex_status?.model_catalog || []);
+      setShareSettings(shareSettingsFromDetail(detail));
       setPlanDraft(cloneValue(detail.plan));
       setSelectedStepId(firstSelectableStepId(detail.plan));
       setPlanDirty(false);
@@ -386,6 +412,8 @@ export function useDesktopController() {
     await withPending("reset-plan", async () => {
       const detail = await bridgeRequest("reset-plan", buildProjectPayload(projectForm), workspaceRoot || null);
       setProjectDetail(detail);
+      setModelCatalog(detail?.codex_status?.model_catalog || []);
+      setShareSettings(shareSettingsFromDetail(detail));
       setPlanDraft(cloneValue(detail.plan));
       setSelectedStepId("");
       setPlanDirty(false);
@@ -477,6 +505,8 @@ export function useDesktopController() {
       );
       const detail = await bridgeRequest("load-project", { project_dir: projectForm.project_dir.trim() }, workspaceRoot || null);
       setProjectDetail(detail);
+      setModelCatalog(detail?.codex_status?.model_catalog || []);
+      setShareSettings(shareSettingsFromDetail(detail));
       setMessage(messagePayload("info", translate(language, "message.stopRequested")));
     });
   }
@@ -509,10 +539,14 @@ export function useDesktopController() {
         {
           project_dir: projectForm.project_dir.trim(),
           created_by: "tauri-react-ui",
+          bind_host: shareSettings.bind_host,
+          public_base_url: shareSettings.public_base_url,
         },
         workspaceRoot || null,
       );
       setProjectDetail(detail);
+      setModelCatalog(detail?.codex_status?.model_catalog || []);
+      setShareSettings(shareSettingsFromDetail(detail));
       const shareUrl = detail?.created_share_session?.share_url || detail?.share?.active_session?.share_url || "";
       if (shareUrl && navigator?.clipboard?.writeText) {
         try {
@@ -545,6 +579,8 @@ export function useDesktopController() {
         workspaceRoot || null,
       );
       setProjectDetail(detail);
+      setModelCatalog(detail?.codex_status?.model_catalog || []);
+      setShareSettings(shareSettingsFromDetail(detail));
       setMessage(messagePayload("success", translate(language, "message.shareLinkRevoked")));
     });
   }
@@ -564,6 +600,8 @@ export function useDesktopController() {
         workspaceRoot || null,
       );
       setProjectDetail(detail);
+      setModelCatalog(detail?.codex_status?.model_catalog || []);
+      setShareSettings(shareSettingsFromDetail(detail));
       setMessage(messagePayload("success", translate(language, "message.checkpointApproved")));
     });
   }
@@ -668,6 +706,7 @@ export function useDesktopController() {
     workspaceRoot,
     defaultRuntime,
     modelPresets,
+    modelCatalog,
     projects,
     filteredProjects,
     workspaceStats,
@@ -680,6 +719,7 @@ export function useDesktopController() {
     activeJob,
     activeJobId,
     message,
+    shareSettings,
     selectedProjectSummary,
     centerTab,
     bottomTab,
@@ -700,6 +740,7 @@ export function useDesktopController() {
     setBottomHeight,
     setProjectFilter,
     setWorkspaceFilter,
+    setShareSettings,
     syncPlan,
     updateSelectedStep,
     chooseDirectory,

@@ -75,25 +75,52 @@ export function buildProjectPayload(form, plan = null) {
   return payload;
 }
 
+export function findModelCatalogEntry(modelCatalog = [], model = "") {
+  const target = String(model || "").trim().toLowerCase();
+  return modelCatalog.find((item) => String(item?.model || "").trim().toLowerCase() === target) || null;
+}
+
+export function supportedReasoningOptions(modelCatalog = [], model = "", fallback = "medium") {
+  const entry = findModelCatalogEntry(modelCatalog, model);
+  const options = (entry?.supported_reasoning_efforts || []).filter((effort) => REASONING_OPTIONS.includes(effort));
+  if (options.length) {
+    return options;
+  }
+  return REASONING_OPTIONS.includes(fallback) ? [fallback] : ["medium"];
+}
+
+export function defaultReasoningOption(modelCatalog = [], model = "", fallback = "medium") {
+  const entry = findModelCatalogEntry(modelCatalog, model);
+  const preferred = String(entry?.default_reasoning_effort || fallback || "medium").trim().toLowerCase();
+  const options = supportedReasoningOptions(modelCatalog, model, preferred);
+  return options.includes(preferred) ? preferred : options[0] || "medium";
+}
+
+export function modelDisplayName(modelCatalog = [], model = "") {
+  const entry = findModelCatalogEntry(modelCatalog, model);
+  return entry?.display_name || model || "auto";
+}
+
 export function firstSelectableStepId(plan) {
   const steps = plan?.steps || [];
   const pending = steps.find((step) => step.status !== "completed");
   return pending?.step_id || steps[0]?.step_id || "";
 }
 
-export function runtimeSummary(runtime, modelPresets = [], language = "en") {
+export function runtimeSummary(runtime, modelPresets = [], language = "en", modelCatalog = []) {
   const preset = modelPresets.find((item) => item.preset_id === runtime?.model_preset);
   if (preset) {
     return preset.summary;
   }
   if (runtime?.model) {
+    const label = modelDisplayName(modelCatalog, runtime.model);
     if (normalizeLanguage(language) === "ko") {
       return translate("ko", "runtime.modelSummary", {
-        model: runtime.model,
+        model: label,
         effort: reasoningEffortLabel(runtime.effort || "high", "ko"),
       });
     }
-    return `${runtime.model} | reasoning ${runtime.effort || "high"}`;
+    return `${label} | reasoning ${runtime.effort || "high"}`;
   }
   return translate(language, "runtime.noModelSelected");
 }

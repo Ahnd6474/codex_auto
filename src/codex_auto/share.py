@@ -22,6 +22,7 @@ DEFAULT_SHARE_TTL_MINUTES = 60
 MAX_PUBLIC_LOG_LINE_CHARS = 240
 MAX_PUBLIC_LOG_LINES = 12
 DEFAULT_VIEWER_PATH = "/share/view"
+DEFAULT_SHARE_PUBLIC_BASE_URL = ""
 
 TOKEN_PATTERNS = [
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),
@@ -78,6 +79,10 @@ def share_server_status_file(workspace_root: Path) -> Path:
 
 def share_server_log_file(workspace_root: Path) -> Path:
     return workspace_root / "share_server.log"
+
+
+def share_server_config_file(workspace_root: Path) -> Path:
+    return workspace_root / "share_server_config.json"
 
 
 @dataclass(slots=True)
@@ -143,6 +148,36 @@ class ShareServerState:
         return f"http://{self.host}:{self.port}"
 
 
+@dataclass(slots=True)
+class ShareServerConfig:
+    bind_host: str = DEFAULT_SHARE_HOST
+    preferred_port: int = DEFAULT_SHARE_PORT
+    public_base_url: str = DEFAULT_SHARE_PUBLIC_BASE_URL
+
+    def to_dict(self) -> dict[str, Any]:
+        return _normalize(asdict(self))
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ShareServerConfig":
+        preferred_port_raw = data.get("preferred_port", DEFAULT_SHARE_PORT)
+        try:
+            preferred_port = max(0, int(preferred_port_raw))
+        except (TypeError, ValueError):
+            preferred_port = DEFAULT_SHARE_PORT
+        return cls(
+            bind_host=str(data.get("bind_host", DEFAULT_SHARE_HOST)).strip() or DEFAULT_SHARE_HOST,
+            preferred_port=preferred_port,
+            public_base_url=normalize_public_base_url(str(data.get("public_base_url", DEFAULT_SHARE_PUBLIC_BASE_URL)).strip()),
+        )
+
+
+def normalize_public_base_url(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return text.rstrip("/")
+
+
 def process_is_running(pid: int) -> bool:
     if pid <= 0:
         return False
@@ -175,7 +210,24 @@ def load_share_server_state(workspace_root: Path) -> ShareServerState | None:
         return None
 
 
+def load_share_server_config(workspace_root: Path) -> ShareServerConfig:
+    raw = read_json(share_server_config_file(workspace_root), default={})
+    if not isinstance(raw, dict):
+        return ShareServerConfig()
+    try:
+        return ShareServerConfig.from_dict(raw)
+    except (TypeError, ValueError):
+        return ShareServerConfig()
+
+
+def save_share_server_config(workspace_root: Path, config: ShareServerConfig) -> ShareServerConfig:
+    normalized = ShareServerConfig.from_dict(config.to_dict())
+    write_json(share_server_config_file(workspace_root), normalized.to_dict())
+    return normalized
+
+
 def share_server_status_payload(workspace_root: Path) -> dict[str, Any]:
+    config = load_share_server_config(workspace_root)
     state = load_share_server_state(workspace_root)
     if state is None:
         return {
@@ -184,6 +236,8 @@ def share_server_status_payload(workspace_root: Path) -> dict[str, Any]:
             "port": None,
             "base_url": None,
             "viewer_path": DEFAULT_VIEWER_PATH,
+            "config": config.to_dict(),
+            "share_base_url": config.public_base_url or None,
         }
     running = process_is_running(state.pid)
     payload = {
@@ -194,6 +248,8 @@ def share_server_status_payload(workspace_root: Path) -> dict[str, Any]:
         "started_at": state.started_at if running else None,
         "base_url": state.base_url if running else None,
         "viewer_path": state.viewer_path,
+        "config": config.to_dict(),
+        "share_base_url": config.public_base_url or (state.base_url if running else None),
     }
     if not running:
         try:
@@ -433,6 +489,15 @@ def public_session_summary(
     include_token: bool = False,
 ) -> dict[str, Any]:
     server = share_server_status_payload(workspace_root)
+    local_url = None
+    if server.get("running") and server.get("base_url"):
+        local_base = str(server["base_url"])
+        if str(server.get("host") or "").strip() == "0.0.0.0":
+            local_base = local_base.replace("http://0.0.0.0:", "http://127.0.0.1:", 1)
+        local_url = viewer_link(local_base, session, str(server.get("viewer_path") or DEFAULT_VIEWER_PATH))
+    public_url = None
+    if server.get("share_base_url"):
+        public_url = viewer_link(str(server["share_base_url"]), session, str(server.get("viewer_path") or DEFAULT_VIEWER_PATH))
     payload = {
         "session_id": session.session_id,
         "created_at": session.created_at,
@@ -440,13 +505,11 @@ def public_session_summary(
         "revoked_at": session.revoked_at,
         "active": session.is_active(),
         "created_by": session.created_by,
+        "local_url": local_url,
     }
     if include_token:
         payload["viewer_token"] = session.viewer_token
-    if server.get("running") and server.get("base_url"):
-        payload["share_url"] = viewer_link(str(server["base_url"]), session, str(server.get("viewer_path") or DEFAULT_VIEWER_PATH))
-    else:
-        payload["share_url"] = None
+    payload["share_url"] = public_url or local_url
     return payload
 
 

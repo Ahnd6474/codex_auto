@@ -68,6 +68,7 @@ class CodexRunnerTests(unittest.TestCase):
             self.assertEqual(result.last_message, "Recovered response")
             self.assertEqual(result.usage["input_tokens"], 7)
             self.assertEqual(result.usage["output_tokens"], 3)
+            self.assertEqual(result.usage["total_tokens"], 10)
             self.assertTrue(result.diagnostics["unexpected_token_detected"])
             self.assertTrue(result.diagnostics["recovered_after_retry"])
             self.assertTrue((block_dir / "demo_pass.attempt_1.stderr.log").exists())
@@ -105,6 +106,38 @@ class CodexRunnerTests(unittest.TestCase):
             self.assertEqual(result.attempt_count, 1)
             self.assertFalse(result.diagnostics["unexpected_token_detected"])
             mocked_sleep.assert_not_called()
+
+    def test_run_pass_omits_model_flag_for_auto(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_temp:
+            temp_root = Path(raw_temp)
+            repo_dir = temp_root / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            manager = WorkspaceManager(temp_root / "workspace")
+            context = manager.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=RuntimeOptions(model="auto", effort="medium"),
+            )
+            runner = CodexRunner("codex.cmd")
+            observed_commands: list[list[str]] = []
+
+            def fake_run(command, input, capture_output, check):
+                observed_commands.append(command)
+                output_file = Path(command[command.index("-o") + 1])
+                output_file.write_text("Auto response", encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+
+            with mock.patch("codex_auto.codex_runner.subprocess.run", side_effect=fake_run):
+                runner.run_pass(
+                    context=context,
+                    prompt="Use the default model routing",
+                    pass_type="demo pass",
+                    block_index=1,
+                    search_enabled=False,
+                )
+
+            self.assertEqual(len(observed_commands), 1)
+            self.assertNotIn("-m", observed_commands[0])
 
 
 if __name__ == "__main__":

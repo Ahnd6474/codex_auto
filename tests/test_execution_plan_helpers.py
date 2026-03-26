@@ -269,7 +269,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
 
         self.assertIsNotNone(resolved)
         self.assertEqual(resolved.preset_id, preset.preset_id)
-        self.assertEqual(resolved.model, "gpt-5.4")
+        self.assertEqual(resolved.model, "auto")
 
     def test_model_preset_helpers_return_none_for_custom_runtime(self) -> None:
         runtime = RuntimeOptions(model="custom-preview-model", model_preset="", effort="medium")

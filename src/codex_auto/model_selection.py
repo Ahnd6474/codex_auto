@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .codex_app_server import AUTO_MODEL_SLUG
 from .models import RuntimeOptions
 
 MODEL_MODE_SLUG = "slug"
 MODEL_MODE_CODEX = "codex"
 VALID_MODEL_MODES = {MODEL_MODE_SLUG, MODEL_MODE_CODEX}
 VALID_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
-DEFAULT_MODEL_SLUG = "gpt-5.4"
+DEFAULT_MODEL_SLUG = AUTO_MODEL_SLUG
 DEFAULT_CODEX_BASE_SLUG = "gpt-5.4"
 DEFAULT_CODEX_VARIANT_SLUG = "codex"
 
@@ -27,35 +28,42 @@ class ModelPreset:
 
 MODEL_PRESETS: tuple[ModelPreset, ...] = (
     ModelPreset(
-        preset_id="low",
-        label="Low",
-        model="gpt-5.4",
-        effort="low",
-        description="Fastest reasoning level for lighter edits and quick checks.",
-    ),
-    ModelPreset(
-        preset_id="medium",
-        label="Medium",
-        model="gpt-5.4",
+        preset_id="auto",
+        label="Auto",
+        model=AUTO_MODEL_SLUG,
         effort="medium",
-        description="Balanced reasoning for everyday coding work.",
+        description="Use Codex automatic model routing with the default reasoning balance.",
     ),
     ModelPreset(
-        preset_id="high",
-        label="High",
-        model="gpt-5.4",
+        preset_id="auto-low",
+        label="Auto / Low",
+        model=AUTO_MODEL_SLUG,
+        effort="low",
+        description="Use automatic routing with lighter reasoning for faster edits and checks.",
+    ),
+    ModelPreset(
+        preset_id="auto-medium",
+        label="Auto / Medium",
+        model=AUTO_MODEL_SLUG,
+        effort="medium",
+        description="Use automatic routing with balanced reasoning for everyday coding work.",
+    ),
+    ModelPreset(
+        preset_id="auto-high",
+        label="Auto / High",
+        model=AUTO_MODEL_SLUG,
         effort="high",
-        description="Stronger reasoning for larger changes and trickier code paths.",
+        description="Use automatic routing with stronger reasoning for larger or trickier changes.",
     ),
     ModelPreset(
-        preset_id="xhigh",
-        label="XHigh",
-        model="gpt-5.4",
+        preset_id="auto-xhigh",
+        label="Auto / XHigh",
+        model=AUTO_MODEL_SLUG,
         effort="xhigh",
-        description="Deepest reasoning for the hardest investigations and refactors.",
+        description="Use automatic routing with the deepest reasoning for the hardest investigations.",
     ),
 )
-DEFAULT_MODEL_PRESET_ID = "high"
+DEFAULT_MODEL_PRESET_ID = "auto"
 
 
 def normalize_model_mode(value: str, fallback: str = MODEL_MODE_SLUG) -> str:

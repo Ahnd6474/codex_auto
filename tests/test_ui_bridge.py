@@ -29,6 +29,62 @@ class TemporaryTestDir:
         shutil.rmtree(self.path, ignore_errors=True)
 
 
+def fake_codex_snapshot() -> mock.Mock:
+    payload = {
+        "checked_at": "2026-03-26T00:00:00+00:00",
+        "available": True,
+        "model_catalog": [
+            {
+                "id": "auto",
+                "model": "auto",
+                "display_name": "Auto",
+                "description": "Use Codex default model routing from the installed CLI.",
+                "hidden": False,
+                "is_default": True,
+                "default_reasoning_effort": "medium",
+                "supported_reasoning_efforts": ["low", "medium", "high", "xhigh"],
+            },
+            {
+                "id": "gpt-5.3-codex-spark",
+                "model": "gpt-5.3-codex-spark",
+                "display_name": "GPT-5.3-Codex-Spark",
+                "description": "Ultra-fast coding model.",
+                "hidden": False,
+                "is_default": False,
+                "default_reasoning_effort": "high",
+                "supported_reasoning_efforts": ["low", "medium", "high", "xhigh"],
+            },
+        ],
+        "account": {
+            "authenticated": True,
+            "requires_openai_auth": True,
+            "type": "chatgpt",
+            "email": "demo@example.com",
+            "plan_type": "pro",
+        },
+        "rate_limits": {
+            "default_limit_id": "codex",
+            "items": [
+                {
+                    "limit_id": "codex",
+                    "limit_name": None,
+                    "plan_type": "pro",
+                    "primary": {
+                        "used_percent": 11,
+                        "remaining_percent": 89,
+                        "window_duration_mins": 300,
+                        "resets_at": "2026-03-26T12:00:00+00:00",
+                    },
+                    "secondary": None,
+                    "credits": None,
+                }
+            ],
+        },
+        "error": "",
+    }
+    return mock.Mock(model_catalog=payload["model_catalog"], to_dict=mock.Mock(return_value=payload))
+
+
 class UIBridgeTests(unittest.TestCase):
     def test_runtime_from_payload_coerces_invalid_scalar_values(self) -> None:
         runtime = runtime_from_payload(
@@ -57,12 +113,15 @@ class UIBridgeTests(unittest.TestCase):
 
     def test_bootstrap_exposes_workspace_and_model_presets(self) -> None:
         with TemporaryTestDir() as temp_dir:
-            payload = run_command("bootstrap", temp_dir)
+            with mock.patch("codex_auto.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
+                payload = run_command("bootstrap", temp_dir)
 
         self.assertEqual(payload["workspace_root"], str(temp_dir.resolve()))
         self.assertTrue(payload["model_presets"])
-        self.assertEqual(payload["default_runtime"]["model"], "gpt-5.4")
-        self.assertEqual(payload["default_runtime"]["model_preset"], "high")
+        self.assertTrue(payload["model_catalog"])
+        self.assertEqual(payload["codex_status"]["account"]["plan_type"], "pro")
+        self.assertEqual(payload["default_runtime"]["model"], "auto")
+        self.assertEqual(payload["default_runtime"]["model_preset"], "auto")
         self.assertEqual(payload["default_runtime"]["sandbox_mode"], "danger-full-access")
 
     def test_project_setup_and_load_round_trip(self) -> None:
@@ -85,7 +144,10 @@ class UIBridgeTests(unittest.TestCase):
                 },
             }
 
-            with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"):
+            with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "codex_auto.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
                 detail = run_command("save-project-setup", workspace_root, payload)
 
             self.assertEqual(detail["project"]["display_name"], "Demo Project")
@@ -97,18 +159,20 @@ class UIBridgeTests(unittest.TestCase):
             self.assertIn("checkpoints", detail)
             self.assertIn("bottom_panels", detail)
             self.assertIn("github", detail)
+            self.assertEqual(detail["codex_status"]["account"]["email"], "demo@example.com")
 
             listing = run_command("list-projects", workspace_root)
             self.assertEqual(len(listing["projects"]), 1)
             self.assertEqual(listing["projects"][0]["display_name"], "Demo Project")
 
-            loaded = run_command(
-                "load-project",
-                workspace_root,
-                {
-                    "repo_id": detail["project"]["repo_id"],
-                },
-            )
+            with mock.patch("codex_auto.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
+                loaded = run_command(
+                    "load-project",
+                    workspace_root,
+                    {
+                        "repo_id": detail["project"]["repo_id"],
+                    },
+                )
             self.assertIn("Demo Project", loaded["summary"])
             self.assertEqual(loaded["stats"]["total_steps"], 0)
 
@@ -132,7 +196,10 @@ class UIBridgeTests(unittest.TestCase):
                 },
             }
 
-            with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"):
+            with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "codex_auto.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
                 detail = run_command("save-project-setup", workspace_root, setup_payload)
 
             save_plan_payload = {
@@ -168,7 +235,10 @@ class UIBridgeTests(unittest.TestCase):
                 },
             }
 
-            with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"):
+            with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "codex_auto.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
                 saved = run_command("save-plan", workspace_root, save_plan_payload)
 
             self.assertEqual(saved["plan"]["steps"][0]["step_id"], "ST1")
@@ -187,13 +257,14 @@ class UIBridgeTests(unittest.TestCase):
             )
             self.assertEqual(stop_payload["run_control"]["stop_after_current_step"], True)
 
-            loaded = run_command(
-                "load-project",
-                workspace_root,
-                {
-                    "project_dir": str(repo_dir),
-                },
-            )
+            with mock.patch("codex_auto.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
+                loaded = run_command(
+                    "load-project",
+                    workspace_root,
+                    {
+                        "project_dir": str(repo_dir),
+                    },
+                )
             self.assertEqual(loaded["run_control"]["stop_after_current_step"], True)
 
             control_path = Path(loaded["files"]["ui_control_file"])
@@ -221,7 +292,10 @@ class UIBridgeTests(unittest.TestCase):
                 },
             }
 
-            with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"):
+            with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "codex_auto.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
                 detail = run_command("save-project-setup", workspace_root, payload)
 
             control_path = Path(detail["files"]["ui_control_file"])
@@ -249,13 +323,14 @@ class UIBridgeTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            loaded = run_command(
-                "load-project",
-                workspace_root,
-                {
-                    "project_dir": str(repo_dir),
-                },
-            )
+            with mock.patch("codex_auto.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
+                loaded = run_command(
+                    "load-project",
+                    workspace_root,
+                    {
+                        "project_dir": str(repo_dir),
+                    },
+                )
 
             self.assertTrue(loaded["run_control"]["stop_after_current_step"])
             self.assertEqual(loaded["run_control"]["requested_at"], "123")
@@ -283,7 +358,10 @@ class UIBridgeTests(unittest.TestCase):
                 },
             }
 
-            with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"):
+            with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "codex_auto.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
                 run_command("save-project-setup", workspace_root, payload)
 
             try:
@@ -291,27 +369,34 @@ class UIBridgeTests(unittest.TestCase):
                 self.assertTrue(server_status["running"])
                 self.assertTrue(str(server_status["base_url"]).startswith("http://127.0.0.1:"))
 
-                created = run_command(
-                    "create_share_session",
-                    workspace_root,
-                    {
-                        "project_dir": str(repo_dir),
-                        "created_by": "unit-test",
-                    },
-                )
+                with mock.patch("codex_auto.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
+                    created = run_command(
+                        "create_share_session",
+                        workspace_root,
+                        {
+                            "project_dir": str(repo_dir),
+                            "created_by": "unit-test",
+                            "bind_host": "0.0.0.0",
+                            "public_base_url": "https://share.example.com/base",
+                        },
+                    )
                 self.assertIn("share", created)
                 self.assertIn("created_share_session", created)
-                self.assertTrue(created["created_share_session"]["share_url"].startswith("http://127.0.0.1:"))
+                self.assertTrue(created["created_share_session"]["share_url"].startswith("https://share.example.com/base/share/view?"))
+                self.assertTrue(created["created_share_session"]["local_url"].startswith("http://"))
                 self.assertEqual(created["share"]["active_session"]["created_by"], "unit-test")
+                self.assertEqual(created["share"]["server"]["config"]["bind_host"], "0.0.0.0")
+                self.assertEqual(created["share"]["server"]["config"]["public_base_url"], "https://share.example.com/base")
 
-                revoked = run_command(
-                    "revoke_share_session",
-                    workspace_root,
-                    {
-                        "project_dir": str(repo_dir),
-                        "session_id": created["share"]["active_session"]["session_id"],
-                    },
-                )
+                with mock.patch("codex_auto.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
+                    revoked = run_command(
+                        "revoke_share_session",
+                        workspace_root,
+                        {
+                            "project_dir": str(repo_dir),
+                            "session_id": created["share"]["active_session"]["session_id"],
+                        },
+                    )
                 self.assertIsNone(revoked["share"]["active_session"])
                 self.assertIn("revoked_share_session", revoked)
             finally:

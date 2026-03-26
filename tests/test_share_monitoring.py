@@ -60,12 +60,44 @@ def create_project(workspace_root: Path, repo_dir: Path) -> tuple[Orchestrator, 
             "max_blocks": 4,
         },
     }
-    with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"):
+    with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+        "codex_auto.ui_bridge.fetch_codex_backend_snapshot",
+        side_effect=lambda *args, **kwargs: _fake_codex_snapshot(),
+    ):
         run_command("save-project-setup", workspace_root, payload)
     orchestrator = Orchestrator(workspace_root)
     project = orchestrator.local_project(repo_dir)
     assert project is not None
     return orchestrator, project
+
+
+def _fake_codex_snapshot() -> mock.Mock:
+    payload = {
+        "checked_at": "2026-03-26T00:00:00+00:00",
+        "available": True,
+        "model_catalog": [
+            {
+                "id": "auto",
+                "model": "auto",
+                "display_name": "Auto",
+                "description": "Use Codex default model routing from the installed CLI.",
+                "hidden": False,
+                "is_default": True,
+                "default_reasoning_effort": "medium",
+                "supported_reasoning_efforts": ["low", "medium", "high", "xhigh"],
+            }
+        ],
+        "account": {
+            "authenticated": True,
+            "requires_openai_auth": True,
+            "type": "chatgpt",
+            "email": "demo@example.com",
+            "plan_type": "pro",
+        },
+        "rate_limits": {"default_limit_id": "codex", "items": []},
+        "error": "",
+    }
+    return mock.Mock(model_catalog=payload["model_catalog"], to_dict=mock.Mock(return_value=payload))
 
 
 class ShareMonitoringTests(unittest.TestCase):

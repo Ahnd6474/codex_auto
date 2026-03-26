@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 import time
 from pathlib import Path
 
+from .codex_app_server import is_auto_model, resolve_codex_path
 from .models import CodexRunResult, ProjectContext
 from .utils import compact_text, decode_process_output, ensure_dir, parse_json_text, read_text, write_json, write_text
 
@@ -16,16 +16,7 @@ class CodexRunner:
     _UNEXPECTED_TOKEN_PATTERN = re.compile(r"unexpected token", re.IGNORECASE)
 
     def __init__(self, codex_path: str) -> None:
-        self.codex_path = self._resolve_codex_path(codex_path)
-
-    def _resolve_codex_path(self, codex_path: str) -> str:
-        if codex_path.lower() == "codex.cmd":
-            appdata = os.environ.get("APPDATA")
-            if appdata:
-                candidate = Path(appdata) / "npm" / "codex.cmd"
-                if candidate.exists():
-                    return str(candidate)
-        return codex_path
+        self.codex_path = resolve_codex_path(codex_path)
 
     def run_pass(
         self,
@@ -53,8 +44,12 @@ class CodexRunner:
                 f'reasoning.effort="{context.runtime.effort}"',
                 "-s",
                 context.runtime.sandbox_mode,
-                "-m",
-                context.runtime.model,
+            ]
+        )
+        if not is_auto_model(context.runtime.model):
+            command.extend(["-m", context.runtime.model])
+        command.extend(
+            [
                 "--json",
                 "-o",
                 str(output_file),
@@ -147,7 +142,13 @@ class CodexRunner:
         )
 
     def _extract_usage(self, stdout: str) -> dict[str, int]:
-        usage = {"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0}
+        usage = {
+            "input_tokens": 0,
+            "cached_input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 0,
+        }
         for line in stdout.splitlines():
             line = line.strip()
             if not line:
@@ -165,6 +166,10 @@ class CodexRunner:
                 value = turn_usage.get(key)
                 if isinstance(value, int):
                     usage[key] += value
+        if usage["total_tokens"] <= 0:
+            usage["total_tokens"] = (
+                usage["input_tokens"] + usage["output_tokens"] + usage["reasoning_output_tokens"]
+            )
         return usage
 
     def _is_unexpected_token_failure(

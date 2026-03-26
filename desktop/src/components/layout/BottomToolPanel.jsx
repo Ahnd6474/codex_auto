@@ -13,6 +13,12 @@ function ToolTab({ value, activeTab, onChange, label }) {
 
 export function BottomToolPanel({ activeTab, onChangeTab, data }) {
   const tokenUsage = data?.token_usage || {};
+  const codexStatus = data?.codex_status || {};
+  const account = codexStatus.account || {};
+  const rateLimits = codexStatus.rate_limits?.items || [];
+  const primaryLimit = rateLimits[0] || {};
+  const primaryWindow = primaryLimit.primary || null;
+  const secondaryWindow = primaryLimit.secondary || null;
   const gitStatus = data?.git_status || {};
   const testRuns = data?.test_runs || [];
   const serializedEventJson = useMemo(() => JSON.stringify(data?.event_json || {}, null, 2), [data?.event_json]);
@@ -49,6 +55,40 @@ export function BottomToolPanel({ activeTab, onChangeTab, data }) {
             <div className="metric-card">
               <span>{t("common.total")}</span>
               <strong>{tokenUsage.total_tokens ?? 0}</strong>
+            </div>
+            <div className="metric-card">
+              <span>{language === "ko" ? "요금제" : "Plan"}</span>
+              <strong>{account.plan_type || t("common.unavailable")}</strong>
+            </div>
+            <div className="metric-card">
+              <span>{language === "ko" ? "남은 사용량" : "Remaining"}</span>
+              <strong>{primaryWindow ? `${primaryWindow.remaining_percent ?? 0}%` : t("common.unavailable")}</strong>
+            </div>
+          </div>
+          <div className="dense-list">
+            <div className="dense-row">
+              <strong>{language === "ko" ? "인증 방식" : "Auth"}</strong>
+              <span>{account.type || t("common.unavailable")}</span>
+            </div>
+            <div className="dense-row">
+              <strong>{language === "ko" ? "계정" : "Account"}</strong>
+              <span>{account.email || t("common.unavailable")}</span>
+            </div>
+            <div className="dense-row">
+              <strong>{language === "ko" ? "현재 창" : "Primary Window"}</strong>
+              <span>
+                {primaryWindow
+                  ? `${primaryWindow.used_percent ?? 0}% used, reset ${primaryWindow.resets_at || t("common.unavailable")}`
+                  : codexStatus.error || t("common.unavailable")}
+              </span>
+            </div>
+            <div className="dense-row">
+              <strong>{language === "ko" ? "주간 창" : "Secondary Window"}</strong>
+              <span>
+                {secondaryWindow
+                  ? `${secondaryWindow.used_percent ?? 0}% used, reset ${secondaryWindow.resets_at || t("common.unavailable")}`
+                  : t("common.unavailable")}
+              </span>
             </div>
           </div>
         </div>

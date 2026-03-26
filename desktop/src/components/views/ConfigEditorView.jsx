@@ -1,21 +1,49 @@
 import { useI18n } from "../../i18n";
-import { runtimeSummary } from "../../utils";
+import { defaultReasoningOption, findModelCatalogEntry, reasoningEffortLabel, runtimeSummary, supportedReasoningOptions } from "../../utils";
 
-function EffortButton({ preset, checked, onSelect, disabled }) {
+function EffortButton({ effort, selected, onSelect, disabled, language, description }) {
   return (
-    <button className={`choice-card ${checked ? "selected" : ""}`} onClick={onSelect} type="button" disabled={disabled}>
+    <button className={`choice-card ${selected ? "selected" : ""}`} onClick={() => onSelect(effort)} type="button" disabled={disabled}>
       <div className="choice-card__title">
-        <strong>{preset.label}</strong>
-        <span>{preset.effort}</span>
+        <strong>{reasoningEffortLabel(effort, language)}</strong>
+        <span>{effort}</span>
       </div>
-      <p>{preset.description}</p>
+      <p>{description}</p>
     </button>
   );
+}
+
+function autoPresetId(effort) {
+  return effort === "medium" ? "auto" : `auto-${effort}`;
+}
+
+function effortDescription(modelLabel, effort, language) {
+  const reasoningLabel = reasoningEffortLabel(effort, language);
+  if (language === "ko") {
+    return `${modelLabel}에 ${reasoningLabel} 추론 수준을 적용합니다.`;
+  }
+  return `Use ${reasoningLabel} reasoning with ${modelLabel}.`;
+}
+
+function updateRuntimeModel(currentRuntime, modelCatalog, nextModel, nextEffort = null) {
+  const model = String(nextModel || "").trim().toLowerCase() || "auto";
+  const supported = supportedReasoningOptions(modelCatalog, model, currentRuntime?.effort || "medium");
+  const preferred = nextEffort || currentRuntime?.effort || defaultReasoningOption(modelCatalog, model, "medium");
+  const effort = supported.includes(preferred) ? preferred : supported[0] || "medium";
+  return {
+    ...currentRuntime,
+    model,
+    effort,
+    model_preset: model === "auto" ? autoPresetId(effort) : "",
+    model_selection_mode: "slug",
+    model_slug_input: model,
+  };
 }
 
 export function ConfigEditorView({
   form,
   modelPresets,
+  modelCatalog,
   busy,
   onChangeForm,
   onChooseDirectory,
@@ -23,6 +51,23 @@ export function ConfigEditorView({
 }) {
   const runtime = form.runtime || {};
   const { language, t } = useI18n();
+  const selectedModel = runtime.model || "auto";
+  const selectedCatalogEntry = findModelCatalogEntry(modelCatalog, selectedModel);
+  const supportedEfforts = supportedReasoningOptions(modelCatalog, selectedModel, runtime.effort || "medium");
+  const selectedEffort = supportedEfforts.includes(runtime.effort) ? runtime.effort : defaultReasoningOption(modelCatalog, selectedModel, "medium");
+
+  const visibleModels = (modelCatalog || []).filter((item) => item && item.model);
+  const allModels = visibleModels.length
+    ? visibleModels
+    : [
+        {
+          model: "auto",
+          display_name: "Auto",
+          hidden: false,
+        },
+      ];
+  const recommendedModels = allModels.filter((item) => !item.hidden);
+  const additionalModels = allModels.filter((item) => item.hidden);
 
   return (
     <section className="workspace-view">
@@ -92,12 +137,14 @@ export function ConfigEditorView({
                 onChange={(event) =>
                   onChangeForm((current) => ({
                     ...current,
-                    runtime: {
-                      ...current.runtime,
-                      model_selection_mode: "slug",
-                      model_slug_input: event.target.value,
-                      model: event.target.value,
-                    },
+                    runtime: updateRuntimeModel(
+                      {
+                        ...current.runtime,
+                        model_slug_input: event.target.value,
+                      },
+                      modelCatalog,
+                      event.target.value,
+                    ),
                   }))
                 }
                 disabled={busy}
@@ -217,35 +264,55 @@ export function ConfigEditorView({
           <div className="subsection">
             <div className="subsection__header">
               <strong>{t("config.executionModel")}</strong>
-              <span>{runtimeSummary(runtime, modelPresets, language)}</span>
+              <span>{runtimeSummary(runtime, modelPresets, language, modelCatalog)}</span>
             </div>
             <label className="field">
               <span>{t("field.model")}</span>
-              <input value={runtime.model || "gpt-5.4"} disabled />
+              <select
+                value={selectedModel}
+                onChange={(event) =>
+                  onChangeForm((current) => ({
+                    ...current,
+                    runtime: updateRuntimeModel(current.runtime, modelCatalog, event.target.value),
+                  }))
+                }
+                disabled={busy}
+              >
+                {recommendedModels.map((item) => (
+                  <option key={item.model} value={item.model}>
+                    {item.display_name}
+                  </option>
+                ))}
+                {additionalModels.length ? (
+                  <optgroup label={language === "ko" ? "기타 지원 모델" : "Additional Models"}>
+                    {additionalModels.map((item) => (
+                      <option key={item.model} value={item.model}>
+                        {item.display_name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+              </select>
             </label>
             <div className="choice-grid">
-              {modelPresets.map((preset) => (
+              {supportedEfforts.map((effort) => (
                 <EffortButton
-                  key={preset.preset_id}
-                  preset={preset}
-                  checked={runtime.model_preset === preset.preset_id}
-                  onSelect={() =>
+                  key={effort}
+                  effort={effort}
+                  selected={selectedEffort === effort}
+                  onSelect={(nextEffort) =>
                     onChangeForm((current) => ({
                       ...current,
-                      runtime: {
-                        ...current.runtime,
-                        model_preset: preset.preset_id,
-                        model: preset.model,
-                        effort: preset.effort,
-                        model_selection_mode: "slug",
-                        model_slug_input: preset.model,
-                      },
+                      runtime: updateRuntimeModel(current.runtime, modelCatalog, selectedModel, nextEffort),
                     }))
                   }
                   disabled={busy}
+                  language={language}
+                  description={effortDescription(selectedCatalogEntry?.display_name || selectedModel || "auto", effort, language)}
                 />
               ))}
             </div>
+            {selectedCatalogEntry?.description ? <p>{selectedCatalogEntry.description}</p> : null}
           </div>
         </div>
       </div>

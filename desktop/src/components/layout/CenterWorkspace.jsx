@@ -19,8 +19,10 @@ export function CenterWorkspace({
   detail,
   form,
   planDraft,
+  shareSettings,
   selectedStepId,
   modelPresets,
+  modelCatalog,
   busy,
   onChangeForm,
   onChooseDirectory,
@@ -35,6 +37,7 @@ export function CenterWorkspace({
   onGenerateShareLink,
   onCopyShareLink,
   onRevokeShareLink,
+  onChangeShareSettings,
   onSelectStep,
   onUpdateStepField,
   onSaveStepLocal,
@@ -59,6 +62,7 @@ export function CenterWorkspace({
         <RunControlView
           detail={detail}
           planDraft={planDraft}
+          shareSettings={shareSettings}
           selectedStepId={selectedStepId}
           busy={busy}
           onPromptChange={onPromptChange}
@@ -71,6 +75,7 @@ export function CenterWorkspace({
           onGenerateShareLink={onGenerateShareLink}
           onCopyShareLink={onCopyShareLink}
           onRevokeShareLink={onRevokeShareLink}
+          onChangeShareSettings={onChangeShareSettings}
           onSelectStep={onSelectStep}
           onUpdateStepField={onUpdateStepField}
           onSaveStepLocal={onSaveStepLocal}
@@ -79,13 +84,14 @@ export function CenterWorkspace({
           onMoveStep={onMoveStep}
         />
       ) : null}
-      {activeTab === "dashboard" ? <DashboardView detail={detail} planDraft={planDraft} modelPresets={modelPresets} activeJob={activeJob} /> : null}
+      {activeTab === "dashboard" ? <DashboardView detail={detail} planDraft={planDraft} modelPresets={modelPresets} modelCatalog={modelCatalog} activeJob={activeJob} /> : null}
       {activeTab === "reports" ? <ReportsView reports={detail?.reports} /> : null}
       {activeTab === "history" ? <HistoryView history={detail?.history} /> : null}
       {activeTab === "config" ? (
         <ConfigEditorView
           form={form}
           modelPresets={modelPresets}
+          modelCatalog={modelCatalog}
           busy={busy}
           onChangeForm={onChangeForm}
           onChooseDirectory={onChooseDirectory}

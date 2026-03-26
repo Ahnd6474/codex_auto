@@ -100,8 +100,10 @@ export default function App() {
             detail={detail}
             form={controller.projectForm}
             planDraft={controller.planDraft}
+            shareSettings={controller.shareSettings}
             selectedStepId={controller.selectedStepId}
             modelPresets={controller.modelPresets}
+            modelCatalog={controller.modelCatalog}
             busy={controller.busy}
             onChangeForm={controller.setProjectForm}
             onChooseDirectory={controller.chooseDirectory}
@@ -121,6 +123,7 @@ export default function App() {
             onGenerateShareLink={controller.generateShareLink}
             onCopyShareLink={controller.copyShareLink}
             onRevokeShareLink={controller.revokeShareLink}
+            onChangeShareSettings={controller.setShareSettings}
             onSelectStep={controller.setSelectedStepId}
             onUpdateStepField={controller.updateSelectedStep}
             onSaveStepLocal={controller.saveStepLocal}

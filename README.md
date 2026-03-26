@@ -66,20 +66,21 @@ The desktop app lets you:
 - generate, edit, reorder, and persist execution-plan steps
 - run the remaining steps sequentially and inspect activity/snapshot traces
 - request stop-after-step and run closeout after all plan steps complete
-- generate a temporary local read-only monitoring link, copy it, and revoke it from the desktop UI
+- generate a temporary read-only monitoring link, copy it, and revoke it from the desktop UI
 - keep the Python orchestration backend, workspace layout, logs, reports, and rollback behavior intact
 
 Static website assets are kept separately under `website/`, including the share viewer served by the local monitoring server.
 
-The read-only monitoring flow is local-first:
+The read-only monitoring flow supports both local-only access and external access through a user-provided public base URL:
 
 1. start the desktop app
-2. open a managed project and generate a share link
-3. open the generated `http://127.0.0.1:<port>/share/view?...` URL on another device or browser
-4. the remote page polls every 5 seconds for masked status, current task, recent logs, latest test result, and last updated time
-5. revoke the link in the desktop UI to deny further access
+2. if you want internet access, start your own reverse proxy or tunnel and note its public base URL
+3. open a managed project, set the share bind host and optional public base URL, then generate a share link
+4. open the generated link on another browser or device
+5. the remote page polls every 5 seconds for masked status, current task, recent logs, latest test result, and last updated time
+6. revoke the link in the desktop UI to deny further access
 
-The core app only starts the local share server and manages temporary session files. Any tunnel or external exposure remains a separate manual step.
+The core app still keeps network exposure separate from orchestration. It starts the local share server, stores temporary share sessions, and can generate links that use a manually supplied public base URL, while any tunnel or reverse proxy remains an external step you control.
 
 ## Main Commands
 
