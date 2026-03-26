@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo } from "react";
-import { LANGUAGE_OPTIONS, detectInitialLanguage, normalizeLanguage, translate } from "./locale";
+import { AVAILABLE_LANGUAGE_OPTIONS, detectInitialLanguage, normalizeLanguage, translate } from "./locale";
 import { usePersistentState } from "./hooks/usePersistentState";
 
 const I18nContext = createContext(null);
@@ -11,7 +11,7 @@ export function I18nProvider({ children }) {
   const value = useMemo(
     () => ({
       language,
-      languageOptions: LANGUAGE_OPTIONS,
+      languageOptions: AVAILABLE_LANGUAGE_OPTIONS,
       setLanguage(nextLanguage) {
         setStoredLanguage(normalizeLanguage(nextLanguage));
       },

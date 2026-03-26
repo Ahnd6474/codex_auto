@@ -255,6 +255,55 @@ class ShareMonitoringTests(unittest.TestCase):
                 server.server_close()
                 thread.join(timeout=2)
 
+    def test_share_events_api_streams_live_status_payload(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            _orchestrator, project = create_project(workspace_root, repo_dir)
+            append_jsonl(
+                project.paths.ui_event_log_file,
+                {
+                    "timestamp": "2026-03-26T10:00:00+00:00",
+                    "event_type": "run-started",
+                    "message": "Started the run loop.",
+                    "details": {},
+                },
+            )
+            session = create_share_session(project, expires_in_minutes=60, created_by="test")
+
+            server = ShareHTTPServer(("127.0.0.1", 0), ShareRequestHandler, workspace_root=workspace_root)
+            thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True)
+            thread.start()
+            try:
+                base_url = f"http://127.0.0.1:{server.server_address[1]}"
+                response = urllib.request.urlopen(
+                    f"{base_url}/share/api/events?session={session.session_id}&token={session.viewer_token}",
+                    timeout=3,
+                )
+                self.assertIn("text/event-stream", response.headers.get("Content-Type", ""))
+
+                event_name = ""
+                payload = None
+                for _ in range(12):
+                    line = response.readline().decode("utf-8").strip()
+                    if not line:
+                        continue
+                    if line.startswith("event: "):
+                        event_name = line.split(": ", 1)[1]
+                    elif line.startswith("data: ") and event_name == "status":
+                        payload = json.loads(line.split(": ", 1)[1])
+                        break
+
+                self.assertIsNotNone(payload)
+                self.assertEqual(payload["project"]["display_name"], "Share Demo")
+                self.assertIn("recent_logs", payload)
+                self.assertIn("latest_test_result", payload)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
 
 if __name__ == "__main__":
     unittest.main()

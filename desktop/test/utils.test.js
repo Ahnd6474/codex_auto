@@ -297,7 +297,7 @@ test("runtimeSummary prefers preset summaries, then direct model settings, then 
   assert.equal(runtimeSummary({ model: "gpt-5.4", effort: "low", use_fast_mode: true }, []), "gpt-5.4 | reasoning Low | /fast");
   assert.equal(runtimeSummary({ model: "gpt-5.4" }), "gpt-5.4 | reasoning High");
   assert.equal(runtimeSummary({}, undefined), "No model selected");
-  assert.equal(runtimeSummary({ model: "gpt-5.4", effort: "high" }, [], "ko"), "gpt-5.4 | 추론 높음");
+  assert.equal(runtimeSummary({ model: "gpt-5.4", effort: "high" }, [], "ko"), "gpt-5.4 | 높음 추론");
 });
 
 test("config reasoning helpers keep auto separate from explicit efforts", () => {
@@ -321,7 +321,7 @@ test("config reasoning helpers keep auto separate from explicit efforts", () => 
   assert.equal(selectedConfigReasoning(modelCatalog, { model: "gpt-5.4", effort: "medium", effort_selection_mode: "auto" }), "auto");
   assert.equal(reasoningEffortLabel("auto"), "Auto");
   assert.equal(autoRoutingPresetLabel("low"), "Low Only");
-  assert.equal(autoRoutingPresetLabel("xhigh", "ko"), "매우 높음만");
+  assert.equal(autoRoutingPresetLabel("xhigh", "ko"), "XHigh만");
 });
 
 test("codexUsageBuckets separates 5h, 7d, and spark usage windows", () => {

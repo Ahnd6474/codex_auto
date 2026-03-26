@@ -71,16 +71,17 @@ The desktop app lets you:
 
 Static website assets are kept separately under `website/`, including the share viewer served by the local monitoring server.
 
-The read-only monitoring flow supports both local-only access and external access through a user-provided public base URL:
+The read-only monitoring flow supports both local-only access and external access through either a user-provided public base URL or an automatic Cloudflare Quick Tunnel:
 
 1. start the desktop app
-2. if you want internet access, start your own reverse proxy or tunnel and note its public base URL
-3. open a managed project, set the share bind host and optional public base URL, then generate a share link
-4. open the generated link on another browser or device
-5. the remote page polls every 5 seconds for masked status, current task, recent logs, latest test result, and last updated time
-6. revoke the link in the desktop UI to deny further access
+2. if you want a stable custom domain, start your own reverse proxy or tunnel and note its public base URL
+3. open a managed project, set the share bind host to `0.0.0.0`, optionally enter a public base URL, then generate a share link
+4. if `public_base_url` is empty and `cloudflared` is installed, `jakal-flow` will start a temporary Cloudflare Quick Tunnel automatically and use that public URL
+5. open the generated link on another browser or device
+6. the remote page opens a live event stream for masked status, current task, recent logs, latest test result, and last updated time, with 5-second polling as a fallback
+7. revoke the link in the desktop UI to deny further access
 
-The core app still keeps network exposure separate from orchestration. It starts the local share server, stores temporary share sessions, and can generate links that use a manually supplied public base URL, while any tunnel or reverse proxy remains an external step you control.
+The core app still keeps network exposure separate from orchestration. It starts the local share server, stores temporary share sessions, and can generate links that use either a manually supplied public base URL or an automatic temporary Cloudflare Quick Tunnel. Quick Tunnels are convenient for free ad-hoc phone access, but they still depend on your local machine being online and are not a replacement for permanent hosting.
 
 ## Main Commands
 

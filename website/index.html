@@ -18,6 +18,7 @@
       gaMeasurementId: "G-ZD7MP818RD"
     };
   </script>
+  <script src="generated_translations.js" defer></script>
   <script src="site.js" defer></script>
 </head>
 <body>
@@ -38,12 +39,10 @@
           <a href="#release" data-i18n="nav_release">Release</a>
           <a href="#contact" data-i18n="nav_contact">Contact</a>
         </nav>
-        <div class="lang-switcher" aria-label="Language switcher">
-          <button class="lang-button active" type="button" data-lang="ko">KO</button>
-          <button class="lang-button" type="button" data-lang="en">EN</button>
-          <button class="lang-button" type="button" data-lang="zh">中文</button>
-          <button class="lang-button" type="button" data-lang="ja">JP</button>
-        </div>
+        <label class="lang-switcher" aria-label="Language switcher">
+          <span class="lang-label">Language</span>
+          <select class="lang-select" data-language-select></select>
+        </label>
       </div>
     </header>
 

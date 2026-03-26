@@ -5,6 +5,7 @@ import json
 import mimetypes
 import os
 import sys
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -33,6 +34,8 @@ WEBSITE_ROOT = Path(__file__).resolve().parents[2] / "website"
 
 class ShareRequestHandler(BaseHTTPRequestHandler):
     server_version = "jakal-flow-share/0.1"
+    stream_poll_interval_secs = 1.0
+    stream_heartbeat_interval_secs = 15.0
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
@@ -50,6 +53,9 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/share/api/status":
             self._serve_status(parsed.query)
+            return
+        if parsed.path == "/share/api/events":
+            self._serve_events(parsed.query)
             return
         if parsed.path == "/share/api/logs":
             self._serve_logs(parsed.query)
@@ -99,14 +105,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
     def _serve_status(self, query: str) -> None:
         try:
             project, session = self._validated_project(query)
-            orchestrator = Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
-            plan_state = orchestrator.load_execution_plan_state(project)
-            payload = public_monitor_status(project, plan_state, log_limit=8)
-            payload["share_session"] = {
-                "session_id": session.session_id,
-                "expires_at": session.expires_at,
-            }
-            self._write_json(HTTPStatus.OK, payload)
+            self._write_json(HTTPStatus.OK, self._status_payload(project, session))
         except ValueError as exc:
             self._write_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
         except KeyError:
@@ -139,6 +138,73 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             self._write_json(HTTPStatus.NOT_FOUND, {"error": "Unknown share session."})
         except PermissionError as exc:
             self._write_json(HTTPStatus.FORBIDDEN, {"error": str(exc)})
+
+    def _serve_events(self, query: str) -> None:
+        try:
+            project, session = self._validated_project(query)
+        except ValueError as exc:
+            self._write_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            return
+        except KeyError:
+            self._write_json(HTTPStatus.NOT_FOUND, {"error": "Unknown share session."})
+            return
+        except PermissionError as exc:
+            self._write_json(HTTPStatus.FORBIDDEN, {"error": str(exc)})
+            return
+
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+
+        last_payload = ""
+        last_heartbeat = time.monotonic()
+        try:
+            self._write_sse_comment("connected")
+            self._write_sse_event("ready", {"ok": True})
+            while True:
+                project, session = resolve_shared_session(self.server.workspace_root, session.session_id)  # type: ignore[attr-defined]
+                validate_share_session(session, self._query_arg(query, "token"))
+                payload = self._status_payload(project, session)
+                serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+                if serialized != last_payload:
+                    self._write_sse_event("status", payload)
+                    last_payload = serialized
+                    last_heartbeat = time.monotonic()
+                elif (time.monotonic() - last_heartbeat) >= self.stream_heartbeat_interval_secs:
+                    self._write_sse_comment("keepalive")
+                    last_heartbeat = time.monotonic()
+                time.sleep(self.stream_poll_interval_secs)
+        except (BrokenPipeError, ConnectionResetError):
+            return
+        except KeyError:
+            self._write_sse_event("error", {"error": "Unknown share session."})
+        except PermissionError as exc:
+            self._write_sse_event("error", {"error": str(exc)})
+
+    def _status_payload(self, project, session) -> dict[str, Any]:
+        orchestrator = Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
+        plan_state = orchestrator.load_execution_plan_state(project)
+        payload = public_monitor_status(project, plan_state, log_limit=8)
+        payload["share_session"] = {
+            "session_id": session.session_id,
+            "expires_at": session.expires_at,
+        }
+        return payload
+
+    def _write_sse_comment(self, message: str) -> None:
+        self.wfile.write(f": {message}\n\n".encode("utf-8"))
+        self.wfile.flush()
+
+    def _write_sse_event(self, event_name: str, payload: dict[str, Any]) -> None:
+        raw = json.dumps(payload, ensure_ascii=False)
+        self.wfile.write(b"retry: 3000\n")
+        self.wfile.write(f"event: {event_name}\n".encode("utf-8"))
+        for line in raw.splitlines() or ["{}"]:
+            self.wfile.write(f"data: {line}\n".encode("utf-8"))
+        self.wfile.write(b"\n")
+        self.wfile.flush()
 
     def _write_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
         raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")

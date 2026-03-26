@@ -1,30 +1,41 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { detectInitialLanguage, displayStatus, normalizeLanguage, translate } from "../src/locale.js";
+import { AVAILABLE_LANGUAGE_OPTIONS, detectInitialLanguage, displayStatus, normalizeLanguage, translate } from "../src/locale.js";
 
-test("normalizeLanguage keeps supported values and falls back to english", () => {
+test("normalizeLanguage keeps supported values, resolves aliases, and falls back to english", () => {
   assert.equal(normalizeLanguage("ko"), "ko");
   assert.equal(normalizeLanguage("en"), "en");
-  assert.equal(normalizeLanguage("fr"), "en");
+  assert.equal(normalizeLanguage("fr"), "fr");
+  assert.equal(normalizeLanguage("pt-BR"), "pt-br");
+  assert.equal(normalizeLanguage("zh-Hant"), "zh-tw");
+  assert.equal(normalizeLanguage("fil"), "tl");
   assert.equal(normalizeLanguage(""), "en");
 });
 
-test("detectInitialLanguage prefers korean locales and otherwise returns english", () => {
+test("detectInitialLanguage returns the nearest supported locale", () => {
   assert.equal(detectInitialLanguage("ko-KR"), "ko");
-  assert.equal(detectInitialLanguage("ko"), "ko");
+  assert.equal(detectInitialLanguage("ja-JP"), "ja");
+  assert.equal(detectInitialLanguage("zh-CN"), "zh-cn");
+  assert.equal(detectInitialLanguage("nb-NO"), "no");
   assert.equal(detectInitialLanguage("en-US"), "en");
-  assert.equal(detectInitialLanguage("ja-JP"), "en");
 });
 
 test("translate interpolates parameters and falls back to english keys", () => {
   assert.equal(translate("ko", "sidebar.targetBlock", { block: 3 }), "대상 블록 3");
-  assert.equal(translate("fr", "action.run"), "Run");
+  assert.equal(translate("fr", "action.run"), "Courir");
 });
 
-test("displayStatus localizes known states and humanizes running details", () => {
-  assert.equal(displayStatus("completed", "ko"), "완료");
+test("available language options include the extended locale list", () => {
+  const values = new Set(AVAILABLE_LANGUAGE_OPTIONS.map((option) => option.value));
+  ["ja", "zh-cn", "zh-tw", "pt-br", "pt-pt", "ar", "he", "tl", "lv"].forEach((value) => {
+    assert.equal(values.has(value), true);
+  });
+});
+
+test("displayStatus still localizes existing translations", () => {
+  assert.equal(displayStatus("completed", "ko"), "완료됨");
   assert.equal(displayStatus("paused_for_review", "en"), "Paused for review");
   assert.equal(displayStatus("running:generate plan", "ko"), "실행 중: generate plan");
-  assert.equal(displayStatus("setup_ready", "en"), "Setup ready");
+  assert.equal(displayStatus("setup_ready", "fr"), "Configuration prête");
 });

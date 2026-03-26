@@ -21,6 +21,7 @@ from .model_selection import (
 )
 from .models import ExecutionPlanState, ProjectContext, RuntimeOptions
 from .orchestrator import Orchestrator
+from .public_tunnel import public_tunnel_status_payload, start_cloudflare_quick_tunnel, stop_public_tunnel_process
 from .share import (
     DEFAULT_SHARE_HOST,
     DEFAULT_SHARE_PORT,
@@ -127,6 +128,7 @@ def start_share_server_process(
         )
     )
     if should_restart:
+        stop_public_tunnel_process(workspace_root)
         stop_share_server_process(workspace_root)
         current = share_server_status_payload(workspace_root)
     if current.get("running"):
@@ -176,6 +178,7 @@ def start_share_server_process(
 
 
 def stop_share_server_process(workspace_root: Path) -> dict[str, Any]:
+    stop_public_tunnel_process(workspace_root)
     status = share_server_status_payload(workspace_root)
     pid = int(status.get("pid") or 0)
     if pid <= 0:
@@ -851,6 +854,9 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
     if command == "get_share_server_status":
         return share_server_status_payload(workspace_root)
 
+    if command == "get_public_tunnel_status":
+        return public_tunnel_status_payload(workspace_root)
+
     if command == "save_share_server_config":
         config = save_share_server_config(
             workspace_root,
@@ -876,6 +882,16 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
 
     if command == "stop_share_server":
         return stop_share_server_process(workspace_root)
+
+    if command == "start_public_tunnel":
+        target_url = str(payload.get("target_url", "")).strip()
+        if not target_url:
+            status = share_server_status_payload(workspace_root)
+            target_url = str(status.get("base_url") or "").strip()
+        return start_cloudflare_quick_tunnel(workspace_root, target_url)
+
+    if command == "stop_public_tunnel":
+        return stop_public_tunnel_process(workspace_root)
 
     if command == "save-project-setup":
         project_dir, runtime, branch, origin_url, display_name = common_project_inputs(payload)
@@ -973,6 +989,17 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
             port=preferred_port,
             public_base_url=public_base_url,
         )
+        share_status = share_server_status_payload(workspace_root)
+        effective_bind_host = str(share_status.get("config", {}).get("bind_host", bind_host or "")).strip() or bind_host or ""
+        should_start_quick_tunnel = (
+            effective_bind_host == "0.0.0.0"
+            and not public_base_url
+            and bool(share_status.get("base_url"))
+        )
+        if should_start_quick_tunnel:
+            start_cloudflare_quick_tunnel(workspace_root, str(share_status["base_url"]))
+        elif public_base_url or effective_bind_host != "0.0.0.0":
+            stop_public_tunnel_process(workspace_root)
         session = create_share_session(
             project,
             expires_in_minutes=expires_in_minutes,

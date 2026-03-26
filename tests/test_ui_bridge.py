@@ -565,6 +565,77 @@ class UIBridgeTests(unittest.TestCase):
             finally:
                 run_command("stop_share_server", workspace_root, {})
 
+    def test_share_bridge_can_auto_start_quick_tunnel_for_public_phone_link(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Quick Tunnel Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m pytest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                run_command("save-project-setup", workspace_root, payload)
+
+            try:
+                with mock.patch(
+                    "jakal_flow.ui_bridge.start_cloudflare_quick_tunnel",
+                    return_value={
+                        "running": True,
+                        "provider": "cloudflare-quick-tunnel",
+                        "public_url": "https://demo.trycloudflare.com",
+                        "target_url": "http://0.0.0.0:43123",
+                        "pid": 4242,
+                        "started_at": "2026-03-26T00:00:00+00:00",
+                        "available": True,
+                    },
+                ) as start_tunnel, mock.patch(
+                    "jakal_flow.public_tunnel.public_tunnel_status_payload",
+                    return_value={
+                        "running": True,
+                        "provider": "cloudflare-quick-tunnel",
+                        "public_url": "https://demo.trycloudflare.com",
+                        "target_url": "http://0.0.0.0:43123",
+                        "pid": 4242,
+                        "started_at": "2026-03-26T00:00:00+00:00",
+                        "available": True,
+                    },
+                ), mock.patch(
+                    "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                    side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+                ):
+                    created = run_command(
+                        "create_share_session",
+                        workspace_root,
+                        {
+                            "project_dir": str(repo_dir),
+                            "created_by": "unit-test",
+                            "bind_host": "0.0.0.0",
+                            "public_base_url": "",
+                        },
+                    )
+
+                start_tunnel.assert_called_once()
+                self.assertEqual(created["share"]["server"]["share_base_url"], "https://demo.trycloudflare.com")
+                self.assertEqual(created["share"]["server"]["share_base_url_source"], "quick_tunnel")
+                self.assertTrue(created["created_share_session"]["share_url"].startswith("https://demo.trycloudflare.com/share/view?"))
+            finally:
+                run_command("stop_share_server", workspace_root, {})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,9 +1,119 @@
+import { GENERATED_STRINGS } from "./generated_locale_data.js";
+
 export const DEFAULT_LANGUAGE = "en";
-export const SUPPORTED_LANGUAGES = ["ko", "en"];
+export const SUPPORTED_LANGUAGES = [
+  "ko",
+  "en",
+  "ja",
+  "zh-cn",
+  "zh-tw",
+  "es",
+  "fr",
+  "de",
+  "it",
+  "pt-br",
+  "pt-pt",
+  "ru",
+  "uk",
+  "pl",
+  "nl",
+  "tr",
+  "ar",
+  "he",
+  "hi",
+  "bn",
+  "th",
+  "vi",
+  "id",
+  "ms",
+  "tl",
+  "cs",
+  "hu",
+  "ro",
+  "sv",
+  "da",
+  "fi",
+  "no",
+  "el",
+  "sk",
+  "bg",
+  "hr",
+  "sr",
+  "sl",
+  "lt",
+  "lv",
+];
 export const LANGUAGE_OPTIONS = [
   { value: "ko", label: "한국어" },
   { value: "en", label: "English" },
 ];
+
+export const AVAILABLE_LANGUAGE_OPTIONS = [
+  { value: "ko", label: "한국어" },
+  { value: "en", label: "English" },
+  { value: "ja", label: "日本語" },
+  { value: "zh-cn", label: "简体中文" },
+  { value: "zh-tw", label: "繁體中文" },
+  { value: "es", label: "Español" },
+  { value: "fr", label: "Français" },
+  { value: "de", label: "Deutsch" },
+  { value: "it", label: "Italiano" },
+  { value: "pt-br", label: "Português (Brasil)" },
+  { value: "pt-pt", label: "Português (Portugal)" },
+  { value: "ru", label: "Русский" },
+  { value: "uk", label: "Українська" },
+  { value: "pl", label: "Polski" },
+  { value: "nl", label: "Nederlands" },
+  { value: "tr", label: "Türkçe" },
+  { value: "ar", label: "العربية" },
+  { value: "he", label: "עברית" },
+  { value: "hi", label: "हिन्दी" },
+  { value: "bn", label: "বাংলা" },
+  { value: "th", label: "ไทย" },
+  { value: "vi", label: "Tiếng Việt" },
+  { value: "id", label: "Bahasa Indonesia" },
+  { value: "ms", label: "Bahasa Melayu" },
+  { value: "tl", label: "Filipino" },
+  { value: "cs", label: "Čeština" },
+  { value: "hu", label: "Magyar" },
+  { value: "ro", label: "Română" },
+  { value: "sv", label: "Svenska" },
+  { value: "da", label: "Dansk" },
+  { value: "fi", label: "Suomi" },
+  { value: "no", label: "Norsk" },
+  { value: "el", label: "Ελληνικά" },
+  { value: "sk", label: "Slovenčina" },
+  { value: "bg", label: "Български" },
+  { value: "hr", label: "Hrvatski" },
+  { value: "sr", label: "Srpski" },
+  { value: "sl", label: "Slovenščina" },
+  { value: "lt", label: "Lietuvių" },
+  { value: "lv", label: "Latviešu" },
+];
+
+const LANGUAGE_ALIASES = {
+  "en-us": "en",
+  "en-gb": "en",
+  "ko-kr": "ko",
+  "ja-jp": "ja",
+  zh: "zh-cn",
+  "zh-hans": "zh-cn",
+  "zh-sg": "zh-cn",
+  "zh-my": "zh-cn",
+  "zh-hk": "zh-tw",
+  "zh-mo": "zh-tw",
+  "zh-hant": "zh-tw",
+  "zh-cn": "zh-cn",
+  "zh-tw": "zh-tw",
+  pt: "pt-pt",
+  "pt-br": "pt-br",
+  "pt-pt": "pt-pt",
+  nb: "no",
+  nn: "no",
+  no: "no",
+  fil: "tl",
+  iw: "he",
+};
 
 const STRINGS = {
   en: {
@@ -183,7 +293,7 @@ const STRINGS = {
     "run.shareExternalHint": "Set a public base URL from your reverse proxy or tunnel to generate an internet-accessible share link.",
     "run.shareLink": "Share Link",
     "run.shareLocalLink": "Local Link",
-    "run.sharePoll": "The remote viewer refreshes every 5 seconds.",
+    "run.sharePoll": "The remote viewer streams live updates and falls back to 5-second polling if needed.",
     "run.sharePublicBaseUrl": "Public Share Base URL",
     "run.shareServerAddress": "Local server: {address}",
     "run.stopAfterStep": "Stop After Step",
@@ -487,6 +597,11 @@ STRINGS.ko["prompt.confirmDeleteAllProjects"] =
   "모든 프로젝트를 삭제할까요? 관리 중인 문서, 로그, 상태만 삭제되고 원본 저장소 폴더는 그대로 유지됩니다.";
 STRINGS.ko["sidebar.projectContextDelete"] = "우클릭으로 프로젝트 메뉴 열기";
 
+const ALL_STRINGS = {
+  ...STRINGS,
+  ...GENERATED_STRINGS,
+};
+
 function titleCase(text) {
   if (!text) {
     return "";
@@ -507,7 +622,18 @@ function humanizeToken(value) {
 
 export function normalizeLanguage(value) {
   const normalized = String(value || "").trim().toLowerCase();
-  return SUPPORTED_LANGUAGES.includes(normalized) ? normalized : DEFAULT_LANGUAGE;
+  if (!normalized) {
+    return DEFAULT_LANGUAGE;
+  }
+  const aliased = LANGUAGE_ALIASES[normalized] || normalized;
+  if (SUPPORTED_LANGUAGES.includes(aliased)) {
+    return aliased;
+  }
+  const base = aliased.split("-")[0];
+  if (SUPPORTED_LANGUAGES.includes(base)) {
+    return base;
+  }
+  return LANGUAGE_ALIASES[base] || DEFAULT_LANGUAGE;
 }
 
 export function detectInitialLanguage(sourceLanguage = null) {
@@ -516,12 +642,12 @@ export function detectInitialLanguage(sourceLanguage = null) {
     globalThis.navigator?.language ||
     globalThis.navigator?.languages?.[0] ||
     DEFAULT_LANGUAGE;
-  return String(source).trim().toLowerCase().startsWith("ko") ? "ko" : "en";
+  return normalizeLanguage(source);
 }
 
 export function translate(language, key, params = {}) {
   const normalized = normalizeLanguage(language);
-  const value = STRINGS[normalized]?.[key] ?? STRINGS.en[key];
+  const value = ALL_STRINGS[normalized]?.[key] ?? STRINGS.en[key];
   if (value === undefined) {
     return key;
   }
@@ -542,7 +668,7 @@ export function displayStatus(status, language) {
     });
   }
   const key = `status.${normalized}`;
-  const translated = STRINGS[normalizedLanguage]?.[key] ?? STRINGS.en[key];
+  const translated = ALL_STRINGS[normalizedLanguage]?.[key] ?? STRINGS.en[key];
   if (translated) {
     return translated;
   }

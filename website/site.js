@@ -364,6 +364,112 @@ const translations = {
   },
 };
 
+const allTranslations = {
+  ...translations,
+  ...(window.JakalFlowGeneratedTranslations || {}),
+};
+
+const supportedLanguages = [
+  { value: "ko", label: "한국어", translation: "ko" },
+  { value: "en", label: "English", translation: "en" },
+  { value: "ja", label: "日本語", translation: "ja" },
+  { value: "zh-CN", label: "简体中文", translation: "zh" },
+  { value: "zh-TW", label: "繁體中文", translation: "zh" },
+  { value: "es", label: "Español", translation: "en" },
+  { value: "fr", label: "Français", translation: "en" },
+  { value: "de", label: "Deutsch", translation: "en" },
+  { value: "it", label: "Italiano", translation: "en" },
+  { value: "pt-BR", label: "Português (Brasil)", translation: "en" },
+  { value: "pt-PT", label: "Português (Portugal)", translation: "en" },
+  { value: "ru", label: "Русский", translation: "en" },
+  { value: "uk", label: "Українська", translation: "en" },
+  { value: "pl", label: "Polski", translation: "en" },
+  { value: "nl", label: "Nederlands", translation: "en" },
+  { value: "tr", label: "Türkçe", translation: "en" },
+  { value: "ar", label: "العربية", translation: "en" },
+  { value: "he", label: "עברית", translation: "en" },
+  { value: "hi", label: "हिन्दी", translation: "en" },
+  { value: "bn", label: "বাংলা", translation: "en" },
+  { value: "th", label: "ไทย", translation: "en" },
+  { value: "vi", label: "Tiếng Việt", translation: "en" },
+  { value: "id", label: "Bahasa Indonesia", translation: "en" },
+  { value: "ms", label: "Bahasa Melayu", translation: "en" },
+  { value: "tl", label: "Filipino", translation: "en" },
+  { value: "cs", label: "Čeština", translation: "en" },
+  { value: "hu", label: "Magyar", translation: "en" },
+  { value: "ro", label: "Română", translation: "en" },
+  { value: "sv", label: "Svenska", translation: "en" },
+  { value: "da", label: "Dansk", translation: "en" },
+  { value: "fi", label: "Suomi", translation: "en" },
+  { value: "no", label: "Norsk", translation: "en" },
+  { value: "el", label: "Ελληνικά", translation: "en" },
+  { value: "sk", label: "Slovenčina", translation: "en" },
+  { value: "bg", label: "Български", translation: "en" },
+  { value: "hr", label: "Hrvatski", translation: "en" },
+  { value: "sr", label: "Srpski", translation: "en" },
+  { value: "sl", label: "Slovenščina", translation: "en" },
+  { value: "lt", label: "Lietuvių", translation: "en" },
+  { value: "lv", label: "Latviešu", translation: "en" },
+];
+
+const languageAliases = {
+  zh: "zh-CN",
+  "zh-cn": "zh-CN",
+  "zh-hans": "zh-CN",
+  "zh-sg": "zh-CN",
+  "zh-tw": "zh-TW",
+  "zh-hant": "zh-TW",
+  "zh-hk": "zh-TW",
+  "zh-mo": "zh-TW",
+  pt: "pt-PT",
+  "pt-br": "pt-BR",
+  "pt-pt": "pt-PT",
+  fil: "tl",
+  iw: "he",
+  nb: "no",
+  nn: "no",
+};
+
+function normalizeLanguage(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "ko";
+  }
+  const lower = normalized.toLowerCase();
+  const aliased = languageAliases[lower] || normalized;
+  const exact = supportedLanguages.find((item) => item.value.toLowerCase() === String(aliased).toLowerCase());
+  if (exact) {
+    return exact.value;
+  }
+  const base = lower.split("-")[0];
+  const baseAliased = languageAliases[base] || base;
+  const matchedBase = supportedLanguages.find((item) => item.value.toLowerCase() === String(baseAliased).toLowerCase());
+  return matchedBase ? matchedBase.value : "ko";
+}
+
+function translationLanguageFor(language) {
+  const normalized = normalizeLanguage(language);
+  if (allTranslations[normalized]) {
+    return normalized;
+  }
+  return supportedLanguages.find((item) => item.value === normalized)?.translation || "en";
+}
+
+function populateLanguageSelect() {
+  const select = document.querySelector("[data-language-select]");
+  if (!select) {
+    return null;
+  }
+  select.innerHTML = "";
+  supportedLanguages.forEach((language) => {
+    const option = document.createElement("option");
+    option.value = language.value;
+    option.textContent = language.label;
+    select.appendChild(option);
+  });
+  return select;
+}
+
 function loadGoogleAnalytics(measurementId) {
   if (!measurementId || window.__codexAutoGaLoaded) {
     return;
@@ -393,9 +499,10 @@ function updateBannerVisibility(banner, visible) {
 }
 
 function applyTranslations(language) {
-  const resolved = translations[language] ? language : "ko";
-  const messages = translations[resolved];
-  document.documentElement.lang = resolved === "zh" ? "zh-CN" : resolved;
+  const resolved = normalizeLanguage(language);
+  const translationLanguage = translationLanguageFor(resolved);
+  const messages = allTranslations[translationLanguage] || allTranslations.ko;
+  document.documentElement.lang = resolved;
   document.title = messages.title;
 
   const metaDescription = document.getElementById("meta-description");
@@ -417,22 +524,26 @@ function applyTranslations(language) {
     }
   });
 
-  document.querySelectorAll("[data-lang]").forEach((button) => {
-    button.classList.toggle("active", button.getAttribute("data-lang") === resolved);
-  });
+  const select = document.querySelector("[data-language-select]");
+  if (select) {
+    select.value = resolved;
+  }
 }
 
 function bootstrapLanguage() {
-  const stored = localStorage.getItem(LANGUAGE_KEY) || "ko";
-  applyTranslations(stored);
+  const select = populateLanguageSelect();
+  const stored = localStorage.getItem(LANGUAGE_KEY);
+  const detected = normalizeLanguage(stored || window.navigator?.language || "ko");
+  applyTranslations(detected);
 
-  document.querySelectorAll("[data-lang]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const nextLanguage = button.getAttribute("data-lang") || "ko";
+  if (select) {
+    select.value = detected;
+    select.addEventListener("change", () => {
+      const nextLanguage = normalizeLanguage(select.value);
       localStorage.setItem(LANGUAGE_KEY, nextLanguage);
       applyTranslations(nextLanguage);
     });
-  });
+  }
 }
 
 function bootstrapConsent() {

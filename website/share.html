@@ -3,11 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>jakal-flow | Remote Monitor</title>
+  <title id="page-title">jakal-flow | Remote Monitor</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/share/share.css">
+  <script src="/share/generated_share_translations.js" defer></script>
   <script src="/share/share.js" defer></script>
 </head>
 <body>
@@ -15,19 +16,19 @@
   <main class="monitor-shell">
     <header class="hero">
       <div>
-        <p class="eyebrow">jakal-flow remote monitor</p>
-        <h1>Read-only progress view</h1>
-        <p class="hero-copy">This page refreshes every 5 seconds and never exposes remote controls.</p>
+        <p class="eyebrow" id="hero-eyebrow">jakal-flow remote monitor</p>
+        <h1 id="hero-title">Read-only progress view</h1>
+        <p class="hero-copy" id="hero-copy">This page streams masked progress updates in near real time and never exposes remote controls.</p>
       </div>
       <div class="hero-meta">
         <span class="pill pill--neutral" id="poll-state">Waiting</span>
-        <span class="pill">Read only</span>
+        <span class="pill" id="read-only-pill">Read only</span>
       </div>
     </header>
 
     <section class="grid">
       <article class="card card--highlight">
-        <p class="card-label">Project</p>
+        <p class="card-label" id="project-label">Project</p>
         <h2 id="project-name">Loading...</h2>
         <div class="meta-list">
           <span id="project-slug">-</span>
@@ -37,19 +38,19 @@
       </article>
 
       <article class="card">
-        <p class="card-label">Run status</p>
+        <p class="card-label" id="run-status-label">Run status</p>
         <strong class="big-value" id="run-status">-</strong>
         <p class="muted" id="current-phase">-</p>
       </article>
 
       <article class="card">
-        <p class="card-label">Current task</p>
+        <p class="card-label" id="current-task-label">Current task</p>
         <strong id="task-title">-</strong>
         <p class="muted" id="task-summary">-</p>
       </article>
 
       <article class="card">
-        <p class="card-label">Latest test</p>
+        <p class="card-label" id="latest-test-label">Latest test</p>
         <strong id="test-status">-</strong>
         <p class="muted" id="test-summary">-</p>
       </article>
@@ -58,16 +59,16 @@
     <section class="card card--logs">
       <div class="section-head">
         <div>
-          <p class="card-label">Recent logs</p>
-          <strong>Masked activity tail</strong>
+          <p class="card-label" id="recent-logs-label">Recent logs</p>
+          <strong id="masked-activity-tail">Masked activity tail</strong>
         </div>
-        <span class="pill pill--neutral" id="refresh-note">Polling every 5s</span>
+        <span class="pill pill--neutral" id="refresh-note">Connecting live stream</span>
       </div>
       <pre id="log-tail">Waiting for status...</pre>
     </section>
 
     <section class="card card--error" id="error-card" hidden>
-      <p class="card-label">Access</p>
+      <p class="card-label" id="access-label">Access</p>
       <strong id="error-title">Unable to load share session</strong>
       <p class="muted" id="error-message"></p>
     </section>
