@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { bridgeRequest, getBridgeJob, startBridgeJob } from "../api";
 import { useI18n } from "../i18n";
@@ -56,6 +56,7 @@ export function useDesktopController() {
     bind_host: "127.0.0.1",
     public_base_url: "",
   });
+  const projectAutosaveTimerRef = useRef(null);
 
   const [centerTab, setCenterTab] = usePersistentState("jakal-flow:center-tab", "run");
   const [bottomTab, setBottomTab] = usePersistentState("jakal-flow:bottom-tab", "json");
@@ -93,6 +94,14 @@ export function useDesktopController() {
       setSidebarTab("projects");
     }
   }, [sidebarTab, setSidebarTab]);
+
+  useEffect(() => {
+    return () => {
+      if (projectAutosaveTimerRef.current) {
+        window.clearTimeout(projectAutosaveTimerRef.current);
+      }
+    };
+  }, []);
 
   function needsExpandedProjectDetail() {
     if (centerTab === "dashboard" || centerTab === "reports" || centerTab === "history") {
@@ -367,6 +376,10 @@ export function useDesktopController() {
     if (!repoId) {
       return null;
     }
+    if (projectAutosaveTimerRef.current) {
+      window.clearTimeout(projectAutosaveTimerRef.current);
+      projectAutosaveTimerRef.current = null;
+    }
     const previousProjectId = selectedProjectId;
     setLoadingProjectId(repoId);
     setSelectedProjectId(repoId);
@@ -429,7 +442,7 @@ export function useDesktopController() {
       if (typeof selected !== "string") {
         return;
       }
-      setProjectForm((current) => ({
+      updateProjectForm((current) => ({
         ...current,
         project_dir: selected,
         display_name: current.display_name || basename(selected),
@@ -440,6 +453,10 @@ export function useDesktopController() {
   }
 
   function startNewProject() {
+    if (projectAutosaveTimerRef.current) {
+      window.clearTimeout(projectAutosaveTimerRef.current);
+      projectAutosaveTimerRef.current = null;
+    }
     setMessage(null);
     setPlanDirty(false);
     setLoadingProjectId("");
@@ -453,19 +470,35 @@ export function useDesktopController() {
     setSidebarTab("projects");
   }
 
-  function saveProgramSettings() {
-    const nextSettings = programSettingsFromRuntime(programSettings);
+  function applyProgramSettingsNow(nextSettings) {
     setStoredProgramSettings(nextSettings);
     setProgramSettings(nextSettings);
     setProjectForm((current) => applyProgramSettingsToForm(current, nextSettings));
+  }
+
+  function updateProgramSettings(updater) {
+    setProgramSettings((current) => {
+      const draft = typeof updater === "function" ? updater(current) : updater;
+      const nextSettings = programSettingsFromRuntime(draft);
+      setStoredProgramSettings(nextSettings);
+      setProjectForm((form) => applyProgramSettingsToForm(form, nextSettings));
+      return nextSettings;
+    });
+  }
+
+  function saveProgramSettings() {
+    const nextSettings = programSettingsFromRuntime(programSettings);
+    applyProgramSettingsNow(nextSettings);
     setMessage(messagePayload("success", translate(language, "message.programSettingsSaved")));
   }
 
-  async function saveProject() {
+  async function saveProject(options = {}) {
+    const { formOverride = null, silent = false } = options;
+    const formToSave = applyProgramSettingsToForm(formOverride || projectForm, storedProgramSettings);
     await withPending("save-project-setup", async () => {
       const detail = await bridgeRequest(
         "save-project-setup",
-        buildProjectPayload(applyProgramSettingsToForm(projectForm, storedProgramSettings)),
+        buildProjectPayload(formToSave),
         workspaceRoot || null,
       );
       setProjectDetail(detail);
@@ -477,7 +510,31 @@ export function useDesktopController() {
       setSelectedStepId(firstSelectableStepId(detail.plan));
       setPlanDirty(false);
       await refreshProjects();
-      setMessage(messagePayload("success", translate(language, "message.projectConfigurationSaved")));
+      if (!silent) {
+        setMessage(messagePayload("success", translate(language, "message.projectConfigurationSaved")));
+      }
+    });
+  }
+
+  function scheduleProjectAutosave(nextForm) {
+    if (projectAutosaveTimerRef.current) {
+      window.clearTimeout(projectAutosaveTimerRef.current);
+      projectAutosaveTimerRef.current = null;
+    }
+    if (!String(nextForm?.project_dir || "").trim()) {
+      return;
+    }
+    projectAutosaveTimerRef.current = window.setTimeout(() => {
+      projectAutosaveTimerRef.current = null;
+      void saveProject({ formOverride: nextForm, silent: true });
+    }, 500);
+  }
+
+  function updateProjectForm(updater) {
+    setProjectForm((current) => {
+      const next = typeof updater === "function" ? updater(current) : updater;
+      scheduleProjectAutosave(next);
+      return next;
     });
   }
 
@@ -933,10 +990,10 @@ export function useDesktopController() {
     workspaceFilter,
     planDirty,
     setMessage,
-    setProjectForm,
+    setProjectForm: updateProjectForm,
     setPlanDraft,
     setSelectedStepId,
-    setProgramSettings,
+    setProgramSettings: updateProgramSettings,
     setCenterTab,
     setBottomTab,
     setSidebarTab,
