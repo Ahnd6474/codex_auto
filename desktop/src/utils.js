@@ -236,15 +236,15 @@ export function defaultReasoningOption(modelCatalog = [], model = "", fallback =
 
 export function configReasoningOptions(modelCatalog = [], model = "", fallback = "medium") {
   const supported = supportedReasoningOptions(modelCatalog, model, fallback);
-  if (String(model || "").trim().toLowerCase() === "auto") {
-    return [AUTO_REASONING_OPTION, ...supported];
-  }
-  return supported;
+  return [AUTO_REASONING_OPTION, ...supported];
 }
 
 export function selectedConfigReasoning(modelCatalog = [], runtime = {}) {
   const model = String(runtime?.model || "").trim().toLowerCase() || "auto";
   const options = configReasoningOptions(modelCatalog, model, runtime?.effort || "medium");
+  if (String(runtime?.effort_selection_mode || "").trim().toLowerCase() === AUTO_REASONING_OPTION && options.includes(AUTO_REASONING_OPTION)) {
+    return AUTO_REASONING_OPTION;
+  }
   if (model === "auto") {
     const preset = String(runtime?.model_preset || "").trim().toLowerCase();
     if (options.includes(preset)) {
@@ -331,14 +331,18 @@ export function runtimeSummary(runtime, modelPresets = [], language = "en", mode
   }
   if (runtime?.model) {
     const label = modelDisplayName(modelCatalog, runtime.model);
+    const effortLabel =
+      String(runtime?.effort_selection_mode || "").trim().toLowerCase() === AUTO_REASONING_OPTION
+        ? reasoningEffortLabel(AUTO_REASONING_OPTION, language)
+        : reasoningEffortLabel(runtime.effort || "high", language);
     if (normalizeLanguage(language) === "ko") {
       const summary = translate("ko", "runtime.modelSummary", {
         model: label,
-        effort: reasoningEffortLabel(runtime.effort || "high", "ko"),
+        effort: effortLabel,
       });
       return runtime?.use_fast_mode ? `${summary} | /fast` : summary;
     }
-    const summary = `${label} | reasoning ${runtime.effort || "high"}`;
+    const summary = `${label} | reasoning ${effortLabel}`;
     return runtime?.use_fast_mode ? `${summary} | /fast` : summary;
   }
   return translate(language, "runtime.noModelSelected");

@@ -62,6 +62,7 @@ function updateRuntimeModel(currentRuntime, modelCatalog, nextModel, nextEffort 
     ...currentRuntime,
     model,
     effort,
+    effort_selection_mode: selection === AUTO_REASONING_OPTION ? AUTO_REASONING_OPTION : "explicit",
     model_preset: model === "auto" ? autoPresetId(selection) : "",
     model_selection_mode: "slug",
     model_slug_input: model,
@@ -130,14 +131,6 @@ export function ConfigEditorView({
           <label className="field">
             <span>{t("common.branch")}</span>
             <input value={form.branch} onChange={(event) => onChangeForm((current) => ({ ...current, branch: event.target.value }))} disabled={busy} />
-          </label>
-          <label className="field">
-            <span>{t("field.verificationCommand")}</span>
-            <input
-              value={runtime.test_cmd || ""}
-              onChange={(event) => onChangeForm((current) => ({ ...current, runtime: { ...current.runtime, test_cmd: event.target.value } }))}
-              disabled={busy}
-            />
           </label>
           <label className="field">
             <span>{t("config.maxPlannedSteps")}</span>

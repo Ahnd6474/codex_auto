@@ -23,6 +23,7 @@ class RuntimeOptions:
     model_preset: str = "auto"
     model_selection_mode: str = "slug"
     model_slug_input: str = ""
+    effort_selection_mode: str = "explicit"
     use_fast_mode: bool = False
     generate_word_report: bool = False
     codex_base_slug: str = ""

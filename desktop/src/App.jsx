@@ -30,7 +30,7 @@ export default function App() {
         return;
       }
       if (event.key >= "1" && event.key <= "6") {
-        const tabs = ["run", "dashboard", "reports", "history", "config", "app-settings"];
+        const tabs = ["run", "config", "dashboard", "reports", "history", "app-settings"];
         setCenterTab(tabs[Number.parseInt(event.key, 10) - 1]);
         event.preventDefault();
       }

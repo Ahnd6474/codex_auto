@@ -269,6 +269,9 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
     merged["test_cmd"] = str(merged.get("test_cmd", "python -m pytest")).strip() or "python -m pytest"
     merged["model"] = str(merged.get("model", "")).strip().lower()
     merged["model_preset"] = normalize_model_preset_id(str(merged.get("model_preset", "")), fallback="")
+    merged["effort_selection_mode"] = str(merged.get("effort_selection_mode", "")).strip().lower()
+    if merged["effort_selection_mode"] not in {"auto", "explicit"}:
+        merged["effort_selection_mode"] = "explicit"
     merged["use_fast_mode"] = coerce_bool(merged.get("use_fast_mode", False), False)
     merged["generate_word_report"] = coerce_bool(merged.get("generate_word_report", False), False)
     raw_effort = str(merged.get("effort", "")).strip()
@@ -286,6 +289,10 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
             merged["effort"] = model_preset_by_id(merged["model_preset"]).effort
         else:
             merged["model_preset"] = "auto" if merged["effort"] == "medium" else merged["effort"]
+        if merged["model_preset"] == "auto":
+            merged["effort_selection_mode"] = "auto"
+        elif merged["effort_selection_mode"] == "auto":
+            merged["effort_selection_mode"] = "explicit"
     elif merged["model_preset"]:
         merged["model_preset"] = ""
     merged["model_selection_mode"] = str(merged.get("model_selection_mode", "slug")).strip() or "slug"

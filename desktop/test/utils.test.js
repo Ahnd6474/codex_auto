@@ -292,9 +292,10 @@ test("runtimeSummary prefers preset summaries, then direct model settings, then 
     ),
     "Balanced preset",
   );
-  assert.equal(runtimeSummary({ model: "gpt-5.4", effort: "low" }, []), "gpt-5.4 | reasoning low");
-  assert.equal(runtimeSummary({ model: "gpt-5.4", effort: "low", use_fast_mode: true }, []), "gpt-5.4 | reasoning low | /fast");
-  assert.equal(runtimeSummary({ model: "gpt-5.4" }), "gpt-5.4 | reasoning high");
+  assert.equal(runtimeSummary({ model: "gpt-5.4", effort: "low" }, []), "gpt-5.4 | reasoning Low");
+  assert.equal(runtimeSummary({ model: "gpt-5.4", effort: "medium", effort_selection_mode: "auto" }, []), "gpt-5.4 | reasoning Auto");
+  assert.equal(runtimeSummary({ model: "gpt-5.4", effort: "low", use_fast_mode: true }, []), "gpt-5.4 | reasoning Low | /fast");
+  assert.equal(runtimeSummary({ model: "gpt-5.4" }), "gpt-5.4 | reasoning High");
   assert.equal(runtimeSummary({}, undefined), "No model selected");
   assert.equal(runtimeSummary({ model: "gpt-5.4", effort: "high" }, [], "ko"), "gpt-5.4 | 추론 높음");
 });
@@ -306,11 +307,18 @@ test("config reasoning helpers keep auto separate from explicit efforts", () => 
       default_reasoning_effort: "medium",
       supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
     },
+    {
+      model: "gpt-5.4",
+      default_reasoning_effort: "medium",
+      supported_reasoning_efforts: ["medium"],
+    },
   ];
 
   assert.deepEqual(configReasoningOptions(modelCatalog, "auto", "medium"), ["auto", "low", "medium", "high", "xhigh"]);
+  assert.deepEqual(configReasoningOptions(modelCatalog, "gpt-5.4", "medium"), ["auto", "medium"]);
   assert.equal(selectedConfigReasoning(modelCatalog, { model: "auto", model_preset: "auto", effort: "medium" }), "auto");
   assert.equal(selectedConfigReasoning(modelCatalog, { model: "auto", model_preset: "medium", effort: "medium" }), "medium");
+  assert.equal(selectedConfigReasoning(modelCatalog, { model: "gpt-5.4", effort: "medium", effort_selection_mode: "auto" }), "auto");
   assert.equal(reasoningEffortLabel("auto"), "Auto");
   assert.equal(autoRoutingPresetLabel("low"), "Low Only");
   assert.equal(autoRoutingPresetLabel("xhigh", "ko"), "매우 높음만");
