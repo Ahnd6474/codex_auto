@@ -121,6 +121,7 @@ class Orchestrator:
         context.loop_state.current_safe_revision = safe_revision
         context.loop_state.stop_requested = False
         context.loop_state.stop_reason = None
+        self._clear_stale_checkpoint_approval_state(context)
         self.workspace.save_project(context)
         self.save_execution_plan_state(context, self.load_execution_plan_state(context))
         return context
@@ -1428,6 +1429,7 @@ class Orchestrator:
                     )
                     self._write_planning_state(context, runtime, resolved_plan_text)
 
+        self._clear_stale_checkpoint_approval_state(context)
         self.workspace.save_project(context)
         runner = CodexRunner(context.runtime.codex_path)
         memory = MemoryStore(context.paths)
@@ -2498,6 +2500,34 @@ class Orchestrator:
                 break
         if changed:
             write_json(context.paths.checkpoint_state_file, data)
+
+    def _clear_stale_checkpoint_approval_state(self, context: ProjectContext) -> None:
+        if context.runtime.require_checkpoint_approval:
+            return
+
+        data = read_json(context.paths.checkpoint_state_file, default=None)
+        checkpoints = data.get("checkpoints", []) if isinstance(data, dict) else []
+        changed = False
+        cleared_at = now_utc_iso()
+
+        for checkpoint in checkpoints:
+            if checkpoint.get("status") != "awaiting_review":
+                continue
+            checkpoint["status"] = "approved"
+            checkpoint["approved_at"] = checkpoint.get("approved_at") or cleared_at
+            checkpoint["pushed"] = False
+            checkpoint["push_skipped_reason"] = checkpoint.get("push_skipped_reason") or "approval_disabled"
+            checkpoint["review_notes"] = checkpoint.get("review_notes") or "Checkpoint approval requirement was disabled."
+            changed = True
+
+        if changed and isinstance(data, dict):
+            write_json(context.paths.checkpoint_state_file, data)
+
+        if context.loop_state.current_checkpoint_id or context.loop_state.pending_checkpoint_approval:
+            context.loop_state.current_checkpoint_id = None
+            context.loop_state.pending_checkpoint_approval = False
+            if context.loop_state.stop_reason == "checkpoint approval required":
+                context.loop_state.stop_reason = None
 
     def _parallel_conflict_details(self, conflicted_files: list[str]) -> dict[str, object]:
         files = sorted({str(item).strip() for item in conflicted_files if str(item).strip()})

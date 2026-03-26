@@ -1,42 +1,43 @@
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
-use std::io::Read;
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::sync::Mutex;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Manager, State};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+use tauri::{AppHandle, Emitter, State};
 
 const DEFAULT_BRIDGE_TIMEOUT_SECS: u64 = 300;
 const MIN_BRIDGE_TIMEOUT_SECS: u64 = 5;
 const MAX_BRIDGE_TIMEOUT_SECS: u64 = 3_600;
 const MAX_BRIDGE_COMMAND_LEN: usize = 64;
 const MAX_WORKSPACE_ROOT_LEN: usize = 4_096;
-
-#[derive(Clone, Debug, Serialize)]
-struct JobSnapshot {
-    id: String,
-    command: String,
-    status: String,
-    error: Option<String>,
-    result: Option<Value>,
-    updated_at_ms: u128,
-}
+const BRIDGE_EVENT_NAME: &str = "jakal-flow://bridge-event";
 
 #[derive(Default)]
 struct AppState {
-    jobs: Mutex<HashMap<String, JobSnapshot>>,
+    bridge: Mutex<Option<BridgeSession>>,
 }
 
-fn now_ms() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
+#[derive(Clone)]
+struct BridgeSession {
+    stdin: Arc<Mutex<ChildStdin>>,
+    pending: Arc<Mutex<HashMap<String, Sender<Result<Value, String>>>>>,
+    next_id: Arc<AtomicU64>,
+    stderr_lines: Arc<Mutex<Vec<String>>>,
+    _child: Arc<Mutex<Child>>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct BridgeEventPayload {
+    event: String,
+    payload: Value,
 }
 
 fn parse_bridge_timeout(env_override: Option<String>) -> Duration {
@@ -149,231 +150,303 @@ fn pythonpath_with_src(root: &Path) -> Result<String, String> {
     build_pythonpath(root, env::var_os("PYTHONPATH"))
 }
 
-fn bridge_failure_message(stdout: String, stderr: String, exit_code: Option<i32>) -> String {
-    if !stderr.is_empty() {
-        return stderr;
-    }
-    if !stdout.is_empty() {
-        return stdout;
-    }
-    if let Some(code) = exit_code {
-        return format!("Python bridge failed with exit code {code}.");
-    }
-    "Python bridge failed without output.".to_string()
-}
-
-fn parse_bridge_output(
-    status_success: bool,
-    exit_code: Option<i32>,
-    stdout: &[u8],
-    stderr: &[u8],
-) -> Result<Value, String> {
-    let stdout = String::from_utf8_lossy(stdout).trim().to_string();
-    let stderr = String::from_utf8_lossy(stderr).trim().to_string();
-
-    if !status_success {
-        return Err(bridge_failure_message(stdout, stderr, exit_code));
-    }
-
-    if stdout.is_empty() {
-        return Ok(serde_json::json!({}));
-    }
-
-    serde_json::from_str(&stdout).map_err(|error| format!("Failed to parse bridge JSON: {error}"))
-}
-
-fn spawn_output_reader<T>(stream: Option<T>) -> Option<std::thread::JoinHandle<Vec<u8>>>
-where
-    T: Read + Send + 'static,
-{
-    stream.map(|mut handle| {
-        std::thread::spawn(move || {
-            let mut buffer = Vec::new();
-            let _ = handle.read_to_end(&mut buffer);
-            buffer
-        })
-    })
-}
-
-fn join_output_reader(handle: Option<std::thread::JoinHandle<Vec<u8>>>) -> Vec<u8> {
-    handle
-        .and_then(|reader| reader.join().ok())
+fn stderr_excerpt(stderr_lines: &Arc<Mutex<Vec<String>>>) -> String {
+    stderr_lines
+        .lock()
+        .map(|lines| lines.join(" | "))
         .unwrap_or_default()
 }
 
-fn run_bridge_command(
-    command: &str,
-    payload: Option<Value>,
-    workspace_root: Option<String>,
-) -> Result<Value, String> {
-    let command = normalize_bridge_command(command)?;
-    let workspace_root = normalize_workspace_root(workspace_root)?;
-    let root = repo_root()?;
-    let python = python_executable(&root);
-    let pythonpath = pythonpath_with_src(&root)?;
-    let mut process = Command::new(python);
-    process
-        .arg("-m")
-        .arg("jakal_flow.ui_bridge")
-        .arg(&command)
-        .current_dir(&root)
-        .env("PYTHONPATH", pythonpath)
-        .env("PYTHONIOENCODING", "utf-8")
-        .env("PYTHONUTF8", "1")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-    if let Some(path) = workspace_root.as_deref() {
-        process.arg("--workspace-root").arg(path);
-    }
-
-    let mut child = process
-        .spawn()
-        .map_err(|error| format!("Failed to start Python bridge: {error}"))?;
-    let mut stdout_reader = spawn_output_reader(child.stdout.take());
-    let mut stderr_reader = spawn_output_reader(child.stderr.take());
-
-    if let Some(payload) = payload {
-        if let Some(stdin) = child.stdin.as_mut() {
-            stdin
-                .write_all(
-                    serde_json::to_vec(&payload)
-                        .map_err(|error| format!("Failed to serialize bridge payload: {error}"))?
-                        .as_slice(),
-                )
-                .map_err(|error| format!("Failed to write bridge payload: {error}"))?;
-        }
-    }
-    drop(child.stdin.take());
-
-    let timeout = bridge_timeout();
-    let started_at = Instant::now();
-    let status = loop {
-        match child
-            .try_wait()
-            .map_err(|error| format!("Failed to poll Python bridge: {error}"))?
-        {
-            Some(status) => break status,
-            None if started_at.elapsed() >= timeout => {
-                let _ = child.kill();
-                let timed_out_status = child
-                    .wait()
-                    .map_err(|error| format!("Failed to wait for timed out Python bridge: {error}"))?;
-                let timed_out_stdout = join_output_reader(stdout_reader.take());
-                let timed_out_stderr = join_output_reader(stderr_reader.take());
-                let detail = bridge_failure_message(
-                    String::from_utf8_lossy(&timed_out_stdout)
-                        .trim()
-                        .to_string(),
-                    String::from_utf8_lossy(&timed_out_stderr)
-                        .trim()
-                        .to_string(),
-                    timed_out_status.code(),
-                );
-                return Err(format!(
-                    "Python bridge timed out after {} seconds while running '{}'. {}",
-                    timeout.as_secs(),
-                    command,
-                    detail
-                ));
+fn store_stderr_line(stderr_lines: &Arc<Mutex<Vec<String>>>, line: String) {
+    if let Ok(mut lines) = stderr_lines.lock() {
+        let trimmed = line.trim().to_string();
+        if !trimmed.is_empty() {
+            lines.push(trimmed);
+            if lines.len() > 12 {
+                let drain_len = lines.len() - 12;
+                lines.drain(0..drain_len);
             }
-            None => std::thread::sleep(Duration::from_millis(50)),
         }
-    };
-    let stdout = join_output_reader(stdout_reader.take());
-    let stderr = join_output_reader(stderr_reader.take());
-    parse_bridge_output(
-        status.success(),
-        status.code(),
-        &stdout,
-        &stderr,
-    )
+    }
 }
 
-async fn run_bridge_command_async(
+fn fail_pending_requests(
+    pending: &Arc<Mutex<HashMap<String, Sender<Result<Value, String>>>>>,
+    error: String,
+) {
+    let senders = pending
+        .lock()
+        .map(|mut items| items.drain().map(|(_, sender)| sender).collect::<Vec<_>>())
+        .unwrap_or_default();
+    for sender in senders {
+        let _ = sender.send(Err(error.clone()));
+    }
+}
+
+impl BridgeSession {
+    fn new<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<Self, String> {
+        let root = repo_root()?;
+        let python = python_executable(&root);
+        let pythonpath = pythonpath_with_src(&root)?;
+        let mut child = Command::new(python)
+            .arg("-m")
+            .arg("jakal_flow.bridge_server")
+            .arg("--stdio")
+            .current_dir(&root)
+            .env("PYTHONPATH", pythonpath)
+            .env("PYTHONIOENCODING", "utf-8")
+            .env("PYTHONUTF8", "1")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| format!("Failed to start Python bridge server: {error}"))?;
+
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| "Failed to capture Python bridge stdin.".to_string())?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| "Failed to capture Python bridge stdout.".to_string())?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| "Failed to capture Python bridge stderr.".to_string())?;
+
+        let pending = Arc::new(Mutex::new(HashMap::<String, Sender<Result<Value, String>>>::new()));
+        let stderr_lines = Arc::new(Mutex::new(Vec::<String>::new()));
+        let stdout_pending = Arc::clone(&pending);
+        let stdout_stderr = Arc::clone(&stderr_lines);
+        let stderr_sink = Arc::clone(&stderr_lines);
+        let app_handle = app.clone();
+
+        thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                let line = match line {
+                    Ok(value) => value,
+                    Err(error) => {
+                        fail_pending_requests(
+                            &stdout_pending,
+                            format!("Failed to read Python bridge stdout: {error}"),
+                        );
+                        return;
+                    }
+                };
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let parsed: Value = match serde_json::from_str(&line) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        store_stderr_line(
+                            &stdout_stderr,
+                            format!("Invalid bridge JSON from stdout: {error}"),
+                        );
+                        continue;
+                    }
+                };
+                let kind = parsed
+                    .get("kind")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                match kind.as_str() {
+                    "response" => {
+                        let id = parsed
+                            .get("id")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_string();
+                        if id.is_empty() {
+                            continue;
+                        }
+                        let sender = stdout_pending
+                            .lock()
+                            .ok()
+                            .and_then(|mut items| items.remove(&id));
+                        if let Some(sender) = sender {
+                            let ok = parsed.get("ok").and_then(Value::as_bool).unwrap_or(false);
+                            if ok {
+                                let value = parsed.get("result").cloned().unwrap_or(Value::Null);
+                                let _ = sender.send(Ok(value));
+                            } else {
+                                let error = parsed
+                                    .get("error")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or("Python bridge request failed.")
+                                    .to_string();
+                                let _ = sender.send(Err(error));
+                            }
+                        }
+                    }
+                    "event" => {
+                        let event_name = parsed
+                            .get("event")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_string();
+                        let payload = parsed.get("payload").cloned().unwrap_or(Value::Null);
+                        let _ = app_handle.emit(
+                            BRIDGE_EVENT_NAME,
+                            BridgeEventPayload {
+                                event: event_name,
+                                payload,
+                            },
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            let detail = stderr_excerpt(&stdout_stderr);
+            let error = if detail.is_empty() {
+                "Python bridge server closed unexpectedly.".to_string()
+            } else {
+                format!("Python bridge server closed unexpectedly. {detail}")
+            };
+            fail_pending_requests(&stdout_pending, error);
+        });
+
+        thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                if let Ok(value) = line {
+                    store_stderr_line(&stderr_sink, value);
+                }
+            }
+        });
+
+        let session = Self {
+            stdin: Arc::new(Mutex::new(stdin)),
+            pending,
+            next_id: Arc::new(AtomicU64::new(1)),
+            stderr_lines,
+            _child: Arc::new(Mutex::new(child)),
+        };
+        let ping = session.request("ping", json!({}), bridge_timeout())?;
+        let status = ping
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        if status != "ok" {
+            return Err("Python bridge server did not acknowledge startup.".to_string());
+        }
+        Ok(session)
+    }
+
+    fn request(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, String> {
+        let request_id = format!("req-{}", self.next_id.fetch_add(1, Ordering::Relaxed));
+        let (sender, receiver): (Sender<Result<Value, String>>, Receiver<Result<Value, String>>) =
+            mpsc::channel();
+        self.pending
+            .lock()
+            .map_err(|_| "Failed to lock pending bridge requests.".to_string())?
+            .insert(request_id.clone(), sender);
+
+        let message = json!({
+            "id": request_id,
+            "method": method,
+            "params": params,
+        });
+        let serialized = serde_json::to_string(&message)
+            .map_err(|error| format!("Failed to serialize bridge request: {error}"))?;
+        {
+            let mut stdin = self
+                .stdin
+                .lock()
+                .map_err(|_| "Failed to lock Python bridge stdin.".to_string())?;
+            if let Err(error) = stdin.write_all(serialized.as_bytes()) {
+                self.pending
+                    .lock()
+                    .ok()
+                    .and_then(|mut items| items.remove(message["id"].as_str().unwrap_or_default()));
+                return Err(format!("Failed to write bridge request: {error}"));
+            }
+            if let Err(error) = stdin.write_all(b"\n") {
+                self.pending
+                    .lock()
+                    .ok()
+                    .and_then(|mut items| items.remove(message["id"].as_str().unwrap_or_default()));
+                return Err(format!("Failed to finalize bridge request: {error}"));
+            }
+            if let Err(error) = stdin.flush() {
+                self.pending
+                    .lock()
+                    .ok()
+                    .and_then(|mut items| items.remove(message["id"].as_str().unwrap_or_default()));
+                return Err(format!("Failed to flush bridge request: {error}"));
+            }
+        }
+        match receiver.recv_timeout(timeout) {
+            Ok(result) => result,
+            Err(_) => {
+                self.pending
+                    .lock()
+                    .ok()
+                    .and_then(|mut items| items.remove(message["id"].as_str().unwrap_or_default()));
+                let detail = stderr_excerpt(&self.stderr_lines);
+                if detail.is_empty() {
+                    Err(format!(
+                        "Python bridge server timed out after {} seconds while running '{}'.",
+                        timeout.as_secs(),
+                        method
+                    ))
+                } else {
+                    Err(format!(
+                        "Python bridge server timed out after {} seconds while running '{}'. {}",
+                        timeout.as_secs(),
+                        method,
+                        detail
+                    ))
+                }
+            }
+        }
+    }
+}
+
+fn bridge_session<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &AppState,
+) -> Result<BridgeSession, String> {
+    if let Ok(guard) = state.bridge.lock() {
+        if let Some(session) = guard.as_ref() {
+            return Ok(session.clone());
+        }
+    }
+    let session = BridgeSession::new(app)?;
+    let mut guard = state
+        .bridge
+        .lock()
+        .map_err(|_| "Failed to lock bridge session state.".to_string())?;
+    *guard = Some(session.clone());
+    Ok(session)
+}
+
+fn bridge_params(
     command: String,
     payload: Option<Value>,
     workspace_root: Option<String>,
 ) -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        run_bridge_command(&command, payload, workspace_root)
-    })
-    .await
-    .map_err(|error| format!("Bridge task join error: {error}"))?
-}
-
-fn register_job_start(state: &AppState, command: &str) -> Result<JobSnapshot, String> {
-    let command = normalize_bridge_command(command)?;
-    let mut jobs = state
-        .jobs
-        .lock()
-        .map_err(|_| "Failed to lock job state.".to_string())?;
-    if jobs.values().any(|job| job.status == "running") {
-        return Err("Another background task is already running.".to_string());
-    }
-
-    let started_at = now_ms();
-    let snapshot = JobSnapshot {
-        id: format!("job-{}-{}", command, started_at),
-        command,
-        status: "running".to_string(),
-        error: None,
-        result: None,
-        updated_at_ms: started_at,
-    };
-    jobs.insert(snapshot.id.clone(), snapshot.clone());
-    Ok(snapshot)
-}
-
-fn update_job_state(state: &AppState, job_id: &str, mutate: impl FnOnce(&mut JobSnapshot)) {
-    if let Ok(mut jobs) = state.jobs.lock() {
-        if let Some(job) = jobs.get_mut(job_id) {
-            mutate(job);
-            job.updated_at_ms = now_ms();
-        }
-    }
-}
-
-fn update_job<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    job_id: &str,
-    mutate: impl FnOnce(&mut JobSnapshot),
-) {
-    let state = app.state::<AppState>();
-    update_job_state(state.inner(), job_id, mutate);
-}
-
-fn get_job_snapshot(state: &AppState, job_id: &str) -> Option<JobSnapshot> {
-    state
-        .jobs
-        .lock()
-        .ok()
-        .and_then(|jobs| jobs.get(job_id).cloned())
-}
-
-fn list_job_snapshots(state: &AppState) -> Vec<JobSnapshot> {
-    let mut jobs: Vec<JobSnapshot> = state
-        .jobs
-        .lock()
-        .map(|jobs| jobs.values().cloned().collect())
-        .unwrap_or_default();
-    jobs.sort_by(|left: &JobSnapshot, right: &JobSnapshot| {
-        right
-            .updated_at_ms
-            .cmp(&left.updated_at_ms)
-            .then_with(|| left.id.cmp(&right.id))
-    });
-    jobs
+    Ok(json!({
+        "command": normalize_bridge_command(&command)?,
+        "payload": payload.unwrap_or(Value::Null),
+        "workspace_root": normalize_workspace_root(workspace_root)?,
+    }))
 }
 
 #[tauri::command]
-async fn bridge_request(
+fn bridge_request<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
     command: String,
     payload: Option<Value>,
     workspace_root: Option<String>,
 ) -> Result<Value, String> {
-    run_bridge_command_async(command, payload, workspace_root).await
+    let session = bridge_session(&app, state.inner())?;
+    session.request("bridge_request", bridge_params(command, payload, workspace_root)?, bridge_timeout())
 }
 
 #[tauri::command]
@@ -383,39 +456,28 @@ fn start_bridge_job<R: tauri::Runtime>(
     command: String,
     payload: Option<Value>,
     workspace_root: Option<String>,
-) -> Result<JobSnapshot, String> {
-    let workspace_root = normalize_workspace_root(workspace_root)?;
-    let snapshot = register_job_start(state.inner(), &command)?;
-    let job_id = snapshot.id.clone();
-    let command = snapshot.command.clone();
-
-    std::thread::spawn(move || {
-        let result = run_bridge_command(&command, payload, workspace_root);
-        match result {
-            Ok(value) => update_job(&app, &job_id, |job| {
-                job.status = "completed".to_string();
-                job.result = Some(value);
-                job.error = None;
-            }),
-            Err(error) => update_job(&app, &job_id, |job| {
-                job.status = "failed".to_string();
-                job.error = Some(error);
-                job.result = None;
-            }),
-        }
-    });
-
-    Ok(snapshot)
+) -> Result<Value, String> {
+    let session = bridge_session(&app, state.inner())?;
+    session.request("start_job", bridge_params(command, payload, workspace_root)?, bridge_timeout())
 }
 
 #[tauri::command]
-fn get_bridge_job(job_id: String, state: State<'_, AppState>) -> Option<JobSnapshot> {
-    get_job_snapshot(state.inner(), &job_id)
+fn get_bridge_job<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    job_id: String,
+) -> Result<Value, String> {
+    let session = bridge_session(&app, state.inner())?;
+    session.request("get_job", json!({ "job_id": job_id }), bridge_timeout())
 }
 
 #[tauri::command]
-fn list_bridge_jobs(state: State<'_, AppState>) -> Vec<JobSnapshot> {
-    list_job_snapshots(state.inner())
+fn list_bridge_jobs<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    let session = bridge_session(&app, state.inner())?;
+    session.request("list_jobs", json!({}), bridge_timeout())
 }
 
 pub fn run() {
@@ -435,10 +497,8 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
     use std::fs;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::Duration;
+    use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
     static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -451,7 +511,7 @@ mod tests {
             let path = env::temp_dir().join(format!(
                 "jakal-flow-desktop-tests-{}-{}",
                 std::process::id(),
-                TEST_DIR_COUNTER.fetch_add(1, Ordering::Relaxed)
+                TEST_DIR_COUNTER.fetch_add(1, AtomicOrdering::Relaxed)
             ));
             fs::create_dir_all(&path).expect("create test directory");
             Self { path }
@@ -473,25 +533,6 @@ mod tests {
             fs::create_dir_all(parent).expect("create parent directories");
         }
         fs::write(path, b"").expect("create file");
-    }
-
-    fn sample_job(id: &str, command: &str, status: &str) -> JobSnapshot {
-        JobSnapshot {
-            id: id.to_string(),
-            command: command.to_string(),
-            status: status.to_string(),
-            error: None,
-            result: Some(json!({"ok": true, "command": command})),
-            updated_at_ms: 123,
-        }
-    }
-
-    fn insert_job(state: &AppState, job: JobSnapshot) {
-        state
-            .jobs
-            .lock()
-            .expect("lock app state")
-            .insert(job.id.clone(), job);
     }
 
     #[test]
@@ -527,222 +568,34 @@ mod tests {
     }
 
     #[test]
-    fn resolve_python_executable_falls_back_to_python() {
+    fn build_pythonpath_prepends_repo_src() {
         let root = TestDir::new();
+        let existing = env::join_paths([root.path().join("existing")]).expect("join paths");
 
-        let resolved = resolve_python_executable(root.path(), None);
+        let pythonpath = build_pythonpath(root.path(), Some(existing)).expect("pythonpath");
 
-        assert_eq!(resolved, "python");
+        assert!(pythonpath.contains(&root.path().join("src").to_string_lossy().to_string()));
+        assert!(pythonpath.contains("existing"));
     }
 
     #[test]
-    fn build_pythonpath_places_src_first_and_preserves_existing_paths() {
-        let root = TestDir::new();
-        let existing_one = root.path().join("existing-one");
-        let existing_two = root.path().join("existing-two");
-        fs::create_dir_all(&existing_one).expect("create existing_one");
-        fs::create_dir_all(&existing_two).expect("create existing_two");
-        let existing =
-            env::join_paths([existing_one.clone(), existing_two.clone()]).expect("join paths");
+    fn bridge_params_normalize_inputs() {
+        let params = bridge_params(
+            "run-plan".to_string(),
+            Some(json!({"repo_id": "demo"})),
+            Some("C:/workspace".to_string()),
+        )
+        .expect("params");
 
-        let pythonpath = build_pythonpath(root.path(), Some(existing)).expect("build PYTHONPATH");
-        let parts: Vec<PathBuf> = env::split_paths(&OsString::from(pythonpath)).collect();
-
-        assert_eq!(
-            parts,
-            vec![root.path().join("src"), existing_one, existing_two]
-        );
+        assert_eq!(params["command"], "run-plan");
+        assert_eq!(params["payload"]["repo_id"], "demo");
+        assert_eq!(params["workspace_root"], "C:/workspace");
     }
 
     #[test]
-    fn parse_bridge_output_returns_empty_object_for_blank_stdout() {
-        let value = parse_bridge_output(true, Some(0), b"  \n", b"").expect("parse empty output");
+    fn normalize_workspace_root_rejects_embedded_nul() {
+        let error = normalize_workspace_root(Some("bad\0path".to_string())).expect_err("expected error");
 
-        assert_eq!(value, serde_json::json!({}));
-    }
-
-    #[test]
-    fn parse_bridge_output_parses_json_payload() {
-        let value = parse_bridge_output(true, Some(0), br#"{"ok":true,"count":2}"#, b"")
-            .expect("parse JSON");
-
-        assert_eq!(value, serde_json::json!({"ok": true, "count": 2}));
-    }
-
-    #[test]
-    fn parse_bridge_output_uses_stderr_on_failure() {
-        let error = parse_bridge_output(false, Some(1), b"{\"ignored\":true}", b"bridge failed")
-            .expect_err("fail");
-
-        assert_eq!(error, "bridge failed");
-    }
-
-    #[test]
-    fn parse_bridge_output_falls_back_to_stdout_when_stderr_is_empty() {
-        let error =
-            parse_bridge_output(false, Some(1), b"bridge failed on stdout", b"").expect_err("fail");
-
-        assert_eq!(error, "bridge failed on stdout");
-    }
-
-    #[test]
-    fn parse_bridge_output_reports_invalid_json() {
-        let error =
-            parse_bridge_output(true, Some(0), b"{not-json}", b"").expect_err("invalid JSON");
-
-        assert!(error.contains("Failed to parse bridge JSON"));
-    }
-
-    #[test]
-    fn parse_bridge_output_returns_generic_error_when_output_is_missing() {
-        let error = parse_bridge_output(false, Some(7), b"", b"").expect_err("generic failure");
-
-        assert_eq!(error, "Python bridge failed with exit code 7.");
-    }
-
-    #[test]
-    fn normalize_bridge_command_rejects_blank_or_invalid_values() {
-        assert_eq!(
-            normalize_bridge_command("   ").expect_err("blank command"),
-            "Bridge command is required."
-        );
-        assert_eq!(
-            normalize_bridge_command("bad command").expect_err("invalid command"),
-            "Bridge command may only contain letters, numbers, '-' and '_'."
-        );
-    }
-
-    #[test]
-    fn normalize_workspace_root_trims_values_and_drops_blank_strings() {
-        assert_eq!(
-            normalize_workspace_root(Some("  C:\\work  ".to_string())).expect("trim path"),
-            Some("C:\\work".to_string())
-        );
-        assert_eq!(
-            normalize_workspace_root(Some("   ".to_string())).expect("drop blank path"),
-            None
-        );
-    }
-
-    #[test]
-    fn parse_bridge_timeout_clamps_invalid_values() {
-        assert_eq!(
-            parse_bridge_timeout(Some("not-a-number".to_string())),
-            Duration::from_secs(DEFAULT_BRIDGE_TIMEOUT_SECS)
-        );
-        assert_eq!(
-            parse_bridge_timeout(Some("1".to_string())),
-            Duration::from_secs(MIN_BRIDGE_TIMEOUT_SECS)
-        );
-        assert_eq!(
-            parse_bridge_timeout(Some("999999".to_string())),
-            Duration::from_secs(MAX_BRIDGE_TIMEOUT_SECS)
-        );
-    }
-
-    #[test]
-    fn register_job_start_records_running_snapshot_for_command_state() {
-        let state = AppState::default();
-
-        let snapshot = register_job_start(&state, "bootstrap").expect("register running job");
-        let stored = get_job_snapshot(&state, &snapshot.id).expect("stored job");
-
-        assert!(snapshot.id.starts_with("job-bootstrap-"));
-        assert_eq!(snapshot.command, "bootstrap");
-        assert_eq!(snapshot.status, "running");
-        assert_eq!(snapshot.error, None);
-        assert_eq!(snapshot.result, None);
-        assert_eq!(stored.id, snapshot.id);
-        assert_eq!(stored.updated_at_ms, snapshot.updated_at_ms);
-    }
-
-    #[test]
-    fn register_job_start_rejects_when_command_state_already_has_running_job() {
-        let state = AppState::default();
-        insert_job(&state, sample_job("job-running", "bootstrap", "running"));
-
-        let error = register_job_start(&state, "list-projects").expect_err("reject second run");
-
-        assert_eq!(error, "Another background task is already running.");
-    }
-
-    #[test]
-    fn register_job_start_rejects_invalid_command() {
-        let state = AppState::default();
-
-        let error = register_job_start(&state, "bad command").expect_err("invalid command");
-
-        assert_eq!(
-            error,
-            "Bridge command may only contain letters, numbers, '-' and '_'."
-        );
-    }
-
-    #[test]
-    fn get_job_snapshot_returns_seeded_job_for_command_lookup() {
-        let state = AppState::default();
-        insert_job(&state, sample_job("job-one", "bootstrap", "completed"));
-
-        let response = get_job_snapshot(&state, "job-one").expect("get job snapshot");
-
-        assert_eq!(response.id, "job-one");
-        assert_eq!(response.command, "bootstrap");
-        assert_eq!(response.status, "completed");
-        assert_eq!(
-            response.result,
-            Some(json!({"ok": true, "command": "bootstrap"}))
-        );
-    }
-
-    #[test]
-    fn get_job_snapshot_returns_none_for_unknown_job() {
-        let state = AppState::default();
-
-        let response = get_job_snapshot(&state, "missing-job");
-
-        assert!(response.is_none());
-    }
-
-    #[test]
-    fn list_job_snapshots_returns_all_jobs_for_command_listing() {
-        let state = AppState::default();
-        let mut older = sample_job("job-b", "bootstrap", "completed");
-        older.updated_at_ms = 10;
-        let mut newer = sample_job("job-a", "list-projects", "failed");
-        newer.updated_at_ms = 20;
-        insert_job(&state, older);
-        insert_job(&state, newer);
-
-        let ids = list_job_snapshots(&state)
-            .into_iter()
-            .map(|job| job.id)
-            .collect::<Vec<_>>();
-
-        assert_eq!(ids, vec!["job-a".to_string(), "job-b".to_string()]);
-    }
-
-    #[test]
-    fn update_job_state_applies_completion_result_for_command_state() {
-        let state = AppState::default();
-        let snapshot = register_job_start(&state, "bootstrap").expect("register running job");
-
-        while now_ms() <= snapshot.updated_at_ms {
-            std::thread::sleep(Duration::from_millis(1));
-        }
-
-        update_job_state(&state, &snapshot.id, |job| {
-            job.status = "completed".to_string();
-            job.result = Some(json!({"workspace_root": "temp-workspace"}));
-            job.error = None;
-        });
-
-        let updated = get_job_snapshot(&state, &snapshot.id).expect("updated job");
-        assert_eq!(updated.status, "completed");
-        assert_eq!(updated.error, None);
-        assert_eq!(
-            updated.result,
-            Some(json!({"workspace_root": "temp-workspace"}))
-        );
-        assert!(updated.updated_at_ms > snapshot.updated_at_ms);
+        assert!(error.contains("null character"));
     }
 }

@@ -301,11 +301,53 @@ test("IdeToolbar renders the active command and DAG-ready progress text", async 
     onGeneratePlan: noop,
     onRunPlan: noop,
     onRunCloseout: noop,
+    onApproveCheckpoint: noop,
   });
 
   assert.match(html, /Run Remaining Steps/);
   assert.match(html, /Completed 1\/3 steps, ready: ST2, ST3/);
   assert.match(html, /Program Settings/);
+});
+
+test("IdeToolbar exposes checkpoint approval when a checkpoint is waiting for review", async () => {
+  const html = await renderBundledComponent(
+    "ide-toolbar-pending-checkpoint-render",
+    "./src/components/layout/IdeToolbar.jsx",
+    "IdeToolbar",
+    {
+      projectDetail: {
+        project: {
+          display_name: "Demo",
+          current_status: "awaiting_checkpoint_approval",
+        },
+      },
+      pendingCheckpoint: {
+        checkpoint_id: "CP2",
+        status: "awaiting_review",
+      },
+      planDraft: {
+        execution_mode: "serial",
+        closeout_status: "not_started",
+        steps: [
+          { step_id: "ST1", status: "completed" },
+          { step_id: "ST2", status: "pending" },
+        ],
+      },
+      busy: false,
+      activeJob: null,
+      activeCenterTab: "run",
+      onRefresh: noop,
+      onOpenSettings: noop,
+      onGeneratePlan: noop,
+      onRunPlan: noop,
+      onRunCloseout: noop,
+      onApproveCheckpoint: noop,
+    },
+  );
+
+  assert.match(html, /Checkpoint Pending/);
+  assert.match(html, /CP2/);
+  assert.match(html, /Approve Checkpoint/);
 });
 
 test("IdeToolbar prioritizes the debugging status over the generic active command", async () => {
@@ -339,6 +381,7 @@ test("IdeToolbar prioritizes the debugging status over the generic active comman
     onGeneratePlan: noop,
     onRunPlan: noop,
     onRunCloseout: noop,
+    onApproveCheckpoint: noop,
   });
 
   assert.match(html, /Debugging/);

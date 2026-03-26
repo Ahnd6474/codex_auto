@@ -10,6 +10,7 @@ import sys
 import time
 from typing import Any
 
+from .bridge_events import emit_bridge_event
 from .codex_app_server import fetch_codex_backend_snapshot
 from .model_constants import AUTO_MODEL_SLUG, DEFAULT_LOCAL_MODEL_PROVIDER, DEFAULT_MODEL_PROVIDER
 from .model_selection import (
@@ -28,7 +29,9 @@ from .model_providers import (
 )
 from .models import ExecutionPlanState, ProjectContext, RuntimeOptions
 from .orchestrator import Orchestrator
+from .process_supervisor import spawn_background_process, terminate_process, wait_for_condition
 from .public_tunnel import public_tunnel_status_payload, start_cloudflare_quick_tunnel, stop_public_tunnel_process
+from .runtime_services import CodexBackendSnapshotService
 from .share import (
     DEFAULT_SHARE_HOST,
     DEFAULT_SHARE_PORT,
@@ -44,13 +47,30 @@ from .share import (
     save_share_server_config,
     share_server_status_payload,
 )
-from .ui_bridge_payloads import list_projects_payload, progress_caption, project_detail_payload
+from .ui_bridge_payloads import (
+    checkpoint_payload,
+    config_payload,
+    history_payload,
+    list_projects_payload,
+    managed_workspace_tree,
+    progress_caption,
+    project_detail_payload,
+    project_share_payload,
+    report_payload,
+)
 from .utils import append_jsonl, normalize_workflow_mode, now_utc_iso, parse_json_text, read_json, write_json
 
 
 DEFAULT_GUI_WORKSPACE_DIRNAME = ".jakal-flow-workspace"
 LEGACY_GUI_WORKSPACE_DIRNAME = ".codex-auto-workspace"
 SHARE_SERVER_START_TIMEOUT_SECS = 3.0
+CODEX_SNAPSHOT_TTL_SECONDS = 15.0
+
+
+_codex_snapshot_service = CodexBackendSnapshotService(
+    fetcher=lambda codex_path="codex.cmd": fetch_codex_backend_snapshot(codex_path),
+    ttl_seconds=CODEX_SNAPSHOT_TTL_SECONDS,
+)
 
 
 def default_workspace_root() -> Path:
@@ -67,7 +87,7 @@ def default_workspace_root() -> Path:
 
 
 def bootstrap_payload(workspace_root: Path) -> dict[str, Any]:
-    codex_status = fetch_codex_backend_snapshot()
+    codex_status = _codex_snapshot_service.get_snapshot()
     return {
         "workspace_root": str(workspace_root),
         "model_presets": [
@@ -158,31 +178,20 @@ def start_share_server_process(
         "--port",
         str(updated_config.preferred_port),
     ]
-    creationflags = 0
-    if os.name == "nt":
-        creationflags = (
-            getattr(subprocess, "DETACHED_PROCESS", 0)
-            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-            | getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        )
-    subprocess.Popen(
+    spawn_background_process(
         command,
         cwd=root,
         env=env,
-        stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        creationflags=creationflags,
-        close_fds=True,
     )
-
-    deadline = time.monotonic() + SHARE_SERVER_START_TIMEOUT_SECS
-    while time.monotonic() < deadline:
-        status = share_server_status_payload(workspace_root)
-        if status.get("running"):
-            return status
-        time.sleep(0.1)
-    raise RuntimeError("Share server did not start in time.")
+    if not wait_for_condition(
+        lambda: bool(share_server_status_payload(workspace_root).get("running")),
+        timeout_seconds=SHARE_SERVER_START_TIMEOUT_SECS,
+        interval_seconds=0.1,
+    ):
+        raise RuntimeError("Share server did not start in time.")
+    return share_server_status_payload(workspace_root)
 
 
 def stop_share_server_process(workspace_root: Path) -> dict[str, Any]:
@@ -191,24 +200,12 @@ def stop_share_server_process(workspace_root: Path) -> dict[str, Any]:
     pid = int(status.get("pid") or 0)
     if pid <= 0:
         return share_server_status_payload(workspace_root)
-    try:
-        if os.name == "nt":
-            subprocess.run(
-                ["taskkill", "/PID", str(pid), "/T", "/F"],
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        else:
-            os.kill(pid, signal.SIGTERM)
-    except OSError:
-        pass
-    deadline = time.monotonic() + 2.0
-    while time.monotonic() < deadline:
-        current = share_server_status_payload(workspace_root)
-        if not current.get("running"):
-            return current
-        time.sleep(0.1)
+    terminate_process(pid)
+    wait_for_condition(
+        lambda: not bool(share_server_status_payload(workspace_root).get("running")),
+        timeout_seconds=2.0,
+        interval_seconds=0.1,
+    )
     return share_server_status_payload(workspace_root)
 
 
@@ -448,6 +445,15 @@ def append_ui_event(context: ProjectContext, event_type: str, message: str, deta
         "details": details or {},
     }
     append_jsonl(context.paths.ui_event_log_file, payload)
+    emit_bridge_event(
+        "project.ui_event",
+        {
+            "repo_id": context.metadata.repo_id,
+            "project_dir": str(context.metadata.repo_path),
+            "project_status": context.metadata.current_status,
+            "event": payload,
+        },
+    )
 
 
 def common_project_inputs(payload: dict[str, Any]) -> tuple[Path, RuntimeOptions, str, str, str]:
@@ -474,7 +480,7 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
             orchestrator,
             project,
             load_run_control=load_run_control,
-            fetch_codex_status=fetch_codex_backend_snapshot,
+            fetch_codex_status=lambda codex_path="codex.cmd": _codex_snapshot_service.get_snapshot(codex_path),
             **kwargs,
         )
 
@@ -486,11 +492,47 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
 
     if command == "load-project":
         project = resolve_project(orchestrator, payload)
+        if coerce_bool(payload.get("refresh_codex_status", True), True):
+            _codex_snapshot_service.invalidate(project.runtime.codex_path)
         return detail_payload(
             project,
             refresh_codex_status=coerce_bool(payload.get("refresh_codex_status", True), True),
             detail_level=str(payload.get("detail_level", "full")).strip().lower() or "full",
         )
+
+    if command == "load-project-core":
+        project = resolve_project(orchestrator, payload)
+        if coerce_bool(payload.get("refresh_codex_status", False), False):
+            _codex_snapshot_service.invalidate(project.runtime.codex_path)
+        return detail_payload(
+            project,
+            refresh_codex_status=coerce_bool(payload.get("refresh_codex_status", False), False),
+            detail_level="core",
+        )
+
+    if command == "load-project-history":
+        project = resolve_project(orchestrator, payload)
+        return history_payload(project)
+
+    if command == "load-project-reports":
+        project = resolve_project(orchestrator, payload)
+        return report_payload(project)
+
+    if command == "load-project-config":
+        project = resolve_project(orchestrator, payload)
+        return config_payload(project)
+
+    if command == "load-project-workspace":
+        project = resolve_project(orchestrator, payload)
+        return {"workspace_tree": managed_workspace_tree(project)}
+
+    if command == "load-project-checkpoints":
+        project = resolve_project(orchestrator, payload)
+        return checkpoint_payload(project)
+
+    if command == "load-project-share":
+        project = resolve_project(orchestrator, payload)
+        return {"share": project_share_payload(orchestrator.workspace.workspace_root, project)}
 
     if command == "delete-project":
         project = resolve_project(orchestrator, payload)
