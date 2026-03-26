@@ -24,6 +24,7 @@ from .planning import (
     bootstrap_plan_prompt,
     candidate_tasks_from_mid_term,
     checkpoint_timeline_markdown,
+    debugger_prompt,
     execution_plan_markdown,
     execution_plan_svg,
     execution_steps_to_plan_items,
@@ -32,6 +33,7 @@ from .planning import (
     generate_project_plan,
     implementation_prompt,
     is_plan_markdown,
+    load_debugger_prompt_template,
     load_plan_generation_prompt_template,
     parse_execution_plan_response,
     parse_work_breakdown_response,
@@ -728,15 +730,83 @@ class Orchestrator:
                         group_test_result = self._run_test_command(context, verification_block_index, "parallel-batch-pass")
                         reporter.save_test_result(verification_block_index, "parallel-batch-pass", group_test_result)
                     if group_test_result and group_test_result.returncode != 0:
-                        self.git.hard_reset(context.paths.repo_dir, base_revision)
-                        rollback_status = "rolled_back_to_safe_revision"
-                        final_status = "failed"
-                        batch_summary = "Parallel batch verification failed and merged changes were rolled back."
-                        group_test_result = None
-                        for step in ordered_targets:
-                            step.status = "failed"
-                            step.notes = batch_summary
-                        context.metadata.current_status = "failed"
+                        batch_debug_step = self._build_parallel_batch_debug_step(
+                            ordered_targets,
+                            plan_state.default_test_command or runtime.test_cmd,
+                        )
+                        batch_candidate = CandidateTask(
+                            candidate_id="parallel-batch-debug",
+                            title=batch_debug_step.title,
+                            rationale=self._execution_step_rationale(batch_debug_step, batch_debug_step.test_command),
+                            plan_refs=[step.step_id for step in ordered_targets],
+                            score=1.0,
+                        )
+                        batch_memory_context = MemoryStore(context.paths).render_context(read_text(context.paths.mid_term_plan_file))
+                        batch_runner = CodexRunner(context.runtime.codex_path)
+                        debug_pass_name, debug_run_result, debug_test_result, debug_commit_hash = self._run_debugger_pass(
+                            context=context,
+                            runner=batch_runner,
+                            reporter=reporter,
+                            block_index=verification_block_index,
+                            candidate=batch_candidate,
+                            execution_step=batch_debug_step,
+                            memory_context=batch_memory_context,
+                            failing_pass_name="parallel-batch-pass",
+                            failing_test_result=group_test_result,
+                        )
+                        if debug_run_result.returncode != 0 or debug_test_result is None or debug_test_result.returncode != 0:
+                            self.git.hard_reset(context.paths.repo_dir, base_revision)
+                            rollback_status = "rolled_back_to_safe_revision"
+                            final_status = "failed"
+                            batch_summary = "Parallel batch verification failed and debugger recovery did not fix it."
+                            group_test_result = None
+                            self._log_pass_result(
+                                context=context,
+                                reporter=reporter,
+                                block_index=verification_block_index,
+                                candidate=batch_candidate,
+                                pass_name=debug_pass_name,
+                                run_result=debug_run_result,
+                                test_result=debug_test_result,
+                                commit_hash=None,
+                                rollback_status=rollback_status,
+                                search_enabled=False,
+                            )
+                            for step in ordered_targets:
+                                step.status = "failed"
+                                step.notes = batch_summary
+                            context.metadata.current_status = "failed"
+                        else:
+                            self._log_pass_result(
+                                context=context,
+                                reporter=reporter,
+                                block_index=verification_block_index,
+                                candidate=batch_candidate,
+                                pass_name=debug_pass_name,
+                                run_result=debug_run_result,
+                                test_result=debug_test_result,
+                                commit_hash=debug_commit_hash,
+                                rollback_status="not_needed",
+                                search_enabled=False,
+                            )
+                            if debug_commit_hash:
+                                merged_commit_hashes.append(debug_commit_hash)
+                            group_test_result = debug_test_result
+                            batch_summary = debug_test_result.summary
+                            merged_commits = [item for item in merged_commit_hashes if item]
+                            if merged_commits:
+                                last_commit = merged_commits[-1]
+                                context.metadata.current_safe_revision = last_commit
+                                context.loop_state.current_safe_revision = last_commit
+                                context.loop_state.last_commit_hash = last_commit
+                            for index, step in enumerate(ordered_targets):
+                                step.status = "completed"
+                                step.completed_at = now_utc_iso()
+                                merged_commit = merged_commit_hashes[index] if index < len(merged_commit_hashes) else ""
+                                step.commit_hash = merged_commit or None
+                                worker_note = str(worker_results[index].get("test_summary") or "").strip()
+                                step.notes = worker_note if worker_note else debug_test_result.summary
+                            context.metadata.current_status = self._status_from_plan_state(plan_state)
                     else:
                         batch_summary = group_test_result.summary if group_test_result else "Parallel batch completed successfully."
                         for index, step in enumerate(ordered_targets):
@@ -1755,6 +1825,124 @@ class Orchestrator:
             context.metadata.current_status = "ready"
             context.loop_state.stop_reason = self._stop_reason(context)
 
+    def _debug_pass_name(self, pass_name: str) -> str:
+        normalized = str(pass_name).strip() or "debug"
+        if normalized.endswith("-pass"):
+            return f"{normalized[:-5]}-debug"
+        return f"{normalized}-debug"
+
+    def _log_pass_result(
+        self,
+        *,
+        context: ProjectContext,
+        reporter: Reporter,
+        block_index: int,
+        candidate: CandidateTask,
+        pass_name: str,
+        run_result,
+        test_result: TestRunResult | None,
+        commit_hash: str | None,
+        rollback_status: str,
+        search_enabled: bool,
+    ) -> None:
+        reporter.log_pass(
+            {
+                "repository_id": context.metadata.repo_id,
+                "repository_slug": context.metadata.slug,
+                "block_index": block_index,
+                "pass_type": pass_name,
+                "selected_task": candidate.title,
+                "changed_files": run_result.changed_files,
+                "test_results": test_result.to_dict() if test_result else None,
+                "usage": run_result.usage,
+                "codex_attempt_count": run_result.attempt_count,
+                "codex_diagnostics": run_result.diagnostics,
+                "codex_return_code": run_result.returncode,
+                "commit_hash": commit_hash,
+                "rollback_status": rollback_status,
+                "search_enabled": search_enabled,
+            }
+        )
+
+    def _run_debugger_pass(
+        self,
+        *,
+        context: ProjectContext,
+        runner: CodexRunner,
+        reporter: Reporter,
+        block_index: int,
+        candidate: CandidateTask,
+        execution_step: ExecutionStep | None,
+        memory_context: str,
+        failing_pass_name: str,
+        failing_test_result: TestRunResult,
+    ):
+        debug_pass_name = self._debug_pass_name(failing_pass_name)
+        debugger_prompt_template = load_debugger_prompt_template(context.runtime.execution_mode)
+        prompt = debugger_prompt(
+            context=context,
+            candidate=candidate,
+            memory_context=memory_context,
+            failing_pass_name=failing_pass_name,
+            failing_test_summary=failing_test_result.summary,
+            failing_test_stdout=read_text(failing_test_result.stdout_file),
+            failing_test_stderr=read_text(failing_test_result.stderr_file),
+            execution_step=execution_step,
+            template_text=debugger_prompt_template,
+        )
+        run_result = runner.run_pass(
+            context=context,
+            prompt=prompt,
+            pass_type=debug_pass_name,
+            block_index=block_index,
+            search_enabled=False,
+        )
+        run_result.changed_files = self.git.changed_files(context.paths.repo_dir)
+        if run_result.returncode != 0:
+            return debug_pass_name, run_result, None, None
+
+        test_result = self._run_test_command(context, block_index, debug_pass_name)
+        test_result.summary = f"{test_result.summary} after debugger recovery"
+        reporter.save_test_result(block_index, debug_pass_name, test_result)
+        commit_hash: str | None = None
+        if test_result.returncode == 0 and self.git.has_changes(context.paths.repo_dir):
+            commit_hash = self.git.commit_all(
+                context.paths.repo_dir,
+                self._commit_message(block_index, debug_pass_name, candidate.title),
+            )
+        return debug_pass_name, run_result, test_result, commit_hash
+
+    def _build_parallel_batch_debug_step(
+        self,
+        steps: list[ExecutionStep],
+        test_command: str,
+    ) -> ExecutionStep:
+        step_ids = [step.step_id for step in steps if step.step_id.strip()]
+        titles = ", ".join(step_ids) if step_ids else "parallel batch"
+        ordered_paths: list[str] = []
+        seen_paths: set[str] = set()
+        for step in steps:
+            for path in step.owned_paths:
+                normalized = self._normalize_owned_path(path)
+                if not normalized or normalized in seen_paths:
+                    continue
+                seen_paths.add(normalized)
+                ordered_paths.append(normalized)
+        return ExecutionStep(
+            step_id="BATCH",
+            title=f"Recover merged parallel batch {titles}",
+            display_description=f"Repair merged verification failures for {titles}.",
+            codex_description=(
+                "Inspect the merged batch failure, use the provided verification logs, and repair the implementation so the "
+                "batch passes without broad refactors or unnecessary test changes."
+            ),
+            test_command=test_command,
+            success_criteria=f"The verification command `{test_command}` exits successfully for the merged batch.",
+            reasoning_effort="high",
+            depends_on=step_ids,
+            owned_paths=ordered_paths,
+        )
+
     def _execute_pass(
         self,
         context: ProjectContext,
@@ -1788,23 +1976,17 @@ class Orchestrator:
         run_result.changed_files = self.git.changed_files(context.paths.repo_dir)
         if run_result.returncode != 0:
             self.git.hard_reset(context.paths.repo_dir, safe_revision)
-            reporter.log_pass(
-                {
-                    "repository_id": context.metadata.repo_id,
-                    "repository_slug": context.metadata.slug,
-                    "block_index": block_index,
-                    "pass_type": pass_name,
-                    "selected_task": candidate.title,
-                    "changed_files": run_result.changed_files,
-                    "test_results": None,
-                    "usage": run_result.usage,
-                    "codex_attempt_count": run_result.attempt_count,
-                    "codex_diagnostics": run_result.diagnostics,
-                    "codex_return_code": run_result.returncode,
-                    "commit_hash": None,
-                    "rollback_status": "rolled_back_to_safe_revision",
-                    "search_enabled": search_enabled,
-                }
+            self._log_pass_result(
+                context=context,
+                reporter=reporter,
+                block_index=block_index,
+                candidate=candidate,
+                pass_name=pass_name,
+                run_result=run_result,
+                test_result=None,
+                commit_hash=None,
+                rollback_status="rolled_back_to_safe_revision",
+                search_enabled=search_enabled,
             )
             return run_result, None, None
 
@@ -1813,31 +1995,77 @@ class Orchestrator:
         commit_hash: str | None = None
         rollback_status = "not_needed"
         if test_result.returncode != 0:
-            self.git.hard_reset(context.paths.repo_dir, safe_revision)
-            rollback_status = "rolled_back_to_safe_revision"
-            test_result = None
+            self._log_pass_result(
+                context=context,
+                reporter=reporter,
+                block_index=block_index,
+                candidate=candidate,
+                pass_name=pass_name,
+                run_result=run_result,
+                test_result=test_result,
+                commit_hash=None,
+                rollback_status="debugger_invoked",
+                search_enabled=search_enabled,
+            )
+            debug_pass_name, debug_run_result, debug_test_result, debug_commit_hash = self._run_debugger_pass(
+                context=context,
+                runner=runner,
+                reporter=reporter,
+                block_index=block_index,
+                candidate=candidate,
+                execution_step=execution_step,
+                memory_context=memory_context,
+                failing_pass_name=pass_name,
+                failing_test_result=test_result,
+            )
+            run_result.changed_files = sorted(set(run_result.changed_files + debug_run_result.changed_files))
+            debug_rollback_status = "not_needed"
+            if debug_run_result.returncode != 0 or debug_test_result is None or debug_test_result.returncode != 0:
+                self.git.hard_reset(context.paths.repo_dir, safe_revision)
+                rollback_status = "rolled_back_to_safe_revision"
+                debug_rollback_status = rollback_status
+                self._log_pass_result(
+                    context=context,
+                    reporter=reporter,
+                    block_index=block_index,
+                    candidate=candidate,
+                    pass_name=debug_pass_name,
+                    run_result=debug_run_result,
+                    test_result=debug_test_result,
+                    commit_hash=None,
+                    rollback_status=debug_rollback_status,
+                    search_enabled=False,
+                )
+                return run_result, None, None
+            self._log_pass_result(
+                context=context,
+                reporter=reporter,
+                block_index=block_index,
+                candidate=candidate,
+                pass_name=debug_pass_name,
+                run_result=debug_run_result,
+                test_result=debug_test_result,
+                commit_hash=debug_commit_hash,
+                rollback_status=debug_rollback_status,
+                search_enabled=False,
+            )
+            return run_result, debug_test_result, debug_commit_hash
         elif self.git.has_changes(context.paths.repo_dir):
             commit_hash = self.git.commit_all(
                 context.paths.repo_dir,
                 self._commit_message(block_index, pass_name, candidate.title),
             )
-        reporter.log_pass(
-            {
-                "repository_id": context.metadata.repo_id,
-                "repository_slug": context.metadata.slug,
-                "block_index": block_index,
-                "pass_type": pass_name,
-                "selected_task": candidate.title,
-                "changed_files": run_result.changed_files,
-                "test_results": test_result.to_dict() if test_result else None,
-                "usage": run_result.usage,
-                "codex_attempt_count": run_result.attempt_count,
-                "codex_diagnostics": run_result.diagnostics,
-                "codex_return_code": run_result.returncode,
-                "commit_hash": commit_hash,
-                "rollback_status": rollback_status,
-                "search_enabled": search_enabled,
-            }
+        self._log_pass_result(
+            context=context,
+            reporter=reporter,
+            block_index=block_index,
+            candidate=candidate,
+            pass_name=pass_name,
+            run_result=run_result,
+            test_result=test_result,
+            commit_hash=commit_hash,
+            rollback_status=rollback_status,
+            search_enabled=search_enabled,
         )
         return run_result, test_result, commit_hash
 

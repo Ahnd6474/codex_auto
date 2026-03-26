@@ -23,6 +23,9 @@ PLAN_GENERATION_PROMPT_FILENAME = PLAN_GENERATION_SERIAL_PROMPT_FILENAME
 STEP_EXECUTION_SERIAL_PROMPT_FILENAME = "STEP_EXECUTION_SERIAL_PROMPT.txt"
 STEP_EXECUTION_PARALLEL_PROMPT_FILENAME = "STEP_EXECUTION_PARALLEL_PROMPT.txt"
 STEP_EXECUTION_PROMPT_FILENAME = STEP_EXECUTION_SERIAL_PROMPT_FILENAME
+DEBUGGER_SERIAL_PROMPT_FILENAME = "DEBUGGER_SERIAL_PROMPT.txt"
+DEBUGGER_PARALLEL_PROMPT_FILENAME = "DEBUGGER_PARALLEL_PROMPT.txt"
+DEBUGGER_PROMPT_FILENAME = DEBUGGER_SERIAL_PROMPT_FILENAME
 FINALIZATION_PROMPT_FILENAME = "FINALIZATION_PROMPT.txt"
 SCOPE_GUARD_TEMPLATE_FILENAME = "SCOPE_GUARD_TEMPLATE.md"
 REFERENCE_GUIDE_FILENAME = "REFERENCE_GUIDE.md"
@@ -63,6 +66,16 @@ def load_plan_generation_prompt_template(execution_mode: str | None) -> str:
 
 def load_step_execution_prompt_template(execution_mode: str | None) -> str:
     return load_source_prompt_template(step_execution_prompt_filename(execution_mode))
+
+
+def debugger_prompt_filename(execution_mode: str | None) -> str:
+    if _normalize_execution_mode(execution_mode) == "parallel":
+        return DEBUGGER_PARALLEL_PROMPT_FILENAME
+    return DEBUGGER_SERIAL_PROMPT_FILENAME
+
+
+def load_debugger_prompt_template(execution_mode: str | None) -> str:
+    return load_source_prompt_template(debugger_prompt_filename(execution_mode))
 
 
 def load_reference_guide_text() -> str:
@@ -600,6 +613,67 @@ def implementation_prompt(
         )
     except KeyError as exc:
         raise ValueError(f"Unknown placeholder in step execution prompt template: {exc.args[0]}") from exc
+
+
+def debugger_prompt(
+    context: ProjectContext,
+    candidate: CandidateTask,
+    memory_context: str,
+    failing_pass_name: str,
+    failing_test_summary: str,
+    failing_test_stdout: str,
+    failing_test_stderr: str,
+    execution_step: ExecutionStep | None = None,
+    template_text: str | None = None,
+) -> str:
+    plan_text = read_text(context.paths.plan_file)
+    mid_term = read_text(context.paths.mid_term_plan_file)
+    scope_guard = read_text(context.paths.scope_guard_file)
+    research_notes = read_text(context.paths.research_notes_file)
+    template = template_text or load_debugger_prompt_template(getattr(context.runtime, "execution_mode", "serial"))
+    task_title = execution_step.title if execution_step else candidate.title
+    display_description = execution_step.display_description.strip() if execution_step else ""
+    codex_description = execution_step.codex_description.strip() if execution_step else ""
+    test_command = context.runtime.test_cmd
+    if execution_step and execution_step.test_command.strip():
+        test_command = execution_step.test_command.strip()
+    if not display_description:
+        display_description = task_title
+    if not codex_description:
+        codex_description = candidate.rationale.strip() or display_description or task_title
+    success_criteria = (
+        execution_step.success_criteria.strip()
+        if execution_step and execution_step.success_criteria.strip()
+        else f"The verification command `{test_command}` exits successfully."
+    )
+    depends_on = ", ".join(execution_step.depends_on) if execution_step and execution_step.depends_on else "none"
+    owned_paths = "\n".join(f"- {path}" for path in execution_step.owned_paths) if execution_step and execution_step.owned_paths else "- none declared"
+    try:
+        return template.format(
+            repo_dir=context.paths.repo_dir,
+            docs_dir=context.paths.docs_dir,
+            failing_pass_name=failing_pass_name,
+            test_command=test_command,
+            task_title=task_title,
+            display_description=display_description,
+            codex_description=codex_description,
+            success_criteria=success_criteria,
+            depends_on=depends_on,
+            owned_paths=owned_paths,
+            candidate_rationale=candidate.rationale,
+            memory_context=memory_context,
+            plan_snapshot=compact_text(plan_text, 4000),
+            mid_term_plan=compact_text(mid_term, 2500),
+            scope_guard=compact_text(scope_guard, 2500),
+            research_notes=compact_text(research_notes, 2500),
+            research_notes_file=context.paths.research_notes_file,
+            failing_test_summary=compact_text(failing_test_summary, 1200) or "No verification summary was captured.",
+            failing_test_stdout=compact_text(failing_test_stdout, 4000) or "No stdout captured.",
+            failing_test_stderr=compact_text(failing_test_stderr, 4000) or "No stderr captured.",
+            extra_prompt=context.runtime.extra_prompt.strip() or "None.",
+        )
+    except KeyError as exc:
+        raise ValueError(f"Unknown placeholder in debugger prompt template: {exc.args[0]}") from exc
 
 
 def finalization_prompt(

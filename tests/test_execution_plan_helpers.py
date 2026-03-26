@@ -21,9 +21,12 @@ from jakal_flow.model_selection import (
     model_selection_from_runtime,
     normalize_model_preset_id,
 )
-from jakal_flow.models import ExecutionPlanState, ExecutionStep, RuntimeOptions
+from jakal_flow.models import CandidateTask, CodexRunResult, CommandResult, ExecutionPlanState, ExecutionStep, RuntimeOptions, TestRunResult
 from jakal_flow.orchestrator import Orchestrator
 from jakal_flow.planning import (
+    DEBUGGER_PARALLEL_PROMPT_FILENAME,
+    DEBUGGER_PROMPT_FILENAME,
+    DEBUGGER_SERIAL_PROMPT_FILENAME,
     FINALIZATION_PROMPT_FILENAME,
     PLAN_GENERATION_PARALLEL_PROMPT_FILENAME,
     PLAN_GENERATION_PROMPT_FILENAME,
@@ -35,6 +38,7 @@ from jakal_flow.planning import (
     STEP_EXECUTION_SERIAL_PROMPT_FILENAME,
     bootstrap_plan_prompt,
     execution_plan_svg,
+    load_debugger_prompt_template,
     load_plan_generation_prompt_template,
     load_reference_guide_text,
     load_source_prompt_template,
@@ -44,6 +48,7 @@ from jakal_flow.planning import (
     scan_repository_inputs,
     source_prompt_template_path,
 )
+from jakal_flow.reporting import Reporter
 from jakal_flow.utils import append_jsonl, read_jsonl_tail, read_last_jsonl
 
 
@@ -478,6 +483,271 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(step.notes, "attempt 2 failed")
         self.assertEqual(context.metadata.current_status, "failed")
 
+    def test_execute_pass_invokes_debugger_with_failure_logs_and_recovers(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_step_debugger_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", test_cmd="python -m pytest")
+
+        try:
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"):
+                context, saved = orchestrator.update_execution_plan(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    plan_state=ExecutionPlanState(
+                        plan_title="Debugger Demo",
+                        default_test_command="python -m pytest",
+                        steps=[
+                            ExecutionStep(
+                                step_id="custom-1",
+                                title="Implement fix",
+                                display_description="Repair the broken behavior.",
+                                codex_description="Update the implementation and keep tests passing.",
+                                test_command="python -m pytest",
+                                success_criteria="The verification command passes.",
+                            )
+                        ],
+                    ),
+                )
+
+            execution_step = saved.steps[0]
+            candidate = CandidateTask(
+                candidate_id=execution_step.step_id,
+                title=execution_step.title,
+                rationale="Fix the implementation without widening scope.",
+                plan_refs=[execution_step.step_id],
+                score=1.0,
+            )
+            reporter = Reporter(context)
+            runner = mock.Mock()
+            runner.run_pass.side_effect = [
+                CodexRunResult(
+                    pass_type="block-search-pass",
+                    prompt_file=context.paths.logs_dir / "initial.prompt.md",
+                    output_file=context.paths.logs_dir / "initial.last_message.txt",
+                    event_file=context.paths.logs_dir / "initial.events.jsonl",
+                    returncode=0,
+                    search_enabled=True,
+                    changed_files=[],
+                    usage={"input_tokens": 10},
+                    last_message="initial implementation pass",
+                ),
+                CodexRunResult(
+                    pass_type="block-search-debug",
+                    prompt_file=context.paths.logs_dir / "debug.prompt.md",
+                    output_file=context.paths.logs_dir / "debug.last_message.txt",
+                    event_file=context.paths.logs_dir / "debug.events.jsonl",
+                    returncode=0,
+                    search_enabled=False,
+                    changed_files=[],
+                    usage={"input_tokens": 8},
+                    last_message="debugger recovery pass",
+                ),
+            ]
+
+            block_dir = context.paths.logs_dir / "block_0001"
+            block_dir.mkdir(parents=True, exist_ok=True)
+            failing_stdout = block_dir / "block-search-pass.test.stdout.log"
+            failing_stderr = block_dir / "block-search-pass.test.stderr.log"
+            failing_stdout.write_text("AssertionError: expected value\n", encoding="utf-8")
+            failing_stderr.write_text("Traceback: test failure details\n", encoding="utf-8")
+            recovered_stdout = block_dir / "block-search-debug.test.stdout.log"
+            recovered_stderr = block_dir / "block-search-debug.test.stderr.log"
+            recovered_stdout.write_text("all green\n", encoding="utf-8")
+            recovered_stderr.write_text("", encoding="utf-8")
+            failing_test = TestRunResult(
+                command="python -m pytest",
+                returncode=1,
+                stdout_file=failing_stdout,
+                stderr_file=failing_stderr,
+                summary="python -m pytest exited with 1",
+            )
+            recovered_test = TestRunResult(
+                command="python -m pytest",
+                returncode=0,
+                stdout_file=recovered_stdout,
+                stderr_file=recovered_stderr,
+                summary="python -m pytest exited with 0",
+            )
+
+            with mock.patch.object(orchestrator, "_run_test_command", side_effect=[failing_test, recovered_test]), mock.patch.object(
+                orchestrator.git,
+                "changed_files",
+                side_effect=[["src/app.py"], ["src/app.py", "src/fix.py"]],
+            ), mock.patch.object(orchestrator.git, "has_changes", return_value=True), mock.patch.object(
+                orchestrator.git,
+                "commit_all",
+                return_value="debug-commit",
+            ) as mocked_commit, mock.patch.object(orchestrator.git, "hard_reset") as mocked_reset:
+                run_result, test_result, commit_hash = orchestrator._execute_pass(
+                    context=context,
+                    runner=runner,
+                    reporter=reporter,
+                    block_index=1,
+                    candidate=candidate,
+                    pass_name="block-search-pass",
+                    safe_revision="safe-revision",
+                    search_enabled=True,
+                    memory_context_override="Recent memory context",
+                    execution_step=execution_step,
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(commit_hash, "debug-commit")
+        self.assertIsNotNone(test_result)
+        self.assertEqual(test_result.returncode, 0)
+        self.assertIn("after debugger recovery", test_result.summary)
+        self.assertEqual(run_result.changed_files, ["src/app.py", "src/fix.py"])
+        mocked_commit.assert_called_once()
+        mocked_reset.assert_not_called()
+        debugger_prompt_text = runner.run_pass.call_args_list[1].kwargs["prompt"]
+        self.assertIn("Implement fix", debugger_prompt_text)
+        self.assertIn("AssertionError: expected value", debugger_prompt_text)
+        self.assertIn("Traceback: test failure details", debugger_prompt_text)
+        self.assertIn("Do not modify tests unless", debugger_prompt_text)
+        pass_entries = read_jsonl_tail(context.paths.pass_log_file, 5)
+        self.assertEqual([item["pass_type"] for item in pass_entries], ["block-search-pass", "block-search-debug"])
+        self.assertEqual(pass_entries[0]["rollback_status"], "debugger_invoked")
+        self.assertEqual(pass_entries[1]["rollback_status"], "not_needed")
+
+    def test_parallel_batch_verification_failure_invokes_debugger(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_batch_debugger_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model="gpt-5.4",
+            effort="medium",
+            test_cmd="python -m pytest",
+            execution_mode="parallel",
+            parallel_workers=2,
+        )
+
+        try:
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"):
+                orchestrator.update_execution_plan(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    plan_state=ExecutionPlanState(
+                        plan_title="Parallel Debugger Demo",
+                        execution_mode="parallel",
+                        default_test_command="python -m pytest",
+                        steps=[
+                            ExecutionStep(
+                                step_id="node-a",
+                                title="Desktop slice",
+                                codex_description="Implement the desktop slice.",
+                                test_command="python -m pytest",
+                                success_criteria="The desktop slice passes verification.",
+                                depends_on=[],
+                                owned_paths=["desktop/src"],
+                            ),
+                            ExecutionStep(
+                                step_id="node-b",
+                                title="Backend slice",
+                                codex_description="Implement the backend slice.",
+                                test_command="python -m pytest",
+                                success_criteria="The backend slice passes verification.",
+                                depends_on=[],
+                                owned_paths=["src/jakal_flow"],
+                            ),
+                        ],
+                    ),
+                )
+
+            failing_stdout = workspace_root / "parallel-batch-pass.stdout.log"
+            failing_stderr = workspace_root / "parallel-batch-pass.stderr.log"
+            failing_stdout.parent.mkdir(parents=True, exist_ok=True)
+            failing_stdout.write_text("integration assertion failed\n", encoding="utf-8")
+            failing_stderr.write_text("parallel batch traceback\n", encoding="utf-8")
+            recovered_stdout = workspace_root / "parallel-batch-debug.stdout.log"
+            recovered_stderr = workspace_root / "parallel-batch-debug.stderr.log"
+            recovered_stdout.write_text("integration fixed\n", encoding="utf-8")
+            recovered_stderr.write_text("", encoding="utf-8")
+            failing_test = TestRunResult(
+                command="python -m pytest",
+                returncode=1,
+                stdout_file=failing_stdout,
+                stderr_file=failing_stderr,
+                summary="python -m pytest exited with 1",
+            )
+            recovered_test = TestRunResult(
+                command="python -m pytest",
+                returncode=0,
+                stdout_file=recovered_stdout,
+                stderr_file=recovered_stderr,
+                summary="python -m pytest exited with 0",
+            )
+            worker_results = [
+                {
+                    "step_id": "ST1",
+                    "status": "completed",
+                    "notes": "worker 1 ok",
+                    "commit_hash": "worker-1-commit",
+                    "changed_files": ["desktop/src/app.jsx"],
+                    "pass_log": {"pass_type": "block-search-pass"},
+                    "block_log": {"status": "completed"},
+                    "test_summary": "worker 1 ok",
+                },
+                {
+                    "step_id": "ST2",
+                    "status": "completed",
+                    "notes": "worker 2 ok",
+                    "commit_hash": "worker-2-commit",
+                    "changed_files": ["src/jakal_flow/orchestrator.py"],
+                    "pass_log": {"pass_type": "block-search-pass"},
+                    "block_log": {"status": "completed"},
+                    "test_summary": "worker 2 ok",
+                },
+            ]
+
+            with mock.patch.object(orchestrator, "_run_parallel_step_worker", side_effect=worker_results), mock.patch.object(
+                orchestrator,
+                "_run_test_command",
+                side_effect=[failing_test, recovered_test],
+            ), mock.patch.object(
+                orchestrator.git,
+                "try_cherry_pick",
+                return_value=CommandResult(command=["git", "cherry-pick"], returncode=0, stdout="", stderr=""),
+            ), mock.patch.object(orchestrator.git, "has_changes", return_value=True), mock.patch.object(
+                orchestrator.git,
+                "commit_all",
+                return_value="parallel-debug-commit",
+            ), mock.patch("jakal_flow.orchestrator.CodexRunner.run_pass") as mocked_run_pass:
+                mocked_run_pass.return_value = CodexRunResult(
+                    pass_type="parallel-batch-debug",
+                    prompt_file=workspace_root / "parallel-debug.prompt.md",
+                    output_file=workspace_root / "parallel-debug.last_message.txt",
+                    event_file=workspace_root / "parallel-debug.events.jsonl",
+                    returncode=0,
+                    search_enabled=False,
+                    changed_files=[],
+                    usage={"input_tokens": 12},
+                    last_message="parallel debugger pass",
+                )
+                context, _plan_state, steps = orchestrator.run_parallel_execution_batch(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    step_ids=["ST1", "ST2"],
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual([step.status for step in steps], ["completed", "completed"])
+        self.assertEqual(context.metadata.current_status, "plan_completed")
+        self.assertEqual(context.metadata.current_safe_revision, "parallel-debug-commit")
+        debug_prompt_text = mocked_run_pass.call_args.kwargs["prompt"]
+        self.assertIn("Recover merged parallel batch ST1, ST2", debug_prompt_text)
+        self.assertIn("integration assertion failed", debug_prompt_text)
+        self.assertIn("parallel batch traceback", debug_prompt_text)
+        self.assertIn("Do not modify tests unless", debug_prompt_text)
+
     def test_execution_plan_svg_includes_step_statuses(self) -> None:
         svg = execution_plan_svg(
             "demo flow",
@@ -549,6 +819,8 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         parallel_plan_template = load_source_prompt_template(PLAN_GENERATION_PARALLEL_PROMPT_FILENAME)
         serial_step_template = load_source_prompt_template(STEP_EXECUTION_SERIAL_PROMPT_FILENAME)
         parallel_step_template = load_source_prompt_template(STEP_EXECUTION_PARALLEL_PROMPT_FILENAME)
+        serial_debugger_template = load_source_prompt_template(DEBUGGER_SERIAL_PROMPT_FILENAME)
+        parallel_debugger_template = load_source_prompt_template(DEBUGGER_PARALLEL_PROMPT_FILENAME)
         final_template = load_source_prompt_template(FINALIZATION_PROMPT_FILENAME)
         scope_template = load_source_prompt_template(SCOPE_GUARD_TEMPLATE_FILENAME)
 
@@ -556,6 +828,8 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertTrue(source_prompt_template_path(PLAN_GENERATION_PARALLEL_PROMPT_FILENAME).exists())
         self.assertTrue(source_prompt_template_path(STEP_EXECUTION_PROMPT_FILENAME).exists())
         self.assertTrue(source_prompt_template_path(STEP_EXECUTION_PARALLEL_PROMPT_FILENAME).exists())
+        self.assertTrue(source_prompt_template_path(DEBUGGER_PROMPT_FILENAME).exists())
+        self.assertTrue(source_prompt_template_path(DEBUGGER_PARALLEL_PROMPT_FILENAME).exists())
         self.assertTrue(source_prompt_template_path(FINALIZATION_PROMPT_FILENAME).exists())
         self.assertTrue(source_prompt_template_path(SCOPE_GUARD_TEMPLATE_FILENAME).exists())
         self.assertTrue(source_prompt_template_path(REFERENCE_GUIDE_FILENAME).exists())
@@ -580,10 +854,17 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("{plan_snapshot}", serial_step_template)
         self.assertIn("saved DAG execution tree", parallel_step_template)
         self.assertIn("primary write scope", parallel_step_template)
+        self.assertIn("{failing_test_summary}", serial_debugger_template)
+        self.assertIn("{failing_test_stdout}", serial_debugger_template)
+        self.assertIn("Do not modify tests unless", serial_debugger_template)
+        self.assertIn("{owned_paths}", parallel_debugger_template)
+        self.assertIn("merged parallel batch", parallel_debugger_template)
         self.assertEqual(load_plan_generation_prompt_template("serial"), serial_plan_template)
         self.assertEqual(load_plan_generation_prompt_template("parallel"), parallel_plan_template)
         self.assertEqual(load_step_execution_prompt_template("serial"), serial_step_template)
         self.assertEqual(load_step_execution_prompt_template("parallel"), parallel_step_template)
+        self.assertEqual(load_debugger_prompt_template("serial"), serial_debugger_template)
+        self.assertEqual(load_debugger_prompt_template("parallel"), parallel_debugger_template)
         self.assertIn("{completed_steps}", final_template)
         self.assertIn("{closeout_report_file}", final_template)
         self.assertIn("{test_command}", final_template)
