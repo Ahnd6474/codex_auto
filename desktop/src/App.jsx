@@ -5,6 +5,7 @@ import { IdeToolbar } from "./components/layout/IdeToolbar";
 import { SidebarPane } from "./components/layout/SidebarPane";
 import { Splitter } from "./components/layout/Splitter";
 import { useDesktopController } from "./hooks/useDesktopController";
+import { useI18n } from "./i18n";
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -12,6 +13,7 @@ function clamp(value, min, max) {
 
 export default function App() {
   const controller = useDesktopController();
+  const { t } = useI18n();
   const keybindingActionsRef = useRef({
     setCenterTab: controller.setCenterTab,
     setBottomCollapsed: controller.setBottomCollapsed,
@@ -66,7 +68,7 @@ export default function App() {
         <section className={`banner banner--${controller.message.tone}`}>
           <span>{controller.message.text}</span>
           <button className="toolbar-button toolbar-button--ghost" onClick={() => controller.setMessage(null)} type="button">
-            Dismiss
+            {t("action.dismiss")}
           </button>
         </section>
       ) : null}

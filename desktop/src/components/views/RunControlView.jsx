@@ -1,16 +1,18 @@
+import { useI18n } from "../../i18n";
+import { displayStatus } from "../../locale";
 import { canEditStep, REASONING_OPTIONS, reasoningEffortLabel, statusTone } from "../../utils";
 
-function FlowNode({ step, selected, onSelect }) {
+function FlowNode({ step, selected, onSelect, language, t }) {
   const tone = statusTone(step.status);
   return (
     <button className={`run-node run-node--${tone} ${selected ? "selected" : ""}`} onClick={() => onSelect(step.step_id)} type="button">
       <div className="run-node__meta">
         <span className="run-node__id">{step.step_id}</span>
-        <span className={`status-badge status-badge--${tone}`}>{step.status}</span>
+        <span className={`status-badge status-badge--${tone}`}>{displayStatus(step.status, language)}</span>
       </div>
       <strong>{step.title}</strong>
-      <p>{step.display_description || step.test_command || "No summary"}</p>
-      <p>Reasoning {reasoningEffortLabel(step.reasoning_effort || "high")}</p>
+      <p>{step.display_description || step.test_command || t("run.noSummary")}</p>
+      <p>{t("run.reasoning", { effort: reasoningEffortLabel(step.reasoning_effort || "high", language) })}</p>
     </button>
   );
 }
@@ -39,56 +41,57 @@ export function RunControlView({
   const editableStep = canEditStep(selectedStep, busy);
   const completedCount = steps.filter((step) => step.status === "completed").length;
   const flowColumns = 3;
+  const { language, t } = useI18n();
 
   return (
     <section className="workspace-view">
       <div className="view-header">
         <div>
-          <span className="eyebrow">Flow</span>
-          <h2>Execution Flow</h2>
+          <span className="eyebrow">{t("run.flow")}</span>
+          <h2>{t("run.executionFlow")}</h2>
         </div>
       </div>
 
       <div className="run-summary">
         <div className={`metric-card metric-card--${statusTone(detail?.project?.current_status)}`}>
-          <span>Status</span>
-          <strong>{detail?.project?.current_status || "idle"}</strong>
+          <span>{t("common.status")}</span>
+          <strong>{displayStatus(detail?.project?.current_status || "idle", language)}</strong>
         </div>
         <div className="metric-card metric-card--info">
-          <span>Done</span>
+          <span>{t("run.done")}</span>
           <strong>{completedCount}/{steps.length || 0}</strong>
         </div>
         <div className={`metric-card metric-card--${detail?.run_control?.stop_after_current_step ? "warning" : "neutral"}`}>
-          <span>Stop After Step</span>
-          <strong>{detail?.run_control?.stop_after_current_step ? "On" : "Off"}</strong>
+          <span>{t("run.stopAfterStep")}</span>
+          <strong>{detail?.run_control?.stop_after_current_step ? t("common.on") : t("common.off")}</strong>
         </div>
         <div className={`metric-card metric-card--${statusTone(planDraft?.closeout_status)}`}>
-          <span>Closeout</span>
-          <strong>{planDraft?.closeout_status || "not_started"}</strong>
+          <span>{t("run.closeout")}</span>
+          <strong>{displayStatus(planDraft?.closeout_status || "not_started", language)}</strong>
         </div>
       </div>
 
       <div className="content-card content-card--flow">
         <div className="content-card__header">
-          <strong>Flow Chart</strong>
+          <strong>{t("run.flowChart")}</strong>
           <div className="action-row">
             <button className="toolbar-button" onClick={onGeneratePlan} type="button" disabled={busy}>
-              Generate
+              {t("action.generate")}
             </button>
             <button className="toolbar-button" onClick={onSavePlan} type="button" disabled={busy}>
-              Save
+              {t("action.save")}
             </button>
             <button className="toolbar-button toolbar-button--ghost" onClick={onResetPlan} type="button" disabled={busy}>
-              Reset
+              {t("action.reset")}
             </button>
             <button className="toolbar-button toolbar-button--accent" onClick={onRunPlan} type="button" disabled={busy}>
-              Run
+              {t("action.run")}
             </button>
             <button className="toolbar-button" onClick={onRunCloseout} type="button" disabled={busy}>
-              Closeout
+              {t("action.closeout")}
             </button>
             <button className="toolbar-button toolbar-button--ghost" onClick={onRequestStop} type="button" disabled={!busy}>
-              Stop
+              {t("action.stop")}
             </button>
           </div>
         </div>
@@ -96,7 +99,7 @@ export function RunControlView({
           {steps.length ? (
             steps.map((step, index) => (
               <div className="run-flow__item" key={step.step_id}>
-                <FlowNode step={step} selected={step.step_id === selectedStepId} onSelect={onSelectStep} />
+                <FlowNode step={step} selected={step.step_id === selectedStepId} onSelect={onSelectStep} language={language} t={t} />
                 {index < steps.length - 1 ? (
                   <div
                     className={`run-flow__connector ${
@@ -108,7 +111,7 @@ export function RunControlView({
               </div>
             ))
           ) : (
-            <div className="empty-block">No steps yet. Generate a plan or add one.</div>
+            <div className="empty-block">{t("run.noSteps")}</div>
           )}
         </div>
       </div>
@@ -116,24 +119,24 @@ export function RunControlView({
       <div className="run-layout">
         <div className="content-card">
           <div className="content-card__header">
-            <strong>Prompt</strong>
+            <strong>{t("field.prompt")}</strong>
           </div>
           <textarea className="editor-textarea editor-textarea--prompt" value={planDraft?.project_prompt || ""} onChange={(event) => onPromptChange(event.target.value)} disabled={busy} />
         </div>
 
         <div className="content-card">
           <div className="content-card__header">
-            <strong>Selected Step</strong>
-            <span className={`status-badge status-badge--${statusTone(selectedStep?.status)}`}>{selectedStep?.status || "none"}</span>
+            <strong>{t("run.selectedStep")}</strong>
+            <span className={`status-badge status-badge--${statusTone(selectedStep?.status)}`}>{selectedStep ? displayStatus(selectedStep.status, language) : t("common.none")}</span>
           </div>
           {selectedStep ? (
             <div className="step-editor-grid">
               <label className="field field--wide">
-                <span>Title</span>
+                <span>{t("field.title")}</span>
                 <input value={selectedStep.title || ""} onChange={(event) => onUpdateStepField("title", event.target.value)} disabled={!editableStep} />
               </label>
               <label className="field">
-                <span>GPT Reasoning</span>
+                <span>{t("field.gptReasoning")}</span>
                 <select
                   value={selectedStep.reasoning_effort || detail?.runtime?.effort || "high"}
                   onChange={(event) => onUpdateStepField("reasoning_effort", event.target.value)}
@@ -141,43 +144,43 @@ export function RunControlView({
                 >
                   {REASONING_OPTIONS.map((effort) => (
                     <option key={effort} value={effort}>
-                      {reasoningEffortLabel(effort)}
+                      {reasoningEffortLabel(effort, language)}
                     </option>
                   ))}
                 </select>
               </label>
               <label className="field field--wide">
-                <span>Description</span>
+                <span>{t("field.description")}</span>
                 <textarea value={selectedStep.display_description || ""} onChange={(event) => onUpdateStepField("display_description", event.target.value)} disabled={!editableStep} />
               </label>
               <label className="field field--wide">
-                <span>Codex Instruction</span>
+                <span>{t("field.codexInstruction")}</span>
                 <textarea value={selectedStep.codex_description || ""} onChange={(event) => onUpdateStepField("codex_description", event.target.value)} disabled={!editableStep} />
               </label>
               <label className="field field--wide">
-                <span>Success Criteria</span>
+                <span>{t("field.successCriteria")}</span>
                 <textarea value={selectedStep.success_criteria || ""} onChange={(event) => onUpdateStepField("success_criteria", event.target.value)} disabled={!editableStep} />
               </label>
               <div className="action-row field--wide">
                 <button className="toolbar-button toolbar-button--accent" onClick={onSaveStepLocal} type="button" disabled={busy}>
-                  Save Local
+                  {t("action.saveLocal")}
                 </button>
                 <button className="toolbar-button" onClick={onAddStep} type="button" disabled={busy}>
-                  Add
+                  {t("action.add")}
                 </button>
                 <button className="toolbar-button toolbar-button--ghost" onClick={onDeleteStep} type="button" disabled={!editableStep}>
-                  Delete
+                  {t("action.delete")}
                 </button>
                 <button className="toolbar-button toolbar-button--ghost" onClick={() => onMoveStep(-1)} type="button" disabled={!editableStep}>
-                  Up
+                  {t("action.up")}
                 </button>
                 <button className="toolbar-button toolbar-button--ghost" onClick={() => onMoveStep(1)} type="button" disabled={!editableStep}>
-                  Down
+                  {t("action.down")}
                 </button>
               </div>
             </div>
           ) : (
-            <div className="empty-block">Select a step.</div>
+            <div className="empty-block">{t("run.selectStep")}</div>
           )}
         </div>
       </div>

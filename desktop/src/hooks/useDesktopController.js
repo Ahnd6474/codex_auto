@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { bridgeRequest, getBridgeJob, startBridgeJob } from "../api";
+import { useI18n } from "../i18n";
+import { translate } from "../locale";
 import {
   basename,
   blankProjectForm,
@@ -17,6 +19,7 @@ function messagePayload(tone, text) {
 }
 
 export function useDesktopController() {
+  const { language } = useI18n();
   const [workspaceRoot, setWorkspaceRoot] = useState("");
   const [defaultRuntime, setDefaultRuntime] = useState(null);
   const [modelPresets, setModelPresets] = useState([]);
@@ -56,7 +59,7 @@ export function useDesktopController() {
       [project.display_name, project.slug, project.status, project.detail, project.repo_path]
         .join(" ")
         .toLowerCase()
-      .includes(query),
+        .includes(query),
     );
   }, [projectFilter, projects]);
 
@@ -134,8 +137,19 @@ export function useDesktopController() {
           setWorkspaceStats(listing.workspace || null);
           setMessage(
             job.status === "completed"
-              ? messagePayload("success", `${commandLabel(job.command)} completed.`)
-              : messagePayload("error", job.error || `${commandLabel(job.command)} failed.`),
+              ? messagePayload(
+                  "success",
+                  translate(language, "message.commandCompleted", {
+                    command: commandLabel(job.command, language),
+                  }),
+                )
+              : messagePayload(
+                  "error",
+                  job.error ||
+                    translate(language, "message.commandFailed", {
+                      command: commandLabel(job.command, language),
+                    }),
+                ),
           );
         }
       } catch (error) {
@@ -155,7 +169,7 @@ export function useDesktopController() {
       cancelled = true;
       window.clearInterval(handle);
     };
-  }, [activeJobId, defaultRuntime, workspaceRoot]);
+  }, [activeJobId, defaultRuntime, language, workspaceRoot]);
 
   useEffect(() => {
     let cancelled = false;
@@ -239,7 +253,7 @@ export function useDesktopController() {
         setSelectedProjectId(listing.projects[0].repo_id);
       }
 
-      setMessage(messagePayload("info", activeJobId ? "Run state refreshed." : "Project state refreshed."));
+      setMessage(messagePayload("info", activeJobId ? translate(language, "message.runStateRefreshed") : translate(language, "message.projectStateRefreshed")));
     } catch (error) {
       setMessage(messagePayload("error", String(error)));
     }
@@ -341,13 +355,13 @@ export function useDesktopController() {
       setSelectedStepId(firstSelectableStepId(detail.plan));
       setPlanDirty(false);
       await refreshProjects();
-      setMessage(messagePayload("success", "Project configuration saved."));
+      setMessage(messagePayload("success", translate(language, "message.projectConfigurationSaved")));
     });
   }
 
   async function savePlan() {
     if (!projectForm.project_dir.trim()) {
-      setMessage(messagePayload("error", "Open or create a project first."));
+      setMessage(messagePayload("error", translate(language, "message.openOrCreateProjectFirst")));
       return;
     }
     await withPending("save-plan", async () => {
@@ -357,16 +371,16 @@ export function useDesktopController() {
       setSelectedStepId(firstSelectableStepId(detail.plan));
       setPlanDirty(false);
       await refreshProjects();
-      setMessage(messagePayload("success", "Plan saved."));
+      setMessage(messagePayload("success", translate(language, "message.planSaved")));
     });
   }
 
   async function resetPlan() {
     if (!projectForm.project_dir.trim()) {
-      setMessage(messagePayload("error", "Open or create a project first."));
+      setMessage(messagePayload("error", translate(language, "message.openOrCreateProjectFirst")));
       return;
     }
-    if (!window.confirm("Reset the saved prompt and remove all execution steps for this project?")) {
+    if (!window.confirm(translate(language, "prompt.confirmResetPlan"))) {
       return;
     }
     await withPending("reset-plan", async () => {
@@ -376,7 +390,7 @@ export function useDesktopController() {
       setSelectedStepId("");
       setPlanDirty(false);
       await refreshProjects();
-      setMessage(messagePayload("success", "Plan reset."));
+      setMessage(messagePayload("success", translate(language, "message.planReset")));
     });
   }
 
@@ -388,7 +402,14 @@ export function useDesktopController() {
       setActiveJob(job);
       setCenterTab("run");
       setBottomTab("json");
-      setMessage(messagePayload("info", `${commandLabel(command)} started.`));
+      setMessage(
+        messagePayload(
+          "info",
+          translate(language, "message.commandStarted", {
+            command: commandLabel(command, language),
+          }),
+        ),
+      );
     } catch (error) {
       setMessage(messagePayload("error", String(error)));
     }
@@ -397,18 +418,18 @@ export function useDesktopController() {
   async function generatePlan() {
     const prompt = planDraft?.project_prompt?.trim() || "";
     if (!projectForm.project_dir.trim()) {
-      setMessage(messagePayload("error", "Prepare or open a project first."));
+      setMessage(messagePayload("error", translate(language, "message.prepareProjectFirst")));
       return;
     }
     if (!prompt) {
-      setMessage(messagePayload("error", "Prompt is required to generate the plan."));
+      setMessage(messagePayload("error", translate(language, "message.promptRequired")));
       return;
     }
     if ((planDraft?.steps || []).some((step) => step.status === "completed")) {
-      setMessage(messagePayload("error", "The plan already has completed steps. Edit the remaining steps instead of regenerating."));
+      setMessage(messagePayload("error", translate(language, "message.editRemainingSteps")));
       return;
     }
-    if ((planDraft?.steps || []).length && !window.confirm("Replace the current unstarted plan with a new Codex-generated plan?")) {
+    if ((planDraft?.steps || []).length && !window.confirm(translate(language, "prompt.confirmRegeneratePlan"))) {
       return;
     }
     await startJob("generate-plan", {
@@ -420,7 +441,7 @@ export function useDesktopController() {
 
   async function runPlan() {
     if (!(planDraft?.steps || []).length) {
-      setMessage(messagePayload("error", "Create or add at least one planned step first."));
+      setMessage(messagePayload("error", translate(language, "message.createStepBeforeRun")));
       return;
     }
     await startJob("run-plan", buildProjectPayload(projectForm, planDraft));
@@ -428,14 +449,14 @@ export function useDesktopController() {
 
   async function runCloseout() {
     if (!(planDraft?.steps || []).length) {
-      setMessage(messagePayload("error", "Create and complete the execution plan before running closeout."));
+      setMessage(messagePayload("error", translate(language, "message.createPlanBeforeCloseout")));
       return;
     }
     if ((planDraft.steps || []).some((step) => step.status !== "completed")) {
-      setMessage(messagePayload("error", "Closeout can run only after all steps are completed."));
+      setMessage(messagePayload("error", translate(language, "message.closeoutAfterAllSteps")));
       return;
     }
-    if (!window.confirm("Run final closeout now? This will do final cleanup, verification, smoke checks when possible, and handoff work.")) {
+    if (!window.confirm(translate(language, "prompt.confirmCloseout"))) {
       return;
     }
     await startJob("run-closeout", buildProjectPayload(projectForm, planDraft));
@@ -456,13 +477,13 @@ export function useDesktopController() {
       );
       const detail = await bridgeRequest("load-project", { project_dir: projectForm.project_dir.trim() }, workspaceRoot || null);
       setProjectDetail(detail);
-      setMessage(messagePayload("info", "Stop requested after the current step."));
+      setMessage(messagePayload("info", translate(language, "message.stopRequested")));
     });
   }
 
   async function approveCheckpoint() {
     if (!selectedProjectId) {
-      setMessage(messagePayload("error", "Open a project first."));
+      setMessage(messagePayload("error", translate(language, "message.openProjectFirst")));
       return;
     }
     await withPending("approve-checkpoint", async () => {
@@ -475,31 +496,31 @@ export function useDesktopController() {
         workspaceRoot || null,
       );
       setProjectDetail(detail);
-      setMessage(messagePayload("success", "Checkpoint approved."));
+      setMessage(messagePayload("success", translate(language, "message.checkpointApproved")));
     });
   }
 
   async function reloadProject() {
     if (!selectedProjectId) {
-      setMessage(messagePayload("error", "No project is open."));
+      setMessage(messagePayload("error", translate(language, "message.noProjectOpen")));
       return;
     }
     await loadProject(selectedProjectId);
-    setMessage(messagePayload("success", "Project reloaded."));
+    setMessage(messagePayload("success", translate(language, "message.projectReloaded")));
   }
 
   function saveStepLocal() {
     if (!selectedStepId) {
-      setMessage(messagePayload("error", "Select a pending step first."));
+      setMessage(messagePayload("error", translate(language, "message.selectPendingStepFirst")));
       return;
     }
     const step = (planDraft?.steps || []).find((item) => item.step_id === selectedStepId);
     if (!step || step.status !== "pending") {
-      setMessage(messagePayload("error", "Only pending steps can be edited."));
+      setMessage(messagePayload("error", translate(language, "message.onlyPendingEdit")));
       return;
     }
     setPlanDirty(true);
-    setMessage(messagePayload("info", "Step updated locally. Save Plan to persist the change."));
+    setMessage(messagePayload("info", translate(language, "message.stepUpdatedLocally")));
   }
 
   function addStep() {
@@ -507,18 +528,18 @@ export function useDesktopController() {
     if (selectedStepId) {
       const selectedStep = steps.find((step) => step.step_id === selectedStepId);
       if (selectedStep && selectedStep.status !== "pending") {
-        setMessage(messagePayload("error", "Insert new steps after a pending step, or clear the selection to append at the end."));
+        setMessage(messagePayload("error", translate(language, "message.insertAfterPending")));
         return;
       }
     }
     const insertAt = selectedStepId ? steps.findIndex((step) => step.step_id === selectedStepId) + 1 : steps.length;
     const newStep = {
       step_id: `TMP${steps.length + 1}`,
-      title: "New pending step",
-      display_description: "Describe the checkpoint for the user.",
-      codex_description: "Describe the implementation work Codex should perform for this checkpoint.",
+      title: translate(language, "run.newPendingStep"),
+      display_description: translate(language, "run.stepCheckpointDescription"),
+      codex_description: translate(language, "run.stepCodexDescription"),
       test_command: projectForm.runtime?.test_cmd || "python -m pytest",
-      success_criteria: "Run the configured verification command successfully.",
+      success_criteria: translate(language, "run.stepSuccessCriteria"),
       reasoning_effort: projectForm.runtime?.effort || "high",
       status: "pending",
       notes: "",
@@ -534,11 +555,11 @@ export function useDesktopController() {
   function deleteStep() {
     const step = (planDraft?.steps || []).find((item) => item.step_id === selectedStepId);
     if (!step) {
-      setMessage(messagePayload("error", "Select a step first."));
+      setMessage(messagePayload("error", translate(language, "message.selectStepFirst")));
       return;
     }
     if (step.status !== "pending") {
-      setMessage(messagePayload("error", "Only pending steps can be deleted."));
+      setMessage(messagePayload("error", translate(language, "message.onlyPendingDelete")));
       return;
     }
     syncPlan({
@@ -552,11 +573,11 @@ export function useDesktopController() {
     const steps = cloneValue(planDraft?.steps || []);
     const index = steps.findIndex((step) => step.step_id === selectedStepId);
     if (index < 0) {
-      setMessage(messagePayload("error", "Select a pending step first."));
+      setMessage(messagePayload("error", translate(language, "message.selectPendingStepFirst")));
       return;
     }
     if (steps[index].status !== "pending") {
-      setMessage(messagePayload("error", "Only pending steps can be reordered."));
+      setMessage(messagePayload("error", translate(language, "message.onlyPendingMove")));
       return;
     }
     const target = index + direction;
@@ -564,7 +585,7 @@ export function useDesktopController() {
       return;
     }
     if (steps[target].status !== "pending") {
-      setMessage(messagePayload("error", "Pending steps can only move within the unstarted portion of the flow."));
+      setMessage(messagePayload("error", translate(language, "message.pendingMoveRange")));
       return;
     }
     [steps[index], steps[target]] = [steps[target], steps[index]];

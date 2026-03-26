@@ -182,6 +182,7 @@ test("runtimeSummary prefers preset summaries, then direct model settings, then 
   assert.equal(runtimeSummary({ model: "gpt-5.4", effort: "low" }, []), "gpt-5.4 | reasoning low");
   assert.equal(runtimeSummary({ model: "gpt-5.4" }), "gpt-5.4 | reasoning high");
   assert.equal(runtimeSummary({}, undefined), "No model selected");
+  assert.equal(runtimeSummary({ model: "gpt-5.4", effort: "high" }, [], "ko"), "gpt-5.4 | 추론 높음");
 });
 
 test("progressCaption summarizes empty, partial, and completed plans", () => {
@@ -224,9 +225,10 @@ test("canEditStep only allows pending steps when the controller is idle", () => 
 test("commandLabel maps known commands and humanizes unknown ones", () => {
   assert.equal(commandLabel("generate-plan"), "Generate Plan");
   assert.equal(commandLabel("run-plan"), "Run Remaining Steps");
-  assert.equal(commandLabel("run-closeout"), "Run Closeout");
+  assert.equal(commandLabel("run-closeout"), "Closeout");
   assert.equal(commandLabel("sync-workspace-now"), "sync workspace now");
   assert.equal(commandLabel(""), "Background Job");
+  assert.equal(commandLabel("run-plan", "ko"), "남은 단계 실행");
 });
 
 test("statusTone maps operational states to UI tones", () => {

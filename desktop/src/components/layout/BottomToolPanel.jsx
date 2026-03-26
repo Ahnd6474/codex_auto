@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { useI18n } from "../../i18n";
+import { displayStatus } from "../../locale";
 import { statusTone } from "../../utils";
 
 function ToolTab({ value, activeTab, onChange, label }) {
@@ -14,15 +16,16 @@ export function BottomToolPanel({ activeTab, onChangeTab, data }) {
   const gitStatus = data?.git_status || {};
   const testRuns = data?.test_runs || [];
   const serializedEventJson = useMemo(() => JSON.stringify(data?.event_json || {}, null, 2), [data?.event_json]);
+  const { language, t } = useI18n();
 
   return (
     <section className="tool-window">
       <div className="tool-window__header">
         <div className="tool-tabs">
-          <ToolTab value="json" activeTab={activeTab} onChange={onChangeTab} label="Event JSON" />
-          <ToolTab value="tokens" activeTab={activeTab} onChange={onChangeTab} label="Token Usage" />
-          <ToolTab value="tests" activeTab={activeTab} onChange={onChangeTab} label="Test Result" />
-          <ToolTab value="git" activeTab={activeTab} onChange={onChangeTab} label="Git / Safe Revision" />
+          <ToolTab value="json" activeTab={activeTab} onChange={onChangeTab} label={t("tool.eventJson")} />
+          <ToolTab value="tokens" activeTab={activeTab} onChange={onChangeTab} label={t("tool.tokenUsage")} />
+          <ToolTab value="tests" activeTab={activeTab} onChange={onChangeTab} label={t("test.result")} />
+          <ToolTab value="git" activeTab={activeTab} onChange={onChangeTab} label={t("tool.gitSafeRevision")} />
         </div>
       </div>
 
@@ -36,15 +39,15 @@ export function BottomToolPanel({ activeTab, onChangeTab, data }) {
         <div className="tool-window__body">
           <div className="metrics-grid">
             <div className="metric-card">
-              <span>Input</span>
+              <span>{t("common.input")}</span>
               <strong>{tokenUsage.input_tokens ?? 0}</strong>
             </div>
             <div className="metric-card">
-              <span>Output</span>
+              <span>{t("common.output")}</span>
               <strong>{tokenUsage.output_tokens ?? 0}</strong>
             </div>
             <div className="metric-card">
-              <span>Total</span>
+              <span>{t("common.total")}</span>
               <strong>{tokenUsage.total_tokens ?? 0}</strong>
             </div>
           </div>
@@ -58,9 +61,9 @@ export function BottomToolPanel({ activeTab, onChangeTab, data }) {
               testRuns.map((run, index) => (
                 <div className="dense-row" key={`${run.label || "test"}-${index}`}>
                   <div className="dense-row__title">
-                    <strong>{run.label || "test run"}</strong>
+                    <strong>{run.label || t("test.run")}</strong>
                     <span className={`status-badge status-badge--${statusTone(run.returncode === 0 ? "completed" : "failed")}`}>
-                      {run.returncode === 0 ? "passed" : "failed"}
+                      {run.returncode === 0 ? t("test.passed") : t("test.failed")}
                     </span>
                   </div>
                   <span>{run.command}</span>
@@ -68,7 +71,7 @@ export function BottomToolPanel({ activeTab, onChangeTab, data }) {
                 </div>
               ))
             ) : (
-              <div className="empty-block">No test runs recorded yet.</div>
+              <div className="empty-block">{t("test.noRuns")}</div>
             )}
           </div>
         </div>
@@ -78,28 +81,28 @@ export function BottomToolPanel({ activeTab, onChangeTab, data }) {
         <div className="tool-window__body">
           <div className="dense-list">
             <div className="dense-row">
-              <strong>Branch</strong>
-              <span>{gitStatus.branch || "Unknown"}</span>
+              <strong>{t("common.branch")}</strong>
+              <span>{gitStatus.branch || t("common.unknown")}</span>
             </div>
             <div className="dense-row">
-              <strong>Status</strong>
-              <span>{gitStatus.current_status || "Unknown"}</span>
+              <strong>{t("common.status")}</strong>
+              <span>{displayStatus(gitStatus.current_status || "unknown", language)}</span>
             </div>
             <div className="dense-row">
-              <strong>Last Safe Revision</strong>
-              <span>{gitStatus.safe_revision || "Not recorded yet"}</span>
+              <strong>{t("dashboard.lastSafeRevision")}</strong>
+              <span>{gitStatus.safe_revision || t("common.unavailable")}</span>
             </div>
             <div className="dense-row">
-              <strong>Last Commit</strong>
-              <span>{gitStatus.last_commit_hash || "None"}</span>
+              <strong>{language === "ko" ? "마지막 커밋" : "Last Commit"}</strong>
+              <span>{gitStatus.last_commit_hash || t("common.none")}</span>
             </div>
             <div className="dense-row">
-              <strong>Checkpoint</strong>
-              <span>{gitStatus.current_checkpoint_id || "None"}</span>
+              <strong>{t("sidebar.checkpoints")}</strong>
+              <span>{gitStatus.current_checkpoint_id || t("common.none")}</span>
             </div>
             <div className="dense-row">
-              <strong>Approval Pending</strong>
-              <span>{gitStatus.pending_checkpoint_approval ? "Yes" : "No"}</span>
+              <strong>{language === "ko" ? "승인 대기" : "Approval Pending"}</strong>
+              <span>{gitStatus.pending_checkpoint_approval ? t("common.yes") : t("common.no")}</span>
             </div>
           </div>
         </div>

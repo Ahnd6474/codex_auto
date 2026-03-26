@@ -1,28 +1,30 @@
 import { useMemo } from "react";
+import { useI18n } from "../../i18n";
 
 export function ReportsView({ reports }) {
   const serializedLatestReport = useMemo(() => JSON.stringify(reports?.latest_report_json || {}, null, 2), [reports?.latest_report_json]);
+  const { t } = useI18n();
 
   return (
     <section className="workspace-view">
       <div className="view-header">
         <div>
-          <span className="eyebrow">Reports</span>
-          <h2>Reports</h2>
+          <span className="eyebrow">{t("reports.reports")}</span>
+          <h2>{t("reports.reports")}</h2>
         </div>
       </div>
 
       <div className="overview-grid">
         <div className="content-card">
           <div className="content-card__header">
-            <strong>Closeout Report</strong>
+            <strong>{t("reports.closeoutReport")}</strong>
           </div>
-          <pre>{reports?.closeout_report_text || "No closeout report yet."}</pre>
+          <pre>{reports?.closeout_report_text || t("reports.noCloseoutReport")}</pre>
         </div>
 
         <div className="content-card">
           <div className="content-card__header">
-            <strong>Latest Report JSON</strong>
+            <strong>{t("reports.json")}</strong>
           </div>
           <pre>{serializedLatestReport}</pre>
         </div>
@@ -31,16 +33,16 @@ export function ReportsView({ reports }) {
       <div className="overview-grid">
         <div className="content-card">
           <div className="content-card__header">
-            <strong>Block Review</strong>
+            <strong>{t("reports.blockReview")}</strong>
           </div>
-          <pre>{reports?.block_review_text || "No block review yet."}</pre>
+          <pre>{reports?.block_review_text || t("reports.noBlockReview")}</pre>
         </div>
 
         <div className="content-card">
           <div className="content-card__header">
-            <strong>Attempt History</strong>
+            <strong>{t("reports.attemptHistory")}</strong>
           </div>
-          <pre>{reports?.attempt_history_text || "No attempt history yet."}</pre>
+          <pre>{reports?.attempt_history_text || t("reports.historyEmpty")}</pre>
         </div>
       </div>
     </section>

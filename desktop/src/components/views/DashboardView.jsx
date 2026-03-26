@@ -1,4 +1,6 @@
-import { runtimeSummary, statusTone } from "../../utils";
+import { useI18n } from "../../i18n";
+import { displayStatus } from "../../locale";
+import { commandLabel, runtimeSummary, statusTone } from "../../utils";
 
 function Stat({ label, value, tone = "neutral" }) {
   return (
@@ -12,48 +14,53 @@ function Stat({ label, value, tone = "neutral" }) {
 export function DashboardView({ detail, planDraft, modelPresets, activeJob }) {
   const usage = detail?.snapshot?.recent_usage || {};
   const pendingSteps = (planDraft?.steps || []).filter((step) => step.status !== "completed");
+  const { language, t } = useI18n();
+  const activeStatus =
+    activeJob?.status === "running"
+      ? displayStatus(`running:${commandLabel(activeJob.command, language)}`, language)
+      : displayStatus(detail?.project?.current_status || "idle", language);
 
   return (
     <section className="workspace-view">
       <div className="view-header">
         <div>
-          <span className="eyebrow">Dashboard</span>
-          <h2>{detail?.project?.display_name || detail?.project?.slug || "No project selected"}</h2>
+          <span className="eyebrow">{t("dashboard.dashboard")}</span>
+          <h2>{detail?.project?.display_name || detail?.project?.slug || t("dashboard.noProjectSelected")}</h2>
         </div>
       </div>
 
       <div className="metrics-grid">
-        <Stat label="Status" value={activeJob?.status === "running" ? `${activeJob.command} running` : detail?.project?.current_status || "idle"} tone={statusTone(detail?.project?.current_status)} />
-        <Stat label="Remaining Steps" value={pendingSteps.length} tone="info" />
-        <Stat label="Checkpoint Pending" value={detail?.checkpoints?.pending ? "Yes" : "No"} tone={detail?.checkpoints?.pending ? "warning" : "neutral"} />
-        <Stat label="Last Safe Revision" value={detail?.project?.current_safe_revision || "Not recorded"} />
-        <Stat label="Input Tokens" value={usage.input_tokens ?? 0} />
-        <Stat label="Output Tokens" value={usage.output_tokens ?? 0} />
+        <Stat label={t("common.status")} value={activeStatus} tone={statusTone(detail?.project?.current_status)} />
+        <Stat label={t("dashboard.remainingSteps")} value={pendingSteps.length} tone="info" />
+        <Stat label={t("dashboard.checkpointPending")} value={detail?.checkpoints?.pending ? t("common.yes") : t("common.no")} tone={detail?.checkpoints?.pending ? "warning" : "neutral"} />
+        <Stat label={t("dashboard.lastSafeRevision")} value={detail?.project?.current_safe_revision || t("common.unavailable")} />
+        <Stat label={t("dashboard.inputTokens")} value={usage.input_tokens ?? 0} />
+        <Stat label={t("dashboard.outputTokens")} value={usage.output_tokens ?? 0} />
       </div>
 
       <div className="overview-grid">
         <div className="content-card">
           <div className="content-card__header">
-            <strong>Runtime</strong>
+            <strong>{t("dashboard.runtime")}</strong>
           </div>
-          <p>{runtimeSummary(detail?.runtime || {}, modelPresets)}</p>
-          <p>Verification: {detail?.runtime?.test_cmd || "python -m pytest"}</p>
-          <p>Branch: {detail?.project?.branch || "Unknown"}</p>
-          <p>Origin: {detail?.project?.origin_url || "Local-only"}</p>
+          <p>{runtimeSummary(detail?.runtime || {}, modelPresets, language)}</p>
+          <p>{t("common.verification")}: {detail?.runtime?.test_cmd || "python -m pytest"}</p>
+          <p>{t("common.branch")}: {detail?.project?.branch || t("common.unknown")}</p>
+          <p>{t("dashboard.origin")}: {detail?.project?.origin_url || t("common.localOnly")}</p>
         </div>
 
         <div className="content-card">
           <div className="content-card__header">
-            <strong>Checkpoint</strong>
+            <strong>{t("dashboard.checkpoint")}</strong>
           </div>
           {detail?.checkpoints?.pending ? (
             <>
               <p>{detail.checkpoints.pending.checkpoint_id}: {detail.checkpoints.pending.title}</p>
-              <p>Target block {detail.checkpoints.pending.target_block}</p>
-              <p>Status: {detail.checkpoints.pending.status}</p>
+              <p>{t("dashboard.targetBlock", { block: detail.checkpoints.pending.target_block })}</p>
+              <p>{t("common.status")}: {displayStatus(detail.checkpoints.pending.status, language)}</p>
             </>
           ) : (
-            <div className="empty-block">No checkpoint is waiting for review.</div>
+            <div className="empty-block">{t("dashboard.noCheckpointWaiting")}</div>
           )}
         </div>
       </div>

@@ -1,3 +1,4 @@
+import { useI18n } from "../../i18n";
 import { runtimeSummary } from "../../utils";
 
 function EffortButton({ preset, checked, onSelect, disabled }) {
@@ -21,41 +22,42 @@ export function ConfigEditorView({
   onSaveProject,
 }) {
   const runtime = form.runtime || {};
+  const { language, t } = useI18n();
 
   return (
     <section className="workspace-view">
       <div className="view-header">
         <div>
-          <span className="eyebrow">Config Editor</span>
-          <h2>Project Configuration</h2>
-          <p>Repository setup stays editable here so the operations console can manage isolated workspaces without hiding the underlying runtime.</p>
+          <span className="eyebrow">{t("tab.config")}</span>
+          <h2>{t("config.projectConfiguration")}</h2>
+          <p>{t("config.projectConfigurationDescription")}</p>
         </div>
         <button className="toolbar-button toolbar-button--accent" onClick={onSaveProject} type="button" disabled={busy}>
-          Save Configuration
+          {t("action.saveConfiguration")}
         </button>
       </div>
 
       <div className="form-layout">
         <div className="form-section">
           <label className="field">
-            <span>Project Name</span>
+            <span>{t("config.projectName")}</span>
             <input value={form.display_name} onChange={(event) => onChangeForm((current) => ({ ...current, display_name: event.target.value }))} disabled={busy} />
           </label>
           <label className="field field--wide">
-            <span>Working Directory</span>
+            <span>{t("config.workingDirectory")}</span>
             <div className="field-row">
               <input value={form.project_dir} onChange={(event) => onChangeForm((current) => ({ ...current, project_dir: event.target.value }))} disabled={busy} />
               <button className="toolbar-button" onClick={onChooseDirectory} type="button" disabled={busy}>
-                Browse
+                {t("action.browse")}
               </button>
             </div>
           </label>
           <label className="field">
-            <span>Branch</span>
+            <span>{t("common.branch")}</span>
             <input value={form.branch} onChange={(event) => onChangeForm((current) => ({ ...current, branch: event.target.value }))} disabled={busy} />
           </label>
           <label className="field">
-            <span>Verification Command</span>
+            <span>{t("field.verificationCommand")}</span>
             <input
               value={runtime.test_cmd || ""}
               onChange={(event) => onChangeForm((current) => ({ ...current, runtime: { ...current.runtime, test_cmd: event.target.value } }))}
@@ -63,7 +65,7 @@ export function ConfigEditorView({
             />
           </label>
           <label className="field">
-            <span>Max Planned Steps</span>
+            <span>{t("config.maxPlannedSteps")}</span>
             <input
               type="number"
               min="1"
@@ -80,11 +82,11 @@ export function ConfigEditorView({
 
           <div className="subsection">
             <div className="subsection__header">
-              <strong>Developer Mode</strong>
-              <span>Advanced runtime controls for debugging and custom execution.</span>
+              <strong>{t("config.developerMode")}</strong>
+              <span>{t("config.developerModeDescription")}</span>
             </div>
             <label className="field">
-              <span>Custom Model Slug</span>
+              <span>{t("field.customModelSlug")}</span>
               <input
                 value={runtime.model_slug_input || runtime.model || ""}
                 onChange={(event) =>
@@ -102,7 +104,7 @@ export function ConfigEditorView({
               />
             </label>
             <label className="field field--wide">
-              <span>Extra Prompt</span>
+              <span>{t("field.extraPrompt")}</span>
               <textarea
                 value={runtime.extra_prompt || ""}
                 onChange={(event) => onChangeForm((current) => ({ ...current, runtime: { ...current.runtime, extra_prompt: event.target.value } }))}
@@ -111,7 +113,7 @@ export function ConfigEditorView({
             </label>
             <div className="choice-grid">
               <label className="field">
-                <span>Approval Mode</span>
+                <span>{t("field.approvalMode")}</span>
                 <select
                   value={runtime.approval_mode || "never"}
                   onChange={(event) => onChangeForm((current) => ({ ...current, runtime: { ...current.runtime, approval_mode: event.target.value } }))}
@@ -123,7 +125,7 @@ export function ConfigEditorView({
                 </select>
               </label>
               <label className="field">
-                <span>Sandbox Mode</span>
+                <span>{t("field.sandboxMode")}</span>
                 <select
                   value={runtime.sandbox_mode || "danger-full-access"}
                   onChange={(event) => onChangeForm((current) => ({ ...current, runtime: { ...current.runtime, sandbox_mode: event.target.value } }))}
@@ -135,7 +137,7 @@ export function ConfigEditorView({
                 </select>
               </label>
               <label className="field">
-                <span>Checkpoint Interval</span>
+                <span>{t("field.checkpointInterval")}</span>
                 <input
                   type="number"
                   min="1"
@@ -150,7 +152,7 @@ export function ConfigEditorView({
                 />
               </label>
               <label className="field">
-                <span>Codex Path</span>
+                <span>{t("field.codexPath")}</span>
                 <input
                   value={runtime.codex_path || "codex.cmd"}
                   onChange={(event) => onChangeForm((current) => ({ ...current, runtime: { ...current.runtime, codex_path: event.target.value } }))}
@@ -166,7 +168,7 @@ export function ConfigEditorView({
                   onChange={(event) => onChangeForm((current) => ({ ...current, runtime: { ...current.runtime, allow_push: event.target.checked } }))}
                   disabled={busy}
                 />
-                <span>Allow push after safe runs</span>
+                <span>{t("option.allowPushAfterSafeRuns")}</span>
               </label>
               <label className="choice-radio">
                 <input
@@ -180,7 +182,7 @@ export function ConfigEditorView({
                   }
                   disabled={busy}
                 />
-                <span>Require checkpoint approval</span>
+                <span>{t("option.requireCheckpointApproval")}</span>
               </label>
             </div>
           </div>
@@ -189,14 +191,14 @@ export function ConfigEditorView({
         <div className="form-section">
           <div className="subsection">
             <div className="subsection__header">
-              <strong>GitHub Connection</strong>
-              <span>Keep local and GitHub-backed repositories explicit.</span>
+              <strong>{t("config.githubConnection")}</strong>
+              <span>{t("config.githubConnectionDescription")}</span>
             </div>
             <div className="choice-list">
               {[
-                ["existing", "Use existing origin in this folder"],
-                ["manual", "Paste a GitHub repository URL"],
-                ["none", "Do not connect GitHub yet"],
+                ["existing", t("config.useExistingOrigin")],
+                ["manual", t("config.manualGithubUrl")],
+                ["none", t("config.noGithubYet")],
               ].map(([value, label]) => (
                 <label className="choice-radio" key={value}>
                   <input type="radio" checked={form.github_mode === value} onChange={() => onChangeForm((current) => ({ ...current, github_mode: value }))} disabled={busy} />
@@ -206,7 +208,7 @@ export function ConfigEditorView({
             </div>
             {form.github_mode === "manual" ? (
               <label className="field field--wide">
-                <span>GitHub URL</span>
+                <span>{t("config.githubUrl")}</span>
                 <input value={form.origin_url} onChange={(event) => onChangeForm((current) => ({ ...current, origin_url: event.target.value }))} disabled={busy} />
               </label>
             ) : null}
@@ -214,11 +216,11 @@ export function ConfigEditorView({
 
           <div className="subsection">
             <div className="subsection__header">
-              <strong>Execution Model</strong>
-              <span>{runtimeSummary(runtime, modelPresets)}</span>
+              <strong>{t("config.executionModel")}</strong>
+              <span>{runtimeSummary(runtime, modelPresets, language)}</span>
             </div>
             <label className="field">
-              <span>Model</span>
+              <span>{t("field.model")}</span>
               <input value={runtime.model || "gpt-5.4"} disabled />
             </label>
             <div className="choice-grid">

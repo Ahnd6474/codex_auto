@@ -1,3 +1,5 @@
+import { normalizeLanguage, translate } from "./locale.js";
+
 export function cloneValue(value) {
   if (value === null || value === undefined) {
     return value;
@@ -10,12 +12,13 @@ export function cloneValue(value) {
 
 export const REASONING_OPTIONS = ["low", "medium", "high", "xhigh"];
 
-export function reasoningEffortLabel(value) {
+export function reasoningEffortLabel(value, language = "en") {
   const normalized = String(value || "").trim().toLowerCase();
+  const locale = normalizeLanguage(language);
   if (!normalized) {
-    return "High";
+    return translate(locale, "reasoning.high");
   }
-  return normalized === "xhigh" ? "XHigh" : normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  return translate(locale, `reasoning.${normalized}`);
 }
 
 export function basename(path) {
@@ -78,54 +81,72 @@ export function firstSelectableStepId(plan) {
   return pending?.step_id || steps[0]?.step_id || "";
 }
 
-export function runtimeSummary(runtime, modelPresets = []) {
+export function runtimeSummary(runtime, modelPresets = [], language = "en") {
   const preset = modelPresets.find((item) => item.preset_id === runtime?.model_preset);
   if (preset) {
     return preset.summary;
   }
   if (runtime?.model) {
+    if (normalizeLanguage(language) === "ko") {
+      return translate("ko", "runtime.modelSummary", {
+        model: runtime.model,
+        effort: reasoningEffortLabel(runtime.effort || "high", "ko"),
+      });
+    }
     return `${runtime.model} | reasoning ${runtime.effort || "high"}`;
   }
-  return "No model selected";
+  return translate(language, "runtime.noModelSelected");
 }
 
-export function progressCaption(plan) {
+export function progressCaption(plan, language = "en") {
   const steps = plan?.steps || [];
   const completed = steps.filter((step) => step.status === "completed").length;
   const total = steps.length;
+  const locale = normalizeLanguage(language);
   if (!total) {
-    return "No plan yet";
+    return locale === "ko" ? "아직 계획이 없습니다" : "No plan yet";
   }
   if (completed === total) {
     if (plan?.closeout_status === "completed") {
-      return `Completed ${completed}/${total} steps, closeout completed`;
+      return locale === "ko"
+        ? `${completed}/${total}단계 완료, 마감 완료`
+        : `Completed ${completed}/${total} steps, closeout completed`;
     }
     if (plan?.closeout_status === "running") {
-      return `Completed ${completed}/${total} steps, closeout running`;
+      return locale === "ko"
+        ? `${completed}/${total}단계 완료, 마감 실행 중`
+        : `Completed ${completed}/${total} steps, closeout running`;
     }
     if (plan?.closeout_status === "failed") {
-      return `Completed ${completed}/${total} steps, closeout failed`;
+      return locale === "ko"
+        ? `${completed}/${total}단계 완료, 마감 실패`
+        : `Completed ${completed}/${total} steps, closeout failed`;
     }
-    return `Completed ${completed}/${total} steps, closeout pending`;
+    return locale === "ko"
+      ? `${completed}/${total}단계 완료, 마감 대기`
+      : `Completed ${completed}/${total} steps, closeout pending`;
   }
   const nextStep = steps.find((step) => step.status !== "completed");
-  return `Completed ${completed}/${total} steps, next: ${nextStep?.step_id || "done"}`;
+  return locale === "ko"
+    ? `${completed}/${total}단계 완료, 다음: ${nextStep?.step_id || "완료"}`
+    : `Completed ${completed}/${total} steps, next: ${nextStep?.step_id || "done"}`;
 }
 
 export function canEditStep(step, busy) {
   return Boolean(step) && step.status === "pending" && !busy;
 }
 
-export function commandLabel(command) {
+export function commandLabel(command, language = "en") {
+  const locale = normalizeLanguage(language);
   switch (command) {
     case "generate-plan":
-      return "Generate Plan";
+      return translate(locale, "action.generatePlan");
     case "run-plan":
-      return "Run Remaining Steps";
+      return translate(locale, "action.runRemaining");
     case "run-closeout":
-      return "Run Closeout";
+      return translate(locale, "action.closeout");
     default:
-      return String(command || "Background Job")
+      return String(command || (locale === "ko" ? "백그라운드 작업" : "Background Job"))
         .split("-")
         .join(" ");
   }
