@@ -118,6 +118,9 @@ export default function App() {
             onRunPlan={controller.runPlan}
             onRunCloseout={controller.runCloseout}
             onRequestStop={controller.requestStop}
+            onGenerateShareLink={controller.generateShareLink}
+            onCopyShareLink={controller.copyShareLink}
+            onRevokeShareLink={controller.revokeShareLink}
             onSelectStep={controller.setSelectedStepId}
             onUpdateStepField={controller.updateSelectedStep}
             onSaveStepLocal={controller.saveStepLocal}

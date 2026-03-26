@@ -66,9 +66,20 @@ The desktop app lets you:
 - generate, edit, reorder, and persist execution-plan steps
 - run the remaining steps sequentially and inspect activity/snapshot traces
 - request stop-after-step and run closeout after all plan steps complete
+- generate a temporary local read-only monitoring link, copy it, and revoke it from the desktop UI
 - keep the Python orchestration backend, workspace layout, logs, reports, and rollback behavior intact
 
-Static website assets are kept separately under `website/`.
+Static website assets are kept separately under `website/`, including the share viewer served by the local monitoring server.
+
+The read-only monitoring flow is local-first:
+
+1. start the desktop app
+2. open a managed project and generate a share link
+3. open the generated `http://127.0.0.1:<port>/share/view?...` URL on another device or browser
+4. the remote page polls every 5 seconds for masked status, current task, recent logs, latest test result, and last updated time
+5. revoke the link in the desktop UI to deny further access
+
+The core app only starts the local share server and manages temporary session files. Any tunnel or external exposure remains a separate manual step.
 
 ## Main Commands
 
@@ -171,6 +182,7 @@ The tool creates or maintains these files for each managed repository project:
 - `docs/attempt_history.md`
 - `state/LOOP_STATE.json`
 - `state/CHECKPOINTS.json`
+- `state/share_sessions.json`
 - `memory/success_patterns.jsonl`
 - `memory/failure_patterns.jsonl`
 - `memory/task_summaries.jsonl`

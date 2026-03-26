@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>codex-auto | Remote Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/share/share.css">
+  <script src="/share/share.js" defer></script>
+</head>
+<body>
+  <div class="mesh"></div>
+  <main class="monitor-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">codex-auto remote monitor</p>
+        <h1>Read-only progress view</h1>
+        <p class="hero-copy">This page refreshes every 5 seconds and never exposes remote controls.</p>
+      </div>
+      <div class="hero-meta">
+        <span class="pill pill--neutral" id="poll-state">Waiting</span>
+        <span class="pill">Read only</span>
+      </div>
+    </header>
+
+    <section class="grid">
+      <article class="card card--highlight">
+        <p class="card-label">Project</p>
+        <h2 id="project-name">Loading...</h2>
+        <div class="meta-list">
+          <span id="project-slug">-</span>
+          <span id="last-updated">-</span>
+          <span id="expires-at">-</span>
+        </div>
+      </article>
+
+      <article class="card">
+        <p class="card-label">Run status</p>
+        <strong class="big-value" id="run-status">-</strong>
+        <p class="muted" id="current-phase">-</p>
+      </article>
+
+      <article class="card">
+        <p class="card-label">Current task</p>
+        <strong id="task-title">-</strong>
+        <p class="muted" id="task-summary">-</p>
+      </article>
+
+      <article class="card">
+        <p class="card-label">Latest test</p>
+        <strong id="test-status">-</strong>
+        <p class="muted" id="test-summary">-</p>
+      </article>
+    </section>
+
+    <section class="card card--logs">
+      <div class="section-head">
+        <div>
+          <p class="card-label">Recent logs</p>
+          <strong>Masked activity tail</strong>
+        </div>
+        <span class="pill pill--neutral" id="refresh-note">Polling every 5s</span>
+      </div>
+      <pre id="log-tail">Waiting for status...</pre>
+    </section>
+
+    <section class="card card--error" id="error-card" hidden>
+      <p class="card-label">Access</p>
+      <strong id="error-title">Unable to load share session</strong>
+      <p class="muted" id="error-message"></p>
+    </section>
+  </main>
+</body>
+</html>

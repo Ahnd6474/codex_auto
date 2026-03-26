@@ -263,6 +263,60 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(len(loaded["checkpoints"]["items"]), 1)
             self.assertEqual(loaded["checkpoints"]["pending"]["checkpoint_id"], "CP1")
 
+    def test_share_bridge_commands_create_and_revoke_read_only_session(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Share Bridge Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m pytest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"):
+                run_command("save-project-setup", workspace_root, payload)
+
+            try:
+                server_status = run_command("start_share_server", workspace_root, {})
+                self.assertTrue(server_status["running"])
+                self.assertTrue(str(server_status["base_url"]).startswith("http://127.0.0.1:"))
+
+                created = run_command(
+                    "create_share_session",
+                    workspace_root,
+                    {
+                        "project_dir": str(repo_dir),
+                        "created_by": "unit-test",
+                    },
+                )
+                self.assertIn("share", created)
+                self.assertIn("created_share_session", created)
+                self.assertTrue(created["created_share_session"]["share_url"].startswith("http://127.0.0.1:"))
+                self.assertEqual(created["share"]["active_session"]["created_by"], "unit-test")
+
+                revoked = run_command(
+                    "revoke_share_session",
+                    workspace_root,
+                    {
+                        "project_dir": str(repo_dir),
+                        "session_id": created["share"]["active_session"]["session_id"],
+                    },
+                )
+                self.assertIsNone(revoked["share"]["active_session"])
+                self.assertIn("revoked_share_session", revoked)
+            finally:
+                run_command("stop_share_server", workspace_root, {})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,16 +4,30 @@ import argparse
 import json
 import os
 from pathlib import Path
+import signal
+import subprocess
 import sys
+import time
 from typing import Any
 
 from .model_selection import DEFAULT_MODEL_PRESET_ID, MODEL_PRESETS, model_preset_by_id
 from .models import ExecutionPlanState, ProjectContext, RuntimeOptions
 from .orchestrator import Orchestrator
+from .share import (
+    DEFAULT_SHARE_HOST,
+    DEFAULT_SHARE_PORT,
+    DEFAULT_SHARE_TTL_MINUTES,
+    create_share_session,
+    project_share_payload,
+    public_session_summary,
+    revoke_share_session,
+    share_server_status_payload,
+)
 from .utils import append_jsonl, compact_text, now_utc_iso, parse_json_text, read_json, read_jsonl_tail, read_last_jsonl, read_text, write_json
 
 
 DEFAULT_GUI_WORKSPACE_DIRNAME = ".codex-auto-workspace"
+SHARE_SERVER_START_TIMEOUT_SECS = 3.0
 
 
 def default_workspace_root() -> Path:
@@ -46,6 +60,92 @@ def bootstrap_payload(workspace_root: Path) -> dict[str, Any]:
 
 def orchestrator_for(workspace_root: Path) -> Orchestrator:
     return Orchestrator(workspace_root)
+
+
+def repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def build_pythonpath(root: Path) -> str:
+    items = [str(root / "src")]
+    existing = os.environ.get("PYTHONPATH", "").strip()
+    if existing:
+        items.append(existing)
+    return os.pathsep.join(items)
+
+
+def start_share_server_process(workspace_root: Path, host: str = DEFAULT_SHARE_HOST, port: int = DEFAULT_SHARE_PORT) -> dict[str, Any]:
+    current = share_server_status_payload(workspace_root)
+    if current.get("running"):
+        return current
+
+    root = repo_root()
+    env = os.environ.copy()
+    env["PYTHONPATH"] = build_pythonpath(root)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    command = [
+        sys.executable,
+        "-m",
+        "codex_auto.share_server",
+        "--workspace-root",
+        str(workspace_root),
+        "--host",
+        host,
+        "--port",
+        str(max(0, int(port))),
+    ]
+    creationflags = 0
+    if os.name == "nt":
+        creationflags = (
+            getattr(subprocess, "DETACHED_PROCESS", 0)
+            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        )
+    subprocess.Popen(
+        command,
+        cwd=root,
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=creationflags,
+        close_fds=True,
+    )
+
+    deadline = time.monotonic() + SHARE_SERVER_START_TIMEOUT_SECS
+    while time.monotonic() < deadline:
+        status = share_server_status_payload(workspace_root)
+        if status.get("running"):
+            return status
+        time.sleep(0.1)
+    raise RuntimeError("Share server did not start in time.")
+
+
+def stop_share_server_process(workspace_root: Path) -> dict[str, Any]:
+    status = share_server_status_payload(workspace_root)
+    pid = int(status.get("pid") or 0)
+    if pid <= 0:
+        return share_server_status_payload(workspace_root)
+    try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        else:
+            os.kill(pid, signal.SIGTERM)
+    except OSError:
+        pass
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline:
+        current = share_server_status_payload(workspace_root)
+        if not current.get("running"):
+            return current
+        time.sleep(0.1)
+    return share_server_status_payload(workspace_root)
 
 
 def coerce_positive_int(value: Any, default: int, minimum: int = 1) -> int:
@@ -550,6 +650,7 @@ def project_detail_payload(orchestrator: Orchestrator, project: ProjectContext) 
             "repo_url": project.metadata.repo_url,
             "branch": project.metadata.branch,
         },
+        "share": project_share_payload(orchestrator.workspace.workspace_root, project),
     }
 
 
@@ -589,6 +690,17 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
     if command == "load-project":
         project = resolve_project(orchestrator, payload)
         return project_detail_payload(orchestrator, project)
+
+    if command == "get_share_server_status":
+        return share_server_status_payload(workspace_root)
+
+    if command == "start_share_server":
+        host = str(payload.get("host", DEFAULT_SHARE_HOST)).strip() or DEFAULT_SHARE_HOST
+        port = coerce_positive_int(payload.get("port", DEFAULT_SHARE_PORT), default=DEFAULT_SHARE_PORT, minimum=0)
+        return start_share_server_process(workspace_root, host=host, port=port)
+
+    if command == "stop_share_server":
+        return stop_share_server_process(workspace_root)
 
     if command == "save-project-setup":
         project_dir, runtime, branch, origin_url, display_name = common_project_inputs(payload)
@@ -666,6 +778,44 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
             "project_dir": str(project.metadata.repo_path),
             "run_control": control,
         }
+
+    if command == "create_share_session":
+        project = resolve_project(orchestrator, payload)
+        expires_in_minutes = coerce_positive_int(
+            payload.get("expires_in_minutes", DEFAULT_SHARE_TTL_MINUTES),
+            default=DEFAULT_SHARE_TTL_MINUTES,
+        )
+        start_share_server_process(workspace_root)
+        session = create_share_session(
+            project,
+            expires_in_minutes=expires_in_minutes,
+            created_by=str(payload.get("created_by", "desktop-ui")).strip() or "desktop-ui",
+        )
+        append_ui_event(
+            project,
+            "share-session-created",
+            "Created a temporary read-only share session.",
+            {"session_id": session.session_id, "expires_at": session.expires_at},
+        )
+        detail = project_detail_payload(orchestrator, project)
+        detail["created_share_session"] = public_session_summary(workspace_root, project, session, include_token=True)
+        return detail
+
+    if command == "revoke_share_session":
+        project = resolve_project(orchestrator, payload)
+        session_id = str(payload.get("session_id", "")).strip()
+        if not session_id:
+            raise ValueError("session_id is required.")
+        session = revoke_share_session(project, session_id)
+        append_ui_event(
+            project,
+            "share-session-revoked",
+            "Revoked a temporary read-only share session.",
+            {"session_id": session.session_id},
+        )
+        detail = project_detail_payload(orchestrator, project)
+        detail["revoked_share_session"] = public_session_summary(workspace_root, project, session, include_token=False)
+        return detail
 
     if command == "approve-checkpoint":
         project = resolve_project(orchestrator, payload)

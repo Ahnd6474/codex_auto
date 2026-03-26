@@ -481,6 +481,74 @@ export function useDesktopController() {
     });
   }
 
+  async function copyShareLink() {
+    const shareUrl = projectDetail?.share?.active_session?.share_url || "";
+    if (!shareUrl) {
+      setMessage(messagePayload("error", translate(language, "message.noShareLinkAvailable")));
+      return;
+    }
+    try {
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error("Clipboard API is unavailable.");
+      }
+      await navigator.clipboard.writeText(shareUrl);
+      setMessage(messagePayload("success", translate(language, "message.shareLinkCopied")));
+    } catch (error) {
+      setMessage(messagePayload("error", `${translate(language, "message.shareLinkCopyFailed")} ${String(error)}`.trim()));
+    }
+  }
+
+  async function generateShareLink() {
+    if (!projectForm.project_dir.trim()) {
+      setMessage(messagePayload("error", translate(language, "message.openOrCreateProjectFirst")));
+      return;
+    }
+    await withPending("create_share_session", async () => {
+      const detail = await bridgeRequest(
+        "create_share_session",
+        {
+          project_dir: projectForm.project_dir.trim(),
+          created_by: "tauri-react-ui",
+        },
+        workspaceRoot || null,
+      );
+      setProjectDetail(detail);
+      const shareUrl = detail?.created_share_session?.share_url || detail?.share?.active_session?.share_url || "";
+      if (shareUrl && navigator?.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(shareUrl);
+        } catch {
+          // Ignore clipboard failures here; the link is still generated and visible.
+        }
+      }
+      setMessage(messagePayload("success", translate(language, "message.shareLinkReady")));
+    });
+  }
+
+  async function revokeShareLink() {
+    const sessionId = projectDetail?.share?.active_session?.session_id || "";
+    if (!projectForm.project_dir.trim()) {
+      setMessage(messagePayload("error", translate(language, "message.openOrCreateProjectFirst")));
+      return;
+    }
+    if (!sessionId) {
+      setMessage(messagePayload("error", translate(language, "message.noShareLinkAvailable")));
+      return;
+    }
+    await withPending("revoke_share_session", async () => {
+      const detail = await bridgeRequest(
+        "revoke_share_session",
+        {
+          project_dir: projectForm.project_dir.trim(),
+          session_id: sessionId,
+        },
+        workspaceRoot || null,
+      );
+      setProjectDetail(detail);
+      setMessage(messagePayload("success", translate(language, "message.shareLinkRevoked")));
+    });
+  }
+
   async function approveCheckpoint() {
     if (!selectedProjectId) {
       setMessage(messagePayload("error", translate(language, "message.openProjectFirst")));
@@ -646,6 +714,9 @@ export function useDesktopController() {
     runPlan,
     runCloseout,
     requestStop,
+    generateShareLink,
+    revokeShareLink,
+    copyShareLink,
     approveCheckpoint,
     reloadProject,
     saveStepLocal,

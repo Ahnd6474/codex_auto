@@ -654,10 +654,22 @@ pre {
 
 .choice-list,
 .action-row,
-.field-row {
+.field-row,
+.share-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.share-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.share-meta {
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .choice-radio {
