@@ -58,14 +58,12 @@ export function DashboardView({ detail, planDraft, form, busy, modelPresets, mod
     { key: "estimated_cost", label: t("dashboard.estimatedCost"), value: formatUsd(costEstimate.estimated_total_cost_usd ?? 0, language) },
     { key: "actual_cost", label: t("dashboard.actualCost"), value: formatUsd(costEstimate?.recent?.estimated_cost_usd ?? 0, language) },
     { key: "codex_plan", label: t("dashboard.codexPlan"), value: account.plan_type || t("common.unavailable"), tone: "neutral" },
-    ...(dashboardVisibility.rate_limits
-      ? usageBuckets.map((bucket) => ({
-          key: `rate_limit_${bucket.key}`,
-          label: bucket.label,
-          value: rateLimitRemainingLabel(bucket.window, language),
-          tone: bucket.window && (bucket.window.remaining_percent ?? 0) < 25 ? "warning" : "success",
-        }))
-      : []),
+    ...usageBuckets.map((bucket) => ({
+      key: `rate_limit_${bucket.key}`,
+      label: bucket.label,
+      value: rateLimitRemainingLabel(bucket.window, language),
+      tone: bucket.window && (bucket.window.remaining_percent ?? 0) < 25 ? "warning" : "success",
+    })),
   ].filter((item) => dashboardVisibility[item.key] !== false);
 
   return (

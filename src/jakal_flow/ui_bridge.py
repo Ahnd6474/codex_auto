@@ -271,6 +271,7 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
         allow_push=True,
         checkpoint_interval_blocks=1,
         require_checkpoint_approval=False,
+        generate_word_report=True,
         max_blocks=5,
         workflow_mode="standard",
         ml_max_cycles=3,
@@ -340,7 +341,7 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
     if merged["effort_selection_mode"] not in {"auto", "explicit"}:
         merged["effort_selection_mode"] = "explicit"
     merged["use_fast_mode"] = coerce_bool(merged.get("use_fast_mode", False), False)
-    merged["generate_word_report"] = coerce_bool(merged.get("generate_word_report", False), False)
+    merged["generate_word_report"] = coerce_bool(merged.get("generate_word_report", True), True)
     raw_effort = str(merged.get("effort", "")).strip()
     merged["effort"] = raw_effort.lower()
 

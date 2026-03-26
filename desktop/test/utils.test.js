@@ -108,24 +108,28 @@ test("program settings helpers keep global runtime controls separate from projec
     codex_path: "codex.cmd",
     allow_push: false,
     require_checkpoint_approval: false,
+    workflow_mode: "standard",
+    ml_max_cycles: 3,
     execution_mode: "serial",
     parallel_workers: 2,
     developer_mode: false,
     ui_theme: "dark",
     dashboard_visibility: {
-      status: true,
+      status: false,
       remaining_steps: true,
-      checkpoint_pending: true,
-      input_tokens: true,
-      output_tokens: true,
+      checkpoint_pending: false,
+      input_tokens: false,
+      output_tokens: false,
       estimated_remaining: true,
-      estimated_cost: true,
-      actual_cost: true,
-      codex_plan: true,
-      rate_limits: true,
+      estimated_cost: false,
+      actual_cost: false,
+      codex_plan: false,
+      rate_limit_window_5h: true,
+      rate_limit_window_7d: false,
+      rate_limit_codex_spark: false,
       runtime_card: true,
-      codex_usage_card: true,
-      word_report_card: true,
+      codex_usage_card: false,
+      word_report_card: false,
     },
   });
 
@@ -153,6 +157,8 @@ test("program settings helpers keep global runtime controls separate from projec
       codex_path: "codex.cmd",
       allow_push: false,
       require_checkpoint_approval: false,
+      workflow_mode: "standard",
+      ml_max_cycles: 3,
       execution_mode: "serial",
       parallel_workers: 2,
     },
@@ -188,6 +194,8 @@ test("program settings helpers keep global runtime controls separate from projec
         codex_path: "codex.cmd",
         allow_push: false,
         require_checkpoint_approval: false,
+        workflow_mode: "standard",
+        ml_max_cycles: 3,
         execution_mode: "serial",
         parallel_workers: 2,
       },
@@ -198,6 +206,7 @@ test("program settings helpers keep global runtime controls separate from projec
 test("blankProjectForm seeds runtime defaults without mutating the source runtime", () => {
   const defaultRuntime = {
     model_preset: "default",
+    generate_word_report: false,
     max_blocks: 9,
     test_cmd: "pytest -q",
   };
@@ -207,17 +216,20 @@ test("blankProjectForm seeds runtime defaults without mutating the source runtim
 
   assert.deepEqual(defaultRuntime, {
     model_preset: "default",
+    generate_word_report: false,
     max_blocks: 9,
     test_cmd: "pytest -q",
   });
   assert.equal(form.branch, "main");
   assert.equal(form.github_mode, "existing");
   assert.equal(form.runtime.max_blocks, 9);
+  assert.equal(form.runtime.generate_word_report, false);
 });
 
 test("blankProjectForm falls back to repository defaults when runtime is missing", () => {
   const form = blankProjectForm(null);
 
+  assert.equal(form.runtime.generate_word_report, true);
   assert.equal(form.runtime.max_blocks, 5);
   assert.equal(form.runtime.test_cmd, "python -m pytest");
 });
@@ -597,6 +609,7 @@ test("buildProjectPayload trims fields, blanks origin_url for existing repos, an
       test_cmd: "changed",
     },
     plan: {
+      workflow_mode: "standard",
       execution_mode: "serial",
       default_test_command: "pytest -q",
       steps: [{ step_id: "S1", status: "completed" }],
@@ -654,24 +667,24 @@ test("runtimeSummary reflects execution mode in preset and direct model summarie
       { model_preset: "balanced" },
       [{ preset_id: "balanced", summary: "Balanced preset" }],
     ),
-    "OpenAI/Codex | Balanced preset | serial",
+    "OpenAI/Codex | Standard Mode | Balanced preset | serial",
   );
-  assert.equal(runtimeSummary({ model: "gpt-5.4", effort: "low" }, []), "OpenAI/Codex | gpt-5.4 | reasoning Low | serial");
+  assert.equal(runtimeSummary({ model: "gpt-5.4", effort: "low" }, []), "OpenAI/Codex | Standard Mode | gpt-5.4 | reasoning Low | serial");
   assert.equal(
     runtimeSummary({ model: "gpt-5.4", effort: "medium", effort_selection_mode: "auto" }, []),
-    "OpenAI/Codex | gpt-5.4 | reasoning Auto | serial",
+    "OpenAI/Codex | Standard Mode | gpt-5.4 | reasoning Auto | serial",
   );
   assert.equal(
     runtimeSummary({ model: "gpt-5.4", effort: "low", use_fast_mode: true }, []),
-    "OpenAI/Codex | gpt-5.4 | reasoning Low | serial | /fast",
+    "OpenAI/Codex | Standard Mode | gpt-5.4 | reasoning Low | serial | /fast",
   );
-  assert.equal(runtimeSummary({ model: "gpt-5.4" }), "OpenAI/Codex | gpt-5.4 | reasoning High | serial");
+  assert.equal(runtimeSummary({ model: "gpt-5.4" }), "OpenAI/Codex | Standard Mode | gpt-5.4 | reasoning High | serial");
   assert.equal(
     runtimeSummary({ model: "gpt-5.4", effort: "high", execution_mode: "parallel", parallel_workers: 4 }, []),
-    "OpenAI/Codex | gpt-5.4 | reasoning High | parallel x4",
+    "OpenAI/Codex | Standard Mode | gpt-5.4 | reasoning High | parallel x4",
   );
   assert.equal(runtimeSummary({}, undefined), "No model selected");
-  assert.match(runtimeSummary({ model: "gpt-5.4", effort: "high" }, [], "ko"), /^OpenAI\/Codex \| gpt-5\.4 .* serial$/);
+  assert.match(runtimeSummary({ model: "gpt-5.4", effort: "high" }, [], "ko"), /^OpenAI\/Codex \| .* \| gpt-5\.4 .* serial$/);
 });
 
 test("runtimeSummary includes the selected local provider for OSS models", () => {
@@ -685,7 +698,7 @@ test("runtimeSummary includes the selected local provider for OSS models", () =>
       },
       [],
     ),
-    "Local/Ollama | qwen2.5-coder:0.5b | reasoning Medium | serial",
+    "Local/Ollama | Standard Mode | qwen2.5-coder:0.5b | reasoning Medium | serial",
   );
 });
 

@@ -220,6 +220,7 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(payload["codex_status"]["account"]["plan_type"], "pro")
         self.assertEqual(payload["default_runtime"]["model"], "auto")
         self.assertEqual(payload["default_runtime"]["model_preset"], "auto")
+        self.assertTrue(payload["default_runtime"]["generate_word_report"])
         self.assertEqual(payload["default_runtime"]["sandbox_mode"], "danger-full-access")
 
     def test_project_setup_and_load_round_trip(self) -> None:

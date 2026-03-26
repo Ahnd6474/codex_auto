@@ -1,16 +1,12 @@
 import { useI18n } from "../../i18n";
 import {
   AUTO_REASONING_OPTION,
-  applyProviderDefaults,
   autoRoutingPresetLabel,
   configReasoningOptions,
   defaultModelForRuntime,
   defaultReasoningOption,
-  defaultProviderApiKeyEnv,
-  defaultProviderBaseUrl,
   filterModelCatalogByProvider,
   findModelCatalogEntry,
-  normalizedLocalModelProvider,
   normalizedModelProvider,
   providerSupportsAutoModel,
   providerSupportsCatalog,
@@ -79,19 +75,6 @@ function updateRuntimeModel(currentRuntime, modelCatalog, nextModel, nextEffort 
   };
 }
 
-function updateRuntimeProvider(currentRuntime, modelCatalog, nextProvider, nextLocalProvider = null) {
-  const nextRuntime = applyProviderDefaults(currentRuntime, nextProvider, nextLocalProvider);
-  const resolvedModel = defaultModelForRuntime(modelCatalog, nextRuntime);
-  return updateRuntimeModel(
-    {
-      ...nextRuntime,
-      model_slug_input: resolvedModel,
-    },
-    filterModelCatalogByProvider(modelCatalog, nextRuntime),
-    resolvedModel,
-  );
-}
-
 export function ConfigEditorView({
   form,
   modelPresets,
@@ -104,7 +87,6 @@ export function ConfigEditorView({
   const runtime = form.runtime || {};
   const { language, t } = useI18n();
   const selectedProvider = normalizedModelProvider(runtime);
-  const selectedLocalProvider = normalizedLocalModelProvider(runtime);
   const providerHasCatalog = providerSupportsCatalog(selectedProvider);
   const providerHasAutoModel = providerSupportsAutoModel(selectedProvider);
   const scopedModelCatalog = filterModelCatalogByProvider(modelCatalog, runtime);
@@ -267,114 +249,6 @@ export function ConfigEditorView({
             />
             <span>{t("option.useFastMode")}</span>
           </label>
-
-          <div className="subsection">
-            <div className="subsection__header">
-              <strong>{t("config.advancedModelSettings")}</strong>
-              <span>{t("config.advancedModelSettingsDescription")}</span>
-            </div>
-            <label className="field">
-              <span>{t("field.modelProvider")}</span>
-              <select
-                value={selectedProvider}
-                onChange={(event) =>
-                  onChangeForm((current) => ({
-                    ...current,
-                    runtime: updateRuntimeProvider(current.runtime, modelCatalog, event.target.value),
-                  }))
-                }
-                disabled={busy}
-              >
-                <option value="openai">{t("option.providerOpenAI")}</option>
-                <option value="openrouter">{t("option.providerOpenRouter")}</option>
-                <option value="opencdk">{t("option.providerOpenCDK")}</option>
-                <option value="local_openai">{t("option.providerLocalCompatible")}</option>
-                <option value="oss">{t("option.providerOSS")}</option>
-              </select>
-            </label>
-            {selectedProvider === "oss" ? (
-              <label className="field">
-                <span>{t("field.localProvider")}</span>
-                <select
-                  value={selectedLocalProvider}
-                  onChange={(event) =>
-                    onChangeForm((current) => ({
-                      ...current,
-                      runtime: updateRuntimeProvider(current.runtime, modelCatalog, "oss", event.target.value),
-                    }))
-                  }
-                  disabled={busy}
-                >
-                  <option value="ollama">{t("option.localProviderOllama")}</option>
-                  <option value="lmstudio">{t("option.localProviderLmStudio")}</option>
-                </select>
-              </label>
-            ) : null}
-            {selectedProvider !== "oss" ? (
-              <label className="field">
-                <span>{t("field.providerBaseUrl")}</span>
-                <input
-                  value={runtime.provider_base_url || defaultProviderBaseUrl(selectedProvider)}
-                  onChange={(event) =>
-                    onChangeForm((current) => ({
-                      ...current,
-                      runtime: {
-                        ...current.runtime,
-                        provider_base_url: event.target.value,
-                      },
-                    }))
-                  }
-                  disabled={busy}
-                />
-              </label>
-            ) : null}
-            {selectedProvider !== "oss" ? (
-              <label className="field">
-                <span>{t("field.providerApiKeyEnv")}</span>
-                <input
-                  value={runtime.provider_api_key_env || defaultProviderApiKeyEnv(selectedProvider)}
-                  onChange={(event) =>
-                    onChangeForm((current) => ({
-                      ...current,
-                      runtime: {
-                        ...current.runtime,
-                        provider_api_key_env: event.target.value,
-                      },
-                    }))
-                  }
-                  disabled={busy}
-                />
-              </label>
-            ) : null}
-            <label className="field">
-              <span>{t("field.customModelSlug")}</span>
-              <input
-                value={runtime.model_slug_input || runtime.model || ""}
-                onChange={(event) =>
-                  onChangeForm((current) => ({
-                    ...current,
-                    runtime: updateRuntimeModel(
-                      {
-                        ...current.runtime,
-                        model_slug_input: event.target.value,
-                      },
-                      scopedModelCatalog,
-                      event.target.value,
-                    ),
-                  }))
-                }
-                disabled={busy}
-              />
-            </label>
-            <label className="field field--wide">
-              <span>{t("field.extraPrompt")}</span>
-              <textarea
-                value={runtime.extra_prompt || ""}
-                onChange={(event) => onChangeForm((current) => ({ ...current, runtime: { ...current.runtime, extra_prompt: event.target.value } }))}
-                disabled={busy}
-              />
-            </label>
-          </div>
         </div>
 
         <div className="form-section">

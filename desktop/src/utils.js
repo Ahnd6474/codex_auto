@@ -46,21 +46,29 @@ export const PROGRAM_RUNTIME_KEYS = [
   "parallel_workers",
 ];
 export const DEFAULT_DASHBOARD_VISIBILITY = Object.freeze({
-  status: true,
+  status: false,
   remaining_steps: true,
-  checkpoint_pending: true,
-  input_tokens: true,
-  output_tokens: true,
+  checkpoint_pending: false,
+  input_tokens: false,
+  output_tokens: false,
   estimated_remaining: true,
-  estimated_cost: true,
-  actual_cost: true,
-  codex_plan: true,
-  rate_limits: true,
+  estimated_cost: false,
+  actual_cost: false,
+  codex_plan: false,
+  rate_limit_window_5h: true,
+  rate_limit_window_7d: false,
+  rate_limit_codex_spark: false,
   runtime_card: true,
-  codex_usage_card: true,
-  word_report_card: true,
+  codex_usage_card: false,
+  word_report_card: false,
 });
 export const PROGRAM_UI_KEYS = ["ui_theme", "developer_mode", "dashboard_visibility"];
+
+const LEGACY_DASHBOARD_VISIBILITY_ALIASES = Object.freeze({
+  rate_limit_window_5h: "rate_limits",
+  rate_limit_window_7d: "rate_limits",
+  rate_limit_codex_spark: "rate_limits",
+});
 
 const DEFAULT_PROGRAM_RUNTIME = {
   model_provider: "openai",
@@ -91,7 +99,14 @@ const DEFAULT_PROGRAM_UI = {
 export function normalizeDashboardVisibility(value) {
   const source = value && typeof value === "object" ? value : {};
   return Object.entries(DEFAULT_DASHBOARD_VISIBILITY).reduce((visibility, [key, fallback]) => {
-    visibility[key] = source[key] === undefined ? fallback : Boolean(source[key]);
+    const legacyKey = LEGACY_DASHBOARD_VISIBILITY_ALIASES[key];
+    const rawValue =
+      source[key] !== undefined
+        ? source[key]
+        : legacyKey && source[legacyKey] !== undefined
+          ? source[legacyKey]
+          : fallback;
+    visibility[key] = Boolean(rawValue);
     return visibility;
   }, {});
 }
@@ -212,6 +227,7 @@ export function blankProjectForm(defaultRuntime) {
     github_mode: "existing",
     runtime: {
       ...(cloneValue(defaultRuntime) || {}),
+      generate_word_report: defaultRuntime?.generate_word_report ?? true,
       max_blocks: defaultRuntime?.max_blocks || 5,
       test_cmd: defaultRuntime?.test_cmd || "python -m pytest",
     },

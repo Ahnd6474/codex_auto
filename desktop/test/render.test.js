@@ -603,6 +603,7 @@ test("DashboardView hides cards that are disabled in program settings", async ()
       programSettings: {
         dashboard_visibility: {
           status: false,
+          input_tokens: true,
           runtime_card: false,
           word_report_card: false,
         },
@@ -617,6 +618,8 @@ test("DashboardView hides cards that are disabled in program settings", async ()
 
   assert.match(html, /Remaining Steps/);
   assert.match(html, /Input Tokens/);
+  assert.match(html, /5h Usage/);
+  assert.doesNotMatch(html, /7d Usage/);
   assert.doesNotMatch(html, /Status/);
   assert.doesNotMatch(html, /Runtime/);
   assert.doesNotMatch(html, /Closeout Report/);
@@ -665,9 +668,58 @@ test("AppSettingsView exposes dashboard visibility controls", async () => {
   );
 
   assert.match(html, /Show only the dashboard cards you want to keep visible\./);
+  assert.match(html, /5h Usage/);
+  assert.match(html, /7d Usage/);
+  assert.match(html, /Codex Spark/);
   assert.match(html, /Custom Model Slug/);
-  assert.match(html, /Rate Limits/);
   assert.match(html, /Codex Usage/);
   assert.doesNotMatch(html, /Billing Mode/);
   assert.doesNotMatch(html, /Input \$ \/ 1M/);
+});
+
+test("ConfigEditorView no longer renders the advanced settings section", async () => {
+  const html = await renderBundledComponent(
+    "config-editor-view-render",
+    "./src/components/views/ConfigEditorView.jsx",
+    "ConfigEditorView",
+    {
+      form: {
+        project_dir: "C:/demo",
+        display_name: "Demo",
+        branch: "main",
+        github_mode: "existing",
+        origin_url: "",
+        runtime: {
+          model_provider: "openai",
+          model: "auto",
+          model_preset: "auto",
+          model_slug_input: "auto",
+          effort: "medium",
+          workflow_mode: "standard",
+          execution_mode: "serial",
+          parallel_workers: 2,
+          ml_max_cycles: 3,
+          max_blocks: 5,
+        },
+      },
+      modelPresets: [],
+      modelCatalog: [
+        {
+          model: "auto",
+          display_name: "Auto",
+          hidden: false,
+          default_reasoning_effort: "medium",
+          supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
+        },
+      ],
+      busy: false,
+      onChangeForm: noop,
+      onChooseDirectory: noop,
+      onDeleteProject: noop,
+    },
+  );
+
+  assert.doesNotMatch(html, /Advanced Settings/);
+  assert.doesNotMatch(html, /Custom Model Slug/);
+  assert.doesNotMatch(html, /Extra Prompt/);
 });
