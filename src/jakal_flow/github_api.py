@@ -33,11 +33,30 @@ class GitHubRepository:
         )
 
 
+def parse_github_repository_url(url: str) -> tuple[str, str] | None:
+    raw = url.strip()
+    if not raw:
+        return None
+    if raw.startswith("git@github.com:"):
+        path = raw.split(":", 1)[1]
+    else:
+        parsed = urllib.parse.urlparse(raw)
+        if parsed.netloc.lower() != "github.com":
+            return None
+        path = parsed.path.lstrip("/")
+    if path.endswith(".git"):
+        path = path[:-4]
+    parts = [part for part in path.split("/") if part]
+    if len(parts) < 2:
+        return None
+    return parts[0], parts[1]
+
+
 class GitHubClient:
     def __init__(self, token: str = "") -> None:
         self.token = token.strip()
 
-    def _request_json(self, url: str) -> dict | list:
+    def _request_json(self, url: str, method: str = "GET", payload: dict | None = None) -> dict | list:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
@@ -45,10 +64,17 @@ class GitHubClient:
         }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
-        request = urllib.request.Request(url, headers=headers, method="GET")
+        data = None
+        if payload is not None:
+            headers["Content-Type"] = "application/json"
+            data = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(url, headers=headers, data=data, method=method)
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
-                return json.loads(response.read().decode("utf-8"))
+                body = response.read().decode("utf-8")
+                if not body.strip():
+                    return {}
+                return json.loads(body)
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
             raise GitHubAPIError(f"GitHub API 요청 실패: HTTP {exc.code}\n{body}") from exc
@@ -71,6 +97,22 @@ class GitHubClient:
         payload = self._request_json(url)
         items = payload if isinstance(payload, list) else []
         return [self._parse_repo(item) for item in items]
+
+    def find_open_pull_request_for_branch(self, owner: str, repo: str, branch: str) -> dict | None:
+        if not self.token:
+            raise GitHubAPIError("PR 조회에는 GitHub Personal Access Token 이 필요합니다.")
+        encoded_head = urllib.parse.quote(f"{owner}:{branch}")
+        url = f"https://api.github.com/repos/{owner}/{repo}/pulls?state=open&head={encoded_head}"
+        payload = self._request_json(url)
+        items = payload if isinstance(payload, list) else []
+        return items[0] if items else None
+
+    def post_issue_comment(self, owner: str, repo: str, issue_number: int, body: str) -> dict:
+        if not self.token:
+            raise GitHubAPIError("PR 코멘트 등록에는 GitHub Personal Access Token 이 필요합니다.")
+        url = f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/comments"
+        payload = self._request_json(url, method="POST", payload={"body": body})
+        return payload if isinstance(payload, dict) else {}
 
     def _parse_repo(self, item: dict) -> GitHubRepository:
         return GitHubRepository(
@@ -153,9 +195,9 @@ class GitHubClient:
             if error in {"expired_token", "token_expired"}:
                 raise GitHubAPIError("디바이스 인증 코드가 만료되었습니다. 다시 로그인하세요.")
             if error == "access_denied":
-                raise GitHubAPIError("GitHub 로그인 승인이 취소되었습니다.")
+                raise GitHubAPIError("GitHub 로그인이 취소되었습니다.")
             if error == "device_flow_disabled":
-                raise GitHubAPIError("이 OAuth 앱은 Device Flow가 활성화되어 있지 않습니다.")
+                raise GitHubAPIError("이 OAuth 앱은 Device Flow 가 활성화되어 있지 않습니다.")
             if error == "incorrect_client_credentials":
                 raise GitHubAPIError("GitHub OAuth Client ID가 잘못되었거나 앱 설정이 올바르지 않습니다.")
             if error:

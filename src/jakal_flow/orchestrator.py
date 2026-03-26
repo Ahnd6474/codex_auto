@@ -483,6 +483,7 @@ class Orchestrator:
         rollback_status = "not_needed"
         final_status = "completed"
         batch_summary = ""
+        failure_extra: dict[str, object] | None = None
 
         try:
             worker_limit = min(len(ordered_targets), self._parallel_worker_count(context.runtime.parallel_workers))
@@ -521,8 +522,15 @@ class Orchestrator:
                         if not worker_commit:
                             merged_commit_hashes.append("")
                             continue
-                        self.git.cherry_pick(context.paths.repo_dir, worker_commit)
-                        merged_commit_hashes.append(self.git.current_revision(context.paths.repo_dir))
+                        merge_result = self.git.try_cherry_pick(context.paths.repo_dir, worker_commit)
+                        if merge_result.returncode == 0:
+                            merged_commit_hashes.append(self.git.current_revision(context.paths.repo_dir))
+                            continue
+                        conflicted_files = self.git.conflicted_files(context.paths.repo_dir)
+                        failure_extra = {"conflict": self._parallel_conflict_details(conflicted_files)}
+                        raise RuntimeError(
+                            f"Parallel merge conflict while cherry-picking {worker_commit}: {', '.join(conflicted_files) or merge_result.stderr.strip() or 'unknown conflict'}"
+                        )
                 except Exception as exc:
                     self.git.abort_cherry_pick(context.paths.repo_dir)
                     self.git.hard_reset(context.paths.repo_dir, base_revision)
@@ -625,6 +633,16 @@ class Orchestrator:
                     [item for item in merged_commit_hashes if item],
                 )
             )
+            if final_status != "completed":
+                self._report_failure(
+                    context,
+                    reporter,
+                    failure_type="parallel_batch_failed",
+                    summary=batch_summary or "Parallel batch failed.",
+                    block_index=context.loop_state.block_index,
+                    selected_task=f"Parallel batch {batch_label}",
+                    extra=failure_extra,
+                )
             return context, self.save_execution_plan_state(context, plan_state), ordered_targets
         finally:
             context.runtime = previous_runtime
@@ -1024,6 +1042,15 @@ class Orchestrator:
             reporter.write_status_report()
             if context.runtime.generate_word_report:
                 reporter.write_closeout_word_report()
+            if plan_state.closeout_status != "completed":
+                self._report_failure(
+                    context,
+                    reporter,
+                    failure_type="closeout_failed",
+                    summary=plan_state.closeout_notes or "Closeout failed.",
+                    block_index=closeout_block_index,
+                    selected_task=closeout_task,
+                )
 
         return context, plan_state
 
@@ -1470,6 +1497,14 @@ class Orchestrator:
                     "rollback_status": "rolled_back_to_safe_revision",
                 }
             )
+            self._report_failure(
+                context,
+                reporter,
+                failure_type="block_failed",
+                summary="Search-enabled Codex pass regressed tests and was rolled back.",
+                block_index=block_index,
+                selected_task=selected_task,
+            )
             return
         if search_commit:
             block_commit_hashes.append(search_commit)
@@ -1680,6 +1715,50 @@ class Orchestrator:
                 break
         if changed:
             write_json(context.paths.checkpoint_state_file, data)
+
+    def _parallel_conflict_details(self, conflicted_files: list[str]) -> dict[str, object]:
+        files = sorted({str(item).strip() for item in conflicted_files if str(item).strip()})
+        return {
+            "policy": "abort_and_report",
+            "recommended_action": "manual_review",
+            "files": files,
+            "procedure": (
+                "Keep the base branch safe revision, inspect each conflicted file manually, choose the final code intentionally, "
+                "then rerun the batch after the overlap is resolved."
+            ),
+        }
+
+    def _report_failure(
+        self,
+        context: ProjectContext,
+        reporter: Reporter,
+        *,
+        failure_type: str,
+        summary: str,
+        block_index: int | None = None,
+        selected_task: str = "",
+        extra: dict | None = None,
+    ) -> None:
+        reporter.write_status_report()
+        bundle = reporter.write_failure_bundle(
+            failure_type=failure_type,
+            summary=summary,
+            block_index=block_index,
+            selected_task=selected_task,
+            extra=extra,
+        )
+        post_result = reporter.post_pr_failure_report(bundle)
+        write_json(
+            context.paths.reports_dir / "latest_pr_failure_status.json",
+            {
+                "generated_at": now_utc_iso(),
+                "failure_type": failure_type,
+                "posted": bool(post_result.get("posted")),
+                "result": post_result,
+                "report_markdown_file": bundle.get("report_markdown_file", ""),
+                "report_json_file": bundle.get("report_json_file", ""),
+            },
+        )
 
     def _read_supplied_plan_text(self, plan_path: Path | None, plan_input: str) -> str:
         if plan_input.strip():

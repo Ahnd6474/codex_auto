@@ -134,8 +134,26 @@ class GitOps:
     def cherry_pick(self, repo_dir: Path, revision: str) -> None:
         self.run(["cherry-pick", revision], cwd=repo_dir)
 
+    def try_cherry_pick(self, repo_dir: Path, revision: str) -> CommandResult:
+        return self.run(["cherry-pick", revision], cwd=repo_dir, check=False)
+
     def abort_cherry_pick(self, repo_dir: Path) -> None:
         self.run(["cherry-pick", "--abort"], cwd=repo_dir, check=False)
+
+    def continue_cherry_pick(self, repo_dir: Path) -> None:
+        self.run(["cherry-pick", "--continue"], cwd=repo_dir)
+
+    def conflicted_files(self, repo_dir: Path) -> list[str]:
+        result = self.run(["diff", "--name-only", "--diff-filter=U"], cwd=repo_dir, check=False)
+        return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+    def checkout_conflict_side(self, repo_dir: Path, side: str, paths: list[str]) -> None:
+        if side not in {"ours", "theirs"}:
+            raise ValueError(f"Unsupported conflict side: {side}")
+        if not paths:
+            return
+        self.run(["checkout", f"--{side}", "--", *paths], cwd=repo_dir)
+        self.run(["add", "--", *paths], cwd=repo_dir)
 
     def hard_reset(self, repo_dir: Path, revision: str) -> None:
         self.run(["reset", "--hard", revision], cwd=repo_dir)

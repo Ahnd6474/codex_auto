@@ -169,6 +169,8 @@ Each run block:
 8. Pushes to GitHub when the user approves a checkpoint in the GUI
 9. Rolls back to the previous safe revision on regression
 10. Saves structured logs, reports, block review, and memory summaries
+11. When a failure occurs, writes a PR-ready failure bundle under `reports/` and tries to post it to the open PR if a GitHub token is available
+12. When a parallel cherry-pick merge hits a Git conflict, aborts to the last safe revision and records the conflict procedure instead of auto-picking source code blindly
 
 ## Repository Files Managed Per Project
 
@@ -193,6 +195,9 @@ The tool creates or maintains these files for each managed repository project:
 - `logs/blocks.jsonl`
 - `logs/ui_events.jsonl`
 - `reports/latest_report.json`
+- `reports/*pr_failure.json`
+- `reports/*pr_failure.md`
+- `reports/latest_pr_failure_status.json`
 - `metadata.json`
 - `project_config.json`
 - `state/UI_RUN_CONTROL.json`
@@ -214,4 +219,5 @@ Source prompt and scope templates:
 - each repository gets its own isolated workspace subtree; no mutable state is shared across projects
 - local git user identity is configured in the managed clone for automated commits
 - `--allow-push` pushes safe commits to `origin` after successful blocks
+- set `JAKAL_FLOW_GITHUB_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN` if you want automatic PR failure comments
 - default `--max-blocks` is `1` for safer operation; increase it explicitly when needed

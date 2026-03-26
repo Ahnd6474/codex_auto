@@ -22,7 +22,7 @@ test("detectInitialLanguage returns the nearest supported locale", () => {
 });
 
 test("translate interpolates parameters and falls back to english keys", () => {
-  assert.equal(translate("ko", "sidebar.targetBlock", { block: 3 }), "대상 블록 3");
+  assert.equal(translate("ko", "sidebar.targetBlock", { block: 3 }), "타깃 블록 3");
   assert.equal(translate("fr", "action.run"), "Courir");
 });
 
@@ -34,8 +34,13 @@ test("available language options include the extended locale list", () => {
 });
 
 test("displayStatus still localizes existing translations", () => {
-  assert.equal(displayStatus("completed", "ko"), "완료됨");
+  assert.equal(displayStatus("completed", "ko"), "완료");
   assert.equal(displayStatus("paused_for_review", "en"), "Paused for review");
   assert.equal(displayStatus("running:generate plan", "ko"), "실행 중: generate plan");
   assert.equal(displayStatus("setup_ready", "fr"), "Configuration prête");
+});
+
+test("korean overrides prefer higher-quality copy", () => {
+  assert.equal(translate("ko", "reports.closeoutReport"), "마감 보고서");
+  assert.equal(translate("ko", "option.generateWordReport"), "Word 보고서 생성");
 });
