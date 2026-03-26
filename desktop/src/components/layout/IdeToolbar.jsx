@@ -5,6 +5,7 @@ import { commandLabel, isDebuggingStatus, statusTone, toolbarProgressCaption } f
 export function IdeToolbar({
   projectDetail,
   planDraft,
+  pendingCheckpoint,
   busy,
   activeJob,
   activeCenterTab,
@@ -13,6 +14,7 @@ export function IdeToolbar({
   onGeneratePlan,
   onRunPlan,
   onRunCloseout,
+  onApproveCheckpoint,
 }) {
   const projectStatus = projectDetail?.project?.current_status || "idle";
   const status = activeJob?.status === "running" && !isDebuggingStatus(projectStatus) ? "running" : projectStatus;
@@ -40,6 +42,12 @@ export function IdeToolbar({
           <span>{t("common.status")}</span>
           <strong>{statusLabel}</strong>
         </div>
+        {pendingCheckpoint ? (
+          <div className="toolbar-status toolbar-status--warning">
+            <span>{t("dashboard.checkpointPending")}</span>
+            <strong>{pendingCheckpoint.checkpoint_id || t("common.yes")}</strong>
+          </div>
+        ) : null}
         <div className="toolbar-status toolbar-status--neutral">
           <span>{t("toolbar.plan")}</span>
           <strong>{toolbarProgressCaption(planDraft)}</strong>
@@ -60,6 +68,11 @@ export function IdeToolbar({
         <button className="toolbar-button toolbar-button--accent" onClick={onRunPlan} type="button" disabled={busy}>
           {t("action.runRemaining")}
         </button>
+        {pendingCheckpoint ? (
+          <button className="toolbar-button toolbar-button--accent" onClick={onApproveCheckpoint} type="button" disabled={busy}>
+            {t("action.approveCheckpoint")}
+          </button>
+        ) : null}
         <button className="toolbar-button" onClick={onRunCloseout} type="button" disabled={busy}>
           {t("action.closeout")}
         </button>

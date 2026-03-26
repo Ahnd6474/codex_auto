@@ -56,6 +56,7 @@ export default function App() {
       <IdeToolbar
         projectDetail={detail}
         planDraft={controller.planDraft}
+        pendingCheckpoint={detail?.checkpoints?.pending || null}
         busy={controller.busy}
         activeJob={controller.activeJob}
         activeCenterTab={controller.centerTab}
@@ -64,6 +65,7 @@ export default function App() {
         onGeneratePlan={controller.generatePlan}
         onRunPlan={controller.runPlan}
         onRunCloseout={controller.runCloseout}
+        onApproveCheckpoint={controller.approveCheckpoint}
       />
 
       <RunProgressPanel detail={detail} planDraft={controller.planDraft} activeJob={controller.activeJob} />

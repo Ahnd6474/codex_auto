@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from .process_supervisor import hidden_window_creationflags, terminate_process
 from .utils import decode_process_output, now_utc_iso, read_json, write_json
 
 
@@ -168,9 +169,6 @@ def start_cloudflare_quick_tunnel(workspace_root: Path, target_url: str, cloudfl
         raise RuntimeError("cloudflared is not installed or not on PATH.")
 
     command = [resolved_command, "tunnel", "--url", resolved_target, "--no-autoupdate"]
-    creationflags = 0
-    if os.name == "nt":
-        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     process = subprocess.Popen(
         command,
         stdin=subprocess.DEVNULL,
@@ -180,7 +178,7 @@ def start_cloudflare_quick_tunnel(workspace_root: Path, target_url: str, cloudfl
         encoding="utf-8",
         errors="replace",
         bufsize=1,
-        creationflags=creationflags,
+        creationflags=hidden_window_creationflags(),
     )
     assert process.stdout is not None
 
@@ -226,18 +224,7 @@ def stop_public_tunnel_process(workspace_root: Path) -> dict[str, Any]:
     status = public_tunnel_status_payload(workspace_root)
     pid = int(status.get("pid") or 0)
     if pid > 0:
-        try:
-            if os.name == "nt":
-                subprocess.run(
-                    ["taskkill", "/PID", str(pid), "/T", "/F"],
-                    check=False,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-            else:
-                os.kill(pid, 15)
-        except OSError:
-            pass
+        terminate_process(pid)
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline:
             if not process_is_running(pid):
