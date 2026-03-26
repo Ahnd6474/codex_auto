@@ -82,6 +82,7 @@ export function useDesktopController() {
   );
 
   const busy = Boolean(pendingAction || (activeJob && activeJob.status === "running"));
+  const shareBusy = pendingAction === "create_share_session" || pendingAction === "revoke_share_session";
   const programSettingsDirty = useMemo(() => JSON.stringify(programSettings) !== JSON.stringify(programSettingsFromRuntime(storedProgramSettings)), [programSettings, storedProgramSettings]);
 
   const filteredProjects = useMemo(() => {
@@ -979,6 +980,7 @@ export function useDesktopController() {
 
   return {
     busy,
+    shareBusy,
     workspaceRoot,
     defaultRuntime,
     programSettings,

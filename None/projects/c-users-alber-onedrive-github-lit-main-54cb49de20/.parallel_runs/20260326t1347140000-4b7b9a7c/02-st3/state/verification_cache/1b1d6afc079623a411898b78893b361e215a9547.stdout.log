@@ -1,0 +1,11 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.4, pytest-9.0.2, pluggy-1.6.0
+rootdir: C:\Users\alber\OneDrive\문서\GitHub\lit
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.12.1
+collected 6 items
+
+tests\test_bootstrap.py ......                                           [100%]
+
+============================== 6 passed in 0.45s ==============================

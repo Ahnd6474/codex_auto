@@ -47,17 +47,23 @@ def spawn_background_process(
     stderr: Any = subprocess.DEVNULL,
     creationflags: int | None = None,
 ) -> subprocess.Popen[Any]:
-    return subprocess.Popen(
-        command,
-        cwd=cwd,
-        env=env,
-        stdin=subprocess.DEVNULL,
-        stdout=stdout,
-        stderr=stderr,
-        creationflags=background_creationflags() if creationflags is None else creationflags,
-        startupinfo=hidden_window_startupinfo(),
-        close_fds=True,
-    )
+    popen_kwargs = {
+        "cwd": cwd,
+        "env": env,
+        "stdin": subprocess.DEVNULL,
+        "stdout": stdout,
+        "stderr": stderr,
+        "creationflags": background_creationflags() if creationflags is None else creationflags,
+        "startupinfo": hidden_window_startupinfo(),
+        "close_fds": True,
+    }
+    try:
+        return subprocess.Popen(command, **popen_kwargs)
+    except (OSError, ValueError):
+        if os.name != "nt" or popen_kwargs["startupinfo"] is None:
+            raise
+        popen_kwargs["startupinfo"] = None
+        return subprocess.Popen(command, **popen_kwargs)
 
 
 def terminate_process(pid: int) -> None:

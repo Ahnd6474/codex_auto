@@ -11,6 +11,7 @@ export function AppSettingsView({
   shareSettings,
   shareDetail,
   busy,
+  shareBusy = false,
   onChangeSettings,
   onGenerateShareLink,
   onCopyShareLink,
@@ -363,10 +364,10 @@ export function AppSettingsView({
                   <span>{t("run.shareExpires", { expiresAt: activeShare.expires_at || t("common.unavailable") })}</span>
                 </div>
                 <div className="action-row">
-                  <button className="toolbar-button toolbar-button--accent" onClick={onCopyShareLink} type="button" disabled={busy}>
+                  <button className="toolbar-button toolbar-button--accent" onClick={onCopyShareLink} type="button" disabled={shareBusy}>
                     {t("action.copyLink")}
                   </button>
-                  <button className="toolbar-button toolbar-button--ghost" onClick={onRevokeShareLink} type="button" disabled={busy}>
+                  <button className="toolbar-button toolbar-button--ghost" onClick={onRevokeShareLink} type="button" disabled={shareBusy}>
                     {t("action.revokeLink")}
                   </button>
                 </div>
@@ -375,7 +376,7 @@ export function AppSettingsView({
               <div className="empty-block">{t("run.noShareSession")}</div>
             )}
             <div className="action-row">
-              <button className="toolbar-button" onClick={onGenerateShareLink} type="button" disabled={busy}>
+              <button className="toolbar-button" onClick={onGenerateShareLink} type="button" disabled={shareBusy}>
                 {t("action.generateShareLink")}
               </button>
             </div>

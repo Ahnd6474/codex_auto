@@ -113,6 +113,7 @@ export default function App() {
             modelPresets={controller.modelPresets}
             modelCatalog={controller.modelCatalog}
             busy={controller.busy}
+            shareBusy={controller.shareBusy}
             onChangeForm={controller.setProjectForm}
             onChangeProgramSettings={controller.setProgramSettings}
             onChooseDirectory={controller.chooseDirectory}

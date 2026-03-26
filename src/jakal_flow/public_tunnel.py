@@ -169,18 +169,24 @@ def start_cloudflare_quick_tunnel(workspace_root: Path, target_url: str, cloudfl
         raise RuntimeError("cloudflared is not installed or not on PATH.")
 
     command = [resolved_command, "tunnel", "--url", resolved_target, "--no-autoupdate"]
-    process = subprocess.Popen(
-        command,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        bufsize=1,
-        creationflags=hidden_window_creationflags(),
-        startupinfo=hidden_window_startupinfo(),
-    )
+    popen_kwargs = {
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.STDOUT,
+        "text": True,
+        "encoding": "utf-8",
+        "errors": "replace",
+        "bufsize": 1,
+        "creationflags": hidden_window_creationflags(),
+        "startupinfo": hidden_window_startupinfo(),
+    }
+    try:
+        process = subprocess.Popen(command, **popen_kwargs)
+    except (OSError, ValueError):
+        if os.name != "nt" or popen_kwargs["startupinfo"] is None:
+            raise
+        popen_kwargs["startupinfo"] = None
+        process = subprocess.Popen(command, **popen_kwargs)
     assert process.stdout is not None
 
     deadline = time.monotonic() + DEFAULT_TUNNEL_START_TIMEOUT_SECS

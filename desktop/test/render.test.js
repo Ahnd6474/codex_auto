@@ -815,6 +815,57 @@ test("AppSettingsView remote monitor fixes sharing to 0.0.0.0 and share link onl
   assert.doesNotMatch(html, /127\.0\.0\.1/);
 });
 
+test("AppSettingsView keeps share actions enabled while a run is active", async () => {
+  const html = await renderBundledComponent(
+    "app-settings-share-enabled-render",
+    "./src/components/views/AppSettingsView.jsx",
+    "AppSettingsView",
+    {
+      settings: {
+        ui_theme: "dark",
+        developer_mode: false,
+        model_provider: "openai",
+        model: "gpt-5.4",
+        model_preset: "",
+        model_selection_mode: "slug",
+        model_slug_input: "gpt-5.4",
+        approval_mode: "never",
+        sandbox_mode: "danger-full-access",
+        checkpoint_interval_blocks: 1,
+        execution_mode: "serial",
+        parallel_workers: 2,
+        codex_path: "codex.cmd",
+        allow_push: true,
+        require_checkpoint_approval: false,
+        dashboard_visibility: {},
+      },
+      shareSettings: {
+        bind_host: "0.0.0.0",
+      },
+      shareDetail: {
+        server: {
+          running: true,
+        },
+        active_session: {
+          share_url: "https://demo.trycloudflare.com/share/view?session=demo&token=secret",
+          expires_at: "2026-03-26T11:00:00+00:00",
+        },
+      },
+      busy: true,
+      shareBusy: false,
+      onChangeSettings: noop,
+      onGenerateShareLink: noop,
+      onCopyShareLink: noop,
+      onRevokeShareLink: noop,
+      onChangeShareSettings: noop,
+    },
+  );
+
+  assert.match(html, /<button class="toolbar-button" type="button">Generate Share Link<\/button>/);
+  assert.match(html, /<button class="toolbar-button toolbar-button--accent" type="button">Copy Link<\/button>/);
+  assert.match(html, /<button class="toolbar-button toolbar-button--ghost" type="button">Revoke Link<\/button>/);
+});
+
 test("ConfigEditorView no longer renders the advanced settings section", async () => {
   const html = await renderBundledComponent(
     "config-editor-view-render",
