@@ -35,7 +35,7 @@ Return exactly one JSON object in this shape:
     "needed": true,
     "task_title": "short guardrail/bootstrap title",
     "purpose": "why this small step helps later experiments",
-    "executor_docstring": "short executor-facing design note describing the evaluation contract, leakage boundary, or experiment skeleton",
+    "contract_docstring": "docstring text that should be written into the skeleton code to lock the evaluation contract, leakage boundary, or experiment skeleton",
     "candidate_owned_paths": ["narrow repo-relative files or directories"],
     "success_criteria": "what makes the bootstrap complete"
   }},
@@ -44,7 +44,7 @@ Return exactly one JSON object in this shape:
       "block_id": "E1",
       "goal": "one clear experiment or guardrail outcome",
       "work_items": ["small ideas inside this block"],
-      "executor_docstring": "2-5 sentence executor-facing design note describing the experiment shape, constraints, and expected artifacts",
+      "implementation_notes": "2-5 sentence planning note describing the experiment shape, constraints, and expected artifacts",
       "testable_boundary": "local completion condition",
       "candidate_owned_paths": ["narrow repo-relative files or directories"],
       "parallelizable_after": ["block ids or contract names that must exist first"],

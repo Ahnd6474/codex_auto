@@ -19,7 +19,7 @@ export function emptyPlanDraft() {
     steps: [],
     project_prompt: "",
     workflow_mode: "standard",
-    execution_mode: "serial",
+    execution_mode: "parallel",
     closeout_status: "not_started",
   };
 }

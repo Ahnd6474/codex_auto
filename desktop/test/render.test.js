@@ -182,7 +182,7 @@ function baseWorkspaceProps(overrides = {}) {
   };
 }
 
-test("CenterWorkspace renders the serial flow view for serial plans", async () => {
+test("CenterWorkspace upgrades legacy serial plans into the parallel execution tree view", async () => {
   const html = await renderBundledComponent(
     "center-workspace-render",
     "./src/components/layout/CenterWorkspace.jsx",
@@ -190,13 +190,10 @@ test("CenterWorkspace renders the serial flow view for serial plans", async () =
     baseWorkspaceProps(),
   );
 
-  assert.match(html, /Execution Flow/);
-  assert.match(html, /Flow Chart/);
-  assert.match(html, /Execution Mode/);
-  assert.match(html, /Serial/);
+  assert.match(html, /Execution Tree/);
   assert.match(html, /CO1/);
   assert.doesNotMatch(html, />Closeout<\/button>/);
-  assert.doesNotMatch(html, /Execution Tree/);
+  assert.doesNotMatch(html, /Serial/);
 });
 
 test("CenterWorkspace renders the parallel execution tree for parallel plans", async () => {

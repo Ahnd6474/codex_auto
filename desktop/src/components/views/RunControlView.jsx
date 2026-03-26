@@ -48,7 +48,7 @@ export function RunControlView({
   const selectedStepEstimate = (executionEstimate.step_estimates || []).find((item) => item.step_id === selectedStepId) || null;
   const editableStep = canEditStep(selectedStep, busy);
   const completedCount = steps.filter((step) => step.status === "completed").length;
-  const executionMode = String(planDraft?.execution_mode || detail?.runtime?.execution_mode || "serial").trim().toLowerCase() === "parallel" ? "parallel" : "serial";
+  const executionMode = "parallel";
   const flowColumns = 3;
   const selectedSystemStep = isSystemStep(selectedStep);
 
@@ -78,9 +78,9 @@ export function RunControlView({
           <span>{t("run.estimatedRemaining")}</span>
           <strong>{formatDurationCompact(executionEstimate.remaining_seconds ?? 0, language)}</strong>
         </div>
-        <div className={`metric-card metric-card--${executionMode === "parallel" ? "info" : "neutral"}`}>
+        <div className="metric-card metric-card--info">
           <span>{t("run.executionMode")}</span>
-          <strong>{executionMode === "parallel" ? t("option.executionParallel") : t("option.executionSerial")}</strong>
+          <strong>{t("option.executionParallel")}</strong>
         </div>
         <div className={`metric-card metric-card--${statusTone(planDraft?.closeout_status)}`}>
           <span>{t("run.closeout")}</span>
@@ -197,12 +197,10 @@ export function RunControlView({
                     ))}
                   </select>
                 </label>
-                {executionMode === "parallel" ? (
-                  <label className="field">
-                    <span>{t("field.parallelGroup")}</span>
-                    <input value={selectedStep.parallel_group || ""} onChange={(event) => onUpdateStepField("parallel_group", event.target.value)} disabled={!editableStep} />
-                  </label>
-                ) : null}
+                <label className="field">
+                  <span>{t("field.parallelGroup")}</span>
+                  <input value={selectedStep.parallel_group || ""} onChange={(event) => onUpdateStepField("parallel_group", event.target.value)} disabled={!editableStep} />
+                </label>
                 <label className="field field--wide">
                   <span>{t("field.description")}</span>
                   <textarea value={selectedStep.display_description || ""} onChange={(event) => onUpdateStepField("display_description", event.target.value)} disabled={!editableStep} />

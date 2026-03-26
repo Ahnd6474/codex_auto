@@ -88,7 +88,7 @@ const DEFAULT_PROGRAM_RUNTIME = {
   require_checkpoint_approval: false,
   workflow_mode: "standard",
   ml_max_cycles: 3,
-  execution_mode: "serial",
+  execution_mode: "parallel",
   parallel_worker_mode: "auto",
   parallel_workers: 0,
 };
@@ -163,6 +163,7 @@ export function programSettingsFromRuntime(runtime) {
       settings[key] = source[key];
     }
   });
+  settings.execution_mode = "parallel";
   settings.dashboard_visibility = normalizeDashboardVisibility(settings.dashboard_visibility);
   return settings;
 }
@@ -175,6 +176,7 @@ export function applyProgramSettings(runtime, programSettings) {
     }
     return settings;
   }, {});
+  runtimeSettings.execution_mode = "parallel";
   return {
     ...(cloneValue(runtime) || {}),
     ...runtimeSettings,
@@ -232,6 +234,7 @@ export function blankProjectForm(defaultRuntime) {
       generate_word_report: defaultRuntime?.generate_word_report ?? true,
       max_blocks: defaultRuntime?.max_blocks || 5,
       test_cmd: defaultRuntime?.test_cmd || "python -m pytest",
+      execution_mode: "parallel",
     },
   };
 }
@@ -246,6 +249,7 @@ export function projectFormFromDetail(detail, defaultRuntime) {
     runtime: {
       ...(cloneValue(defaultRuntime) || {}),
       ...(cloneValue(detail?.runtime) || {}),
+      execution_mode: "parallel",
     },
   };
 }
@@ -680,11 +684,8 @@ export function buildProjectPayload(form, plan = null) {
     const workflowMode = String(payload.runtime?.workflow_mode || nextPlan.workflow_mode || "standard")
       .trim()
       .toLowerCase();
-    const executionMode = String(payload.runtime?.execution_mode || nextPlan.execution_mode || "serial")
-      .trim()
-      .toLowerCase();
     nextPlan.workflow_mode = workflowMode === "ml" ? "ml" : "standard";
-    nextPlan.execution_mode = executionMode === "parallel" ? "parallel" : "serial";
+    nextPlan.execution_mode = "parallel";
     nextPlan.default_test_command = nextPlan.default_test_command || payload.runtime?.test_cmd || "python -m pytest";
     payload.plan = nextPlan;
   }
@@ -1008,12 +1009,9 @@ export function runtimeSummary(runtime, modelPresets = [], language = "en", mode
       ? ` | ${translate(language, "option.workflowML")}`
       : ` | ${translate(language, "option.workflowStandard")}`;
   const autoParallelWorkers = String(runtime?.parallel_worker_mode || "auto").trim().toLowerCase() !== "manual";
-  const executionSuffix =
-    String(runtime?.execution_mode || "serial").trim().toLowerCase() === "parallel"
-      ? autoParallelWorkers
-        ? ` | parallel ${String(translate(language, "preset.auto") || "auto").trim().toLowerCase() || "auto"}`
-        : ` | parallel x${Math.max(1, Number.parseInt(String(runtime?.parallel_workers || 4), 10) || 1)}`
-      : " | serial";
+  const executionSuffix = autoParallelWorkers
+    ? ` | parallel ${String(translate(language, "preset.auto") || "auto").trim().toLowerCase() || "auto"}`
+    : ` | parallel x${Math.max(1, Number.parseInt(String(runtime?.parallel_workers || 4), 10) || 1)}`;
   const preset = modelPresets.find((item) => item.preset_id === runtime?.model_preset);
   if (preset && providerSupportsAutoModel(provider)) {
     const summary = `${providerPrefix}${workflowSuffix} | ${preset.summary}${executionSuffix}`;
@@ -1093,9 +1091,7 @@ export function executionProgressCaption(plan, language = "en") {
     }
     return locale === "ko" ? `${completed}/${total}단계 완료, 마감 대기` : `Completed ${completed}/${total} steps, closeout pending`;
   }
-  const usesDag =
-    String(plan?.execution_mode || "serial").trim().toLowerCase() === "parallel" &&
-    steps.some((step) => (step?.depends_on || []).length || (step?.owned_paths || []).length);
+  const usesDag = steps.some((step) => (step?.depends_on || []).length || (step?.owned_paths || []).length);
   if (usesDag) {
     const runningIds = summarizeStepIds(runningExecutionSteps(plan));
     if (runningIds) {
@@ -1142,9 +1138,7 @@ export function toolbarProgressCaption(plan) {
     }
     return `Completed ${completed}/${total} steps, closeout pending`;
   }
-  const usesDag =
-    String(plan?.execution_mode || "serial").trim().toLowerCase() === "parallel" &&
-    steps.some((step) => (step?.depends_on || []).length || (step?.owned_paths || []).length);
+  const usesDag = steps.some((step) => (step?.depends_on || []).length || (step?.owned_paths || []).length);
   if (usesDag) {
     const runningIds = summarizeStepIds(runningExecutionSteps(plan));
     if (runningIds) {

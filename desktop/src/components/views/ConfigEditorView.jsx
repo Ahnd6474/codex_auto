@@ -196,25 +196,10 @@ export function ConfigEditorView({
               disabled={busy}
             />
           </label>
-          <label className="field">
+          <div className="field">
             <span>{t("field.executionMode")}</span>
-            <select
-              value={runtime.execution_mode || "serial"}
-              onChange={(event) =>
-                onChangeForm((current) => ({
-                  ...current,
-                  runtime: {
-                    ...current.runtime,
-                    execution_mode: event.target.value,
-                  },
-                }))
-              }
-              disabled={busy}
-            >
-              <option value="serial">{t("option.executionSerial")}</option>
-              <option value="parallel">{t("option.executionParallel")}</option>
-            </select>
-          </label>
+            <strong>{t("option.executionParallel")}</strong>
+          </div>
           <label className="field">
             <span>{t("field.parallelWorkers")}</span>
             <input

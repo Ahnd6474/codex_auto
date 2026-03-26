@@ -51,7 +51,7 @@ def load_source_prompt_template(name: str) -> str:
 
 
 def _normalize_execution_mode(value: str | None) -> str:
-    return "parallel" if str(value or "").strip().lower() == "parallel" else "serial"
+    return "parallel"
 
 
 def plan_generation_prompt_filename(execution_mode: str | None, workflow_mode: str | None = None) -> str:
@@ -430,7 +430,7 @@ def prompt_to_execution_plan_prompt(
     repo_inputs: dict[str, str],
     user_prompt: str,
     max_steps: int,
-    execution_mode: str = "serial",
+    execution_mode: str = "parallel",
     planner_outline: str = "",
     template_text: str | None = None,
 ) -> str:
@@ -442,7 +442,7 @@ def prompt_to_execution_plan_prompt(
             repo_dir=context.paths.repo_dir,
             max_steps=max(3, max_steps),
             workflow_mode=workflow_mode,
-            execution_mode=execution_mode.strip().lower() or "serial",
+            execution_mode=_normalize_execution_mode(execution_mode),
             readme=repo_inputs["readme"],
             agents=repo_inputs["agents"],
             reference_notes=load_reference_guide_text(),
@@ -459,7 +459,7 @@ def prompt_to_plan_decomposition_prompt(
     repo_inputs: dict[str, str],
     user_prompt: str,
     max_steps: int,
-    execution_mode: str = "serial",
+    execution_mode: str = "parallel",
     template_text: str | None = None,
 ) -> str:
     runtime = getattr(context, "runtime", None)
@@ -470,7 +470,7 @@ def prompt_to_plan_decomposition_prompt(
             repo_dir=context.paths.repo_dir,
             max_steps=max(3, max_steps),
             workflow_mode=workflow_mode,
-            execution_mode=execution_mode.strip().lower() or "serial",
+            execution_mode=_normalize_execution_mode(execution_mode),
             readme=repo_inputs["readme"],
             agents=repo_inputs["agents"],
             reference_notes=load_reference_guide_text(),
@@ -641,7 +641,7 @@ def implementation_prompt(
     scope_guard = read_text(context.paths.scope_guard_file)
     research_notes = read_text(context.paths.research_notes_file)
     workflow_mode = normalize_workflow_mode(getattr(context.runtime, "workflow_mode", "standard"))
-    template = template_text or load_step_execution_prompt_template(getattr(context.runtime, "execution_mode", "serial"), workflow_mode)
+    template = template_text or load_step_execution_prompt_template(getattr(context.runtime, "execution_mode", "parallel"), workflow_mode)
     task_title = execution_step.title if execution_step else candidate.title
     display_description = execution_step.display_description.strip() if execution_step else ""
     codex_description = execution_step.codex_description.strip() if execution_step else ""
@@ -704,7 +704,7 @@ def debugger_prompt(
     mid_term = read_text(context.paths.mid_term_plan_file)
     scope_guard = read_text(context.paths.scope_guard_file)
     research_notes = read_text(context.paths.research_notes_file)
-    template = template_text or load_debugger_prompt_template(getattr(context.runtime, "execution_mode", "serial"))
+    template = template_text or load_debugger_prompt_template(getattr(context.runtime, "execution_mode", "parallel"))
     workflow_mode = normalize_workflow_mode(getattr(context.runtime, "workflow_mode", "standard"))
     task_title = execution_step.title if execution_step else candidate.title
     display_description = execution_step.display_description.strip() if execution_step else ""
@@ -906,7 +906,7 @@ def execution_plan_markdown(
         normalize_workflow_mode(workflow_mode),
         "",
         "## Execution Mode",
-        execution_mode.strip().lower() or "serial",
+        _normalize_execution_mode(execution_mode),
         "",
         "## Planned Steps",
     ]
@@ -974,7 +974,7 @@ def _execution_graph_levels(steps: list[ExecutionStep]) -> list[list[ExecutionSt
     return levels
 
 
-def execution_plan_svg(title: str, steps: list[ExecutionStep], execution_mode: str = "serial") -> str:
+def execution_plan_svg(title: str, steps: list[ExecutionStep], execution_mode: str = "parallel") -> str:
     width = 1180
     box_width = 220
     box_height = 120

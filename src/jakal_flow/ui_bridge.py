@@ -78,7 +78,7 @@ def default_workspace_root() -> Path:
 
 
 def bootstrap_payload(workspace_root: Path) -> dict[str, Any]:
-    codex_status = _codex_snapshot_service.get_snapshot()
+    codex_status = _codex_snapshot_service.get_snapshot(force_refresh=True)
     return {
         "workspace_root": str(workspace_root),
         "model_presets": [
@@ -354,9 +354,7 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
         merged.get("require_checkpoint_approval", False),
         False,
     )
-    merged["execution_mode"] = str(merged.get("execution_mode", "serial")).strip().lower()
-    if merged["execution_mode"] not in {"serial", "parallel"}:
-        merged["execution_mode"] = "serial"
+    merged["execution_mode"] = "parallel"
     merged["workflow_mode"] = normalize_workflow_mode(merged.get("workflow_mode", "standard"))
     merged["test_cmd"] = str(merged.get("test_cmd", "python -m pytest")).strip() or "python -m pytest"
     merged["model_provider"] = normalize_model_provider(

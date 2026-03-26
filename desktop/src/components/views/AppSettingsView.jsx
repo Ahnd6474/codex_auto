@@ -258,17 +258,10 @@ export function AppSettingsView({
                   disabled={busy}
                 />
               </label>
-              <label className="field">
+              <div className="field">
                 <span>{t("field.executionMode")}</span>
-                <select
-                  value={settings.execution_mode || "serial"}
-                  onChange={(event) => onChangeSettings((current) => ({ ...current, execution_mode: event.target.value }))}
-                  disabled={runtimeBusy}
-                >
-                  <option value="serial">{t("option.executionSerial")}</option>
-                  <option value="parallel">{t("option.executionParallel")}</option>
-                </select>
-              </label>
+                <strong>{t("option.executionParallel")}</strong>
+              </div>
               <label className="field">
                 <span>{t("field.parallelWorkers")}</span>
                 <input

@@ -67,7 +67,7 @@ The desktop app lets you:
 - keep managed projects in a reusable list with saved status, summaries, and runtime settings
 - generate, edit, reorder, and persist execution-plan steps
 - switch between the standard software workflow and an ML experiment workflow with automatic cycle replanning
-- choose serial execution or a parallel DAG execution tree for the remaining steps and inspect activity/snapshot traces
+- always use the parallel DAG execution tree for the remaining steps, letting the scheduler naturally fall back to single-step execution when no safe parallel wave exists, and inspect activity/snapshot traces
 - request stop-after-step and run a separate closeout block after all plan steps complete
 - generate a temporary read-only monitoring link, copy it, and revoke it from the desktop UI
 - keep the Python orchestration backend, workspace layout, logs, reports, and rollback behavior intact

@@ -307,7 +307,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
 
         self.assertEqual([[step.step_id for step in batch] for batch in batches], [["ST2"], ["ST3", "ST4"]])
 
-    def test_save_execution_plan_state_clears_dag_fields_in_serial_mode(self) -> None:
+    def test_save_execution_plan_state_upgrades_legacy_serial_mode_to_parallel(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_serial_parallel_group_test"
         shutil.rmtree(temp_root, ignore_errors=True)
         workspace_root = temp_root / "workspace"
@@ -330,18 +330,23 @@ class ExecutionPlanHelperTests(unittest.TestCase):
                                 title="Serialized step",
                                 depends_on=["custom-2"],
                                 owned_paths=["src/serial.py"],
-                            )
+                            ),
+                            ExecutionStep(
+                                step_id="custom-2",
+                                title="Bootstrap step",
+                                owned_paths=["src/bootstrap.py"],
+                            ),
                         ],
                     ),
                 )
         finally:
             shutil.rmtree(temp_root, ignore_errors=True)
 
-        self.assertEqual(context.runtime.execution_mode, "serial")
-        self.assertEqual(plan_state.execution_mode, "serial")
+        self.assertEqual(context.runtime.execution_mode, "parallel")
+        self.assertEqual(plan_state.execution_mode, "parallel")
         self.assertEqual(plan_state.steps[0].parallel_group, "")
-        self.assertEqual(plan_state.steps[0].depends_on, [])
-        self.assertEqual(plan_state.steps[0].owned_paths, [])
+        self.assertEqual(plan_state.steps[0].depends_on, ["ST2"])
+        self.assertEqual(plan_state.steps[0].owned_paths, ["src/serial.py"])
 
     def test_save_execution_plan_state_renormalizes_dag_dependency_ids(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_dag_plan_test"
@@ -1328,9 +1333,12 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertTrue(source_prompt_template_path(REFERENCE_GUIDE_FILENAME).exists())
         self.assertIn("Planner Agent A", serial_decomposition_template)
         self.assertIn('"candidate_blocks": [', serial_decomposition_template)
+        self.assertIn('"contract_docstring"', serial_decomposition_template)
         self.assertIn("Planner Agent A", parallel_decomposition_template)
         self.assertIn('"candidate_blocks": [', parallel_decomposition_template)
+        self.assertIn('"contract_docstring"', parallel_decomposition_template)
         self.assertIn("candidate_experiments", ml_decomposition_template)
+        self.assertIn('"contract_docstring"', ml_decomposition_template)
         self.assertIn("{repo_dir}", serial_plan_template)
         self.assertIn("{user_prompt}", serial_plan_template)
         self.assertIn("{max_steps}", serial_plan_template)
@@ -1342,12 +1350,16 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn('"step_id": "stable id like ST1"', parallel_plan_template)
         self.assertIn('"depends_on": ["step ids that must complete first"]', parallel_plan_template)
         self.assertIn('"owned_paths": ["repo-relative paths or directories this step primarily owns"]', parallel_plan_template)
+        self.assertIn('"implementation_notes"', parallel_plan_template)
+        self.assertIn('"skeleton_contract_docstring"', parallel_plan_template)
         self.assertIn("DAG execution tree", parallel_plan_template)
         self.assertIn("Maximize safe frontier width", parallel_plan_template)
         self.assertIn("contract-freezing or coordination step", parallel_plan_template)
         self.assertIn("{reference_notes}", parallel_plan_template)
         self.assertIn("src/jakal_flow/docs/REFERENCE_GUIDE.md", parallel_plan_template)
         self.assertIn('"metadata": {', ml_plan_template)
+        self.assertIn('"implementation_notes"', ml_plan_template)
+        self.assertIn('"skeleton_contract_docstring"', ml_plan_template)
         self.assertIn("Prevent data leakage", ml_plan_template)
         self.assertIn("Maximize safe experiment frontier width", ml_plan_template)
         self.assertIn("small coordination node", ml_plan_template)
@@ -1375,16 +1387,16 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("merged parallel batch", parallel_debugger_template)
         self.assertIn("cherry-pick conflict", parallel_debugger_template)
         self.assertIn("Do not edit README.md during debugger recovery.", parallel_debugger_template)
-        self.assertEqual(load_plan_decomposition_prompt_template("serial"), serial_decomposition_template)
+        self.assertEqual(load_plan_decomposition_prompt_template("serial"), parallel_decomposition_template)
         self.assertEqual(load_plan_decomposition_prompt_template("parallel"), parallel_decomposition_template)
         self.assertEqual(load_plan_decomposition_prompt_template("parallel", "ml"), ml_decomposition_template)
-        self.assertEqual(load_plan_generation_prompt_template("serial"), serial_plan_template)
+        self.assertEqual(load_plan_generation_prompt_template("serial"), parallel_plan_template)
         self.assertEqual(load_plan_generation_prompt_template("parallel"), parallel_plan_template)
         self.assertEqual(load_plan_generation_prompt_template("parallel", "ml"), ml_plan_template)
-        self.assertEqual(load_step_execution_prompt_template("serial"), serial_step_template)
+        self.assertEqual(load_step_execution_prompt_template("serial"), parallel_step_template)
         self.assertEqual(load_step_execution_prompt_template("parallel"), parallel_step_template)
         self.assertEqual(load_step_execution_prompt_template("parallel", "ml"), ml_step_template)
-        self.assertEqual(load_debugger_prompt_template("serial"), serial_debugger_template)
+        self.assertEqual(load_debugger_prompt_template("serial"), parallel_debugger_template)
         self.assertEqual(load_debugger_prompt_template("parallel"), parallel_debugger_template)
         self.assertIn("{completed_steps}", final_template)
         self.assertIn("{closeout_report_file}", final_template)

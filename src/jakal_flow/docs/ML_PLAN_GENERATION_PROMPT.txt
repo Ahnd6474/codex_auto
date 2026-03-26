@@ -73,7 +73,9 @@ JSON shape:
         "artifact_paths": ["important outputs expected from this node"],
         "candidate_block_id": "Planner Agent A block id",
         "parallelizable_after": ["Planner Agent A block ids or contract names carried through"],
-        "planning_docstring": "executor-facing design note carried forward from Planner Agent A",
+        "implementation_notes": "non-docstring planning note carried forward from Planner Agent A",
+        "is_skeleton_contract": false,
+        "skeleton_contract_docstring": "required only when this step is the bootstrap/skeleton contract step; otherwise empty string",
         "candidate_owned_paths": ["Planner Agent A ownership hint for post-processing and traceability"]
       }}
     }}
@@ -88,8 +90,8 @@ Field requirements:
 - `resource_budget` should be concrete enough to limit runaway experimentation.
 - `primary_metric` and `metric_direction` must be explicit whenever a quantitative target exists.
 - `codex_description` should tell the executor to use the repo's existing ML tooling first.
-- Preserve `candidate_block_id`, carry `parallelizable_after`, and copy Planner Agent A's executor docstring into `planning_docstring`.
-- Use Planner Agent A docstrings to make each experiment instruction sharper, especially around split discipline, artifacts, and architecture/model details.
+- Preserve `candidate_block_id`, carry `parallelizable_after`, keep non-skeleton notes in `implementation_notes`, and use `skeleton_contract_docstring` only for the bootstrap/skeleton contract step.
+- If the step is the bootstrap/skeleton contract step, make `codex_description` explicitly tell the executor to write the skeleton code with the provided docstring.
 - When parallel execution is plausible, avoid broad shared ownership like the entire training package or the whole configs directory unless that node truly must run alone.
 - Do not include markdown fences or commentary outside the JSON.
 

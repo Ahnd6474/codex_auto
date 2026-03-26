@@ -34,7 +34,7 @@ Return exactly one JSON object in this shape:
     "needed": true,
     "task_title": "short skeleton/bootstrap title",
     "purpose": "why this small step helps later execution",
-    "executor_docstring": "short executor-facing design note describing the intended contract and boundaries",
+    "contract_docstring": "docstring text that should be written into the skeleton code to lock the contract and boundaries",
     "candidate_owned_paths": ["narrow repo-relative files or directories"],
     "success_criteria": "what makes the skeleton good enough"
   }},
@@ -43,7 +43,7 @@ Return exactly one JSON object in this shape:
       "block_id": "B1",
       "goal": "one clear outcome",
       "work_items": ["small implementation ideas inside this block"],
-      "executor_docstring": "2-5 sentence executor-facing design note describing intended interfaces, constraints, and implementation shape",
+      "implementation_notes": "2-5 sentence planning note describing intended interfaces, constraints, and implementation shape",
       "testable_boundary": "local completion condition",
       "candidate_owned_paths": ["narrow repo-relative files or directories"],
       "parallelizable_after": ["block ids or contract names that must exist first"],

@@ -59,7 +59,9 @@ JSON shape:
       "metadata": {{
         "candidate_block_id": "Planner Agent A block id",
         "parallelizable_after": ["Planner Agent A block ids or contract names carried through"],
-        "planning_docstring": "executor-facing design note carried forward from Planner Agent A",
+        "implementation_notes": "non-docstring planning note carried forward from Planner Agent A",
+        "is_skeleton_contract": false,
+        "skeleton_contract_docstring": "required only when this step is the skeleton/bootstrap contract step; otherwise empty string",
         "candidate_owned_paths": ["Planner Agent A ownership hint for post-processing and traceability"]
       }}
     }}
@@ -78,8 +80,8 @@ Field requirements:
 - "depends_on": in parallel mode, use this to encode the DAG.
 - "owned_paths": in parallel mode, list the main repo-relative files or directories each step owns so independently ready steps can be batched safely. Prefer narrow exact files or leaf directories. Use an empty array only when the step should run alone.
 - "success_criteria": a concrete, locally judgeable done condition, describing what must be true when the block is complete.
-- "metadata": carry Planner Agent A traceability hints. Preserve `candidate_block_id`, carry `parallelizable_after`, and copy Planner Agent A's executor docstring into `planning_docstring`.
-- Use Planner Agent A docstrings to make `codex_description` sharper and more implementation-specific rather than generic.
+- "metadata": carry Planner Agent A traceability hints. Preserve `candidate_block_id`, carry `parallelizable_after`, keep non-skeleton notes in `implementation_notes`, and use `skeleton_contract_docstring` only for the skeleton/bootstrap contract step.
+- If the step is the skeleton/bootstrap contract step, make `codex_description` explicitly tell the executor to write the skeleton code with the provided docstring.
 
 Do not include markdown fences or commentary outside the JSON.
 

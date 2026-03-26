@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from html import escape
@@ -52,7 +53,7 @@ from .planning import (
 )
 from .reporting import Reporter
 from .status_views import status_from_plan_state
-from .utils import compact_text, ensure_dir, normalize_workflow_mode, now_utc_iso, read_json, read_last_jsonl, read_text, write_json, write_text
+from .utils import compact_text, ensure_dir, normalize_workflow_mode, now_utc_iso, parse_json_text, read_json, read_last_jsonl, read_text, similarity_score, write_json, write_text
 from .verification import VerificationRunner
 from .workspace import WorkspaceManager
 
@@ -71,6 +72,7 @@ class Orchestrator:
         origin_url: str = "",
         display_name: str = "",
     ) -> ProjectContext:
+        runtime.execution_mode = self._normalize_execution_mode(runtime.execution_mode)
         resolved_dir = project_dir.resolve()
         created_repo = self.git.ensure_repository(resolved_dir, branch)
         active_branch = self.git.current_branch(resolved_dir) or branch or "main"
@@ -194,6 +196,11 @@ class Orchestrator:
                 runtime.effort,
                 limit=max_steps,
             )
+            steps = self._postprocess_generated_plan_steps(
+                steps,
+                planner_outline=planner_outline,
+                execution_mode=normalized_execution_mode,
+            )
         if not steps:
             steps = [
                 ExecutionStep(
@@ -229,6 +236,269 @@ class Orchestrator:
         context.metadata.last_run_at = now_utc_iso()
         self.workspace.save_project(context)
         return context, plan_state
+
+    def _postprocess_generated_plan_steps(
+        self,
+        steps: list[ExecutionStep],
+        *,
+        planner_outline: str,
+        execution_mode: str,
+    ) -> list[ExecutionStep]:
+        if not steps or not planner_outline.strip():
+            return steps
+        outline = self._parse_planner_outline_payload(planner_outline)
+        if not outline:
+            return steps
+        outline_blocks = self._planner_outline_blocks(outline)
+        if not outline_blocks:
+            return steps
+
+        processed_steps = [deepcopy(step) for step in steps]
+        block_matches: dict[str, dict[str, object]] = {}
+        step_by_block_id: dict[str, str] = {}
+        shared_contracts = self._planner_outline_shared_contracts(outline)
+
+        for step in processed_steps:
+            block = self._match_step_to_planner_outline_block(step, outline_blocks)
+            metadata = deepcopy(step.metadata) if isinstance(step.metadata, dict) else {}
+            if block:
+                block_id = str(block.get("block_id", "")).strip()
+                if block_id and not str(metadata.get("candidate_block_id", "")).strip():
+                    metadata["candidate_block_id"] = block_id
+                parallelizable_after = self._coerce_string_list(block.get("parallelizable_after", []))
+                if parallelizable_after and not self._coerce_string_list(metadata.get("parallelizable_after", [])):
+                    metadata["parallelizable_after"] = parallelizable_after
+                candidate_owned_paths = self._coerce_string_list(block.get("candidate_owned_paths", []))
+                if candidate_owned_paths and not self._coerce_string_list(metadata.get("candidate_owned_paths", [])):
+                    metadata["candidate_owned_paths"] = candidate_owned_paths
+                implementation_notes = str(block.get("implementation_notes", "")).strip()
+                if implementation_notes and not str(metadata.get("implementation_notes", "")).strip():
+                    metadata["implementation_notes"] = implementation_notes
+                if bool(block.get("is_skeleton_contract")):
+                    metadata["is_skeleton_contract"] = True
+                    contract_docstring = str(block.get("skeleton_contract_docstring", "")).strip()
+                    if contract_docstring and not str(metadata.get("skeleton_contract_docstring", "")).strip():
+                        metadata["skeleton_contract_docstring"] = contract_docstring
+                    step.codex_description = self._apply_skeleton_contract_docstring(
+                        step.codex_description or step.display_description or step.title,
+                        contract_docstring,
+                    )
+                step.metadata = metadata
+                block_matches[step.step_id] = block
+                if block_id:
+                    step_by_block_id[block_id] = step.step_id
+            else:
+                step.metadata = metadata
+
+            if execution_mode == "parallel" and not step.owned_paths:
+                step.owned_paths = self._normalize_owned_paths(
+                    step.metadata.get("candidate_owned_paths", []),
+                )
+
+        if execution_mode == "parallel":
+            self._repack_parallelizable_steps(
+                processed_steps,
+                block_matches=block_matches,
+                step_by_block_id=step_by_block_id,
+                shared_contracts=shared_contracts,
+            )
+        return processed_steps
+
+    def _parse_planner_outline_payload(self, planner_outline: str) -> dict[str, object]:
+        raw = planner_outline.strip()
+        if not raw:
+            return {}
+        try:
+            payload = parse_json_text(raw)
+        except json.JSONDecodeError:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _planner_outline_blocks(self, outline: dict[str, object]) -> list[dict[str, object]]:
+        blocks: list[dict[str, object]] = []
+
+        skeleton_payload = outline.get("skeleton_step")
+        if not isinstance(skeleton_payload, dict):
+            skeleton_payload = outline.get("bootstrap_step")
+        if isinstance(skeleton_payload, dict) and bool(skeleton_payload.get("needed")):
+            blocks.append(
+                {
+                    "block_id": str(skeleton_payload.get("block_id", "")).strip() or "SK1",
+                    "title": str(skeleton_payload.get("task_title", "")).strip() or "Skeleton bootstrap",
+                    "candidate_owned_paths": self._coerce_string_list(skeleton_payload.get("candidate_owned_paths", [])),
+                    "parallelizable_after": [],
+                    "implementation_notes": "",
+                    "is_skeleton_contract": True,
+                    "skeleton_contract_docstring": str(
+                        skeleton_payload.get("contract_docstring", skeleton_payload.get("executor_docstring", ""))
+                    ).strip(),
+                }
+            )
+
+        candidate_payload = outline.get("candidate_blocks")
+        if not isinstance(candidate_payload, list):
+            candidate_payload = outline.get("candidate_experiments")
+        if isinstance(candidate_payload, list):
+            for index, item in enumerate(candidate_payload, start=1):
+                if not isinstance(item, dict):
+                    continue
+                blocks.append(
+                    {
+                        "block_id": str(item.get("block_id", "")).strip() or f"B{index}",
+                        "title": str(item.get("goal", item.get("task_title", ""))).strip() or f"Candidate block {index}",
+                        "candidate_owned_paths": self._coerce_string_list(item.get("candidate_owned_paths", [])),
+                        "parallelizable_after": self._coerce_string_list(item.get("parallelizable_after", [])),
+                        "implementation_notes": str(
+                            item.get("implementation_notes", item.get("executor_docstring", ""))
+                        ).strip(),
+                        "is_skeleton_contract": False,
+                        "skeleton_contract_docstring": "",
+                    }
+                )
+        return blocks
+
+    def _planner_outline_shared_contracts(self, outline: dict[str, object]) -> set[str]:
+        names = self._coerce_string_list(outline.get("shared_contracts", []))
+        names.extend(self._coerce_string_list(outline.get("guardrail_contracts", [])))
+        return {item.strip().lower() for item in names if item.strip()}
+
+    def _match_step_to_planner_outline_block(
+        self,
+        step: ExecutionStep,
+        outline_blocks: list[dict[str, object]],
+    ) -> dict[str, object] | None:
+        metadata = step.metadata if isinstance(step.metadata, dict) else {}
+        candidate_block_id = str(metadata.get("candidate_block_id", "")).strip()
+        if candidate_block_id:
+            for block in outline_blocks:
+                if str(block.get("block_id", "")).strip() == candidate_block_id:
+                    return block
+
+        normalized_title = step.title.strip().lower()
+        if normalized_title:
+            for block in outline_blocks:
+                block_title = str(block.get("title", "")).strip().lower()
+                if block_title and block_title == normalized_title:
+                    return block
+
+        best_block: dict[str, object] | None = None
+        best_score = 0.0
+        for block in outline_blocks:
+            block_title = str(block.get("title", "")).strip()
+            if not block_title:
+                continue
+            score = similarity_score(step.title, block_title)
+            if score > best_score:
+                best_score = score
+                best_block = block
+        if best_score >= 0.45:
+            return best_block
+        return None
+
+    def _repack_parallelizable_steps(
+        self,
+        steps: list[ExecutionStep],
+        *,
+        block_matches: dict[str, dict[str, object]],
+        step_by_block_id: dict[str, str],
+        shared_contracts: set[str],
+    ) -> None:
+        step_index = {step.step_id: index for index, step in enumerate(steps)}
+        skeleton_step_id = ""
+        for step in steps:
+            metadata = step.metadata if isinstance(step.metadata, dict) else {}
+            if metadata.get("is_skeleton_contract"):
+                skeleton_step_id = step.step_id
+                break
+
+        for step in steps:
+            metadata = step.metadata if isinstance(step.metadata, dict) else {}
+            parallelizable_after = self._coerce_string_list(metadata.get("parallelizable_after", []))
+            if not parallelizable_after:
+                continue
+            resolved_dependencies = self._resolve_parallelizable_dependencies(
+                parallelizable_after,
+                step_by_block_id=step_by_block_id,
+                shared_contracts=shared_contracts,
+                skeleton_step_id=skeleton_step_id,
+                current_step_id=step.step_id,
+            )
+            if not resolved_dependencies:
+                continue
+            current_dependencies = [dependency for dependency in step.depends_on if dependency and dependency != step.step_id]
+            if not current_dependencies:
+                step.depends_on = resolved_dependencies
+                continue
+            if len(current_dependencies) == 1 and current_dependencies[0] not in resolved_dependencies:
+                current_dependency_index = step_index.get(current_dependencies[0], -1)
+                step_position = step_index.get(step.step_id, -1)
+                if 0 <= current_dependency_index < step_position:
+                    step.depends_on = resolved_dependencies
+
+    def _resolve_parallelizable_dependencies(
+        self,
+        values: list[str],
+        *,
+        step_by_block_id: dict[str, str],
+        shared_contracts: set[str],
+        skeleton_step_id: str,
+        current_step_id: str,
+    ) -> list[str]:
+        resolved: list[str] = []
+        seen: set[str] = set()
+        for item in values:
+            normalized = str(item).strip()
+            if not normalized:
+                continue
+            target_step_id = step_by_block_id.get(normalized, "")
+            if not target_step_id and skeleton_step_id and normalized.lower() in shared_contracts:
+                target_step_id = skeleton_step_id
+            if not target_step_id or target_step_id == current_step_id or target_step_id in seen:
+                continue
+            seen.add(target_step_id)
+            resolved.append(target_step_id)
+        return resolved
+
+    def _apply_skeleton_contract_docstring(self, codex_description: str, contract_docstring: str) -> str:
+        base = codex_description.strip()
+        normalized_docstring = " ".join(contract_docstring.split())
+        if not normalized_docstring:
+            return base
+        if normalized_docstring.lower() in base.lower():
+            return base
+        instruction = (
+            f'Write the skeleton code with this contract docstring in the appropriate module, class, or function: '
+            f'"""{normalized_docstring}"""'
+        )
+        return f"{base} {instruction}".strip()
+
+    def _coerce_string_list(self, value: object) -> list[str]:
+        items: list[str]
+        if isinstance(value, list):
+            items = [str(item).strip() for item in value]
+        elif isinstance(value, str):
+            items = [part.strip() for part in value.replace("\r", "\n").replace(",", "\n").split("\n")]
+        else:
+            return []
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for item in items:
+            if not item or item in seen:
+                continue
+            seen.add(item)
+            ordered.append(item)
+        return ordered
+
+    def _normalize_owned_paths(self, value: object) -> list[str]:
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for item in self._coerce_string_list(value):
+            normalized = self._normalize_owned_path(item)
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            ordered.append(normalized)
+        return ordered
 
     def load_execution_plan_state(self, context: ProjectContext) -> ExecutionPlanState:
         payload = read_json(context.paths.execution_plan_file, default=None)
@@ -1003,8 +1273,7 @@ class Orchestrator:
                 self._cleanup_parallel_worker(context.paths.repo_dir, result)
 
     def _normalize_execution_mode(self, value: str | None) -> str:
-        normalized = str(value or "").strip().lower()
-        return "parallel" if normalized == "parallel" else "serial"
+        return "parallel"
 
     def _parallel_worker_plan(self, runtime: RuntimeOptions):
         return build_parallel_resource_plan(
@@ -1030,7 +1299,7 @@ class Orchestrator:
                 **runtime.to_dict(),
                 "test_cmd": step.test_command.strip() or runtime.test_cmd,
                 "effort": normalize_reasoning_effort(step.reasoning_effort, fallback=fallback_effort),
-                "execution_mode": "serial",
+                "execution_mode": "parallel",
                 "parallel_workers": 1,
                 "max_blocks": 1,
                 "allow_push": False,
@@ -2045,10 +2314,7 @@ class Orchestrator:
         return bool(steps) and all(step.status == "completed" for step in steps)
 
     def _normalize_execution_mode(self, value: str | None) -> str:
-        normalized = str(value or "").strip().lower()
-        if normalized == "parallel":
-            return "parallel"
-        return "serial"
+        return "parallel"
 
     def _status_from_plan_state(self, plan_state: ExecutionPlanState) -> str:
         return status_from_plan_state(plan_state)

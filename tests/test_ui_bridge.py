@@ -144,6 +144,12 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(runtime.parallel_worker_mode, "auto")
         self.assertEqual(runtime.parallel_workers, 0)
 
+    def test_runtime_from_payload_upgrades_legacy_serial_mode_to_parallel(self) -> None:
+        runtime = runtime_from_payload({"execution_mode": "serial"})
+
+        self.assertEqual(runtime.execution_mode, "parallel")
+        self.assertEqual(runtime.parallel_worker_mode, "auto")
+
     def test_runtime_from_payload_accepts_manual_parallel_worker_mode(self) -> None:
         runtime = runtime_from_payload(
             {
@@ -719,7 +725,7 @@ class UIBridgeTests(unittest.TestCase):
                 "project_prompt": "Finish the work",
                 "summary": "Everything is ready for closeout.",
                 "workflow_mode": "standard",
-                "execution_mode": "serial",
+                "execution_mode": "parallel",
                 "default_test_command": "python -m unittest",
                 "steps": [
                     {

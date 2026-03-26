@@ -81,7 +81,7 @@ class RuntimeOptions:
     effort: str = "medium"
     workflow_mode: str = "standard"
     ml_max_cycles: int = 3
-    execution_mode: str = "serial"
+    execution_mode: str = "parallel"
     parallel_worker_mode: str = "auto"
     parallel_workers: int = 0
     extra_prompt: str = ""
@@ -344,7 +344,7 @@ class ExecutionPlanState:
     project_prompt: str = ""
     summary: str = ""
     workflow_mode: str = "standard"
-    execution_mode: str = "serial"
+    execution_mode: str = "parallel"
     default_test_command: str = "python -m pytest"
     last_updated_at: str | None = None
     closeout_status: str = "not_started"
@@ -370,7 +370,7 @@ class ExecutionPlanState:
             project_prompt=str(data.get("project_prompt", "")).strip(),
             summary=str(data.get("summary", "")).strip(),
             workflow_mode=str(data.get("workflow_mode", "standard")).strip().lower() or "standard",
-            execution_mode=str(data.get("execution_mode", "serial")).strip().lower() or "serial",
+            execution_mode="parallel",
             default_test_command=str(data.get("default_test_command", "python -m pytest")).strip() or "python -m pytest",
             last_updated_at=data.get("last_updated_at"),
             closeout_status=str(data.get("closeout_status", "not_started")).strip() or "not_started",
