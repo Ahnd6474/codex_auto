@@ -30,12 +30,10 @@ export const PROGRAM_RUNTIME_KEYS = [
   "local_model_provider",
   "provider_base_url",
   "provider_api_key_env",
-  "billing_mode",
-  "input_cost_per_million_usd",
-  "cached_input_cost_per_million_usd",
-  "output_cost_per_million_usd",
-  "reasoning_output_cost_per_million_usd",
-  "per_pass_cost_usd",
+  "model",
+  "model_preset",
+  "model_selection_mode",
+  "model_slug_input",
   "approval_mode",
   "sandbox_mode",
   "checkpoint_interval_blocks",
@@ -69,12 +67,10 @@ const DEFAULT_PROGRAM_RUNTIME = {
   local_model_provider: "ollama",
   provider_base_url: "",
   provider_api_key_env: "OPENAI_API_KEY",
-  billing_mode: "included",
-  input_cost_per_million_usd: 0,
-  cached_input_cost_per_million_usd: 0,
-  output_cost_per_million_usd: 0,
-  reasoning_output_cost_per_million_usd: 0,
-  per_pass_cost_usd: 0,
+  model: "auto",
+  model_preset: "auto",
+  model_selection_mode: "slug",
+  model_slug_input: "auto",
   approval_mode: "never",
   sandbox_mode: "danger-full-access",
   checkpoint_interval_blocks: 1,
@@ -183,6 +179,7 @@ export function applyProviderDefaults(runtime = {}, nextProvider = "openai", nex
   const localProvider = provider === "oss" ? (String(nextLocalProvider || runtime?.local_model_provider || "ollama").trim().toLowerCase() === "lmstudio" ? "lmstudio" : "ollama") : "";
   const supportsAuto = providerSupportsAutoModel(provider);
   const currentModel = String(runtime?.model_slug_input || runtime?.model || "").trim().toLowerCase();
+  const nextModel = supportsAuto ? (currentModel || "auto") : currentModel === "auto" ? "" : currentModel;
   return {
     ...(cloneValue(runtime) || {}),
     model_provider: provider,
@@ -199,10 +196,10 @@ export function applyProviderDefaults(runtime = {}, nextProvider = "openai", nex
       previousProvider === provider
         ? String(runtime?.billing_mode || "").trim() || defaultBillingMode(provider)
         : defaultBillingMode(provider),
-    model: supportsAuto ? (currentModel || "auto") : currentModel,
-    model_preset: supportsAuto ? String(runtime?.model_preset || "auto").trim().toLowerCase() || "auto" : "",
+    model: nextModel,
+    model_preset: nextModel === "auto" && supportsAuto ? String(runtime?.model_preset || "auto").trim().toLowerCase() || "auto" : "",
     model_selection_mode: "slug",
-    model_slug_input: supportsAuto ? (currentModel || "auto") : currentModel,
+    model_slug_input: nextModel,
   };
 }
 

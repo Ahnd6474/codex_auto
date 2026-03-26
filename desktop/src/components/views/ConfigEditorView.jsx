@@ -5,7 +5,6 @@ import {
   autoRoutingPresetLabel,
   configReasoningOptions,
   defaultModelForRuntime,
-  defaultBillingMode,
   defaultReasoningOption,
   defaultProviderApiKeyEnv,
   defaultProviderBaseUrl,
@@ -367,108 +366,6 @@ export function ConfigEditorView({
                 disabled={busy}
               />
             </label>
-            <label className="field">
-              <span>{t("field.billingMode")}</span>
-              <select
-                value={runtime.billing_mode || defaultBillingMode(selectedProvider)}
-                onChange={(event) =>
-                  onChangeForm((current) => ({
-                    ...current,
-                    runtime: {
-                      ...current.runtime,
-                      billing_mode: event.target.value,
-                    },
-                  }))
-                }
-                disabled={busy}
-              >
-                <option value="included">{t("option.billingIncluded")}</option>
-                <option value="token">{t("option.billingToken")}</option>
-                <option value="per_pass">{t("option.billingPerPass")}</option>
-              </select>
-            </label>
-            {(runtime.billing_mode || defaultBillingMode(selectedProvider)) === "token" ? (
-              <>
-                <label className="field">
-                  <span>{t("field.inputTokenRate")}</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.0001"
-                    value={runtime.input_cost_per_million_usd || 0}
-                    onChange={(event) =>
-                      onChangeForm((current) => ({
-                        ...current,
-                        runtime: {
-                          ...current.runtime,
-                          input_cost_per_million_usd: Number.parseFloat(event.target.value || "0") || 0,
-                        },
-                      }))
-                    }
-                    disabled={busy}
-                  />
-                </label>
-                <label className="field">
-                  <span>{t("field.outputTokenRate")}</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.0001"
-                    value={runtime.output_cost_per_million_usd || 0}
-                    onChange={(event) =>
-                      onChangeForm((current) => ({
-                        ...current,
-                        runtime: {
-                          ...current.runtime,
-                          output_cost_per_million_usd: Number.parseFloat(event.target.value || "0") || 0,
-                        },
-                      }))
-                    }
-                    disabled={busy}
-                  />
-                </label>
-                <label className="field">
-                  <span>{t("field.reasoningTokenRate")}</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.0001"
-                    value={runtime.reasoning_output_cost_per_million_usd || 0}
-                    onChange={(event) =>
-                      onChangeForm((current) => ({
-                        ...current,
-                        runtime: {
-                          ...current.runtime,
-                          reasoning_output_cost_per_million_usd: Number.parseFloat(event.target.value || "0") || 0,
-                        },
-                      }))
-                    }
-                    disabled={busy}
-                  />
-                </label>
-              </>
-            ) : null}
-            {(runtime.billing_mode || defaultBillingMode(selectedProvider)) === "per_pass" ? (
-              <label className="field">
-                <span>{t("field.perPassRate")}</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.0001"
-                  value={runtime.per_pass_cost_usd || 0}
-                  onChange={(event) =>
-                    onChangeForm((current) => ({
-                      ...current,
-                      runtime: {
-                        ...current.runtime,
-                        per_pass_cost_usd: Number.parseFloat(event.target.value || "0") || 0,
-                      },
-                    }))
-                  }
-                  disabled={busy}
-                />
-              </label>
-            ) : null}
             <label className="field field--wide">
               <span>{t("field.extraPrompt")}</span>
               <textarea

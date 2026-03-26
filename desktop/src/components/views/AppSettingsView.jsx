@@ -1,7 +1,6 @@
 import { useI18n } from "../../i18n";
 import {
   applyProviderDefaults,
-  defaultBillingMode,
   defaultProviderApiKeyEnv,
   defaultProviderBaseUrl,
   normalizeDashboardVisibility,
@@ -22,6 +21,8 @@ export function AppSettingsView({
   const activeShare = shareDetail?.active_session || null;
   const shareServer = shareDetail?.server || null;
   const dashboardVisibility = normalizeDashboardVisibility(settings?.dashboard_visibility);
+  const interfaceBusy = false;
+  const runtimeBusy = busy;
   const dashboardOptions = [
     ["status", t("common.status")],
     ["remaining_steps", t("dashboard.remainingSteps")],
@@ -57,7 +58,7 @@ export function AppSettingsView({
             </div>
             <label className="field">
               <span>{t("common.language")}</span>
-              <select value={language} onChange={(event) => setLanguage(event.target.value)} disabled={busy}>
+              <select value={language} onChange={(event) => setLanguage(event.target.value)} disabled={interfaceBusy}>
                 {languageOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
@@ -70,7 +71,7 @@ export function AppSettingsView({
                 type="checkbox"
                 checked={settings.ui_theme === "light"}
                 onChange={(event) => onChangeSettings((current) => ({ ...current, ui_theme: event.target.checked ? "light" : "dark" }))}
-                disabled={busy}
+                disabled={interfaceBusy}
               />
               <span>{t("option.lightMode")}</span>
             </label>
@@ -79,7 +80,7 @@ export function AppSettingsView({
                 type="checkbox"
                 checked={Boolean(settings.developer_mode)}
                 onChange={(event) => onChangeSettings((current) => ({ ...current, developer_mode: event.target.checked }))}
-                disabled={busy}
+                disabled={interfaceBusy}
               />
               <span>{t("option.developerMode")}</span>
             </label>
@@ -105,7 +106,7 @@ export function AppSettingsView({
                         },
                       }))
                     }
-                    disabled={busy}
+                    disabled={interfaceBusy}
                   />
                   <span>{label}</span>
                 </label>
@@ -130,7 +131,7 @@ export function AppSettingsView({
                       ...applyProviderDefaults(current, event.target.value),
                     }))
                   }
-                  disabled={busy}
+                  disabled={runtimeBusy}
                 >
                   <option value="openai">{t("option.providerOpenAI")}</option>
                   <option value="openrouter">{t("option.providerOpenRouter")}</option>
@@ -145,7 +146,7 @@ export function AppSettingsView({
                   <select
                     value={settings.local_model_provider || "ollama"}
                     onChange={(event) => onChangeSettings((current) => ({ ...current, local_model_provider: event.target.value }))}
-                    disabled={busy}
+                    disabled={runtimeBusy}
                   >
                     <option value="ollama">{t("option.localProviderOllama")}</option>
                     <option value="lmstudio">{t("option.localProviderLmStudio")}</option>
@@ -158,7 +159,7 @@ export function AppSettingsView({
                   <input
                     value={settings.provider_base_url || defaultProviderBaseUrl(settings.model_provider)}
                     onChange={(event) => onChangeSettings((current) => ({ ...current, provider_base_url: event.target.value }))}
-                    disabled={busy}
+                    disabled={runtimeBusy}
                   />
                 </label>
               ) : null}
@@ -168,28 +169,35 @@ export function AppSettingsView({
                   <input
                     value={settings.provider_api_key_env || defaultProviderApiKeyEnv(settings.model_provider)}
                     onChange={(event) => onChangeSettings((current) => ({ ...current, provider_api_key_env: event.target.value }))}
-                    disabled={busy}
+                    disabled={runtimeBusy}
                   />
                 </label>
               ) : null}
               <label className="field">
-                <span>{t("field.billingMode")}</span>
-                <select
-                  value={settings.billing_mode || defaultBillingMode(settings.model_provider)}
-                  onChange={(event) => onChangeSettings((current) => ({ ...current, billing_mode: event.target.value }))}
-                  disabled={busy}
-                >
-                  <option value="included">{t("option.billingIncluded")}</option>
-                  <option value="token">{t("option.billingToken")}</option>
-                  <option value="per_pass">{t("option.billingPerPass")}</option>
-                </select>
+                <span>{t("field.customModelSlug")}</span>
+                <input
+                  value={settings.model_slug_input || settings.model || ""}
+                  onChange={(event) =>
+                    onChangeSettings((current) => {
+                      const nextModel = event.target.value.trim().toLowerCase();
+                      return {
+                        ...current,
+                        model: nextModel,
+                        model_preset: nextModel === "auto" ? "auto" : "",
+                        model_selection_mode: "slug",
+                        model_slug_input: event.target.value,
+                      };
+                    })
+                  }
+                  disabled={runtimeBusy}
+                />
               </label>
               <label className="field">
                 <span>{t("field.approvalMode")}</span>
                 <select
                   value={settings.approval_mode || "never"}
                   onChange={(event) => onChangeSettings((current) => ({ ...current, approval_mode: event.target.value }))}
-                  disabled={busy}
+                  disabled={runtimeBusy}
                 >
                   <option value="never">never</option>
                   <option value="on-failure">on-failure</option>
@@ -201,52 +209,13 @@ export function AppSettingsView({
                 <select
                   value={settings.sandbox_mode || "danger-full-access"}
                   onChange={(event) => onChangeSettings((current) => ({ ...current, sandbox_mode: event.target.value }))}
-                  disabled={busy}
+                  disabled={runtimeBusy}
                 >
                   <option value="danger-full-access">danger-full-access</option>
                   <option value="workspace-write">workspace-write</option>
                   <option value="read-only">read-only</option>
                 </select>
               </label>
-              {String(settings.billing_mode || defaultBillingMode(settings.model_provider)).trim().toLowerCase() === "token" ? (
-                <>
-                  <label className="field">
-                    <span>{t("field.inputTokenRate")}</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.0001"
-                      value={settings.input_cost_per_million_usd || 0}
-                      onChange={(event) => onChangeSettings((current) => ({ ...current, input_cost_per_million_usd: Number.parseFloat(event.target.value || "0") || 0 }))}
-                      disabled={busy}
-                    />
-                  </label>
-                  <label className="field">
-                    <span>{t("field.outputTokenRate")}</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.0001"
-                      value={settings.output_cost_per_million_usd || 0}
-                      onChange={(event) => onChangeSettings((current) => ({ ...current, output_cost_per_million_usd: Number.parseFloat(event.target.value || "0") || 0 }))}
-                      disabled={busy}
-                    />
-                  </label>
-                </>
-              ) : null}
-              {String(settings.billing_mode || defaultBillingMode(settings.model_provider)).trim().toLowerCase() === "per_pass" ? (
-                <label className="field">
-                  <span>{t("field.perPassRate")}</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.0001"
-                    value={settings.per_pass_cost_usd || 0}
-                    onChange={(event) => onChangeSettings((current) => ({ ...current, per_pass_cost_usd: Number.parseFloat(event.target.value || "0") || 0 }))}
-                    disabled={busy}
-                  />
-                </label>
-              ) : null}
               <label className="field">
                 <span>{t("field.checkpointInterval")}</span>
                 <input
@@ -259,7 +228,7 @@ export function AppSettingsView({
                       checkpoint_interval_blocks: Math.max(1, Number.parseInt(event.target.value || "1", 10) || 1),
                     }))
                   }
-                  disabled={busy}
+                  disabled={runtimeBusy}
                 />
               </label>
               <label className="field">
@@ -293,7 +262,7 @@ export function AppSettingsView({
                 <select
                   value={settings.execution_mode || "serial"}
                   onChange={(event) => onChangeSettings((current) => ({ ...current, execution_mode: event.target.value }))}
-                  disabled={busy}
+                  disabled={runtimeBusy}
                 >
                   <option value="serial">{t("option.executionSerial")}</option>
                   <option value="parallel">{t("option.executionParallel")}</option>
@@ -311,7 +280,7 @@ export function AppSettingsView({
                       parallel_workers: Math.max(1, Number.parseInt(event.target.value || "1", 10) || 1),
                     }))
                   }
-                  disabled={busy}
+                  disabled={runtimeBusy}
                 />
               </label>
               <label className="field">
@@ -319,7 +288,7 @@ export function AppSettingsView({
                 <input
                   value={settings.codex_path || "codex.cmd"}
                   onChange={(event) => onChangeSettings((current) => ({ ...current, codex_path: event.target.value }))}
-                  disabled={busy}
+                  disabled={runtimeBusy}
                 />
               </label>
             </div>
@@ -329,7 +298,7 @@ export function AppSettingsView({
                   type="checkbox"
                   checked={Boolean(settings.allow_push)}
                   onChange={(event) => onChangeSettings((current) => ({ ...current, allow_push: event.target.checked }))}
-                  disabled={busy}
+                  disabled={runtimeBusy}
                 />
                 <span>{t("option.allowPushAfterSafeRuns")}</span>
               </label>
@@ -343,7 +312,7 @@ export function AppSettingsView({
                       require_checkpoint_approval: event.target.checked,
                     }))
                   }
-                  disabled={busy}
+                  disabled={runtimeBusy}
                 />
                 <span>{t("option.requireCheckpointApproval")}</span>
               </label>

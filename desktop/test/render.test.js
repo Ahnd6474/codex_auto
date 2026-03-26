@@ -494,3 +494,136 @@ test("SidebarPane renders a filtered workspace tree without unrelated nodes", as
   assert.match(html, /Repository/);
   assert.doesNotMatch(html, /README\.md/);
 });
+
+test("DashboardView hides cards that are disabled in program settings", async () => {
+  const html = await renderBundledComponent(
+    "dashboard-view-render",
+    "./src/components/views/DashboardView.jsx",
+    "DashboardView",
+    {
+      detail: {
+        project: {
+          display_name: "Demo",
+          slug: "demo",
+          current_status: "plan_ready",
+          branch: "main",
+          origin_url: "",
+        },
+        runtime: {
+          execution_mode: "serial",
+          model: "auto",
+          effort: "medium",
+        },
+        snapshot: {
+          recent_usage: {
+            input_tokens: 12,
+            output_tokens: 34,
+          },
+        },
+        runtime_insights: {
+          execution: {
+            remaining_seconds: 90,
+            estimated_total_seconds: 120,
+          },
+          cost: {
+            estimated_total_cost_usd: 1.23,
+            recent: {
+              estimated_cost_usd: 0.45,
+            },
+          },
+        },
+        checkpoints: {
+          pending: null,
+        },
+        codex_status: {
+          account: {
+            plan_type: "pro",
+          },
+          rate_limits: {
+            items: [],
+          },
+          error: "",
+        },
+      },
+      planDraft: {
+        steps: [
+          { step_id: "ST1", status: "completed" },
+          { step_id: "ST2", status: "pending" },
+        ],
+      },
+      form: {
+        runtime: {
+          generate_word_report: true,
+        },
+      },
+      programSettings: {
+        dashboard_visibility: {
+          status: false,
+          runtime_card: false,
+          word_report_card: false,
+        },
+      },
+      busy: false,
+      modelPresets: [],
+      modelCatalog: [],
+      activeJob: null,
+      onChangeForm: noop,
+    },
+  );
+
+  assert.match(html, /Remaining Steps/);
+  assert.match(html, /Input Tokens/);
+  assert.doesNotMatch(html, /Status/);
+  assert.doesNotMatch(html, /Runtime/);
+  assert.doesNotMatch(html, /Closeout Report/);
+});
+
+test("AppSettingsView exposes dashboard visibility controls", async () => {
+  const html = await renderBundledComponent(
+    "app-settings-view-render",
+    "./src/components/views/AppSettingsView.jsx",
+    "AppSettingsView",
+    {
+      settings: {
+        ui_theme: "dark",
+        developer_mode: false,
+        model_provider: "openai",
+        model: "gpt-5.4",
+        model_preset: "",
+        model_selection_mode: "slug",
+        model_slug_input: "gpt-5.4",
+        approval_mode: "never",
+        sandbox_mode: "danger-full-access",
+        checkpoint_interval_blocks: 1,
+        execution_mode: "serial",
+        parallel_workers: 2,
+        codex_path: "codex.cmd",
+        allow_push: true,
+        require_checkpoint_approval: false,
+        dashboard_visibility: {},
+      },
+      shareSettings: {
+        bind_host: "127.0.0.1",
+        public_base_url: "",
+      },
+      shareDetail: {
+        server: {
+          running: false,
+        },
+      },
+      busy: false,
+      onChangeSettings: noop,
+      onGenerateShareLink: noop,
+      onCopyShareLink: noop,
+      onRevokeShareLink: noop,
+      onChangeShareSettings: noop,
+    },
+  );
+
+  assert.match(html, /Show only the dashboard cards you want to keep visible\./);
+  assert.match(html, /Custom Model Slug/);
+  assert.match(html, /Rate Limits/);
+  assert.match(html, /Codex Usage/);
+  assert.doesNotMatch(html, /Billing Mode/);
+  assert.doesNotMatch(html, /Input \$ \/ 1M/);
+});

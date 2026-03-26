@@ -398,14 +398,16 @@ export function useDesktopController() {
 
   useEffect(() => {
     let cancelled = false;
+    let syncInFlight = false;
 
     async function syncDesktopState() {
-      if (!workspaceRoot || activeJobId || pendingAction || loadingProjectId) {
+      if (!workspaceRoot || pendingAction || loadingProjectId || syncInFlight) {
         return;
       }
+      syncInFlight = true;
       try {
         const runningJob = await syncRunningJobSnapshot(activeJobId);
-        if (cancelled || runningJob) {
+        if (cancelled) {
           return;
         }
 
@@ -437,17 +439,20 @@ export function useDesktopController() {
           detailLevel,
         });
         if (!cancelled) {
-          applyProjectDetail(detail, { preserveSelectedStep: true, runningJob: null });
+          applyProjectDetail(detail, { preserveSelectedStep: true, runningJob: runningJob || null });
         }
       } catch {
         // Keep background sync quiet; manual refresh still surfaces explicit errors.
+      } finally {
+        syncInFlight = false;
       }
     }
 
-    if (!workspaceRoot || activeJobId) {
+    if (!workspaceRoot) {
       return undefined;
     }
 
+    void syncDesktopState();
     const handle = window.setInterval(() => {
       void syncDesktopState();
     }, AUTO_SYNC_INTERVAL_MS);

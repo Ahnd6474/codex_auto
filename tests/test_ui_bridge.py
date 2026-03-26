@@ -530,6 +530,79 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(len(loaded["checkpoints"]["items"]), 1)
             self.assertEqual(loaded["checkpoints"]["pending"]["checkpoint_id"], "CP1")
 
+    def test_approve_checkpoint_respects_string_push_flag_and_clears_pending_checkpoint(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Approval Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "allow_push": True,
+                    "require_checkpoint_approval": True,
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            project_root = Path(detail["project"]["project_root"])
+            checkpoint_path = project_root / "state" / "CHECKPOINTS.json"
+            checkpoint_path.write_text(
+                json.dumps(
+                    {
+                        "checkpoints": [
+                            {
+                                "checkpoint_id": "CP1",
+                                "title": "Review me",
+                                "target_block": 1,
+                                "status": "awaiting_review",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            loop_state_path = project_root / "state" / "LOOP_STATE.json"
+            loop_state = json.loads(loop_state_path.read_text(encoding="utf-8"))
+            loop_state["current_checkpoint_id"] = "CP1"
+            loop_state["pending_checkpoint_approval"] = True
+            loop_state_path.write_text(json.dumps(loop_state), encoding="utf-8")
+
+            with mock.patch("jakal_flow.orchestrator.GitOps.push") as push_mock, mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                approved = run_command(
+                    "approve-checkpoint",
+                    workspace_root,
+                    {
+                        "repo_id": detail["project"]["repo_id"],
+                        "push": "false",
+                    },
+                )
+
+            push_mock.assert_not_called()
+            self.assertIsNone(approved["checkpoints"]["pending"])
+            self.assertEqual(approved["project"]["current_status"], "setup_ready")
+            self.assertEqual(approved["loop_state"]["current_checkpoint_id"], None)
+            self.assertFalse(approved["loop_state"]["pending_checkpoint_approval"])
+            self.assertEqual(approved["checkpoints"]["items"][0]["status"], "approved")
+            self.assertFalse(approved["checkpoints"]["items"][0]["pushed"])
+            self.assertEqual(approved["checkpoints"]["items"][0]["push_skipped_reason"], "not_requested")
+
     def test_load_project_can_skip_codex_status_refresh(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"

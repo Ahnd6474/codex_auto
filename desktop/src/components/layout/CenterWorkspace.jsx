@@ -157,6 +157,12 @@ export function CenterWorkspace({
     });
   }, [activeTab, developerMode, executionMode]);
 
+  useEffect(() => {
+    if (!developerMode && (activeTab === "reports" || activeTab === "history")) {
+      onChangeTab("run");
+    }
+  }, [activeTab, developerMode, onChangeTab]);
+
   const visibleTabs = [
     ["run", t("tab.flow")],
     ["config", t("tab.config")],
