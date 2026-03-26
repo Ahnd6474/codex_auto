@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   activityLineSummary,
+  applyProviderDefaults,
   applyProgramSettings,
   applyProgramSettingsToForm,
   autoRoutingPresetLabel,
@@ -97,12 +98,10 @@ test("program settings helpers keep global runtime controls separate from projec
     local_model_provider: "ollama",
     provider_base_url: "",
     provider_api_key_env: "OPENAI_API_KEY",
-    billing_mode: "included",
-    input_cost_per_million_usd: 0,
-    cached_input_cost_per_million_usd: 0,
-    output_cost_per_million_usd: 0,
-    reasoning_output_cost_per_million_usd: 0,
-    per_pass_cost_usd: 0,
+    model: "auto",
+    model_preset: "auto",
+    model_selection_mode: "slug",
+    model_slug_input: "auto",
     approval_mode: "untrusted",
     sandbox_mode: "workspace-write",
     checkpoint_interval_blocks: 1,
@@ -133,7 +132,6 @@ test("program settings helpers keep global runtime controls separate from projec
   assert.deepEqual(
     applyProgramSettings(
       {
-        model: "gpt-5.4",
         test_cmd: "pytest -q",
       },
       settings,
@@ -145,12 +143,10 @@ test("program settings helpers keep global runtime controls separate from projec
       local_model_provider: "ollama",
       provider_base_url: "",
       provider_api_key_env: "OPENAI_API_KEY",
-      billing_mode: "included",
-      input_cost_per_million_usd: 0,
-      cached_input_cost_per_million_usd: 0,
-      output_cost_per_million_usd: 0,
-      reasoning_output_cost_per_million_usd: 0,
-      per_pass_cost_usd: 0,
+      model: "auto",
+      model_preset: "auto",
+      model_selection_mode: "slug",
+      model_slug_input: "auto",
       approval_mode: "untrusted",
       sandbox_mode: "workspace-write",
       checkpoint_interval_blocks: 1,
@@ -177,18 +173,15 @@ test("program settings helpers keep global runtime controls separate from projec
     {
       project_dir: "demo",
       runtime: {
-        model: "gpt-5.4",
+        model: "auto",
+        model_preset: "auto",
+        model_selection_mode: "slug",
+        model_slug_input: "auto",
         test_cmd: "pytest -q",
         model_provider: "openai",
         local_model_provider: "ollama",
         provider_base_url: "",
         provider_api_key_env: "OPENAI_API_KEY",
-        billing_mode: "included",
-        input_cost_per_million_usd: 0,
-        cached_input_cost_per_million_usd: 0,
-        output_cost_per_million_usd: 0,
-        reasoning_output_cost_per_million_usd: 0,
-        per_pass_cost_usd: 0,
         approval_mode: "untrusted",
         sandbox_mode: "workspace-write",
         checkpoint_interval_blocks: 1,
@@ -227,6 +220,23 @@ test("blankProjectForm falls back to repository defaults when runtime is missing
 
   assert.equal(form.runtime.max_blocks, 5);
   assert.equal(form.runtime.test_cmd, "python -m pytest");
+});
+
+test("applyProviderDefaults drops the auto sentinel for providers without auto routing", () => {
+  const runtime = applyProviderDefaults(
+    {
+      model_provider: "openai",
+      model: "auto",
+      model_slug_input: "auto",
+      model_preset: "auto",
+    },
+    "openrouter",
+  );
+
+  assert.equal(runtime.model_provider, "openrouter");
+  assert.equal(runtime.model, "");
+  assert.equal(runtime.model_slug_input, "");
+  assert.equal(runtime.model_preset, "");
 });
 
 test("projectFormFromDetail merges persisted runtime and derives GitHub mode", () => {

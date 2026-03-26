@@ -588,7 +588,10 @@ test("AppSettingsView exposes dashboard visibility controls", async () => {
         ui_theme: "dark",
         developer_mode: false,
         model_provider: "openai",
-        billing_mode: "included",
+        model: "gpt-5.4",
+        model_preset: "",
+        model_selection_mode: "slug",
+        model_slug_input: "gpt-5.4",
         approval_mode: "never",
         sandbox_mode: "danger-full-access",
         checkpoint_interval_blocks: 1,
@@ -618,6 +621,9 @@ test("AppSettingsView exposes dashboard visibility controls", async () => {
   );
 
   assert.match(html, /Show only the dashboard cards you want to keep visible\./);
+  assert.match(html, /Custom Model Slug/);
   assert.match(html, /Rate Limits/);
   assert.match(html, /Codex Usage/);
+  assert.doesNotMatch(html, /Billing Mode/);
+  assert.doesNotMatch(html, /Input \$ \/ 1M/);
 });
