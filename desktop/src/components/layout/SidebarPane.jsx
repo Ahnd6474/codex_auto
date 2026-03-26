@@ -157,6 +157,17 @@ export function SidebarPane({
   const deferredWorkspaceFilter = useDeferredValue(workspaceFilter);
   const workspaceFilterCacheRef = useRef(new Map());
   const normalizedWorkspaceTree = useMemo(() => (workspaceTree || []).map((node) => normalizeTree(node)), [workspaceTree]);
+  const visibleCheckpoints = useMemo(() => {
+    const items = Array.isArray(checkpoints?.items) ? checkpoints.items.filter(Boolean) : [];
+    const pending = checkpoints?.pending && typeof checkpoints.pending === "object" ? checkpoints.pending : null;
+    if (!pending) {
+      return items;
+    }
+    if (items.some((item) => item?.checkpoint_id === pending.checkpoint_id)) {
+      return items;
+    }
+    return [pending, ...items];
+  }, [checkpoints]);
 
   useEffect(() => {
     workspaceFilterCacheRef.current.clear();
@@ -316,17 +327,24 @@ export function SidebarPane({
             </div>
             <div className="sidebar-group">
               <div className="sidebar-list">
-                {(checkpoints?.items || []).length ? (
-                  checkpoints.items.map((checkpoint) => (
-                    <div className="sidebar-item" key={checkpoint.checkpoint_id}>
-                      <div className="sidebar-item__title">
-                        <strong>{checkpoint.checkpoint_id}</strong>
-                        <span className={`status-badge status-badge--${statusTone(checkpoint.status)}`}>{displayStatus(checkpoint.status, language)}</span>
+                {visibleCheckpoints.length ? (
+                  visibleCheckpoints.map((checkpoint) => {
+                    const isPendingCheckpoint =
+                      checkpoint?.status === "awaiting_review" ||
+                      checkpoint?.checkpoint_id === checkpoints?.pending?.checkpoint_id;
+                    return (
+                      <div className={`sidebar-item ${isPendingCheckpoint ? "sidebar-item--checkpoint-live" : ""}`} key={checkpoint.checkpoint_id}>
+                        <div className="sidebar-item__title">
+                          <strong>{checkpoint.checkpoint_id}</strong>
+                          <span className={`status-badge status-badge--${statusTone(checkpoint.status)} ${isPendingCheckpoint ? "status-badge--pulse" : ""}`}>
+                            {displayStatus(checkpoint.status, language)}
+                          </span>
+                        </div>
+                        <span>{checkpoint.title}</span>
+                        <span>{t("sidebar.targetBlock", { block: checkpoint.target_block })}</span>
                       </div>
-                      <span>{checkpoint.title}</span>
-                      <span>{t("sidebar.targetBlock", { block: checkpoint.target_block })}</span>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="empty-block">{t("sidebar.noRecordedCheckpoints")}</div>
                 )}

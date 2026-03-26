@@ -495,6 +495,50 @@ test("SidebarPane renders a filtered workspace tree without unrelated nodes", as
   assert.doesNotMatch(html, /README\.md/);
 });
 
+test("SidebarPane keeps a pending checkpoint visible and marked as live", async () => {
+  const html = await renderBundledComponent(
+    "sidebar-pane-pending-checkpoint-render",
+    "./src/components/layout/SidebarPane.jsx",
+    "SidebarPane",
+    {
+      activeTab: "plans",
+      onChangeTab: noop,
+      projects: [],
+      selectedProjectId: "",
+      loadingProjectId: "",
+      projectFilter: "",
+      workspaceFilter: "",
+      onProjectFilterChange: noop,
+      onWorkspaceFilterChange: noop,
+      onSelectProject: noop,
+      onNewProject: noop,
+      onDeleteProject: noop,
+      onDeleteAllProjects: noop,
+      workspaceTree: [],
+      checkpoints: {
+        items: [],
+        pending: {
+          checkpoint_id: "CP2",
+          status: "awaiting_review",
+          title: "Review the merged work",
+          target_block: 2,
+        },
+      },
+      github: {
+        connected: false,
+        origin_url: "",
+        branch: "main",
+        repo_url: "",
+      },
+    },
+  );
+
+  assert.match(html, /CP2/);
+  assert.match(html, /Review the merged work/);
+  assert.match(html, /sidebar-item--checkpoint-live/);
+  assert.match(html, /status-badge--pulse/);
+});
+
 test("DashboardView hides cards that are disabled in program settings", async () => {
   const html = await renderBundledComponent(
     "dashboard-view-render",

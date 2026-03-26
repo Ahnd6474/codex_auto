@@ -410,6 +410,47 @@ test("job-aware sanitizers clear stale running status without touching active jo
   assert.equal(sanitizedList[0].status, "plan_ready");
 });
 
+test("job-aware sanitizers preserve recent running state while bridge tracking catches up", () => {
+  const nowMs = Date.parse("2026-03-26T10:00:00Z");
+  const runningDetail = {
+    project: {
+      repo_id: "repo-a",
+      current_status: "running:block:2",
+      last_run_at: "2026-03-26T09:59:40Z",
+    },
+    activity: ["2026-03-26T09:59:42Z | step-started [ST2] | Running ST2: Build the screen"],
+    checkpoints: {
+      pending: {
+        checkpoint_id: "CP2",
+        status: "awaiting_review",
+      },
+    },
+    plan: {
+      closeout_status: "not_started",
+      steps: [
+        { step_id: "ST1", status: "completed" },
+        { step_id: "ST2", status: "running", started_at: "2026-03-26T09:59:35Z" },
+      ],
+    },
+  };
+  const runningList = [
+    {
+      repo_id: "repo-a",
+      status: "running:block:2",
+      last_run_at: "2026-03-26T09:59:40Z",
+      stats: { total_steps: 2, completed_steps: 1, failed_steps: 0, running_steps: 1, remaining_steps: 1 },
+      closeout_status: "not_started",
+    },
+  ];
+
+  const preservedDetail = sanitizeProjectDetailForJobState(runningDetail, null, { nowMs });
+  const preservedList = sanitizeProjectListForJobState(runningList, null, { nowMs });
+
+  assert.equal(preservedDetail.project.current_status, "running:block:2");
+  assert.equal(preservedDetail.plan.steps[1].status, "running");
+  assert.equal(preservedList[0].status, "running:block:2");
+});
+
 test("activityLineSummary strips the timestamp and event prefix", () => {
   assert.equal(
     activityLineSummary("2026-03-26T09:00:00Z | step-started [ST2] | Running ST2: Build the screen"),

@@ -302,6 +302,54 @@ export function computePlanStats(plan = {}) {
   };
 }
 
+const RUN_STATE_STALE_AFTER_MS = 60 * 60 * 1000;
+
+function parseTimestampMs(value) {
+  if (!value) {
+    return null;
+  }
+  const parsed = Date.parse(String(value).trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function latestRunningSignalMs({
+  project = null,
+  plan = null,
+  activity = [],
+}) {
+  const candidates = [
+    parseTimestampMs(project?.last_run_at),
+    parseTimestampMs(plan?.closeout_started_at),
+    ...((Array.isArray(plan?.steps) ? plan.steps : [])
+      .filter((step) => step?.status === "running")
+      .map((step) => parseTimestampMs(step?.started_at))),
+    ...((Array.isArray(activity) ? activity : [])
+      .map((line) => parseTimestampMs(String(line || "").split("|")[0]))),
+  ].filter((value) => Number.isFinite(value));
+  if (!candidates.length) {
+    return null;
+  }
+  return Math.max(...candidates);
+}
+
+function shouldPreserveRecentRunningState({
+  project = null,
+  plan = null,
+  activity = [],
+  pendingCheckpoint = false,
+  nowMs = Date.now(),
+  staleAfterMs = RUN_STATE_STALE_AFTER_MS,
+}) {
+  if (pendingCheckpoint) {
+    return true;
+  }
+  const latestSignal = latestRunningSignalMs({ project, plan, activity });
+  if (latestSignal === null) {
+    return false;
+  }
+  return Math.max(0, nowMs - latestSignal) < staleAfterMs;
+}
+
 function readyExecutionNodeIds(plan = {}) {
   const steps = Array.isArray(plan?.steps) ? plan.steps : [];
   const completedIds = new Set(steps.filter((step) => step.status === "completed").map((step) => step.step_id));
@@ -478,13 +526,27 @@ export function normalizeInterruptedPlan(plan = null) {
   return nextPlan;
 }
 
-export function sanitizeProjectListForJobState(projects = [], activeJob = null) {
+export function sanitizeProjectListForJobState(projects = [], activeJob = null, options = {}) {
   if (activeJob?.status === "running") {
     return projects;
   }
+  const nowMs = Number.isFinite(options?.nowMs) ? options.nowMs : Date.now();
   return (projects || []).map((project) => {
     const currentStatus = String(project?.status || "").trim();
     if (!currentStatus.toLowerCase().startsWith("running:")) {
+      return project;
+    }
+    if (
+      shouldPreserveRecentRunningState({
+        project: {
+          last_run_at: project?.last_run_at,
+        },
+        plan: {
+          closeout_started_at: null,
+        },
+        nowMs,
+      })
+    ) {
       return project;
     }
     return {
@@ -494,7 +556,7 @@ export function sanitizeProjectListForJobState(projects = [], activeJob = null) 
   });
 }
 
-export function sanitizeProjectDetailForJobState(detail, activeJob = null) {
+export function sanitizeProjectDetailForJobState(detail, activeJob = null, options = {}) {
   if (!detail || activeJob?.status === "running") {
     return detail;
   }
@@ -502,6 +564,21 @@ export function sanitizeProjectDetailForJobState(detail, activeJob = null) {
   const planHasRunningStep = (detail?.plan?.steps || []).some((step) => step.status === "running");
   const closeoutRunning = String(detail?.plan?.closeout_status || "").trim().toLowerCase() === "running";
   if (!currentStatus.toLowerCase().startsWith("running:") && !planHasRunningStep && !closeoutRunning) {
+    return detail;
+  }
+  const nowMs = Number.isFinite(options?.nowMs) ? options.nowMs : Date.now();
+  if (
+    shouldPreserveRecentRunningState({
+      project: detail?.project,
+      plan: detail?.plan,
+      activity: detail?.activity,
+      pendingCheckpoint:
+        Boolean(detail?.checkpoints?.pending) ||
+        Boolean(detail?.loop_state?.pending_checkpoint_approval) ||
+        Boolean(detail?.bottom_panels?.git_status?.pending_checkpoint_approval),
+      nowMs,
+    })
+  ) {
     return detail;
   }
 

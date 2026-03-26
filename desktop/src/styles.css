@@ -717,6 +717,26 @@ pre {
   color: var(--text-muted);
 }
 
+.status-badge--pulse {
+  animation: checkpoint-badge-blink 1s steps(2, end) infinite;
+}
+
+.sidebar-item--checkpoint-live {
+  border-color: color-mix(in srgb, var(--warning) 48%, var(--border));
+  box-shadow: 0 0 0 1px rgba(211, 169, 84, 0.12);
+}
+
+@keyframes checkpoint-badge-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.28;
+  }
+}
+
 .sidebar-summary,
 .tool-window__body--log,
 .details-text pre,

@@ -415,7 +415,7 @@ export function useDesktopController() {
         if (cancelled) {
           return;
         }
-        const nextProjects = applyListingPayload(listing, null);
+        const nextProjects = applyListingPayload(listing, runningJob || null);
         if (!selectedProjectId) {
           if (nextProjects.length) {
             setSelectedProjectId(nextProjects[0].repo_id);
