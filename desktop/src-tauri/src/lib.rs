@@ -7,8 +7,14 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager, State};
+
+const DEFAULT_BRIDGE_TIMEOUT_SECS: u64 = 300;
+const MIN_BRIDGE_TIMEOUT_SECS: u64 = 5;
+const MAX_BRIDGE_TIMEOUT_SECS: u64 = 3_600;
+const MAX_BRIDGE_COMMAND_LEN: usize = 64;
+const MAX_WORKSPACE_ROOT_LEN: usize = 4_096;
 
 #[derive(Clone, Debug, Serialize)]
 struct JobSnapshot {
@@ -30,6 +36,61 @@ fn now_ms() -> u128 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis()
+}
+
+fn parse_bridge_timeout(env_override: Option<String>) -> Duration {
+    let seconds = env_override
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(DEFAULT_BRIDGE_TIMEOUT_SECS)
+        .clamp(MIN_BRIDGE_TIMEOUT_SECS, MAX_BRIDGE_TIMEOUT_SECS);
+    Duration::from_secs(seconds)
+}
+
+fn bridge_timeout() -> Duration {
+    parse_bridge_timeout(env::var("CODEX_AUTO_BRIDGE_TIMEOUT_SECS").ok())
+}
+
+fn normalize_bridge_command(command: &str) -> Result<String, String> {
+    let trimmed = command.trim();
+    if trimmed.is_empty() {
+        return Err("Bridge command is required.".to_string());
+    }
+    if trimmed.len() > MAX_BRIDGE_COMMAND_LEN {
+        return Err(format!(
+            "Bridge command is too long (max {MAX_BRIDGE_COMMAND_LEN} characters)."
+        ));
+    }
+    if !trimmed
+        .chars()
+        .all(|value| value.is_ascii_alphanumeric() || value == '-' || value == '_')
+    {
+        return Err("Bridge command may only contain letters, numbers, '-' and '_'.".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
+fn normalize_workspace_root(workspace_root: Option<String>) -> Result<Option<String>, String> {
+    match workspace_root {
+        Some(path) => {
+            let trimmed = path.trim();
+            if trimmed.is_empty() {
+                return Ok(None);
+            }
+            if trimmed.len() > MAX_WORKSPACE_ROOT_LEN {
+                return Err(format!(
+                    "Workspace root is too long (max {MAX_WORKSPACE_ROOT_LEN} characters)."
+                ));
+            }
+            if trimmed.contains('\0') {
+                return Err("Workspace root contains an invalid null character.".to_string());
+            }
+            Ok(Some(trimmed.to_string()))
+        }
+        None => Ok(None),
+    }
 }
 
 fn repo_root() -> Result<PathBuf, String> {
@@ -78,8 +139,22 @@ fn pythonpath_with_src(root: &Path) -> Result<String, String> {
     build_pythonpath(root, env::var_os("PYTHONPATH"))
 }
 
+fn bridge_failure_message(stdout: String, stderr: String, exit_code: Option<i32>) -> String {
+    if !stderr.is_empty() {
+        return stderr;
+    }
+    if !stdout.is_empty() {
+        return stdout;
+    }
+    if let Some(code) = exit_code {
+        return format!("Python bridge failed with exit code {code}.");
+    }
+    "Python bridge failed without output.".to_string()
+}
+
 fn parse_bridge_output(
     status_success: bool,
+    exit_code: Option<i32>,
     stdout: &[u8],
     stderr: &[u8],
 ) -> Result<Value, String> {
@@ -87,8 +162,7 @@ fn parse_bridge_output(
     let stderr = String::from_utf8_lossy(stderr).trim().to_string();
 
     if !status_success {
-        let message = if stderr.is_empty() { stdout } else { stderr };
-        return Err(message);
+        return Err(bridge_failure_message(stdout, stderr, exit_code));
     }
 
     if stdout.is_empty() {
@@ -103,6 +177,8 @@ fn run_bridge_command(
     payload: Option<Value>,
     workspace_root: Option<String>,
 ) -> Result<Value, String> {
+    let command = normalize_bridge_command(command)?;
+    let workspace_root = normalize_workspace_root(workspace_root)?;
     let root = repo_root()?;
     let python = python_executable(&root);
     let pythonpath = pythonpath_with_src(&root)?;
@@ -110,7 +186,7 @@ fn run_bridge_command(
     process
         .arg("-m")
         .arg("codex_auto.ui_bridge")
-        .arg(command)
+        .arg(&command)
         .current_dir(&root)
         .env("PYTHONPATH", pythonpath)
         .env("PYTHONIOENCODING", "utf-8")
@@ -119,7 +195,7 @@ fn run_bridge_command(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    if let Some(path) = workspace_root {
+    if let Some(path) = workspace_root.as_deref() {
         process.arg("--workspace-root").arg(path);
     }
 
@@ -140,13 +216,52 @@ fn run_bridge_command(
     }
     drop(child.stdin.take());
 
-    let output = child
-        .wait_with_output()
-        .map_err(|error| format!("Failed to wait for Python bridge: {error}"))?;
-    parse_bridge_output(output.status.success(), &output.stdout, &output.stderr)
+    let timeout = bridge_timeout();
+    let started_at = Instant::now();
+    let output = loop {
+        match child
+            .try_wait()
+            .map_err(|error| format!("Failed to poll Python bridge: {error}"))?
+        {
+            Some(_status) => {
+                break child
+                    .wait_with_output()
+                    .map_err(|error| format!("Failed to wait for Python bridge: {error}"))?;
+            }
+            None if started_at.elapsed() >= timeout => {
+                let _ = child.kill();
+                let timed_out_output = child.wait_with_output().map_err(|error| {
+                    format!("Failed to wait for timed out Python bridge: {error}")
+                })?;
+                let detail = bridge_failure_message(
+                    String::from_utf8_lossy(&timed_out_output.stdout)
+                        .trim()
+                        .to_string(),
+                    String::from_utf8_lossy(&timed_out_output.stderr)
+                        .trim()
+                        .to_string(),
+                    timed_out_output.status.code(),
+                );
+                return Err(format!(
+                    "Python bridge timed out after {} seconds while running '{}'. {}",
+                    timeout.as_secs(),
+                    command,
+                    detail
+                ));
+            }
+            None => std::thread::sleep(Duration::from_millis(50)),
+        }
+    };
+    parse_bridge_output(
+        output.status.success(),
+        output.status.code(),
+        &output.stdout,
+        &output.stderr,
+    )
 }
 
 fn register_job_start(state: &AppState, command: &str) -> Result<JobSnapshot, String> {
+    let command = normalize_bridge_command(command)?;
     let mut jobs = state
         .jobs
         .lock()
@@ -158,7 +273,7 @@ fn register_job_start(state: &AppState, command: &str) -> Result<JobSnapshot, St
     let started_at = now_ms();
     let snapshot = JobSnapshot {
         id: format!("job-{}-{}", command, started_at),
-        command: command.to_string(),
+        command,
         status: "running".to_string(),
         error: None,
         result: None,
@@ -195,11 +310,18 @@ fn get_job_snapshot(state: &AppState, job_id: &str) -> Option<JobSnapshot> {
 }
 
 fn list_job_snapshots(state: &AppState) -> Vec<JobSnapshot> {
-    state
+    let mut jobs: Vec<JobSnapshot> = state
         .jobs
         .lock()
         .map(|jobs| jobs.values().cloned().collect())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    jobs.sort_by(|left: &JobSnapshot, right: &JobSnapshot| {
+        right
+            .updated_at_ms
+            .cmp(&left.updated_at_ms)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    jobs
 }
 
 #[tauri::command]
@@ -219,8 +341,10 @@ fn start_bridge_job<R: tauri::Runtime>(
     payload: Option<Value>,
     workspace_root: Option<String>,
 ) -> Result<JobSnapshot, String> {
+    let workspace_root = normalize_workspace_root(workspace_root)?;
     let snapshot = register_job_start(state.inner(), &command)?;
     let job_id = snapshot.id.clone();
+    let command = snapshot.command.clone();
 
     std::thread::spawn(move || {
         let result = run_bridge_command(&command, payload, workspace_root);
@@ -389,39 +513,88 @@ mod tests {
 
     #[test]
     fn parse_bridge_output_returns_empty_object_for_blank_stdout() {
-        let value = parse_bridge_output(true, b"  \n", b"").expect("parse empty output");
+        let value = parse_bridge_output(true, Some(0), b"  \n", b"").expect("parse empty output");
 
         assert_eq!(value, serde_json::json!({}));
     }
 
     #[test]
     fn parse_bridge_output_parses_json_payload() {
-        let value =
-            parse_bridge_output(true, br#"{"ok":true,"count":2}"#, b"").expect("parse JSON");
+        let value = parse_bridge_output(true, Some(0), br#"{"ok":true,"count":2}"#, b"")
+            .expect("parse JSON");
 
         assert_eq!(value, serde_json::json!({"ok": true, "count": 2}));
     }
 
     #[test]
     fn parse_bridge_output_uses_stderr_on_failure() {
-        let error =
-            parse_bridge_output(false, b"{\"ignored\":true}", b"bridge failed").expect_err("fail");
+        let error = parse_bridge_output(false, Some(1), b"{\"ignored\":true}", b"bridge failed")
+            .expect_err("fail");
 
         assert_eq!(error, "bridge failed");
     }
 
     #[test]
     fn parse_bridge_output_falls_back_to_stdout_when_stderr_is_empty() {
-        let error = parse_bridge_output(false, b"bridge failed on stdout", b"").expect_err("fail");
+        let error =
+            parse_bridge_output(false, Some(1), b"bridge failed on stdout", b"").expect_err("fail");
 
         assert_eq!(error, "bridge failed on stdout");
     }
 
     #[test]
     fn parse_bridge_output_reports_invalid_json() {
-        let error = parse_bridge_output(true, b"{not-json}", b"").expect_err("invalid JSON");
+        let error =
+            parse_bridge_output(true, Some(0), b"{not-json}", b"").expect_err("invalid JSON");
 
         assert!(error.contains("Failed to parse bridge JSON"));
+    }
+
+    #[test]
+    fn parse_bridge_output_returns_generic_error_when_output_is_missing() {
+        let error = parse_bridge_output(false, Some(7), b"", b"").expect_err("generic failure");
+
+        assert_eq!(error, "Python bridge failed with exit code 7.");
+    }
+
+    #[test]
+    fn normalize_bridge_command_rejects_blank_or_invalid_values() {
+        assert_eq!(
+            normalize_bridge_command("   ").expect_err("blank command"),
+            "Bridge command is required."
+        );
+        assert_eq!(
+            normalize_bridge_command("bad command").expect_err("invalid command"),
+            "Bridge command may only contain letters, numbers, '-' and '_'."
+        );
+    }
+
+    #[test]
+    fn normalize_workspace_root_trims_values_and_drops_blank_strings() {
+        assert_eq!(
+            normalize_workspace_root(Some("  C:\\work  ".to_string())).expect("trim path"),
+            Some("C:\\work".to_string())
+        );
+        assert_eq!(
+            normalize_workspace_root(Some("   ".to_string())).expect("drop blank path"),
+            None
+        );
+    }
+
+    #[test]
+    fn parse_bridge_timeout_clamps_invalid_values() {
+        assert_eq!(
+            parse_bridge_timeout(Some("not-a-number".to_string())),
+            Duration::from_secs(DEFAULT_BRIDGE_TIMEOUT_SECS)
+        );
+        assert_eq!(
+            parse_bridge_timeout(Some("1".to_string())),
+            Duration::from_secs(MIN_BRIDGE_TIMEOUT_SECS)
+        );
+        assert_eq!(
+            parse_bridge_timeout(Some("999999".to_string())),
+            Duration::from_secs(MAX_BRIDGE_TIMEOUT_SECS)
+        );
     }
 
     #[test]
@@ -448,6 +621,18 @@ mod tests {
         let error = register_job_start(&state, "list-projects").expect_err("reject second run");
 
         assert_eq!(error, "Another background task is already running.");
+    }
+
+    #[test]
+    fn register_job_start_rejects_invalid_command() {
+        let state = AppState::default();
+
+        let error = register_job_start(&state, "bad command").expect_err("invalid command");
+
+        assert_eq!(
+            error,
+            "Bridge command may only contain letters, numbers, '-' and '_'."
+        );
     }
 
     #[test]
@@ -478,14 +663,17 @@ mod tests {
     #[test]
     fn list_job_snapshots_returns_all_jobs_for_command_listing() {
         let state = AppState::default();
-        insert_job(&state, sample_job("job-b", "bootstrap", "completed"));
-        insert_job(&state, sample_job("job-a", "list-projects", "failed"));
+        let mut older = sample_job("job-b", "bootstrap", "completed");
+        older.updated_at_ms = 10;
+        let mut newer = sample_job("job-a", "list-projects", "failed");
+        newer.updated_at_ms = 20;
+        insert_job(&state, older);
+        insert_job(&state, newer);
 
-        let mut ids = list_job_snapshots(&state)
+        let ids = list_job_snapshots(&state)
             .into_iter()
             .map(|job| job.id)
             .collect::<Vec<_>>();
-        ids.sort();
 
         assert_eq!(ids, vec!["job-a".to_string(), "job-b".to_string()]);
     }

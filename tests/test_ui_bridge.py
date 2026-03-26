@@ -10,7 +10,7 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from codex_auto.ui_bridge import run_command
+from codex_auto.ui_bridge import run_command, runtime_from_payload
 
 
 def local_temp_root() -> Path:
@@ -30,6 +30,31 @@ class TemporaryTestDir:
 
 
 class UIBridgeTests(unittest.TestCase):
+    def test_runtime_from_payload_coerces_invalid_scalar_values(self) -> None:
+        runtime = runtime_from_payload(
+            {
+                "model": "gpt-5.4-mini",
+                "model_preset": "missing",
+                "max_blocks": "not-a-number",
+                "allow_push": "false",
+                "require_checkpoint_approval": "true",
+                "no_progress_limit": "-3",
+                "regression_limit": "bogus",
+                "empty_cycle_limit": 0,
+                "checkpoint_interval_blocks": "0",
+            }
+        )
+
+        self.assertEqual(runtime.model, "gpt-5.4-mini")
+        self.assertEqual(runtime.model_preset, "")
+        self.assertEqual(runtime.max_blocks, 5)
+        self.assertFalse(runtime.allow_push)
+        self.assertTrue(runtime.require_checkpoint_approval)
+        self.assertEqual(runtime.no_progress_limit, 1)
+        self.assertEqual(runtime.regression_limit, 3)
+        self.assertEqual(runtime.empty_cycle_limit, 1)
+        self.assertEqual(runtime.checkpoint_interval_blocks, 1)
+
     def test_bootstrap_exposes_workspace_and_model_presets(self) -> None:
         with TemporaryTestDir() as temp_dir:
             payload = run_command("bootstrap", temp_dir)
@@ -175,6 +200,68 @@ class UIBridgeTests(unittest.TestCase):
             self.assertTrue(control_path.exists())
             control_payload = json.loads(control_path.read_text(encoding="utf-8"))
             self.assertEqual(control_payload["request_source"], "unit-test")
+
+    def test_load_project_tolerates_malformed_ui_state_files(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "State Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            control_path = Path(detail["files"]["ui_control_file"])
+            control_path.write_text(
+                json.dumps(
+                    {
+                        "stop_after_current_step": "yes",
+                        "requested_at": 123,
+                        "request_source": ["desktop"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            checkpoint_path = Path(detail["project"]["project_root"]) / "state" / "CHECKPOINTS.json"
+            checkpoint_path.write_text(
+                json.dumps(
+                    {
+                        "checkpoints": [
+                            {"checkpoint_id": "CP1", "status": "awaiting_review"},
+                            "bad-entry",
+                            99,
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            loaded = run_command(
+                "load-project",
+                workspace_root,
+                {
+                    "project_dir": str(repo_dir),
+                },
+            )
+
+            self.assertTrue(loaded["run_control"]["stop_after_current_step"])
+            self.assertEqual(loaded["run_control"]["requested_at"], "123")
+            self.assertIsNone(loaded["run_control"]["request_source"])
+            self.assertEqual(len(loaded["checkpoints"]["items"]), 1)
+            self.assertEqual(loaded["checkpoints"]["pending"]["checkpoint_id"], "CP1")
 
 
 if __name__ == "__main__":

@@ -48,6 +48,48 @@ def orchestrator_for(workspace_root: Path) -> Orchestrator:
     return Orchestrator(workspace_root)
 
 
+def coerce_positive_int(value: Any, default: int, minimum: int = 1) -> int:
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, parsed)
+
+
+def coerce_bool(value: Any, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
+def optional_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        return text or None
+    if isinstance(value, (int, float)):
+        return str(value)
+    return None
+
+
+def normalize_run_control(payload: Any) -> dict[str, Any]:
+    data = payload if isinstance(payload, dict) else {}
+    return {
+        "stop_after_current_step": coerce_bool(data.get("stop_after_current_step", False), False),
+        "requested_at": optional_text(data.get("requested_at")),
+        "request_source": optional_text(data.get("request_source")),
+    }
+
+
 def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
     base = RuntimeOptions(
         approval_mode="never",
@@ -58,7 +100,19 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
         max_blocks=5,
     ).to_dict()
     merged = {**base, **payload}
-    merged["max_blocks"] = max(1, int(str(merged.get("max_blocks", 5) or "5")))
+    merged["max_blocks"] = coerce_positive_int(merged.get("max_blocks", 5), default=5)
+    merged["no_progress_limit"] = coerce_positive_int(merged.get("no_progress_limit", 3), default=3)
+    merged["regression_limit"] = coerce_positive_int(merged.get("regression_limit", 3), default=3)
+    merged["empty_cycle_limit"] = coerce_positive_int(merged.get("empty_cycle_limit", 3), default=3)
+    merged["checkpoint_interval_blocks"] = coerce_positive_int(
+        merged.get("checkpoint_interval_blocks", 1),
+        default=1,
+    )
+    merged["allow_push"] = coerce_bool(merged.get("allow_push", True), True)
+    merged["require_checkpoint_approval"] = coerce_bool(
+        merged.get("require_checkpoint_approval", False),
+        False,
+    )
     merged["test_cmd"] = str(merged.get("test_cmd", "python -m pytest")).strip() or "python -m pytest"
     merged["model"] = str(merged.get("model", "")).strip()
     merged["model_preset"] = str(merged.get("model_preset", "")).strip()
@@ -109,16 +163,11 @@ def default_run_control() -> dict[str, Any]:
 
 def load_run_control(context: ProjectContext) -> dict[str, Any]:
     data = read_json(context.paths.ui_control_file, default=None)
-    if not isinstance(data, dict):
-        return default_run_control()
-    payload = default_run_control()
-    payload.update(data)
-    return payload
+    return normalize_run_control(data)
 
 
 def save_run_control(context: ProjectContext, payload: dict[str, Any]) -> dict[str, Any]:
-    state = default_run_control()
-    state.update(payload)
+    state = normalize_run_control(payload)
     write_json(context.paths.ui_control_file, state)
     return state
 
@@ -252,8 +301,11 @@ def preview_text(path: Path, default: str = "", max_chars: int = 12_000) -> str:
 def preview_tree(path: Path, max_entries: int = 16) -> list[dict[str, Any]]:
     if not path.exists() or not path.is_dir():
         return []
+    try:
+        children = sorted(path.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
+    except OSError:
+        return [{"label": "Directory unavailable", "path": str(path), "kind": "meta"}]
     entries: list[dict[str, Any]] = []
-    children = sorted(path.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
     for child in children[:max_entries]:
         item = {
             "label": child.name,
@@ -261,14 +313,19 @@ def preview_tree(path: Path, max_entries: int = 16) -> list[dict[str, Any]]:
             "kind": "dir" if child.is_dir() else "file",
         }
         if child.is_dir():
-            item["children"] = [
-                {
-                    "label": grandchild.name,
-                    "path": str(grandchild),
-                    "kind": "dir" if grandchild.is_dir() else "file",
-                }
-                for grandchild in sorted(child.iterdir(), key=lambda entry: (not entry.is_dir(), entry.name.lower()))[:8]
-            ]
+            try:
+                grandchildren = sorted(child.iterdir(), key=lambda entry: (not entry.is_dir(), entry.name.lower()))
+            except OSError:
+                item["children"] = [{"label": "Directory unavailable", "path": str(child), "kind": "meta"}]
+            else:
+                item["children"] = [
+                    {
+                        "label": grandchild.name,
+                        "path": str(grandchild),
+                        "kind": "dir" if grandchild.is_dir() else "file",
+                    }
+                    for grandchild in grandchildren[:8]
+                ]
         entries.append(item)
     if len(children) > max_entries:
         entries.append({"label": f"+{len(children) - max_entries} more", "path": str(path), "kind": "meta"})
@@ -318,7 +375,8 @@ def history_payload(context: ProjectContext) -> dict[str, Any]:
 
 def checkpoint_payload(context: ProjectContext) -> dict[str, Any]:
     raw = safe_json(context.paths.checkpoint_state_file, default={"checkpoints": []})
-    checkpoints = raw.get("checkpoints", []) if isinstance(raw, dict) else []
+    raw_items = raw.get("checkpoints", []) if isinstance(raw, dict) else []
+    checkpoints = [item for item in raw_items if isinstance(item, dict)]
     pending = next((item for item in checkpoints if item.get("status") == "awaiting_review"), None)
     if pending is None and context.loop_state.current_checkpoint_id:
         pending = next(
@@ -507,7 +565,7 @@ def common_project_inputs(payload: dict[str, Any]) -> tuple[Path, RuntimeOptions
     project_dir_value = str(payload.get("project_dir", "")).strip()
     if not project_dir_value:
         raise ValueError("project_dir is required.")
-    project_dir = Path(project_dir_value)
+    project_dir = Path(project_dir_value).expanduser().resolve()
     runtime_payload = payload.get("runtime", {})
     if not isinstance(runtime_payload, dict):
         raise ValueError("runtime payload must be an object.")
