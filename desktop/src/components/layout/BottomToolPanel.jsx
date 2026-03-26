@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { statusTone } from "../../utils";
+import { codexUsageBuckets, rateLimitRemainingLabel, rateLimitWindowSummary, statusTone } from "../../utils";
 
 function ToolTab({ value, activeTab, onChange, label }) {
   return (
@@ -15,14 +15,11 @@ export function BottomToolPanel({ activeTab, onChangeTab, data }) {
   const tokenUsage = data?.token_usage || {};
   const codexStatus = data?.codex_status || {};
   const account = codexStatus.account || {};
-  const rateLimits = codexStatus.rate_limits?.items || [];
-  const primaryLimit = rateLimits[0] || {};
-  const primaryWindow = primaryLimit.primary || null;
-  const secondaryWindow = primaryLimit.secondary || null;
   const gitStatus = data?.git_status || {};
   const testRuns = data?.test_runs || [];
   const serializedEventJson = useMemo(() => JSON.stringify(data?.event_json || {}, null, 2), [data?.event_json]);
   const { language, t } = useI18n();
+  const usageBuckets = codexUsageBuckets(codexStatus, language);
 
   return (
     <section className="tool-window">
@@ -31,7 +28,7 @@ export function BottomToolPanel({ activeTab, onChangeTab, data }) {
           <ToolTab value="json" activeTab={activeTab} onChange={onChangeTab} label={t("tool.eventJson")} />
           <ToolTab value="tokens" activeTab={activeTab} onChange={onChangeTab} label={t("tool.tokenUsage")} />
           <ToolTab value="tests" activeTab={activeTab} onChange={onChangeTab} label={t("test.result")} />
-          <ToolTab value="git" activeTab={activeTab} onChange={onChangeTab} label={t("tool.gitSafeRevision")} />
+          <ToolTab value="git" activeTab={activeTab} onChange={onChangeTab} label={t("tool.gitStatus")} />
         </div>
       </div>
 
@@ -60,10 +57,12 @@ export function BottomToolPanel({ activeTab, onChangeTab, data }) {
               <span>{language === "ko" ? "요금제" : "Plan"}</span>
               <strong>{account.plan_type || t("common.unavailable")}</strong>
             </div>
-            <div className="metric-card">
-              <span>{language === "ko" ? "남은 사용량" : "Remaining"}</span>
-              <strong>{primaryWindow ? `${primaryWindow.remaining_percent ?? 0}%` : t("common.unavailable")}</strong>
-            </div>
+            {usageBuckets.map((bucket) => (
+              <div className="metric-card" key={bucket.key}>
+                <span>{bucket.label}</span>
+                <strong>{rateLimitRemainingLabel(bucket.window, language)}</strong>
+              </div>
+            ))}
           </div>
           <div className="dense-list">
             <div className="dense-row">
@@ -75,21 +74,15 @@ export function BottomToolPanel({ activeTab, onChangeTab, data }) {
               <span>{account.email || t("common.unavailable")}</span>
             </div>
             <div className="dense-row">
-              <strong>{language === "ko" ? "현재 창" : "Primary Window"}</strong>
-              <span>
-                {primaryWindow
-                  ? `${primaryWindow.used_percent ?? 0}% used, reset ${primaryWindow.resets_at || t("common.unavailable")}`
-                  : codexStatus.error || t("common.unavailable")}
-              </span>
+              <strong>{language === "ko" ? "상태" : "Status"}</strong>
+              <span>{codexStatus.error || t("common.connected")}</span>
             </div>
-            <div className="dense-row">
-              <strong>{language === "ko" ? "주간 창" : "Secondary Window"}</strong>
-              <span>
-                {secondaryWindow
-                  ? `${secondaryWindow.used_percent ?? 0}% used, reset ${secondaryWindow.resets_at || t("common.unavailable")}`
-                  : t("common.unavailable")}
-              </span>
-            </div>
+            {usageBuckets.map((bucket) => (
+              <div className="dense-row" key={bucket.key}>
+                <strong>{bucket.label}</strong>
+                <span>{rateLimitWindowSummary(bucket.window, language)}</span>
+              </div>
+            ))}
           </div>
         </div>
       ) : null}
@@ -127,10 +120,6 @@ export function BottomToolPanel({ activeTab, onChangeTab, data }) {
             <div className="dense-row">
               <strong>{t("common.status")}</strong>
               <span>{displayStatus(gitStatus.current_status || "unknown", language)}</span>
-            </div>
-            <div className="dense-row">
-              <strong>{t("dashboard.lastSafeRevision")}</strong>
-              <span>{gitStatus.safe_revision || t("common.unavailable")}</span>
             </div>
             <div className="dense-row">
               <strong>{language === "ko" ? "마지막 커밋" : "Last Commit"}</strong>

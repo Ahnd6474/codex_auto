@@ -113,6 +113,7 @@ export default function App() {
             onChangeProgramSettings={controller.setProgramSettings}
             onChooseDirectory={controller.chooseDirectory}
             onSaveProject={controller.saveProject}
+            onDeleteProject={controller.deleteProject}
             onSaveProgramSettings={controller.saveProgramSettings}
             onPromptChange={(value) =>
               controller.syncPlan({

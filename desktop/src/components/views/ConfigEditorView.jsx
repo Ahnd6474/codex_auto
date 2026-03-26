@@ -76,6 +76,7 @@ export function ConfigEditorView({
   onChangeForm,
   onChooseDirectory,
   onSaveProject,
+  onDeleteProject,
 }) {
   const runtime = form.runtime || {};
   const { language, t } = useI18n();
@@ -102,12 +103,17 @@ export function ConfigEditorView({
       <div className="view-header">
         <div>
           <span className="eyebrow">{t("tab.config")}</span>
-          <h2>{t("config.projectConfiguration")}</h2>
+          <h2>{t("tab.config")}</h2>
           <p>{t("config.projectConfigurationDescription")}</p>
         </div>
-        <button className="toolbar-button toolbar-button--accent" onClick={onSaveProject} type="button" disabled={busy}>
-          {t("action.saveConfiguration")}
-        </button>
+        <div className="field-row">
+          <button className="toolbar-button" onClick={onDeleteProject} type="button" disabled={busy || !form.project_dir?.trim()}>
+            {t("action.delete")}
+          </button>
+          <button className="toolbar-button toolbar-button--accent" onClick={onSaveProject} type="button" disabled={busy}>
+            {t("action.saveConfiguration")}
+          </button>
+        </div>
       </div>
 
       <div className="form-layout">

@@ -449,7 +449,7 @@ export function useDesktopController() {
     setProjectForm(blankProjectForm(defaultRuntime));
     setPlanDraft({ steps: [], project_prompt: "", closeout_status: "not_started" });
     setShareSettings({ bind_host: "127.0.0.1", public_base_url: "" });
-    setCenterTab("run");
+    setCenterTab("config");
     setSidebarTab("projects");
   }
 
@@ -478,6 +478,39 @@ export function useDesktopController() {
       setPlanDirty(false);
       await refreshProjects();
       setMessage(messagePayload("success", translate(language, "message.projectConfigurationSaved")));
+    });
+  }
+
+  async function deleteProject() {
+    if (!selectedProjectId) {
+      setMessage(messagePayload("error", translate(language, "message.openProjectFirst")));
+      return;
+    }
+    if (!window.confirm(translate(language, "prompt.confirmDeleteProject"))) {
+      return;
+    }
+    await withPending("delete-project", async () => {
+      const result = await bridgeRequest(
+        "delete-project",
+        {
+          repo_id: selectedProjectId,
+        },
+        workspaceRoot || null,
+      );
+      setProjects(result.projects || []);
+      setWorkspaceStats(result.workspace || null);
+      setProjectDetail(null);
+      setSelectedProjectId("");
+      setSelectedStepId("");
+      setPlanDirty(false);
+      setLoadingProjectId("");
+      setProjectForm(blankProjectForm(defaultRuntime));
+      setPlanDraft({ steps: [], project_prompt: "", closeout_status: "not_started" });
+      setShareSettings({ bind_host: "127.0.0.1", public_base_url: "" });
+      if ((result.projects || []).length) {
+        setSelectedProjectId(result.projects[0].repo_id);
+      }
+      setMessage(messagePayload("success", translate(language, "message.projectDeleted")));
     });
   }
 
@@ -862,6 +895,7 @@ export function useDesktopController() {
     refreshProjects,
     loadProject,
     saveProject,
+    deleteProject,
     savePlan,
     resetPlan,
     startNewProject,

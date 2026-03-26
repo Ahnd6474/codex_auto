@@ -31,6 +31,7 @@ export function CenterWorkspace({
   onChangeProgramSettings,
   onChooseDirectory,
   onSaveProject,
+  onDeleteProject,
   onSaveProgramSettings,
   onPromptChange,
   onGeneratePlan,
@@ -102,6 +103,7 @@ export function CenterWorkspace({
           onChangeForm={onChangeForm}
           onChooseDirectory={onChooseDirectory}
           onSaveProject={onSaveProject}
+          onDeleteProject={onDeleteProject}
         />
       ) : null}
       {activeTab === "app-settings" ? (

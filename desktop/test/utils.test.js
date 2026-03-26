@@ -10,6 +10,7 @@ import {
   blankProjectForm,
   buildProjectPayload,
   canEditStep,
+  codexUsageBuckets,
   cloneValue,
   commandLabel,
   reasoningEffortLabel,
@@ -311,6 +312,32 @@ test("config reasoning helpers keep auto separate from explicit efforts", () => 
   assert.equal(reasoningEffortLabel("auto"), "Auto");
   assert.equal(autoRoutingPresetLabel("low"), "Low Only");
   assert.equal(autoRoutingPresetLabel("xhigh", "ko"), "매우 높음만");
+});
+
+test("codexUsageBuckets separates 5h, 7d, and spark usage windows", () => {
+  const buckets = codexUsageBuckets({
+    rate_limits: {
+      default_limit_id: "codex",
+      items: [
+        {
+          limit_id: "codex",
+          primary: { remaining_percent: 70, used_percent: 30, resets_at: "2026-03-26T05:00:00+00:00" },
+          secondary: { remaining_percent: 55, used_percent: 45, resets_at: "2026-04-02T00:00:00+00:00" },
+        },
+        {
+          limit_id: "codex-spark",
+          primary: { remaining_percent: 20, used_percent: 80, resets_at: "2026-03-26T02:00:00+00:00" },
+        },
+      ],
+    },
+  });
+
+  assert.equal(buckets[0].label, "5h Usage");
+  assert.equal(buckets[0].window.remaining_percent, 70);
+  assert.equal(buckets[1].label, "7d Usage");
+  assert.equal(buckets[1].window.remaining_percent, 55);
+  assert.equal(buckets[2].label, "Codex Spark");
+  assert.equal(buckets[2].window.remaining_percent, 20);
 });
 
 test("progressCaption summarizes empty, partial, and completed plans", () => {

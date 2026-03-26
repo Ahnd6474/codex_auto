@@ -200,6 +200,49 @@ class UIBridgeTests(unittest.TestCase):
             self.assertIn("Demo Project", loaded["summary"])
             self.assertEqual(loaded["stats"]["total_steps"], 0)
 
+    def test_delete_project_removes_managed_workspace_but_keeps_local_repo(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            (repo_dir / "README.md").write_text("demo", encoding="utf-8")
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Delete Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "codex_auto.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            managed_root = Path(detail["project"]["project_root"])
+            self.assertTrue(managed_root.exists())
+
+            deleted = run_command(
+                "delete-project",
+                workspace_root,
+                {
+                    "repo_id": detail["project"]["repo_id"],
+                },
+            )
+
+            self.assertEqual(deleted["deleted"]["display_name"], "Delete Demo")
+            self.assertEqual(deleted["projects"], [])
+            self.assertFalse(managed_root.exists())
+            self.assertTrue(repo_dir.exists())
+            self.assertTrue((repo_dir / "README.md").exists())
+
     def test_save_plan_and_request_stop_persist_bridge_state(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"
