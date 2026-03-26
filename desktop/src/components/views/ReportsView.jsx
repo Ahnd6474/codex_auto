@@ -15,6 +15,13 @@ export function ReportsView({ reports }) {
       <div className="overview-grid">
         <div className="content-card">
           <div className="content-card__header">
+            <strong>ML Experiment Report</strong>
+          </div>
+          <pre>{reports?.ml_experiment_report_text || "No ML experiment report yet."}</pre>
+        </div>
+
+        <div className="content-card">
+          <div className="content-card__header">
             <strong>{t("reports.closeoutReport")}</strong>
           </div>
           <pre>{reports?.closeout_report_text || t("reports.noCloseoutReport")}</pre>

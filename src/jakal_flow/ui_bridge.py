@@ -45,7 +45,7 @@ from .share import (
     share_server_status_payload,
 )
 from .ui_bridge_payloads import list_projects_payload, progress_caption, project_detail_payload
-from .utils import append_jsonl, now_utc_iso, parse_json_text, read_json, write_json
+from .utils import append_jsonl, normalize_workflow_mode, now_utc_iso, parse_json_text, read_json, write_json
 
 
 DEFAULT_GUI_WORKSPACE_DIRNAME = ".jakal-flow-workspace"
@@ -272,6 +272,8 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
         checkpoint_interval_blocks=1,
         require_checkpoint_approval=False,
         max_blocks=5,
+        workflow_mode="standard",
+        ml_max_cycles=3,
     ).to_dict()
     merged = {**base, **payload}
     merged["max_blocks"] = coerce_positive_int(merged.get("max_blocks", 5), default=5)
@@ -286,6 +288,10 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
         merged.get("parallel_workers", 2),
         default=2,
     )
+    merged["ml_max_cycles"] = coerce_positive_int(
+        merged.get("ml_max_cycles", 3),
+        default=3,
+    )
     merged["allow_push"] = coerce_bool(merged.get("allow_push", True), True)
     merged["require_checkpoint_approval"] = coerce_bool(
         merged.get("require_checkpoint_approval", False),
@@ -294,6 +300,7 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
     merged["execution_mode"] = str(merged.get("execution_mode", "serial")).strip().lower()
     if merged["execution_mode"] not in {"serial", "parallel"}:
         merged["execution_mode"] = "serial"
+    merged["workflow_mode"] = normalize_workflow_mode(merged.get("workflow_mode", "standard"))
     merged["test_cmd"] = str(merged.get("test_cmd", "python -m pytest")).strip() or "python -m pytest"
     merged["model_provider"] = normalize_model_provider(
         str(merged.get("model_provider", DEFAULT_MODEL_PROVIDER)),
@@ -368,6 +375,8 @@ def parse_plan_state(payload: dict[str, Any]) -> ExecutionPlanState:
     state = ExecutionPlanState.from_dict(payload)
     if "execution_mode" not in payload:
         state.execution_mode = ""
+    if "workflow_mode" not in payload:
+        state.workflow_mode = ""
     state.default_test_command = payload.get("default_test_command", state.default_test_command) or state.default_test_command
     return state
 
@@ -737,6 +746,45 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
                 current_plan = orchestrator.load_execution_plan_state(latest_project)
                 batches = orchestrator.pending_execution_batches(current_plan)
                 if not batches:
+                    if normalize_workflow_mode(runtime.workflow_mode) == "ml":
+                        saved = current_plan
+                        project = latest_project
+                        if str(current_plan.closeout_status).strip().lower() != "completed":
+                            append_ui_event(project, "closeout-started", "Started ML cycle closeout.")
+                            project, saved = orchestrator.run_execution_closeout(
+                                project_dir=project_dir,
+                                runtime=runtime,
+                                branch=branch,
+                                origin_url=origin_url,
+                            )
+                            append_ui_event(
+                                project,
+                                "closeout-finished",
+                                f"ML cycle closeout finished with status {saved.closeout_status}.",
+                                {"status": saved.closeout_status, "commit_hash": saved.closeout_commit_hash},
+                            )
+                            if saved.closeout_status != "completed":
+                                break
+                        project, saved, continued, reason = orchestrator.prepare_next_ml_cycle(
+                            project_dir=project_dir,
+                            runtime=runtime,
+                            branch=branch,
+                            origin_url=origin_url,
+                        )
+                        if continued:
+                            append_ui_event(
+                                project,
+                                "plan-generated",
+                                f"Generated the next ML execution cycle with {len(saved.steps)} step(s).",
+                                {"workflow_mode": "ml", "step_count": len(saved.steps)},
+                            )
+                            continue
+                        append_ui_event(
+                            project,
+                            "ml-cycle-stopped",
+                            f"ML loop stopped: {reason}.",
+                            {"reason": reason},
+                        )
                     break
                 if stop_requested(latest_project):
                     append_ui_event(latest_project, "run-paused", "Paused before the next step because a stop was requested.")

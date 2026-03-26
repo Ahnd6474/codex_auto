@@ -28,6 +28,9 @@ from jakal_flow.planning import (
     DEBUGGER_PROMPT_FILENAME,
     DEBUGGER_SERIAL_PROMPT_FILENAME,
     FINALIZATION_PROMPT_FILENAME,
+    ML_FINALIZATION_PROMPT_FILENAME,
+    ML_PLAN_GENERATION_PROMPT_FILENAME,
+    ML_STEP_EXECUTION_PROMPT_FILENAME,
     PLAN_GENERATION_PARALLEL_PROMPT_FILENAME,
     PLAN_GENERATION_PROMPT_FILENAME,
     PLAN_GENERATION_SERIAL_PROMPT_FILENAME,
@@ -39,6 +42,7 @@ from jakal_flow.planning import (
     bootstrap_plan_prompt,
     execution_plan_svg,
     load_debugger_prompt_template,
+    load_finalization_prompt_template,
     load_plan_generation_prompt_template,
     load_reference_guide_text,
     load_source_prompt_template,
@@ -49,7 +53,7 @@ from jakal_flow.planning import (
     source_prompt_template_path,
 )
 from jakal_flow.reporting import Reporter
-from jakal_flow.utils import append_jsonl, read_jsonl_tail, read_last_jsonl
+from jakal_flow.utils import append_jsonl, read_json, read_jsonl_tail, read_last_jsonl, write_json
 
 
 class ExecutionPlanHelperTests(unittest.TestCase):
@@ -123,6 +127,32 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(len(steps), 1)
         self.assertEqual(steps[0].reasoning_effort, "xhigh")
 
+    def test_parse_execution_plan_response_preserves_metadata(self) -> None:
+        response = """
+        {
+          "tasks": [
+            {
+              "task_title": "Run experiment",
+              "display_description": "Evaluate one ML configuration.",
+              "codex_description": "Use the existing training script and log one reproducible experiment.",
+              "metadata": {
+                "experiment_id": "EXP-1",
+                "experiment_kind": "ml",
+                "primary_metric": "f1",
+                "feature_spec": "tfidf + stats",
+                "model_spec": "lightgbm"
+              }
+            }
+          ]
+        }
+        """
+
+        _title, _summary, steps = parse_execution_plan_response(response, "python -m unittest", "high", limit=2)
+
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0].metadata["experiment_id"], "EXP-1")
+        self.assertEqual(steps[0].metadata["model_spec"], "lightgbm")
+
     def test_parse_execution_plan_response_recovers_json_from_noisy_text(self) -> None:
         response = """
         Here is the execution plan JSON.
@@ -183,6 +213,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         state = ExecutionPlanState.from_dict(
             {
                 "plan_title": "demo",
+                "workflow_mode": "ml",
                 "execution_mode": "parallel",
                 "closeout_status": "completed",
                 "closeout_started_at": "2026-01-01T00:00:00+00:00",
@@ -193,6 +224,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             }
         )
 
+        self.assertEqual(state.workflow_mode, "ml")
         self.assertEqual(state.execution_mode, "parallel")
         self.assertEqual(state.closeout_status, "completed")
         self.assertEqual(state.closeout_commit_hash, "abc123")
@@ -355,6 +387,88 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(step.status, "completed")
         self.assertEqual(step.reasoning_effort, "xhigh")
         self.assertEqual(step.commit_hash, "abc123")
+
+    def test_collect_ml_step_report_updates_ml_state_and_outputs(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_ml_report_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model="gpt-5.4",
+            effort="high",
+            test_cmd="python -m pytest",
+            workflow_mode="ml",
+            execution_mode="parallel",
+            ml_max_cycles=4,
+        )
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(project_dir=repo_dir, branch="main", runtime=runtime)
+            context.metadata.current_safe_revision = "safe-revision"
+            context.loop_state.current_safe_revision = "safe-revision"
+            orchestrator.workspace.save_project(context)
+            plan_state = orchestrator.save_execution_plan_state(
+                context,
+                ExecutionPlanState(
+                    plan_title="ML Demo",
+                    project_prompt="Improve validation F1 with disciplined ML experiments.",
+                    summary="Run one reproducible ML experiment.",
+                    workflow_mode="ml",
+                    execution_mode="parallel",
+                    default_test_command="python -m pytest",
+                    steps=[
+                        ExecutionStep(
+                            step_id="EXP-A",
+                            title="Train a baseline classifier",
+                            test_command="python -m pytest",
+                            status="completed",
+                            notes="validation f1 improved",
+                            metadata={
+                                "experiment_id": "EXP-BASELINE",
+                                "experiment_kind": "ml",
+                                "primary_metric": "f1",
+                                "feature_spec": "tfidf + stats",
+                                "model_spec": "lightgbm",
+                                "resource_budget": "1 gpu-hour",
+                            },
+                        )
+                    ],
+                ),
+            )
+            orchestrator._initialize_ml_mode_state(context, plan_state, plan_state.project_prompt, cycle_index=1)
+            write_json(
+                context.paths.ml_step_report_file,
+                {
+                    "experiment_id": "EXP-BASELINE",
+                    "experiment_kind": "ml",
+                    "primary_metric": "f1",
+                    "metric_direction": "maximize",
+                    "metric_value": 0.913,
+                    "feature_spec": "tfidf + stats",
+                    "model_spec": "lightgbm",
+                    "resource_budget": "1 gpu-hour",
+                    "validation_summary": "Best validation f1 reached 0.913",
+                    "notes": "No leakage detected during split audit.",
+                },
+            )
+
+            record = orchestrator._collect_ml_step_report(context, plan_state.steps[0])
+            ml_state = read_json(context.paths.ml_mode_state_file)
+            report_text = context.paths.ml_experiment_report_file.read_text(encoding="utf-8")
+            svg_text = context.paths.ml_experiment_results_svg_file.read_text(encoding="utf-8")
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertIsNotNone(record)
+        self.assertEqual(record.experiment_id, "EXP-BASELINE")
+        self.assertAlmostEqual(record.metric_value or 0.0, 0.913, places=3)
+        self.assertEqual(ml_state["best_experiment_id"], "EXP-BASELINE")
+        self.assertEqual(ml_state["best_metric_name"], "f1")
+        self.assertIn("EXP-BASELINE", report_text)
+        self.assertIn("0.913", report_text)
+        self.assertIn("<svg", svg_text)
 
     def test_run_saved_execution_step_retries_rolled_back_attempts_until_success(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_step_retry_success_test"
@@ -869,11 +983,14 @@ class ExecutionPlanHelperTests(unittest.TestCase):
     def test_source_prompt_templates_exist_and_keep_expected_placeholders(self) -> None:
         serial_plan_template = load_source_prompt_template(PLAN_GENERATION_SERIAL_PROMPT_FILENAME)
         parallel_plan_template = load_source_prompt_template(PLAN_GENERATION_PARALLEL_PROMPT_FILENAME)
+        ml_plan_template = load_source_prompt_template(ML_PLAN_GENERATION_PROMPT_FILENAME)
         serial_step_template = load_source_prompt_template(STEP_EXECUTION_SERIAL_PROMPT_FILENAME)
         parallel_step_template = load_source_prompt_template(STEP_EXECUTION_PARALLEL_PROMPT_FILENAME)
+        ml_step_template = load_source_prompt_template(ML_STEP_EXECUTION_PROMPT_FILENAME)
         serial_debugger_template = load_source_prompt_template(DEBUGGER_SERIAL_PROMPT_FILENAME)
         parallel_debugger_template = load_source_prompt_template(DEBUGGER_PARALLEL_PROMPT_FILENAME)
         final_template = load_source_prompt_template(FINALIZATION_PROMPT_FILENAME)
+        ml_final_template = load_source_prompt_template(ML_FINALIZATION_PROMPT_FILENAME)
         scope_template = load_source_prompt_template(SCOPE_GUARD_TEMPLATE_FILENAME)
 
         self.assertTrue(source_prompt_template_path(PLAN_GENERATION_PROMPT_FILENAME).exists())
@@ -883,6 +1000,9 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertTrue(source_prompt_template_path(DEBUGGER_PROMPT_FILENAME).exists())
         self.assertTrue(source_prompt_template_path(DEBUGGER_PARALLEL_PROMPT_FILENAME).exists())
         self.assertTrue(source_prompt_template_path(FINALIZATION_PROMPT_FILENAME).exists())
+        self.assertTrue(source_prompt_template_path(ML_PLAN_GENERATION_PROMPT_FILENAME).exists())
+        self.assertTrue(source_prompt_template_path(ML_STEP_EXECUTION_PROMPT_FILENAME).exists())
+        self.assertTrue(source_prompt_template_path(ML_FINALIZATION_PROMPT_FILENAME).exists())
         self.assertTrue(source_prompt_template_path(SCOPE_GUARD_TEMPLATE_FILENAME).exists())
         self.assertTrue(source_prompt_template_path(REFERENCE_GUIDE_FILENAME).exists())
         self.assertIn("{repo_dir}", serial_plan_template)
@@ -897,6 +1017,9 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("DAG execution tree", parallel_plan_template)
         self.assertIn("{reference_notes}", parallel_plan_template)
         self.assertIn("src/jakal_flow/docs/REFERENCE_GUIDE.md", parallel_plan_template)
+        self.assertIn('"metadata": {', ml_plan_template)
+        self.assertIn("Prevent data leakage", ml_plan_template)
+        self.assertIn("{workflow_mode}", ml_plan_template)
         self.assertIn("{task_title}", serial_step_template)
         self.assertIn("{display_description}", serial_step_template)
         self.assertIn("{codex_description}", serial_step_template)
@@ -906,6 +1029,8 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("{plan_snapshot}", serial_step_template)
         self.assertIn("saved DAG execution tree", parallel_step_template)
         self.assertIn("primary write scope", parallel_step_template)
+        self.assertIn("{ml_step_report_file}", ml_step_template)
+        self.assertIn("Step metadata", ml_step_template)
         self.assertIn("{failing_test_summary}", serial_debugger_template)
         self.assertIn("{failing_test_stdout}", serial_debugger_template)
         self.assertIn("Do not modify tests unless", serial_debugger_template)
@@ -913,13 +1038,18 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("merged parallel batch", parallel_debugger_template)
         self.assertEqual(load_plan_generation_prompt_template("serial"), serial_plan_template)
         self.assertEqual(load_plan_generation_prompt_template("parallel"), parallel_plan_template)
+        self.assertEqual(load_plan_generation_prompt_template("parallel", "ml"), ml_plan_template)
         self.assertEqual(load_step_execution_prompt_template("serial"), serial_step_template)
         self.assertEqual(load_step_execution_prompt_template("parallel"), parallel_step_template)
+        self.assertEqual(load_step_execution_prompt_template("parallel", "ml"), ml_step_template)
         self.assertEqual(load_debugger_prompt_template("serial"), serial_debugger_template)
         self.assertEqual(load_debugger_prompt_template("parallel"), parallel_debugger_template)
         self.assertIn("{completed_steps}", final_template)
         self.assertIn("{closeout_report_file}", final_template)
         self.assertIn("{test_command}", final_template)
+        self.assertIn("{ml_mode_state_file}", ml_final_template)
+        self.assertIn("{ml_experiment_reports_dir}", ml_final_template)
+        self.assertEqual(load_finalization_prompt_template("ml"), ml_final_template)
         self.assertIn("{repo_url}", scope_template)
 
     def test_scan_repository_inputs_and_source_reference_guide_feed_planning_prompts(self) -> None:

@@ -181,6 +181,19 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(runtime.model, "qwen2.5-coder:0.5b")
         self.assertEqual(runtime.model_preset, "")
 
+    def test_runtime_from_payload_normalizes_ml_workflow_values(self) -> None:
+        runtime = runtime_from_payload(
+            {
+                "workflow_mode": "ML",
+                "ml_max_cycles": "0",
+                "execution_mode": "parallel",
+            }
+        )
+
+        self.assertEqual(runtime.workflow_mode, "ml")
+        self.assertEqual(runtime.ml_max_cycles, 1)
+        self.assertEqual(runtime.execution_mode, "parallel")
+
     def test_runtime_from_payload_applies_openrouter_defaults(self) -> None:
         runtime = runtime_from_payload(
             {

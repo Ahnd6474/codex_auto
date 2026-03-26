@@ -47,6 +47,16 @@ def _float_or_none(value: Any) -> float | None:
         return None
 
 
+def _int_or_default(value: Any, default: int, minimum: int | None = None) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    if minimum is not None:
+        return max(minimum, parsed)
+    return parsed
+
+
 @dataclass(slots=True)
 class RuntimeOptions:
     model_provider: str = "openai"
@@ -404,7 +414,7 @@ class MLExperimentRecord:
     def from_dict(cls, data: dict[str, Any]) -> "MLExperimentRecord":
         return cls(
             experiment_id=str(data.get("experiment_id", data.get("step_id", ""))).strip() or "EXP-UNKNOWN",
-            cycle_index=max(1, int(data.get("cycle_index", 1) or 1)),
+            cycle_index=_int_or_default(data.get("cycle_index", 1), 1, minimum=1),
             step_id=str(data.get("step_id", "")).strip(),
             status=str(data.get("status", "planned")).strip() or "planned",
             title=str(data.get("title", "")).strip(),
@@ -461,8 +471,8 @@ class MLModeState:
                     experiments.append(MLExperimentRecord.from_dict(item))
         return cls(
             workflow_mode=str(data.get("workflow_mode", "standard")).strip().lower() or "standard",
-            cycle_index=max(0, int(data.get("cycle_index", 0) or 0)),
-            max_cycles=max(1, int(data.get("max_cycles", 1) or 1)),
+            cycle_index=_int_or_default(data.get("cycle_index", 0), 0, minimum=0),
+            max_cycles=_int_or_default(data.get("max_cycles", 1), 1, minimum=1),
             objective=str(data.get("objective", "")).strip(),
             target_metric=str(data.get("target_metric", "")).strip(),
             target_value=_float_or_none(data.get("target_value")),

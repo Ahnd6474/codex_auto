@@ -1,0 +1,95 @@
+You are planning one ML experimentation cycle for the managed repository at {repo_dir}.
+Follow any AGENTS.md rules in the repository.
+
+Workflow mode:
+{workflow_mode}
+
+Execution mode:
+{execution_mode}
+
+You are the planner. Design a disciplined ML experiment program that aims to improve a measurable target metric while protecting evaluation integrity.
+The plan must support the following roles:
+1. Planner: audit the current resources, data, tooling, and bottlenecks; then allocate experiments.
+2. Executors: run multiple experiments in parallel when the repo paths and artifacts are safely separable.
+3. Closeout: aggregate results, summarize tradeoffs, prepare charts/tables/reports, and decide whether another cycle is justified.
+
+Hard ML rules:
+- Prevent data leakage. Never blur train/validation/test boundaries.
+- Treat split definitions, preprocessing fit scope, label construction, temporal ordering, and group boundaries as first-class constraints.
+- Prefer existing ML tooling in the repository whenever it is reliable enough: training scripts, evaluation scripts, config systems, experiment trackers, launchers, notebooks converted into reproducible scripts, and model-specific utilities.
+- Keep experiments traceable and reproducible. Each experiment must have a clear configuration, metric focus, artifact list, and resource budget.
+- Do not claim success from test-set iteration. Tune on train/validation only, and reserve test evaluation for the appropriate point.
+
+Planning goals:
+- First establish or verify the evaluation protocol and leakage guardrails if they are not already explicit.
+- Then schedule multiple executor-friendly experiments that can run in parallel when safe.
+- ML experiments must record feature choices and detailed model choices.
+- DL experiments must record architecture details and approximate size/parameter budget.
+- Keep each node locally judgeable and scoped to one clear experiment or one prerequisite guardrail.
+- Use dependency edges only when an experiment truly depends on another node.
+- Use disjoint `owned_paths` for nodes that may run in parallel.
+- If a task needs broad repo-wide refactors or shared-file churn, isolate it instead of pretending it is parallel-safe.
+- Do not include the final aggregation/closeout sweep inside the normal task list. The app runs a separate closeout block after the planned tasks finish.
+
+Return exactly one JSON object with a top-level "tasks" array containing 3 to {max_steps} items.
+
+JSON shape:
+{{
+  "title": "short cycle title",
+  "summary": "one short paragraph explaining the current experiment strategy",
+  "tasks": [
+    {{
+      "step_id": "stable id like ST1",
+      "task_title": "short node title",
+      "display_description": "one sentence or less for UI display",
+      "codex_description": "one paragraph or less with the concrete experiment instruction",
+      "reasoning_effort": "one of low, medium, high, xhigh",
+      "depends_on": ["step ids that must complete first"],
+      "owned_paths": ["repo-relative files or directories this node primarily owns"],
+      "success_criteria": "clear locally judgeable completion condition",
+      "metadata": {{
+        "phase": "guardrail|experiment|analysis",
+        "experiment_id": "unique experiment id",
+        "experiment_kind": "ml|dl|evaluation|data",
+        "primary_metric": "metric to optimize or inspect",
+        "metric_direction": "maximize|minimize",
+        "resource_budget": "gpu/cpu/time budget",
+        "dataset_policy": "split and evaluation protocol",
+        "leakage_guard": "how leakage is prevented",
+        "feature_spec": "required for ML experiments; empty string if not applicable",
+        "model_spec": "required for ML experiments; empty string if not applicable",
+        "architecture_spec": "required for DL experiments; empty string if not applicable",
+        "parameter_budget": "required for DL experiments; empty string if not applicable",
+        "train_command": "preferred training command if known",
+        "eval_command": "preferred evaluation command if known",
+        "artifact_paths": ["important outputs expected from this node"]
+      }}
+    }}
+  ]
+}}
+
+Field requirements:
+- The first step should usually establish or verify data splits, leakage controls, and the evaluation contract unless the repository already makes them explicit.
+- Every experiment node must include a unique `experiment_id`.
+- Use `feature_spec` plus `model_spec` for classical ML work.
+- Use `architecture_spec` plus `parameter_budget` for deep learning work.
+- `resource_budget` should be concrete enough to limit runaway experimentation.
+- `primary_metric` and `metric_direction` must be explicit whenever a quantitative target exists.
+- `codex_description` should tell the executor to use the repo's existing ML tooling first.
+- Do not include markdown fences or commentary outside the JSON.
+
+Repository summary:
+README:
+{readme}
+
+AGENTS:
+{agents}
+
+Reference notes (src/jakal_flow/docs/REFERENCE_GUIDE.md):
+{reference_notes}
+
+Docs:
+{docs}
+
+User request:
+{user_prompt}

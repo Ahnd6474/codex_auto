@@ -40,6 +40,8 @@ export const PROGRAM_RUNTIME_KEYS = [
   "codex_path",
   "allow_push",
   "require_checkpoint_approval",
+  "workflow_mode",
+  "ml_max_cycles",
   "execution_mode",
   "parallel_workers",
 ];
@@ -75,6 +77,8 @@ const DEFAULT_PROGRAM_RUNTIME = {
   codex_path: "codex.cmd",
   allow_push: true,
   require_checkpoint_approval: false,
+  workflow_mode: "standard",
+  ml_max_cycles: 3,
   execution_mode: "serial",
   parallel_workers: 2,
 };
@@ -635,9 +639,13 @@ export function buildProjectPayload(form, plan = null) {
   };
   if (plan) {
     const nextPlan = cloneValue(plan) || {};
+    const workflowMode = String(payload.runtime?.workflow_mode || nextPlan.workflow_mode || "standard")
+      .trim()
+      .toLowerCase();
     const executionMode = String(payload.runtime?.execution_mode || nextPlan.execution_mode || "serial")
       .trim()
       .toLowerCase();
+    nextPlan.workflow_mode = workflowMode === "ml" ? "ml" : "standard";
     nextPlan.execution_mode = executionMode === "parallel" ? "parallel" : "serial";
     nextPlan.default_test_command = nextPlan.default_test_command || payload.runtime?.test_cmd || "python -m pytest";
     payload.plan = nextPlan;
@@ -917,13 +925,17 @@ export function firstSelectableStepId(plan) {
 export function runtimeSummary(runtime, modelPresets = [], language = "en", modelCatalog = []) {
   const provider = normalizedModelProvider(runtime);
   const providerPrefix = providerDisplayName(provider, normalizedLocalModelProvider(runtime));
+  const workflowSuffix =
+    String(runtime?.workflow_mode || "standard").trim().toLowerCase() === "ml"
+      ? ` | ${translate(language, "option.workflowML")}`
+      : ` | ${translate(language, "option.workflowStandard")}`;
   const executionSuffix =
     String(runtime?.execution_mode || "serial").trim().toLowerCase() === "parallel"
       ? ` | parallel x${Math.max(1, Number.parseInt(String(runtime?.parallel_workers || 2), 10) || 1)}`
       : " | serial";
   const preset = modelPresets.find((item) => item.preset_id === runtime?.model_preset);
   if (preset && providerSupportsAutoModel(provider)) {
-    const summary = `${providerPrefix} | ${preset.summary}${executionSuffix}`;
+    const summary = `${providerPrefix}${workflowSuffix} | ${preset.summary}${executionSuffix}`;
     return runtime?.use_fast_mode ? `${summary} | /fast` : summary;
   }
   if (runtime?.model) {
@@ -934,13 +946,13 @@ export function runtimeSummary(runtime, modelPresets = [], language = "en", mode
         : reasoningEffortLabel(runtime.effort || "high", language);
     if (normalizeLanguage(language) === "ko") {
       const summary = translate("ko", "runtime.modelSummary", {
-        model: `${providerPrefix} | ${label}`,
+        model: `${providerPrefix}${workflowSuffix} | ${label}`,
         effort: effortLabel,
       });
       const nextSummary = `${summary}${executionSuffix}`;
       return runtime?.use_fast_mode ? `${nextSummary} | /fast` : nextSummary;
     }
-    const summary = `${providerPrefix} | ${label} | reasoning ${effortLabel}${executionSuffix}`;
+    const summary = `${providerPrefix}${workflowSuffix} | ${label} | reasoning ${effortLabel}${executionSuffix}`;
     return runtime?.use_fast_mode ? `${summary} | /fast` : summary;
   }
   return translate(language, "runtime.noModelSelected");

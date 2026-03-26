@@ -177,6 +177,43 @@ export function ConfigEditorView({
             />
           </label>
           <label className="field">
+            <span>{t("field.workflowMode")}</span>
+            <select
+              value={runtime.workflow_mode || "standard"}
+              onChange={(event) =>
+                onChangeForm((current) => ({
+                  ...current,
+                  runtime: {
+                    ...current.runtime,
+                    workflow_mode: event.target.value,
+                  },
+                }))
+              }
+              disabled={busy}
+            >
+              <option value="standard">{t("option.workflowStandard")}</option>
+              <option value="ml">{t("option.workflowML")}</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>{t("field.mlMaxCycles")}</span>
+            <input
+              type="number"
+              min="1"
+              value={runtime.ml_max_cycles || 3}
+              onChange={(event) =>
+                onChangeForm((current) => ({
+                  ...current,
+                  runtime: {
+                    ...current.runtime,
+                    ml_max_cycles: Math.max(1, Number.parseInt(event.target.value || "1", 10) || 1),
+                  },
+                }))
+              }
+              disabled={busy}
+            />
+          </label>
+          <label className="field">
             <span>{t("field.executionMode")}</span>
             <select
               value={runtime.execution_mode || "serial"}

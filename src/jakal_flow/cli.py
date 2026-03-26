@@ -47,6 +47,13 @@ def build_parser() -> argparse.ArgumentParser:
         target.add_argument("--fast", action="store_true", help="Prefix Codex prompts with /fast before execution")
         target.add_argument("--word-report", action="store_true", help="Generate a .docx closeout report after closeout completes")
         target.add_argument("--effort", default="medium", help="Reasoning effort override: low, medium, high, xhigh")
+        target.add_argument(
+            "--workflow-mode",
+            default="standard",
+            choices=["standard", "ml"],
+            help="Execution workflow mode: standard software iteration or ML experiment loop",
+        )
+        target.add_argument("--ml-max-cycles", type=int, default=3, help="Maximum automatic ML planning cycles before stopping")
         target.add_argument("--extra-prompt", default="", help="Additional user instructions appended to Codex prompts")
         target.add_argument(
             "--plan-prompt",
@@ -103,6 +110,8 @@ def runtime_from_args(args: argparse.Namespace) -> RuntimeOptions:
         use_fast_mode=args.fast,
         generate_word_report=args.word_report,
         effort=args.effort,
+        workflow_mode=args.workflow_mode,
+        ml_max_cycles=max(1, args.ml_max_cycles),
         extra_prompt=args.extra_prompt,
         init_plan_prompt=args.plan_prompt,
         approval_mode=args.approval_mode,

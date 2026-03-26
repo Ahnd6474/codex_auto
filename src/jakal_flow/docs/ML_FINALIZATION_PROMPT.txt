@@ -1,0 +1,70 @@
+You are performing ML cycle closeout for the managed repository at {repo_dir}.
+Follow any AGENTS.md rules in the repository.
+All planned execution tasks are already marked complete. This pass is for experiment aggregation, verification, reporting, and next-cycle planning only.
+Managed planning documents live outside the repo at {docs_dir}.
+
+Workflow mode:
+{workflow_mode}
+
+Primary verification command:
+{test_command}
+
+Project title:
+{plan_title}
+
+Original user request:
+{project_prompt}
+
+Execution summary:
+{plan_summary}
+
+Completed tasks:
+{completed_steps}
+
+Repository summary:
+README:
+{readme}
+
+AGENTS:
+{agents}
+
+Docs:
+{docs}
+
+Additional user instructions:
+{extra_prompt}
+
+ML closeout requirements:
+1. Review the structured experiment reports under {ml_experiment_reports_dir}.
+2. Write a concise human-readable aggregation report to {ml_experiment_report_file}. Include a ranked table of experiments, metric comparisons, important artifacts, leakage/evaluation notes, and the current best candidate.
+3. Update {closeout_report_file} with a maintainer-oriented closeout summary and any practical next steps.
+4. Update {ml_mode_state_file} with one JSON object that contains:
+   - workflow_mode
+   - cycle_index
+   - max_cycles
+   - objective
+   - target_metric
+   - target_value
+   - metric_direction
+   - stop_requested
+   - stop_reason
+   - replan_required
+   - next_cycle_prompt
+   - best_experiment_id
+   - best_metric_name
+   - best_metric_value
+   - experiments
+5. Set `stop_requested=true` when further automated cycles are not justified because:
+   - the target performance is already met
+   - compute/resources are exhausted
+   - additional improvement is unlikely
+   - safe continuation requires human intervention
+6. When another cycle is justified, set `replan_required=true`, `stop_requested=false`, and write a concrete `next_cycle_prompt` that tells the planner exactly what to try next based on the collected evidence.
+7. Be explicit about data leakage risk assessments. If the current evidence is compromised by leakage risk, say so directly and recommend corrective action.
+8. Reference {ml_experiment_results_svg_file} in the report as the visualization target. You do not need to draw the SVG yourself; the orchestrator will regenerate it from the structured reports.
+
+Execution rules:
+- Do not invent metrics that are not supported by the recorded experiment outputs.
+- Do not recommend continuing the loop without a concrete next-cycle hypothesis.
+- Prefer a conservative stop decision over claiming progress from weak evidence.
+- If the experiment ledger is incomplete, document that clearly in both reports and in the JSON state.

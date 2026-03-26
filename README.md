@@ -66,6 +66,7 @@ The desktop app lets you:
 - start from a managed project screen with working directory, display name, GitHub connection mode, and verification command inputs
 - keep managed projects in a reusable list with saved status, summaries, and runtime settings
 - generate, edit, reorder, and persist execution-plan steps
+- switch between the standard software workflow and an ML experiment workflow with automatic cycle replanning
 - choose serial execution or a parallel DAG execution tree for the remaining steps and inspect activity/snapshot traces
 - request stop-after-step and run a separate closeout block after all plan steps complete
 - generate a temporary read-only monitoring link, copy it, and revoke it from the desktop UI
@@ -132,6 +133,23 @@ python -m jakal_flow run \
   --sandbox-mode workspace-write \
   --test-cmd "python -m pytest" \
   --max-blocks 1
+```
+
+Run one ML workflow cycle and allow automatic replanning for up to three cycles:
+
+```bash
+python -m jakal_flow run \
+  --repo-url https://github.com/example/project.git \
+  --branch main \
+  --workspace-root .jakal-flow-workspace \
+  --model gpt-5.4 \
+  --effort high \
+  --workflow-mode ml \
+  --ml-max-cycles 3 \
+  --approval-mode never \
+  --sandbox-mode workspace-write \
+  --test-cmd "python -m pytest" \
+  --max-blocks 6
 ```
 
 Run against an OpenAI-compatible provider such as OpenRouter:
@@ -222,10 +240,14 @@ The tool creates or maintains these files for each managed repository project:
 - `docs/BLOCK_REVIEW.md`
 - `docs/CHECKPOINT_TIMELINE.md`
 - `docs/CLOSEOUT_REPORT.md`
+- `docs/ML_EXPERIMENT_REPORT.md`
 - `docs/RESEARCH_NOTES.md`
 - `docs/attempt_history.md`
 - `state/LOOP_STATE.json`
 - `state/CHECKPOINTS.json`
+- `state/ML_MODE_STATE.json`
+- `state/ML_STEP_REPORT.json`
+- `state/ml_experiments/*.json`
 - `state/verification_cache/*.json`
 - `state/share_sessions.json`
 - `memory/success_patterns.jsonl`
@@ -250,6 +272,9 @@ Source prompt and scope templates:
 - `src/jakal_flow/docs/STEP_EXECUTION_SERIAL_PROMPT.txt`
 - `src/jakal_flow/docs/STEP_EXECUTION_PARALLEL_PROMPT.txt`
 - `src/jakal_flow/docs/FINALIZATION_PROMPT.txt`
+- `src/jakal_flow/docs/ML_PLAN_GENERATION_PROMPT.txt`
+- `src/jakal_flow/docs/ML_STEP_EXECUTION_PROMPT.txt`
+- `src/jakal_flow/docs/ML_FINALIZATION_PROMPT.txt`
 - `src/jakal_flow/docs/SCOPE_GUARD_TEMPLATE.md`
 
 ## Notes
@@ -258,6 +283,7 @@ Source prompt and scope templates:
 - local OSS runs are still executed through Codex CLI, using its `--oss` and `--local-provider` flags when a project runtime selects a local provider
 - the GUI saves both the resolved execution model slug and the selected preset in `project_config.json`; auto-model presets are normalized to `auto`, `low`, `medium`, `high`, or `xhigh`, and previously saved custom model slugs are still preserved
 - `reasoning.effort` is passed through to Codex using `low`, `medium`, `high`, or `xhigh`; saved execution-plan steps can override the project default per step
+- `--workflow-mode ml` switches the planner/executor/closeout prompts into an ML experiment loop with structured experiment reports and automatic next-cycle planning until a stop condition or `--ml-max-cycles` is reached
 - token usage is aggregated from `turn.completed` JSON events and surfaced in the GUI dashboard and pass logs
 - each repository gets its own isolated workspace subtree; no mutable state is shared across projects
 - local git user identity is configured in the managed clone for automated commits

@@ -12,7 +12,7 @@ from .models import ExecutionPlanState, ProjectContext
 from .orchestrator import Orchestrator
 from .runtime_insights import build_runtime_insights
 from .share import project_share_payload
-from .utils import compact_text, read_json, read_jsonl_tail, read_last_jsonl, read_text, write_json
+from .utils import compact_text, normalize_workflow_mode, read_json, read_jsonl_tail, read_last_jsonl, read_text, write_json
 
 
 DETAIL_CACHE_VERSION = 1
@@ -75,6 +75,9 @@ def project_detail_content_signature(project: ProjectContext, detail_level: str)
         project.paths.checkpoint_timeline_file,
         project.paths.attempt_history_file,
         project.paths.closeout_report_file,
+        project.paths.ml_mode_state_file,
+        project.paths.ml_experiment_report_file,
+        project.paths.ml_experiment_results_svg_file,
         project.paths.block_review_file,
         project.paths.execution_flow_svg_file,
     ]
@@ -163,6 +166,7 @@ def project_summary(orchestrator: Orchestrator, project: ProjectContext, plan_st
         f"GitHub: {project.metadata.origin_url or 'Not connected'}",
         f"Branch: {project.metadata.branch}",
         f"Status: {project.metadata.current_status}",
+        f"Workflow: {normalize_workflow_mode(getattr(plan, 'workflow_mode', '') or getattr(project.runtime, 'workflow_mode', 'standard'))}",
         f"Model: {project.runtime.model}  ({project.runtime.effort}) [{provider_summary}]",
         f"Verification: {plan.default_test_command or project.runtime.test_cmd}",
         f"Remaining Steps: {', '.join(remaining) if remaining else 'None'}",
@@ -288,9 +292,14 @@ def report_payload(context: ProjectContext) -> dict[str, Any]:
             context.paths.closeout_report_file,
             default="# Closeout Report\n\nNo closeout has been run yet.\n",
         ),
+        "ml_experiment_report_text": preview_text(
+            context.paths.ml_experiment_report_file,
+            default="# ML Experiment Report\n\nNo ML experiment summary has been generated yet.\n",
+        ),
         "attempt_history_text": preview_text(context.paths.attempt_history_file, default="No attempt history recorded yet.\n"),
         "word_report_enabled": bool(context.runtime.generate_word_report),
         "word_report_path": str(context.paths.closeout_report_docx_file) if context.paths.closeout_report_docx_file.exists() else "",
+        "ml_results_svg_path": str(context.paths.ml_experiment_results_svg_file) if context.paths.ml_experiment_results_svg_file.exists() else "",
     }
 
 

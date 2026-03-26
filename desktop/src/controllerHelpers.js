@@ -20,6 +20,7 @@ export function emptyPlanDraft() {
   return {
     steps: [],
     project_prompt: "",
+    workflow_mode: "standard",
     execution_mode: "serial",
     closeout_status: "not_started",
   };

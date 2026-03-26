@@ -418,7 +418,8 @@ def prompt_to_execution_plan_prompt(
     execution_mode: str = "serial",
     template_text: str | None = None,
 ) -> str:
-    workflow_mode = normalize_workflow_mode(getattr(context.runtime, "workflow_mode", "standard"))
+    runtime = getattr(context, "runtime", None)
+    workflow_mode = normalize_workflow_mode(getattr(runtime, "workflow_mode", "standard"))
     template = template_text or load_plan_generation_prompt_template(execution_mode, workflow_mode)
     try:
         return template.format(
