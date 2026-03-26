@@ -649,6 +649,58 @@ class UIBridgeTests(unittest.TestCase):
             finally:
                 run_command("stop_share_server", workspace_root, {})
 
+    def test_share_bridge_falls_back_to_local_share_session_when_quick_tunnel_fails(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Tunnel Fallback Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m pytest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                run_command("save-project-setup", workspace_root, payload)
+
+            try:
+                with mock.patch(
+                    "jakal_flow.ui_bridge.start_cloudflare_quick_tunnel",
+                    side_effect=RuntimeError("quick tunnel startup failed"),
+                ), mock.patch(
+                    "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                    side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+                ):
+                    created = run_command(
+                        "create_share_session",
+                        workspace_root,
+                        {
+                            "project_dir": str(repo_dir),
+                            "created_by": "unit-test",
+                            "bind_host": "0.0.0.0",
+                            "public_base_url": "",
+                        },
+                    )
+
+                self.assertIn("created_share_session", created)
+                self.assertIn("share_tunnel_warning", created)
+                self.assertIn("quick tunnel startup failed", created["share_tunnel_warning"])
+                self.assertTrue(created["created_share_session"]["local_url"].startswith("http://127.0.0.1:"))
+            finally:
+                run_command("stop_share_server", workspace_root, {})
+
 
 if __name__ == "__main__":
     unittest.main()

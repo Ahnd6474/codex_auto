@@ -1005,8 +1005,18 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
             and not public_base_url
             and bool(share_status.get("base_url"))
         )
+        quick_tunnel_warning = ""
         if should_start_quick_tunnel:
-            start_cloudflare_quick_tunnel(workspace_root, str(share_status["base_url"]))
+            try:
+                start_cloudflare_quick_tunnel(workspace_root, str(share_status["base_url"]))
+            except Exception as exc:
+                quick_tunnel_warning = str(exc).strip()
+                append_ui_event(
+                    project,
+                    "share-tunnel-warning",
+                    "Automatic public tunnel startup failed; the share session was created without a public URL.",
+                    {"error": quick_tunnel_warning},
+                )
         elif public_base_url or effective_bind_host != "0.0.0.0":
             stop_public_tunnel_process(workspace_root)
         session = create_share_session(
@@ -1022,6 +1032,8 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
         )
         detail = project_detail_payload(orchestrator, project)
         detail["created_share_session"] = public_session_summary(workspace_root, project, session, include_token=True)
+        if quick_tunnel_warning:
+            detail["share_tunnel_warning"] = quick_tunnel_warning
         return detail
 
     if command == "revoke_share_session":
