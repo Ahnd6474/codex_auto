@@ -253,6 +253,61 @@ export function modelDisplayName(modelCatalog = [], model = "") {
   return entry?.display_name || model || "auto";
 }
 
+function findRateLimitItem(rateLimits = [], matcher) {
+  return (
+    rateLimits.find((item) => {
+      const haystack = `${item?.limit_id || ""} ${item?.limit_name || ""}`.trim().toLowerCase();
+      return matcher(haystack, item);
+    }) || null
+  );
+}
+
+export function codexUsageBuckets(codexStatus = {}, language = "en") {
+  const rateLimits = codexStatus?.rate_limits?.items || [];
+  const defaultLimitId = String(codexStatus?.rate_limits?.default_limit_id || "").trim().toLowerCase();
+  const defaultItem =
+    findRateLimitItem(rateLimits, (_haystack, item) => String(item?.limit_id || "").trim().toLowerCase() === defaultLimitId) ||
+    findRateLimitItem(rateLimits, (haystack) => haystack.includes("codex")) ||
+    rateLimits[0] ||
+    null;
+  const sparkItem = findRateLimitItem(rateLimits, (haystack) => haystack.includes("spark"));
+  return [
+    {
+      key: "window_5h",
+      label: translate(language, "usage.window5h"),
+      window: defaultItem?.primary || null,
+    },
+    {
+      key: "window_7d",
+      label: translate(language, "usage.window7d"),
+      window: defaultItem?.secondary || null,
+    },
+    {
+      key: "codex_spark",
+      label: translate(language, "usage.codexSpark"),
+      window: sparkItem?.primary || sparkItem?.secondary || null,
+    },
+  ];
+}
+
+export function rateLimitRemainingLabel(window, language = "en") {
+  if (!window) {
+    return translate(language, "common.unavailable");
+  }
+  return `${window.remaining_percent ?? 0}%`;
+}
+
+export function rateLimitWindowSummary(window, language = "en") {
+  if (!window) {
+    return translate(language, "common.unavailable");
+  }
+  return translate(language, "usage.windowSummary", {
+    used: window.used_percent ?? 0,
+    remaining: window.remaining_percent ?? 0,
+    resetsAt: window.resets_at || translate(language, "common.unavailable"),
+  });
+}
+
 export function firstSelectableStepId(plan) {
   const steps = plan?.steps || [];
   const pending = steps.find((step) => step.status !== "completed");
