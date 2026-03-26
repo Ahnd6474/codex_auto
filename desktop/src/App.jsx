@@ -24,13 +24,21 @@ export default function App() {
   }, [controller.programSettings?.ui_theme]);
 
   useEffect(() => {
+    if (!controller.message || controller.message.tone === "error") {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => controller.setMessage(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [controller.message, controller.setMessage]);
+
+  useEffect(() => {
     function handleKeyDown(event) {
       const { setCenterTab } = keybindingActionsRef.current;
       if (!(event.ctrlKey || event.metaKey)) {
         return;
       }
       if (event.key >= "1" && event.key <= "6") {
-        const tabs = ["run", "dashboard", "reports", "history", "config", "app-settings"];
+        const tabs = ["run", "config", "dashboard", "reports", "history", "app-settings"];
         setCenterTab(tabs[Number.parseInt(event.key, 10) - 1]);
         event.preventDefault();
       }

@@ -54,6 +54,7 @@ export function CenterWorkspace({
 
   const visibleTabs = [
     ["run", t("tab.flow")],
+    ["config", t("tab.config")],
     ["dashboard", t("tab.dashboard")],
     ...(developerMode
       ? [
@@ -61,7 +62,6 @@ export function CenterWorkspace({
           ["history", t("tab.history")],
         ]
       : []),
-    ["config", t("tab.config")],
   ];
 
   return (

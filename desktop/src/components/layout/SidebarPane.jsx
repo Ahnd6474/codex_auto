@@ -146,10 +146,30 @@ export function SidebarPane({
   github,
 }) {
   const { language, t } = useI18n();
+  const [contextMenu, setContextMenu] = useState(null);
   const filteredWorkspaceTree = useMemo(() => {
     const normalizedQuery = workspaceFilter.trim().toLowerCase();
     return (workspaceTree || []).map((node) => filterTree(node, normalizedQuery)).filter(Boolean);
   }, [workspaceFilter, workspaceTree]);
+
+  useEffect(() => {
+    function handlePointerDown() {
+      setContextMenu(null);
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setContextMenu(null);
+      }
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
   const tabs = [
     ["projects", <SidebarProjectsIcon key="projects-icon" />, t("common.project")],
     ["workspace", <SidebarExplorerIcon key="workspace-icon" />, t("sidebar.explorer")],
@@ -189,7 +209,11 @@ export function SidebarPane({
                     onClick={() => onSelectProject(project.repo_id)}
                     onContextMenu={(event) => {
                       event.preventDefault();
-                      onDeleteProject(project.repo_id);
+                      setContextMenu({
+                        repoId: project.repo_id,
+                        x: event.clientX,
+                        y: event.clientY,
+                      });
                     }}
                     title={t("sidebar.projectContextDelete")}
                     type="button"
@@ -221,6 +245,25 @@ export function SidebarPane({
               <strong>{t("common.repoUrl")}</strong>
               <span>{github?.repo_url || t("common.unavailable")}</span>
             </div>
+            {contextMenu ? (
+              <div
+                className="context-menu"
+                style={{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <button
+                  className="context-menu__item"
+                  onClick={() => {
+                    const repoId = contextMenu.repoId;
+                    setContextMenu(null);
+                    onDeleteProject(repoId);
+                  }}
+                  type="button"
+                >
+                  {t("action.delete")}
+                </button>
+              </div>
+            ) : null}
           </>
         ) : null}
 

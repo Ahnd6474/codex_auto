@@ -55,7 +55,6 @@ export function DashboardView({ detail, planDraft, form, busy, modelPresets, mod
             <strong>{t("dashboard.runtime")}</strong>
           </div>
           <p>{runtimeSummary(detail?.runtime || {}, modelPresets, language, modelCatalog)}</p>
-          <p>{t("common.verification")}: {detail?.runtime?.test_cmd || "python -m pytest"}</p>
           <p>{t("common.branch")}: {detail?.project?.branch || t("common.unknown")}</p>
           <p>{t("dashboard.origin")}: {detail?.project?.origin_url || t("common.localOnly")}</p>
         </div>
@@ -100,7 +99,6 @@ export function DashboardView({ detail, planDraft, form, busy, modelPresets, mod
             />
             <span>{t("option.generateWordReport")}</span>
           </label>
-          <p>{t("config.wordReportDescription")}</p>
         </div>
       </div>
     </section>

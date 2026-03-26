@@ -62,6 +62,7 @@ function updateRuntimeModel(currentRuntime, modelCatalog, nextModel, nextEffort 
     ...currentRuntime,
     model,
     effort,
+    effort_selection_mode: selection === AUTO_REASONING_OPTION ? AUTO_REASONING_OPTION : "explicit",
     model_preset: model === "auto" ? autoPresetId(selection) : "",
     model_selection_mode: "slug",
     model_slug_input: model,
@@ -84,13 +85,15 @@ export function ConfigEditorView({
   const supportedEfforts = configReasoningOptions(modelCatalog, selectedModel, runtime.effort || "medium");
   const selectedEffort = selectedConfigReasoning(modelCatalog, runtime);
 
-  const visibleModels = (modelCatalog || []).filter((item) => item && item.model);
+  const visibleModels = (modelCatalog || []).filter(
+    (item) => item && item.model && (item.model !== "auto" || selectedModel === "auto"),
+  );
   const allModels = visibleModels.length
     ? visibleModels
     : [
         {
-          model: "auto",
-          display_name: "Auto",
+          model: selectedModel || "auto",
+          display_name: selectedCatalogEntry?.display_name || selectedModel || "Auto",
           hidden: false,
         },
       ];
@@ -103,7 +106,6 @@ export function ConfigEditorView({
         <div>
           <span className="eyebrow">{t("tab.config")}</span>
           <h2>{t("tab.config")}</h2>
-          <p>{t("config.projectConfigurationDescription")}</p>
         </div>
         <div className="field-row">
           <button className="toolbar-button" onClick={onDeleteProject} type="button" disabled={busy || !form.project_dir?.trim()}>
@@ -130,14 +132,6 @@ export function ConfigEditorView({
           <label className="field">
             <span>{t("common.branch")}</span>
             <input value={form.branch} onChange={(event) => onChangeForm((current) => ({ ...current, branch: event.target.value }))} disabled={busy} />
-          </label>
-          <label className="field">
-            <span>{t("field.verificationCommand")}</span>
-            <input
-              value={runtime.test_cmd || ""}
-              onChange={(event) => onChangeForm((current) => ({ ...current, runtime: { ...current.runtime, test_cmd: event.target.value } }))}
-              disabled={busy}
-            />
           </label>
           <label className="field">
             <span>{t("config.maxPlannedSteps")}</span>
@@ -171,7 +165,6 @@ export function ConfigEditorView({
             />
             <span>{t("option.useFastMode")}</span>
           </label>
-          <p>{t("config.fastModeDescription")}</p>
 
           <div className="subsection">
             <div className="subsection__header">
@@ -206,7 +199,6 @@ export function ConfigEditorView({
                 disabled={busy}
               />
             </label>
-            <p>{t("config.programSettingsMoved")}</p>
           </div>
         </div>
 
@@ -214,7 +206,6 @@ export function ConfigEditorView({
           <div className="subsection">
             <div className="subsection__header">
               <strong>{t("config.githubConnection")}</strong>
-              <span>{t("config.githubConnectionDescription")}</span>
             </div>
             <div className="choice-list">
               {[
@@ -288,7 +279,6 @@ export function ConfigEditorView({
                 />
               ))}
             </div>
-            {selectedCatalogEntry?.description ? <p>{selectedCatalogEntry.description}</p> : null}
           </div>
         </div>
       </div>

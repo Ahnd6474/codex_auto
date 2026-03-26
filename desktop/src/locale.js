@@ -13,6 +13,7 @@ const STRINGS = {
     "action.closeout": "Closeout",
     "action.copyLink": "Copy Link",
     "action.delete": "Delete",
+    "action.deleteAll": "Delete All",
     "action.dismiss": "Dismiss",
     "action.down": "Down",
     "action.generate": "Generate",
@@ -118,6 +119,7 @@ const STRINGS = {
     "message.prepareProjectFirst": "Prepare or open a project first.",
     "message.projectConfigurationSaved": "Project configuration saved.",
     "message.projectDeleted": "Project removed from jakal-flow.",
+    "message.allProjectsDeleted": "All projects removed from jakal-flow.",
     "message.programSettingsSaved": "Program settings saved.",
     "message.projectReloaded": "Project reloaded.",
     "message.projectStateRefreshed": "Project state refreshed.",
@@ -133,6 +135,7 @@ const STRINGS = {
     "message.stopRequested": "Stop requested after the current step.",
     "message.noShareLinkAvailable": "No active share link is available for this project.",
     "option.allowPushAfterSafeRuns": "Allow push after safe runs",
+    "option.generateWordReport": "Word Report Creation",
     "option.requireCheckpointApproval": "Require checkpoint approval",
     "option.useFastMode": "Use /fast",
     "project.none": "No Project",
@@ -140,6 +143,7 @@ const STRINGS = {
     "prompt.confirmRegeneratePlan": "Replace the current unstarted plan with a new Codex-generated plan?",
     "prompt.confirmResetPlan": "Reset the saved prompt and remove all execution steps for this project?",
     "prompt.confirmDeleteProject": "Remove this project from jakal-flow? The managed docs, logs, and state will be deleted, but the original repository folder will stay in place.",
+    "prompt.confirmDeleteAllProjects": "Remove all projects from jakal-flow? The managed docs, logs, and state will be deleted, but the original repository folders will stay in place.",
     "preset.auto": "Auto",
     "preset.highOnly": "High Only",
     "preset.lowOnly": "Low Only",
@@ -202,6 +206,7 @@ const STRINGS = {
     "sidebar.noProjectSummary": "Pick a project to inspect its managed state.",
     "sidebar.noRecordedCheckpoints": "No checkpoints recorded.",
     "sidebar.repositoryLink": "Repository Link",
+    "sidebar.projectContextDelete": "Right-click to open project actions",
     "sidebar.searchFiles": "Search files",
     "sidebar.searchProjects": "Search projects",
     "sidebar.selectedSummary": "Selected summary",
@@ -463,6 +468,24 @@ const STRINGS = {
     "tool.tokenUsage": "토큰 사용량",
   },
 };
+
+STRINGS.en["action.deleteAll"] = "Delete All";
+STRINGS.en["config.advancedModelSettings"] = "Advanced Settings";
+STRINGS.en["config.advancedModelSettingsDescription"] = "Advanced Settings";
+STRINGS.en["message.allProjectsDeleted"] = "All projects removed from jakal-flow.";
+STRINGS.en["option.generateWordReport"] = "Word Report Creation";
+STRINGS.en["prompt.confirmDeleteAllProjects"] =
+  "Remove all projects from jakal-flow? The managed docs, logs, and state will be deleted, but the original repository folders will stay in place.";
+STRINGS.en["sidebar.projectContextDelete"] = "Right-click to open project actions";
+
+STRINGS.ko["action.deleteAll"] = "전부 삭제";
+STRINGS.ko["config.advancedModelSettings"] = "고급 설정";
+STRINGS.ko["config.advancedModelSettingsDescription"] = "고급 설정";
+STRINGS.ko["message.allProjectsDeleted"] = "모든 프로젝트를 제거했습니다.";
+STRINGS.ko["option.generateWordReport"] = "Word 보고서 제작";
+STRINGS.ko["prompt.confirmDeleteAllProjects"] =
+  "모든 프로젝트를 삭제할까요? 관리 중인 문서, 로그, 상태만 삭제되고 원본 저장소 폴더는 그대로 유지됩니다.";
+STRINGS.ko["sidebar.projectContextDelete"] = "우클릭으로 프로젝트 메뉴 열기";
 
 function titleCase(text) {
   if (!text) {
