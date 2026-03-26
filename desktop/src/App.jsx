@@ -27,6 +27,11 @@ export default function App() {
   }, [controller.setBottomCollapsed, controller.setCenterTab]);
 
   useEffect(() => {
+    const nextTheme = controller.programSettings?.ui_theme === "light" ? "light" : "dark";
+    document.documentElement.dataset.theme = nextTheme;
+  }, [controller.programSettings?.ui_theme]);
+
+  useEffect(() => {
     function handleKeyDown(event) {
       const { setCenterTab, setBottomCollapsed } = keybindingActionsRef.current;
       if (!(event.ctrlKey || event.metaKey)) {
@@ -89,6 +94,8 @@ export default function App() {
             onWorkspaceFilterChange={controller.setWorkspaceFilter}
             onSelectProject={controller.loadProject}
             onNewProject={controller.startNewProject}
+            onDeleteProject={controller.deleteProjectById}
+            onDeleteAllProjects={controller.deleteAllProjects}
             workspaceTree={detail?.workspace_tree}
             checkpoints={detail?.checkpoints}
             github={detail?.github}
@@ -115,6 +122,10 @@ export default function App() {
             onSaveProject={controller.saveProject}
             onDeleteProject={controller.deleteProject}
             onSaveProgramSettings={controller.saveProgramSettings}
+            onGenerateShareLink={controller.generateShareLink}
+            onCopyShareLink={controller.copyShareLink}
+            onRevokeShareLink={controller.revokeShareLink}
+            onChangeShareSettings={controller.setShareSettings}
             onPromptChange={(value) =>
               controller.syncPlan({
                 ...(controller.planDraft || {}),
@@ -127,10 +138,6 @@ export default function App() {
             onRunPlan={controller.runPlan}
             onRunCloseout={controller.runCloseout}
             onRequestStop={controller.requestStop}
-            onGenerateShareLink={controller.generateShareLink}
-            onCopyShareLink={controller.copyShareLink}
-            onRevokeShareLink={controller.revokeShareLink}
-            onChangeShareSettings={controller.setShareSettings}
             onSelectStep={controller.setSelectedStepId}
             onUpdateStepField={controller.updateSelectedStep}
             onSaveStepLocal={controller.saveStepLocal}

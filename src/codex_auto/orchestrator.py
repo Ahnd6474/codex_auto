@@ -532,6 +532,8 @@ class Orchestrator:
             self.save_execution_plan_state(context, plan_state)
             self.workspace.save_project(context)
             reporter.write_status_report()
+            if context.runtime.generate_word_report:
+                reporter.write_closeout_word_report()
 
         return context, plan_state
 

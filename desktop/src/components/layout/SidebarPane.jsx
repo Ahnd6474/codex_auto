@@ -100,6 +100,8 @@ export function SidebarPane({
   onWorkspaceFilterChange,
   onSelectProject,
   onNewProject,
+  onDeleteProject,
+  onDeleteAllProjects,
   workspaceTree,
   checkpoints,
   github,
@@ -124,9 +126,14 @@ export function SidebarPane({
           <>
             <div className="sidebar-panel__header">
               <strong>{t("common.project")}</strong>
-              <button className="toolbar-button toolbar-button--ghost" onClick={onNewProject} type="button">
-                {t("action.new")}
-              </button>
+              <div className="action-row">
+                <button className="toolbar-button toolbar-button--ghost" onClick={onDeleteAllProjects} type="button" disabled={!projects.length}>
+                  {t("action.deleteAll")}
+                </button>
+                <button className="toolbar-button toolbar-button--ghost" onClick={onNewProject} type="button">
+                  {t("action.new")}
+                </button>
+              </div>
             </div>
             <label className="sidebar-search">
               <span>{t("common.filter")}</span>
@@ -141,6 +148,11 @@ export function SidebarPane({
                       project.repo_id === loadingProjectId ? "loading" : ""
                     }`}
                     onClick={() => onSelectProject(project.repo_id)}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      onDeleteProject(project.repo_id);
+                    }}
+                    title={t("sidebar.projectContextDelete")}
                     type="button"
                   >
                     <div className="sidebar-project__title">

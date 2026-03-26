@@ -26,6 +26,28 @@
   --toolbar-height: 44px;
 }
 
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f5f8;
+  --bg-elevated: #f8fafc;
+  --bg-panel: #ffffff;
+  --bg-panel-alt: #eef2f7;
+  --bg-panel-hover: #e9eef5;
+  --bg-active: #e4ebf5;
+  --bg-accent: #3d6fa8;
+  --bg-accent-strong: #285f9d;
+  --border: #d3dbe7;
+  --border-strong: #b6c4d6;
+  --text: #17212f;
+  --text-muted: #5d6878;
+  --text-dim: #788396;
+  --success: #2f8a58;
+  --warning: #b27a1f;
+  --danger: #bb4c50;
+  --info: #2f6fb3;
+  --shadow: 0 10px 24px rgba(29, 45, 70, 0.08);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -62,7 +84,7 @@ textarea,
 select {
   width: 100%;
   border: 1px solid var(--border);
-  background: #202226;
+  background: var(--bg-panel);
   color: var(--text);
   border-radius: var(--radius-sm);
   padding: 9px 11px;
@@ -206,7 +228,7 @@ pre {
 }
 
 .toolbar-button--ghost {
-  background: #26292e;
+  background: var(--bg-panel-alt);
 }
 
 .banner {
@@ -326,14 +348,14 @@ pre {
 .tool-window__header {
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
-  background: #26292f;
+  background: var(--bg-panel-alt);
 }
 
 .sidebar-tab,
 .workspace-tab,
 .tool-tab {
   border: 1px solid var(--border);
-  background: #2d3036;
+  background: var(--bg-panel-alt);
   color: var(--text-muted);
   border-radius: var(--radius-sm);
   padding: 7px 10px;
@@ -359,7 +381,7 @@ pre {
   width: 44px;
   height: 44px;
   border: 1px solid var(--border);
-  background: #2d3036;
+  background: var(--bg-panel-alt);
   color: var(--text-muted);
   border-radius: 12px;
   display: inline-flex;
@@ -613,7 +635,7 @@ pre {
 .tool-window__body--log,
 .details-text pre,
 .content-card pre {
-  background: #202226;
+  background: var(--bg-panel-alt);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 10px;
@@ -692,7 +714,7 @@ pre {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  background: #202226;
+  background: var(--bg-panel-alt);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
@@ -927,7 +949,7 @@ pre {
 }
 
 .tool-window__body--log {
-  background: #1b1d21;
+  background: var(--bg-panel-alt);
 }
 
 .empty-block {

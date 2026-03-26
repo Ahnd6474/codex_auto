@@ -24,6 +24,7 @@ class RuntimeOptions:
     model_selection_mode: str = "slug"
     model_slug_input: str = ""
     use_fast_mode: bool = False
+    generate_word_report: bool = False
     codex_base_slug: str = ""
     codex_variant_slug: str = ""
     effort: str = "medium"
@@ -128,6 +129,7 @@ class ProjectPaths:
     ui_event_log_file: Path
     execution_flow_svg_file: Path
     closeout_report_file: Path
+    closeout_report_docx_file: Path
 
     def to_dict(self) -> dict[str, Any]:
         return _normalize(self)

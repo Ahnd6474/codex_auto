@@ -135,6 +135,17 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(runtime.model, "gpt-5.4")
         self.assertTrue(runtime.use_fast_mode)
 
+    def test_runtime_from_payload_coerces_word_report_flag(self) -> None:
+        runtime = runtime_from_payload(
+            {
+                "model": "gpt-5.4",
+                "generate_word_report": "true",
+            }
+        )
+
+        self.assertEqual(runtime.model, "gpt-5.4")
+        self.assertTrue(runtime.generate_word_report)
+
     def test_bootstrap_exposes_workspace_and_model_presets(self) -> None:
         with TemporaryTestDir() as temp_dir:
             with mock.patch("codex_auto.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
@@ -242,6 +253,43 @@ class UIBridgeTests(unittest.TestCase):
             self.assertFalse(managed_root.exists())
             self.assertTrue(repo_dir.exists())
             self.assertTrue((repo_dir / "README.md").exists())
+
+    def test_delete_all_projects_clears_registry_but_keeps_local_repos(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_a = temp_dir / "repo-a"
+            repo_b = temp_dir / "repo-b"
+            repo_a.mkdir(parents=True, exist_ok=True)
+            repo_b.mkdir(parents=True, exist_ok=True)
+            (repo_a / "README.md").write_text("a", encoding="utf-8")
+            (repo_b / "README.md").write_text("b", encoding="utf-8")
+
+            for repo_dir, name in ((repo_a, "A"), (repo_b, "B")):
+                payload = {
+                    "project_dir": str(repo_dir),
+                    "display_name": f"Project {name}",
+                    "branch": "main",
+                    "origin_url": "",
+                    "runtime": {
+                        "model": "gpt-5.4",
+                        "effort": "high",
+                        "test_cmd": "python -m unittest",
+                        "max_blocks": 5,
+                    },
+                }
+                with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                    "codex_auto.ui_bridge.fetch_codex_backend_snapshot",
+                    side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+                ):
+                    run_command("save-project-setup", workspace_root, payload)
+
+            deleted = run_command("delete-all-projects", workspace_root, {})
+            self.assertTrue(deleted["deleted_all"])
+            self.assertEqual(deleted["projects"], [])
+            self.assertTrue(repo_a.exists())
+            self.assertTrue(repo_b.exists())
+            self.assertTrue((repo_a / "README.md").exists())
+            self.assertTrue((repo_b / "README.md").exists())
 
     def test_save_plan_and_request_stop_persist_bridge_state(self) -> None:
         with TemporaryTestDir() as temp_dir:

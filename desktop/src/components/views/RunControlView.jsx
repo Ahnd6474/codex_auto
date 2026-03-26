@@ -20,7 +20,6 @@ function FlowNode({ step, selected, onSelect, language, t }) {
 export function RunControlView({
   detail,
   planDraft,
-  shareSettings,
   selectedStepId,
   busy,
   onPromptChange,
@@ -30,10 +29,6 @@ export function RunControlView({
   onRunPlan,
   onRunCloseout,
   onRequestStop,
-  onGenerateShareLink,
-  onCopyShareLink,
-  onRevokeShareLink,
-  onChangeShareSettings,
   onSelectStep,
   onUpdateStepField,
   onSaveStepLocal,
@@ -47,8 +42,6 @@ export function RunControlView({
   const completedCount = steps.filter((step) => step.status === "completed").length;
   const flowColumns = 3;
   const { language, t } = useI18n();
-  const activeShare = detail?.share?.active_session || null;
-  const shareServer = detail?.share?.server || null;
 
   return (
     <section className="workspace-view">
@@ -129,83 +122,6 @@ export function RunControlView({
             <strong>{t("field.prompt")}</strong>
           </div>
           <textarea className="editor-textarea editor-textarea--prompt" value={planDraft?.project_prompt || ""} onChange={(event) => onPromptChange(event.target.value)} disabled={busy} />
-        </div>
-
-        <div className="content-card">
-          <div className="content-card__header">
-            <strong>{t("run.remoteMonitor")}</strong>
-            <span className={`status-badge status-badge--${shareServer?.running ? "success" : "neutral"}`}>
-              {shareServer?.running ? t("common.on") : t("common.off")}
-            </span>
-          </div>
-          <p>{t("run.shareDescription")}</p>
-          <p>{t("run.sharePoll")}</p>
-          <div className="share-panel">
-            <label className="field">
-              <span>{t("run.shareBindHost")}</span>
-              <select
-                value={shareSettings?.bind_host || "127.0.0.1"}
-                onChange={(event) =>
-                  onChangeShareSettings((current) => ({
-                    ...(current || {}),
-                    bind_host: event.target.value,
-                  }))
-                }
-                disabled={busy}
-              >
-                <option value="127.0.0.1">{t("run.shareBindLocal")}</option>
-                <option value="0.0.0.0">{t("run.shareBindNetwork")}</option>
-              </select>
-            </label>
-            <label className="field field--wide">
-              <span>{t("run.sharePublicBaseUrl")}</span>
-              <input
-                value={shareSettings?.public_base_url || ""}
-                onChange={(event) =>
-                  onChangeShareSettings((current) => ({
-                    ...(current || {}),
-                    public_base_url: event.target.value,
-                  }))
-                }
-                placeholder="https://your-public-share.example"
-                disabled={busy}
-              />
-            </label>
-            <p className="muted">{t("run.shareExternalHint")}</p>
-          </div>
-          {activeShare?.share_url ? (
-            <div className="share-panel">
-              <label className="field field--wide">
-                <span>{t("run.shareLink")}</span>
-                <input value={activeShare.share_url} readOnly />
-              </label>
-              <div className="share-meta">
-                <span>{t("run.shareExpires", { expiresAt: activeShare.expires_at || t("common.unavailable") })}</span>
-                <span>{t("run.shareServerAddress", { address: shareServer?.base_url || t("common.unavailable") })}</span>
-              </div>
-              {activeShare?.local_url && activeShare.local_url !== activeShare.share_url ? (
-                <label className="field field--wide">
-                  <span>{t("run.shareLocalLink")}</span>
-                  <input value={activeShare.local_url} readOnly />
-                </label>
-              ) : null}
-              <div className="action-row">
-                <button className="toolbar-button toolbar-button--accent" onClick={onCopyShareLink} type="button" disabled={busy}>
-                  {t("action.copyLink")}
-                </button>
-                <button className="toolbar-button toolbar-button--ghost" onClick={onRevokeShareLink} type="button" disabled={busy}>
-                  {t("action.revokeLink")}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="empty-block">{t("run.noShareSession")}</div>
-          )}
-          <div className="action-row">
-            <button className="toolbar-button" onClick={onGenerateShareLink} type="button" disabled={busy}>
-              {t("action.generateShareLink")}
-            </button>
-          </div>
         </div>
 
         <div className="content-card">

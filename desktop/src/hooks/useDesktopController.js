@@ -514,6 +514,63 @@ export function useDesktopController() {
     });
   }
 
+  async function deleteProjectById(repoId) {
+    if (!repoId) {
+      return;
+    }
+    if (!window.confirm(translate(language, "prompt.confirmDeleteProject"))) {
+      return;
+    }
+    await withPending("delete-project", async () => {
+      const result = await bridgeRequest(
+        "delete-project",
+        {
+          repo_id: repoId,
+        },
+        workspaceRoot || null,
+      );
+      setProjects(result.projects || []);
+      setWorkspaceStats(result.workspace || null);
+      if (repoId === selectedProjectId) {
+        setProjectDetail(null);
+        setSelectedProjectId("");
+        setSelectedStepId("");
+        setPlanDirty(false);
+        setLoadingProjectId("");
+        setProjectForm(blankProjectForm(defaultRuntime));
+        setPlanDraft({ steps: [], project_prompt: "", closeout_status: "not_started" });
+        setShareSettings({ bind_host: "127.0.0.1", public_base_url: "" });
+      }
+      if ((result.projects || []).length && (!selectedProjectId || repoId === selectedProjectId)) {
+        setSelectedProjectId(result.projects[0].repo_id);
+      }
+      setMessage(messagePayload("success", translate(language, "message.projectDeleted")));
+    });
+  }
+
+  async function deleteAllProjects() {
+    if (!projects.length) {
+      return;
+    }
+    if (!window.confirm(translate(language, "prompt.confirmDeleteAllProjects"))) {
+      return;
+    }
+    await withPending("delete-all-projects", async () => {
+      const result = await bridgeRequest("delete-all-projects", {}, workspaceRoot || null);
+      setProjects(result.projects || []);
+      setWorkspaceStats(result.workspace || null);
+      setProjectDetail(null);
+      setSelectedProjectId("");
+      setSelectedStepId("");
+      setPlanDirty(false);
+      setLoadingProjectId("");
+      setProjectForm(blankProjectForm(defaultRuntime));
+      setPlanDraft({ steps: [], project_prompt: "", closeout_status: "not_started" });
+      setShareSettings({ bind_host: "127.0.0.1", public_base_url: "" });
+      setMessage(messagePayload("success", translate(language, "message.allProjectsDeleted")));
+    });
+  }
+
   async function savePlan() {
     if (!projectForm.project_dir.trim()) {
       setMessage(messagePayload("error", translate(language, "message.openOrCreateProjectFirst")));
@@ -896,6 +953,8 @@ export function useDesktopController() {
     loadProject,
     saveProject,
     deleteProject,
+    deleteProjectById,
+    deleteAllProjects,
     savePlan,
     resetPlan,
     startNewProject,

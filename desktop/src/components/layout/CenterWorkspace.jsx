@@ -19,10 +19,10 @@ export function CenterWorkspace({
   onChangeTab,
   detail,
   form,
+  shareSettings,
   programSettings,
   programSettingsDirty,
   planDraft,
-  shareSettings,
   selectedStepId,
   modelPresets,
   modelCatalog,
@@ -33,6 +33,10 @@ export function CenterWorkspace({
   onSaveProject,
   onDeleteProject,
   onSaveProgramSettings,
+  onGenerateShareLink,
+  onCopyShareLink,
+  onRevokeShareLink,
+  onChangeShareSettings,
   onPromptChange,
   onGeneratePlan,
   onSavePlan,
@@ -40,10 +44,6 @@ export function CenterWorkspace({
   onRunPlan,
   onRunCloseout,
   onRequestStop,
-  onGenerateShareLink,
-  onCopyShareLink,
-  onRevokeShareLink,
-  onChangeShareSettings,
   onSelectStep,
   onUpdateStepField,
   onSaveStepLocal,
@@ -62,7 +62,6 @@ export function CenterWorkspace({
         <WorkspaceTab value="reports" activeTab={activeTab} onChange={onChangeTab} label={t("tab.reports")} />
         <WorkspaceTab value="history" activeTab={activeTab} onChange={onChangeTab} label={t("tab.history")} />
         <WorkspaceTab value="config" activeTab={activeTab} onChange={onChangeTab} label={t("tab.config")} />
-        <WorkspaceTab value="app-settings" activeTab={activeTab} onChange={onChangeTab} label={t("tab.programSettings")} />
       </div>
 
       {activeTab === "run" ? (
@@ -109,10 +108,16 @@ export function CenterWorkspace({
       {activeTab === "app-settings" ? (
         <AppSettingsView
           settings={programSettings}
+          shareSettings={shareSettings}
+          shareDetail={detail?.share}
           dirty={programSettingsDirty}
           busy={busy}
           onChangeSettings={onChangeProgramSettings}
           onSaveSettings={onSaveProgramSettings}
+          onGenerateShareLink={onGenerateShareLink}
+          onCopyShareLink={onCopyShareLink}
+          onRevokeShareLink={onRevokeShareLink}
+          onChangeShareSettings={onChangeShareSettings}
         />
       ) : null}
     </section>

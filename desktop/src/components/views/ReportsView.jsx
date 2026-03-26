@@ -1,8 +1,6 @@
-import { useMemo } from "react";
 import { useI18n } from "../../i18n";
 
 export function ReportsView({ reports }) {
-  const serializedLatestReport = useMemo(() => JSON.stringify(reports?.latest_report_json || {}, null, 2), [reports?.latest_report_json]);
   const { t } = useI18n();
 
   return (
@@ -24,25 +22,14 @@ export function ReportsView({ reports }) {
 
         <div className="content-card">
           <div className="content-card__header">
-            <strong>{t("reports.json")}</strong>
-          </div>
-          <pre>{serializedLatestReport}</pre>
-        </div>
-      </div>
-
-      <div className="overview-grid">
-        <div className="content-card">
-          <div className="content-card__header">
-            <strong>{t("reports.blockReview")}</strong>
-          </div>
-          <pre>{reports?.block_review_text || t("reports.noBlockReview")}</pre>
-        </div>
-
-        <div className="content-card">
-          <div className="content-card__header">
             <strong>{t("reports.attemptHistory")}</strong>
           </div>
           <pre>{reports?.attempt_history_text || t("reports.historyEmpty")}</pre>
+          {reports?.word_report_enabled ? (
+            <p>{t("reports.wordReportReady", { path: reports?.word_report_path || t("common.unavailable") })}</p>
+          ) : (
+            <p>{t("reports.wordReportDisabled")}</p>
+          )}
         </div>
       </div>
     </section>

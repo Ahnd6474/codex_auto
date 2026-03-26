@@ -70,6 +70,7 @@ test("program settings helpers keep global runtime controls separate from projec
     codex_path: "codex.cmd",
     allow_push: false,
     require_checkpoint_approval: false,
+    ui_theme: "dark",
   });
 
   assert.deepEqual(

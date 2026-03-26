@@ -175,7 +175,25 @@ export function ConfigEditorView({
             />
             <span>{t("option.useFastMode")}</span>
           </label>
+          <label className="choice-radio">
+            <input
+              type="checkbox"
+              checked={Boolean(runtime.generate_word_report)}
+              onChange={(event) =>
+                onChangeForm((current) => ({
+                  ...current,
+                  runtime: {
+                    ...current.runtime,
+                    generate_word_report: event.target.checked,
+                  },
+                }))
+              }
+              disabled={busy}
+            />
+            <span>{t("option.generateWordReport")}</span>
+          </label>
           <p>{t("config.fastModeDescription")}</p>
+          <p>{t("config.wordReportDescription")}</p>
 
           <div className="subsection">
             <div className="subsection__header">

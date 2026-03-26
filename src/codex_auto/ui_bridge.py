@@ -266,6 +266,7 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
     merged["model"] = str(merged.get("model", "")).strip().lower()
     merged["model_preset"] = normalize_model_preset_id(str(merged.get("model_preset", "")), fallback="")
     merged["use_fast_mode"] = coerce_bool(merged.get("use_fast_mode", False), False)
+    merged["generate_word_report"] = coerce_bool(merged.get("generate_word_report", False), False)
     raw_effort = str(merged.get("effort", "")).strip()
     merged["effort"] = raw_effort.lower()
 
@@ -511,13 +512,13 @@ def managed_workspace_tree(context: ProjectContext) -> list[dict[str, Any]]:
 
 def report_payload(context: ProjectContext) -> dict[str, Any]:
     return {
-        "latest_report_json": safe_json(context.paths.reports_dir / "latest_report.json", default={}) or {},
         "closeout_report_text": preview_text(
             context.paths.closeout_report_file,
             default="# Closeout Report\n\nNo closeout has been run yet.\n",
         ),
-        "block_review_text": preview_text(context.paths.block_review_file, default="No block review recorded yet.\n"),
         "attempt_history_text": preview_text(context.paths.attempt_history_file, default="No attempt history recorded yet.\n"),
+        "word_report_enabled": bool(context.runtime.generate_word_report),
+        "word_report_path": str(context.paths.closeout_report_docx_file) if context.paths.closeout_report_docx_file.exists() else "",
     }
 
 
@@ -823,6 +824,15 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
                 "project_dir": project_dir,
                 "display_name": display_name,
             },
+            "projects": listing["projects"],
+            "workspace": listing["workspace"],
+        }
+
+    if command == "delete-all-projects":
+        orchestrator.workspace.delete_all_projects()
+        listing = list_projects_payload(orchestrator)
+        return {
+            "deleted_all": True,
             "projects": listing["projects"],
             "workspace": listing["workspace"],
         }

@@ -1,14 +1,28 @@
 import { useI18n } from "../../i18n";
 
-export function AppSettingsView({ settings, dirty, busy, onChangeSettings, onSaveSettings }) {
+export function AppSettingsView({
+  settings,
+  shareSettings,
+  shareDetail,
+  dirty,
+  busy,
+  onChangeSettings,
+  onSaveSettings,
+  onGenerateShareLink,
+  onCopyShareLink,
+  onRevokeShareLink,
+  onChangeShareSettings,
+}) {
   const { language, languageOptions, setLanguage, t } = useI18n();
+  const activeShare = shareDetail?.active_session || null;
+  const shareServer = shareDetail?.server || null;
 
   return (
     <section className="workspace-view">
       <div className="view-header">
         <div>
           <span className="eyebrow">{t("tab.programSettings")}</span>
-          <h2>{t("settings.programSettings")}</h2>
+          <h2>{t("tab.programSettings")}</h2>
           <p>{t("settings.programSettingsDescription")}</p>
         </div>
         <button className="toolbar-button toolbar-button--accent" onClick={onSaveSettings} type="button" disabled={busy || !dirty}>
@@ -32,6 +46,15 @@ export function AppSettingsView({ settings, dirty, busy, onChangeSettings, onSav
                   </option>
                 ))}
               </select>
+            </label>
+            <label className="choice-radio">
+              <input
+                type="checkbox"
+                checked={settings.ui_theme === "light"}
+                onChange={(event) => onChangeSettings((current) => ({ ...current, ui_theme: event.target.checked ? "light" : "dark" }))}
+                disabled={busy}
+              />
+              <span>{t("option.lightMode")}</span>
             </label>
           </div>
         </div>
@@ -115,6 +138,85 @@ export function AppSettingsView({ settings, dirty, busy, onChangeSettings, onSav
                 />
                 <span>{t("option.requireCheckpointApproval")}</span>
               </label>
+            </div>
+          </div>
+        </div>
+
+        <div className="form-section">
+          <div className="subsection">
+            <div className="subsection__header">
+              <strong>{t("run.remoteMonitor")}</strong>
+              <span className={`status-badge status-badge--${shareServer?.running ? "success" : "neutral"}`}>
+                {shareServer?.running ? t("common.on") : t("common.off")}
+              </span>
+            </div>
+            <p>{t("run.shareDescription")}</p>
+            <p>{t("run.sharePoll")}</p>
+            <div className="share-panel">
+              <label className="field">
+                <span>{t("run.shareBindHost")}</span>
+                <select
+                  value={shareSettings?.bind_host || "127.0.0.1"}
+                  onChange={(event) =>
+                    onChangeShareSettings((current) => ({
+                      ...(current || {}),
+                      bind_host: event.target.value,
+                    }))
+                  }
+                  disabled={busy}
+                >
+                  <option value="127.0.0.1">{t("run.shareBindLocal")}</option>
+                  <option value="0.0.0.0">{t("run.shareBindNetwork")}</option>
+                </select>
+              </label>
+              <label className="field field--wide">
+                <span>{t("run.sharePublicBaseUrl")}</span>
+                <input
+                  value={shareSettings?.public_base_url || ""}
+                  onChange={(event) =>
+                    onChangeShareSettings((current) => ({
+                      ...(current || {}),
+                      public_base_url: event.target.value,
+                    }))
+                  }
+                  placeholder="https://your-public-share.example"
+                  disabled={busy}
+                />
+              </label>
+              <p className="muted">{t("run.shareExternalHint")}</p>
+            </div>
+            {activeShare?.share_url ? (
+              <div className="share-panel">
+                <label className="field field--wide">
+                  <span>{t("run.shareLink")}</span>
+                  <input value={activeShare.share_url} readOnly />
+                </label>
+                <div className="share-meta">
+                  <span>{t("run.shareExpires", { expiresAt: activeShare.expires_at || t("common.unavailable") })}</span>
+                  <span>{t("run.shareServerAddress", { address: shareServer?.base_url || t("common.unavailable") })}</span>
+                </div>
+                {activeShare?.local_url && activeShare.local_url !== activeShare.share_url ? (
+                  <label className="field field--wide">
+                    <span>{t("run.shareLocalLink")}</span>
+                    <input value={activeShare.local_url} readOnly />
+                  </label>
+                ) : null}
+                <div className="action-row">
+                  <button className="toolbar-button toolbar-button--accent" onClick={onCopyShareLink} type="button" disabled={busy}>
+                    {t("action.copyLink")}
+                  </button>
+                  <button className="toolbar-button toolbar-button--ghost" onClick={onRevokeShareLink} type="button" disabled={busy}>
+                    {t("action.revokeLink")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="empty-block">{t("run.noShareSession")}</div>
+            )}
+            <div className="action-row">
+              <button className="toolbar-button" onClick={onGenerateShareLink} type="button" disabled={busy}>
+                {t("action.generateShareLink")}
+              </button>
             </div>
           </div>
         </div>

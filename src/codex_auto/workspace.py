@@ -61,6 +61,7 @@ class WorkspaceManager:
             ui_event_log_file=logs_dir / "ui_events.jsonl",
             execution_flow_svg_file=docs_dir / "EXECUTION_FLOW.svg",
             closeout_report_file=docs_dir / "CLOSEOUT_REPORT.md",
+            closeout_report_docx_file=reports_dir / "CLOSEOUT_REPORT.docx",
         )
 
     def initialize_project(
@@ -284,3 +285,12 @@ class WorkspaceManager:
         project_root = (self.projects_root / str(item.get("slug", "")).strip()).resolve()
         if project_root != self.projects_root and self.projects_root in project_root.parents and project_root.exists():
             shutil.rmtree(project_root, ignore_errors=True)
+
+    def delete_all_projects(self) -> None:
+        self.ensure_workspace()
+        registry = read_json(self.registry_file, default={"projects": {}})
+        for item in list(registry.get("projects", {}).values()):
+            project_root = (self.projects_root / str(item.get("slug", "")).strip()).resolve()
+            if project_root != self.projects_root and self.projects_root in project_root.parents and project_root.exists():
+                shutil.rmtree(project_root, ignore_errors=True)
+        write_json(self.registry_file, {"projects": {}})

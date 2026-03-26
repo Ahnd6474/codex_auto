@@ -21,6 +21,7 @@ export const PROGRAM_RUNTIME_KEYS = [
   "allow_push",
   "require_checkpoint_approval",
 ];
+export const PROGRAM_UI_KEYS = ["ui_theme"];
 
 const DEFAULT_PROGRAM_RUNTIME = {
   approval_mode: "never",
@@ -29,6 +30,9 @@ const DEFAULT_PROGRAM_RUNTIME = {
   codex_path: "codex.cmd",
   allow_push: true,
   require_checkpoint_approval: false,
+};
+const DEFAULT_PROGRAM_UI = {
+  ui_theme: "dark",
 };
 
 export function reasoningEffortLabel(value, language = "en") {
@@ -75,21 +79,26 @@ export function deriveGithubMode(originUrl) {
 
 export function programSettingsFromRuntime(runtime) {
   const source = cloneValue(runtime) || {};
-  return PROGRAM_RUNTIME_KEYS.reduce(
-    (settings, key) => {
-      if (source[key] !== undefined) {
-        settings[key] = source[key];
-      }
-      return settings;
-    },
-    { ...DEFAULT_PROGRAM_RUNTIME },
-  );
+  const settings = { ...DEFAULT_PROGRAM_RUNTIME, ...DEFAULT_PROGRAM_UI };
+  [...PROGRAM_RUNTIME_KEYS, ...PROGRAM_UI_KEYS].forEach((key) => {
+    if (source[key] !== undefined) {
+      settings[key] = source[key];
+    }
+  });
+  return settings;
 }
 
 export function applyProgramSettings(runtime, programSettings) {
+  const normalizedSettings = programSettingsFromRuntime(programSettings);
+  const runtimeSettings = PROGRAM_RUNTIME_KEYS.reduce((settings, key) => {
+    if (normalizedSettings[key] !== undefined) {
+      settings[key] = normalizedSettings[key];
+    }
+    return settings;
+  }, {});
   return {
     ...(cloneValue(runtime) || {}),
-    ...programSettingsFromRuntime(programSettings),
+    ...runtimeSettings,
   };
 }
 
