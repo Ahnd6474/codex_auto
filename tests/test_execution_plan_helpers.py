@@ -255,6 +255,36 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(plan_state.steps[0].depends_on, [])
         self.assertEqual(plan_state.steps[0].owned_paths, [])
 
+    def test_save_execution_plan_state_renormalizes_dag_dependency_ids(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_dag_plan_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", execution_mode="parallel")
+
+        try:
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"):
+                _context, plan_state = orchestrator.update_execution_plan(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    plan_state=ExecutionPlanState(
+                        execution_mode="parallel",
+                        default_test_command="python -m pytest",
+                        steps=[
+                            ExecutionStep(step_id="NODE-B", title="Backend", depends_on=["NODE-A"], owned_paths=["src/backend"]),
+                            ExecutionStep(step_id="NODE-A", title="API", depends_on=[], owned_paths=["src/api"]),
+                        ],
+                    ),
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual([step.step_id for step in plan_state.steps], ["ST1", "ST2"])
+        self.assertEqual(plan_state.steps[0].depends_on, ["ST2"])
+        self.assertEqual(plan_state.steps[1].depends_on, [])
+
     def test_run_saved_execution_step_uses_step_reasoning_effort(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_step_reasoning_test"
         shutil.rmtree(temp_root, ignore_errors=True)
@@ -443,6 +473,9 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("Use the following priority order while planning:", plan_prompt)
         self.assertIn("Requested execution mode:", plan_prompt)
         self.assertIn("parallel", plan_prompt)
+        self.assertIn("step_id", plan_prompt)
+        self.assertIn("depends_on", plan_prompt)
+        self.assertIn("owned_paths", plan_prompt)
         self.assertIn("src/jakal_flow/docs/REFERENCE_GUIDE.md", plan_prompt)
         self.assertIn("React + Tauri", plan_prompt)
         self.assertIn("1. Follow AGENTS.md and explicit repository constraints first.", bootstrap_prompt)

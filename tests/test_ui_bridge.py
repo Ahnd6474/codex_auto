@@ -343,7 +343,8 @@ class UIBridgeTests(unittest.TestCase):
                             "test_command": "python -m pytest",
                             "success_criteria": "The desktop bridge can load and save projects.",
                             "reasoning_effort": "medium",
-                            "parallel_group": "PG1",
+                            "depends_on": [],
+                            "owned_paths": ["src/jakal_flow/ui_bridge.py", "tests/test_ui_bridge.py"],
                         },
                         {
                             "step_id": "custom-2",
@@ -353,7 +354,8 @@ class UIBridgeTests(unittest.TestCase):
                             "test_command": "python -m pytest",
                             "success_criteria": "The desktop app can render the plan flow.",
                             "reasoning_effort": "xhigh",
-                            "parallel_group": "PG1",
+                            "depends_on": [],
+                            "owned_paths": ["desktop/src", "desktop/package.json"],
                         },
                     ],
                 },
@@ -370,7 +372,8 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(saved["plan"]["steps"][0]["reasoning_effort"], "medium")
             self.assertEqual(saved["plan"]["steps"][1]["reasoning_effort"], "xhigh")
             self.assertEqual(saved["plan"]["execution_mode"], "parallel")
-            self.assertEqual(saved["plan"]["steps"][0]["parallel_group"], "PG1")
+            self.assertEqual(saved["plan"]["steps"][0]["depends_on"], [])
+            self.assertEqual(saved["plan"]["steps"][0]["owned_paths"], ["src/jakal_flow/ui_bridge.py", "tests/test_ui_bridge.py"])
             self.assertEqual(saved["runtime"]["execution_mode"], "parallel")
             self.assertEqual(saved["runtime"]["parallel_workers"], 3)
             self.assertEqual(saved["stats"]["total_steps"], 2)
