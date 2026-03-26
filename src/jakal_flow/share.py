@@ -229,11 +229,13 @@ def save_share_server_config(workspace_root: Path, config: ShareServerConfig) ->
 
 
 def share_server_status_payload(workspace_root: Path) -> dict[str, Any]:
-    from .public_tunnel import public_tunnel_status_payload
+    from .public_tunnel import normalize_tunnel_target_url, public_tunnel_status_payload
 
     config = load_share_server_config(workspace_root)
     tunnel = public_tunnel_status_payload(workspace_root)
     state = load_share_server_state(workspace_root)
+    tunnel_public_url = str(tunnel.get("public_url") or "").strip()
+    tunnel_target = normalize_tunnel_target_url(str(tunnel.get("target_url") or "").strip())
     if state is None:
         return {
             "running": False,
@@ -242,11 +244,25 @@ def share_server_status_payload(workspace_root: Path) -> dict[str, Any]:
             "base_url": None,
             "viewer_path": DEFAULT_VIEWER_PATH,
             "config": config.to_dict(),
-            "share_base_url": config.public_base_url or tunnel.get("public_url") or None,
-            "share_base_url_source": "config" if config.public_base_url else ("quick_tunnel" if tunnel.get("public_url") else None),
+            "share_base_url": config.public_base_url or None,
+            "share_base_url_source": "config" if config.public_base_url else None,
             "public_tunnel": tunnel,
         }
     running = process_is_running(state.pid)
+    local_tunnel_target = normalize_tunnel_target_url(state.base_url if running else "")
+    tunnel_matches_server = bool(
+        running
+        and bool(tunnel.get("running"))
+        and tunnel_public_url
+        and local_tunnel_target
+        and tunnel_target == local_tunnel_target
+    )
+    share_base_url = config.public_base_url or (tunnel_public_url if tunnel_matches_server else "") or (state.base_url if running else None)
+    share_base_url_source = (
+        "config"
+        if config.public_base_url
+        else ("quick_tunnel" if tunnel_matches_server else ("local" if running else None))
+    )
     payload = {
         "running": running,
         "host": state.host,
@@ -256,12 +272,8 @@ def share_server_status_payload(workspace_root: Path) -> dict[str, Any]:
         "base_url": state.base_url if running else None,
         "viewer_path": state.viewer_path,
         "config": config.to_dict(),
-        "share_base_url": config.public_base_url or tunnel.get("public_url") or (state.base_url if running else None),
-        "share_base_url_source": (
-            "config"
-            if config.public_base_url
-            else ("quick_tunnel" if tunnel.get("public_url") else ("local" if running else None))
-        ),
+        "share_base_url": share_base_url,
+        "share_base_url_source": share_base_url_source,
         "public_tunnel": tunnel,
     }
     return payload

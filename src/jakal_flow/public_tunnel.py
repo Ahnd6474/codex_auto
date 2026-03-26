@@ -7,6 +7,7 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from .process_supervisor import hidden_window_creationflags, hidden_window_startupinfo, terminate_process
 from .utils import decode_process_output, now_utc_iso, read_json, write_json
@@ -153,8 +154,20 @@ def extract_trycloudflare_url(text: str) -> str | None:
     return match.group(0) if match else None
 
 
+def normalize_tunnel_target_url(target_url: str) -> str:
+    text = str(target_url).strip().rstrip("/")
+    if not text:
+        return ""
+    parsed = urlsplit(text)
+    if parsed.hostname != "0.0.0.0":
+        return text
+    port = f":{parsed.port}" if parsed.port is not None else ""
+    netloc = f"127.0.0.1{port}"
+    return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment)).rstrip("/")
+
+
 def start_cloudflare_quick_tunnel(workspace_root: Path, target_url: str, cloudflared_path: str = DEFAULT_TUNNEL_COMMAND) -> dict[str, Any]:
-    resolved_target = str(target_url).strip().rstrip("/")
+    resolved_target = normalize_tunnel_target_url(target_url)
     if not resolved_target:
         raise ValueError("target_url is required.")
 

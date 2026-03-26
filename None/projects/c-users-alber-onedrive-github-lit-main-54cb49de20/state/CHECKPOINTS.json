@@ -18,62 +18,70 @@
       "title": "Stabilize Core Repository Spine"
     },
     {
-      "approved_at": null,
+      "approved_at": "2026-03-26T23:04:29+00:00",
       "checkpoint_id": "CP2",
-      "commit_hashes": [],
+      "commit_hashes": [
+        "f96da7698e7a64f94885cc7b1b5938d3d70c1d92"
+      ],
       "created_at": "2026-03-26T13:47:14+00:00",
       "plan_refs": [
         "ST2"
       ],
-      "pushed": false,
-      "reached_at": "2026-03-26T13:47:14+00:00",
-      "review_notes": "",
-      "status": "running",
+      "pushed": true,
+      "reached_at": "2026-03-26T23:04:29+00:00",
+      "review_notes": "python -m pytest exited with 0",
+      "status": "approved",
       "target_block": 2,
       "title": "Finish Branch and Checkout Workflows"
     },
     {
-      "approved_at": null,
+      "approved_at": "2026-03-26T23:04:29+00:00",
       "checkpoint_id": "CP3",
-      "commit_hashes": [],
+      "commit_hashes": [
+        "74d5103e20c5e889c6f053240b87e524ae6a742e"
+      ],
       "created_at": "2026-03-26T13:47:14+00:00",
       "plan_refs": [
         "ST3"
       ],
-      "pushed": false,
-      "reached_at": "2026-03-26T13:47:14+00:00",
-      "review_notes": "",
-      "status": "running",
+      "pushed": true,
+      "reached_at": "2026-03-26T23:04:29+00:00",
+      "review_notes": "python -m pytest exited with 0",
+      "status": "approved",
       "target_block": 3,
       "title": "Implement Merge and Rebase Engine"
     },
     {
-      "approved_at": null,
+      "approved_at": "2026-03-26T23:33:22+00:00",
       "checkpoint_id": "CP4",
-      "commit_hashes": [],
-      "created_at": "2026-03-26T13:47:14+00:00",
+      "commit_hashes": [
+        "33213e077bb846708ed291ea4af1c5f0942a3bbf"
+      ],
+      "created_at": "2026-03-26T23:04:31+00:00",
       "plan_refs": [
         "ST4"
       ],
-      "pushed": false,
-      "reached_at": null,
-      "review_notes": "",
-      "status": "pending",
+      "pushed": true,
+      "reached_at": "2026-03-26T23:33:22+00:00",
+      "review_notes": "python -m pytest exited with 0",
+      "status": "approved",
       "target_block": 4,
       "title": "Cover Core Workflows with CLI Tests"
     },
     {
-      "approved_at": null,
+      "approved_at": "2026-03-26T23:33:22+00:00",
       "checkpoint_id": "CP5",
-      "commit_hashes": [],
-      "created_at": "2026-03-26T13:47:14+00:00",
+      "commit_hashes": [
+        "6f5295a85535e40d9e5db0e82a93f1ef6ce5f95a"
+      ],
+      "created_at": "2026-03-26T23:04:31+00:00",
       "plan_refs": [
         "ST5"
       ],
-      "pushed": false,
-      "reached_at": null,
-      "review_notes": "",
-      "status": "pending",
+      "pushed": true,
+      "reached_at": "2026-03-26T23:33:22+00:00",
+      "review_notes": "python -m pytest exited with 0",
+      "status": "approved",
       "target_block": 5,
       "title": "Publish README and Static Website"
     }

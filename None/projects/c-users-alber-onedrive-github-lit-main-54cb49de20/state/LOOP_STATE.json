@@ -1,14 +1,14 @@
 {
-  "block_index": 1,
+  "block_index": 5,
   "counters": {
     "empty_cycles": 0,
     "no_progress_blocks": 0,
     "regression_failures": 0
   },
   "current_checkpoint_id": null,
-  "current_safe_revision": "ae75a46293ae4b2faf6ceee1bc0d0944aafcdb4f",
-  "current_task": "Parallel batch ST2, ST3",
-  "last_block_completed_at": "2026-03-26T13:47:12+00:00",
+  "current_safe_revision": "6f5295a85535e40d9e5db0e82a93f1ef6ce5f95a",
+  "current_task": "Project closeout",
+  "last_block_completed_at": "2026-03-26T23:33:24+00:00",
   "last_candidates": [
     {
       "candidate_id": "ST1",
@@ -20,7 +20,7 @@
       "title": "Stabilize Core Repository Spine"
     }
   ],
-  "last_commit_hash": "ae75a46293ae4b2faf6ceee1bc0d0944aafcdb4f",
+  "last_commit_hash": "6f5295a85535e40d9e5db0e82a93f1ef6ce5f95a",
   "pending_checkpoint_approval": false,
   "plan_locked": true,
   "repo_id": "54cb49de202ec7df13e43069c1f910205bff0b8f",

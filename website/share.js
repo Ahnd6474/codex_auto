@@ -1,12 +1,60 @@
+const builtInEnglishShareTranslations = {
+  page_title: "jakal-flow | Remote Monitor",
+  hero_eyebrow: "jakal-flow remote monitor",
+  hero_title: "Read-only progress view",
+  hero_copy: "This page streams masked progress updates in near real time and never exposes remote controls.",
+  poll_waiting: "Waiting",
+  read_only: "Read only",
+  project_label: "Project",
+  project_loading: "Loading...",
+  run_status_label: "Run status",
+  current_task_label: "Current task",
+  latest_test_label: "Latest test",
+  recent_logs_label: "Recent logs",
+  masked_activity_tail: "Masked activity tail",
+  refresh_connecting: "Connecting live stream",
+  log_waiting: "Waiting for status...",
+  access_label: "Access",
+  error_unable_load: "Unable to load share session",
+  unnamed_project: "Unnamed project",
+  slug_prefix: "Slug: {value}",
+  last_updated_prefix: "Last updated: {value}",
+  expires_prefix: "Expires: {value}",
+  phase_prefix: "Phase: {value}",
+  phase_unavailable: "Phase unavailable",
+  no_task_reported: "No task reported",
+  no_current_task_summary: "No current task summary",
+  test_label_default: "test",
+  no_test_result_yet: "No test result yet",
+  no_test_result_summary: "No test result summary",
+  no_recent_logs: "No recent logs available.",
+  request_failed_with: "Request failed with {status}",
+  live_stream: "Live stream",
+  streaming_live_updates: "Streaming live updates",
+  live_connection_lost: "Live connection lost.",
+  missing_link: "Missing link",
+  missing_share_link_data: "This URL does not include the required session and token.",
+  missing_share_link_title: "Missing share link data",
+  refreshing: "Refreshing",
+  polling_every_5s: "Polling every 5s",
+  polling: "Polling",
+  access_denied: "Access denied",
+  unable_keep_live_connection: "Unable to keep live connection",
+  live_stream_unavailable: "Live stream unavailable",
+  falling_back_to_polling: "{message} Falling back to polling.",
+};
+
 const shareTranslations = Object.fromEntries(
   Array.from(
     new Set([
+      "en",
       ...Object.keys(window.JakalFlowGeneratedShareTranslations || { en: {} }),
       ...Object.keys(window.JakalFlowManualShareTranslations || {}),
     ]),
   ).map((language) => [
     language,
     {
+      ...(language === "en" ? builtInEnglishShareTranslations : {}),
       ...((window.JakalFlowGeneratedShareTranslations || { en: {} })[language] || {}),
       ...((window.JakalFlowManualShareTranslations || {})[language] || {}),
     },
@@ -55,6 +103,17 @@ function t(key, params = {}) {
 function queryValue(key) {
   const params = new URLSearchParams(window.location.search);
   return (params.get(key) || "").trim();
+}
+
+function shareEndpoint(path) {
+  const current = new URL(window.location.href);
+  const pathname = current.pathname.replace(/\/+$/, "");
+  const basePath = pathname.endsWith("/share/view")
+    ? pathname.slice(0, -"/view".length)
+    : pathname.endsWith("/view")
+      ? pathname.slice(0, -"/view".length)
+      : pathname.replace(/\/[^/]*$/, "");
+  return new URL(`${basePath}/${String(path).replace(/^\/+/, "")}`, current.origin);
 }
 
 function setText(id, value) {
@@ -139,7 +198,7 @@ function renderStatus(payload) {
 }
 
 async function fetchStatus(session, token) {
-  const url = new URL("/share/api/status", window.location.origin);
+  const url = shareEndpoint("api/status");
   url.searchParams.set("session", session);
   url.searchParams.set("token", token);
   const response = await fetch(url, { cache: "no-store" });
@@ -156,7 +215,7 @@ function connectEventStream(session, token, onStatus, onFailure) {
   if (typeof window.EventSource !== "function") {
     return null;
   }
-  const url = new URL("/share/api/events", window.location.origin);
+  const url = shareEndpoint("api/events");
   url.searchParams.set("session", session);
   url.searchParams.set("token", token);
   const source = new window.EventSource(url);

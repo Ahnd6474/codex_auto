@@ -1,12 +1,12 @@
 # Block Review
 
-- Timestamp: 2026-03-26T13:47:12+00:00
-- Active task: Stabilize Core Repository Spine
-- Changed files: src/lit/cli.py, src/lit/commands/, src/lit/commits.py, src/lit/index.py, src/lit/refs.py, src/lit/repository.py, src/lit/state.py, src/lit/trees.py, src/lit/working_tree.py, tests/test_bootstrap.py
-- Commits: ae75a46293ae4b2faf6ceee1bc0d0944aafcdb4f
+- Timestamp: 2026-03-26T23:33:24+00:00
+- Active task: Parallel batch ST4, ST5
+- Changed files: README.md, tests/test_bootstrap.py, website/
+- Commits: 33213e077bb846708ed291ea4af1c5f0942a3bbf, 6f5295a85535e40d9e5db0e82a93f1ef6ce5f95a
 
 ## Verification
-python -m pytest exited with 0
+python -m pytest exited with 0 (cached)
 
 ## Lessons
 - Preserve scope and only retain documentation that matches verified implementation.

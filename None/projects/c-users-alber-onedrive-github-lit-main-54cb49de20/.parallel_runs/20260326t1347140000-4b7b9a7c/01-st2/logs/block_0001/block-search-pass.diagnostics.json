@@ -1,0 +1,16 @@
+{
+  "attempt_count": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "duration_seconds": 231.797,
+      "last_message_excerpt": "",
+      "returncode": 3221225786,
+      "stderr_excerpt": "^C",
+      "stdout_excerpt": "{\"type\":\"thread.started\",\"thread_id\":\"019d2a66-3759-7251-a6e0-581c0ec98dc0\"}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"agent_message\",\"text\":\"I\u2019m starting with the repository rules and the branch/checkout implementation surface so the changes stay inside the owned files and current scope. After that I\u2019ll add focused tests, implement the missing local workflow behavior, and run `python -m pytest`.\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_1\",\"type\":\"comm...",
+      "unexpected_token_detected": false
+    }
+  ],
+  "recovered_after_retry": false,
+  "unexpected_token_detected": false
+}

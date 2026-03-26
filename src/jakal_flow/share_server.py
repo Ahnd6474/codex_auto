@@ -45,6 +45,12 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == DEFAULT_VIEWER_PATH:
             self._serve_static(WEBSITE_ROOT / "share.html", "text/html; charset=utf-8")
             return
+        if parsed.path == "/share/generated_share_translations.js":
+            self._serve_static(WEBSITE_ROOT / "generated_share_translations.js", "application/javascript; charset=utf-8")
+            return
+        if parsed.path == "/share/manual_share_translations.js":
+            self._serve_static(WEBSITE_ROOT / "manual_share_translations.js", "application/javascript; charset=utf-8")
+            return
         if parsed.path == "/share/share.js":
             self._serve_static(WEBSITE_ROOT / "share.js", "application/javascript; charset=utf-8")
             return
@@ -66,7 +72,9 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         line = mask_public_text(format % args, max_chars=180)
         if not line:
             return
-        with share_server_log_file(self.server.workspace_root).open("a", encoding="utf-8") as handle:  # type: ignore[attr-defined]
+        log_path = share_server_log_file(self.server.workspace_root)  # type: ignore[attr-defined]
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as handle:
             handle.write(f"{now_utc_iso()} {line}\n")
 
     def _redirect(self, path: str) -> None:

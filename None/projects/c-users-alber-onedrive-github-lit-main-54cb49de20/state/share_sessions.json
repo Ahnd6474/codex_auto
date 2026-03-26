@@ -4,9 +4,97 @@
       "created_at": "2026-03-26T13:47:15+00:00",
       "created_by": "tauri-react-ui",
       "expires_at": "2026-03-26T14:47:15+00:00",
-      "revoked_at": null,
+      "revoked_at": "2026-03-26T13:50:20+00:00",
       "session_id": "cbb43c094dc43ffe2d69e72852171b42",
       "viewer_token": "8HIoyKMFja40RjRg_t9W_9DJl0Ki2bQx"
+    },
+    {
+      "created_at": "2026-03-26T13:50:20+00:00",
+      "created_by": "tauri-react-ui",
+      "expires_at": "2026-03-26T14:50:20+00:00",
+      "revoked_at": "2026-03-26T13:52:27+00:00",
+      "session_id": "0da927a3d4e8013ce178d5db9703d85b",
+      "viewer_token": "xDwHBVwhxtaVvpHcq0ezwwiFh6XiAX4a"
+    },
+    {
+      "created_at": "2026-03-26T13:52:27+00:00",
+      "created_by": "tauri-react-ui",
+      "expires_at": "2026-03-26T14:52:27+00:00",
+      "revoked_at": "2026-03-26T13:55:12+00:00",
+      "session_id": "1ceb64ae58842cae2a2fdad95eaf0adb",
+      "viewer_token": "1KeTA6x845k8VhQ7t94TpALQHAgiJEKg"
+    },
+    {
+      "created_at": "2026-03-26T13:55:20+00:00",
+      "created_by": "tauri-react-ui",
+      "expires_at": "2026-03-26T14:55:20+00:00",
+      "revoked_at": "2026-03-26T13:57:39+00:00",
+      "session_id": "69ec2b52ef34a9f4310206f2bdbcea54",
+      "viewer_token": "oGStlHiuGm46nmNF0eYLW4kymuj4lbvH"
+    },
+    {
+      "created_at": "2026-03-26T13:57:44+00:00",
+      "created_by": "tauri-react-ui",
+      "expires_at": "2026-03-26T14:57:44+00:00",
+      "revoked_at": "2026-03-26T14:00:28+00:00",
+      "session_id": "a059fa153376c2e6a11104f7ded7b846",
+      "viewer_token": "3_9VCEVGOeTH_Tu_-OFkL7WHV_IUImd4"
+    },
+    {
+      "created_at": "2026-03-26T14:00:39+00:00",
+      "created_by": "tauri-react-ui",
+      "expires_at": "2026-03-26T15:00:39+00:00",
+      "revoked_at": "2026-03-26T14:00:55+00:00",
+      "session_id": "592417ccdd20b30098c3430effcb6bd1",
+      "viewer_token": "YlfxnEbfNCwe_2sTSB0TwkX0_wW5mx4v"
+    },
+    {
+      "created_at": "2026-03-26T14:00:59+00:00",
+      "created_by": "tauri-react-ui",
+      "expires_at": "2026-03-26T15:00:59+00:00",
+      "revoked_at": null,
+      "session_id": "00962cb1a70eebb1c8a7059ffa323ce7",
+      "viewer_token": "R9ZGr1hSD3q6c3mEGU1cp439QUrtEH5e"
+    },
+    {
+      "created_at": "2026-03-26T23:30:13+00:00",
+      "created_by": "tauri-react-ui",
+      "expires_at": "2026-03-27T00:30:13+00:00",
+      "revoked_at": "2026-03-26T23:32:33+00:00",
+      "session_id": "60ca6a9c7a5c946101d897060356b6fe",
+      "viewer_token": "Zmtfl5DFTDVf-a0afkRBgpY-eMkLYuT8"
+    },
+    {
+      "created_at": "2026-03-26T23:32:33+00:00",
+      "created_by": "codex-cli-debug",
+      "expires_at": "2026-03-27T00:32:33+00:00",
+      "revoked_at": "2026-03-26T23:33:01+00:00",
+      "session_id": "4ebdef7bc8d5b581ee57590f9413eda9",
+      "viewer_token": "sizW3nGDcq4uXS9EbnpET3-o20KC-1gM"
+    },
+    {
+      "created_at": "2026-03-26T23:33:01+00:00",
+      "created_by": "codex-cli-debug",
+      "expires_at": "2026-03-27T00:33:01+00:00",
+      "revoked_at": "2026-03-26T23:38:38+00:00",
+      "session_id": "3cc647d27f99c902a9e162fb21fa9bb4",
+      "viewer_token": "CxghdLZf5obRNf8XiF-ra3LrU89_3Epw"
+    },
+    {
+      "created_at": "2026-03-26T23:38:38+00:00",
+      "created_by": "tauri-react-ui",
+      "expires_at": "2026-03-27T00:38:38+00:00",
+      "revoked_at": "2026-03-26T23:42:26+00:00",
+      "session_id": "e4caac261d9a28c449c06db38476a1bd",
+      "viewer_token": "fwMmxxZgSr6CN-9JQwWl6R1xjWB0wsr5"
+    },
+    {
+      "created_at": "2026-03-26T23:42:26+00:00",
+      "created_by": "codex-cli-verified",
+      "expires_at": "2026-03-27T00:42:26+00:00",
+      "revoked_at": null,
+      "session_id": "0ff0bc5124f957652b486971c0ce9007",
+      "viewer_token": "KlXPiJXOhaQDOrHp4GOZt9hPh4PUr5s6"
     }
   ]
 }

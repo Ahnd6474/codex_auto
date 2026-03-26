@@ -173,8 +173,18 @@ class BridgeServer:
         except Exception as exc:
             self._jobs.update(job_id, status="failed", error=str(exc).strip() or str(exc), result=None)
 
+    def _resolve_workspace_root(self, raw_value: Any) -> Path:
+        if isinstance(raw_value, Path):
+            return raw_value.expanduser().resolve()
+        if raw_value is None:
+            return default_workspace_root()
+        text = str(raw_value).strip()
+        if not text or text.lower() == "none":
+            return default_workspace_root()
+        return Path(text).expanduser().resolve()
+
     def _handle_request(self, request_id: str, method: str, params: dict[str, Any]) -> None:
-        workspace_root = Path(str(params.get("workspace_root", default_workspace_root())).strip() or default_workspace_root())
+        workspace_root = self._resolve_workspace_root(params.get("workspace_root"))
         payload = params.get("payload", {})
         payload = payload if isinstance(payload, dict) else {}
         command = str(params.get("command", "")).strip()

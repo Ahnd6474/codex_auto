@@ -1,221 +1,161 @@
-<svg width="1440" height="980" viewBox="0 0 1440 980" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="1280" height="760" viewBox="0 0 1280 760" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">jakal-flow 아키텍처 개요</title>
+  <desc id="desc">CLI와 데스크톱 UI에서 오케스트레이션 코어, 외부 시스템, 프로젝트별 워크스페이스로 이어지는 흐름도.</desc>
   <defs>
-    <linearGradient id="bg" x1="80" y1="60" x2="1360" y2="920" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#F4EFE6"/>
-      <stop offset="0.5" stop-color="#EEF3F8"/>
-      <stop offset="1" stop-color="#E7F1EE"/>
+    <linearGradient id="bg" x1="70" y1="40" x2="1210" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F3F7FF"/>
+      <stop offset="1" stop-color="#EEF7F2"/>
     </linearGradient>
-    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.94"/>
-      <stop offset="1" stop-color="#F8FBFD" stop-opacity="0.88"/>
+    <linearGradient id="headerBand" x1="44" y1="132" x2="1236" y2="222" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#EEF4FF"/>
+      <stop offset="1" stop-color="#F5FBF7"/>
     </linearGradient>
-    <linearGradient id="accentBlue" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0F4C81"/>
-      <stop offset="1" stop-color="#2563EB"/>
-    </linearGradient>
-    <linearGradient id="accentTeal" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0F766E"/>
-      <stop offset="1" stop-color="#14B8A6"/>
-    </linearGradient>
-    <linearGradient id="accentAmber" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#92400E"/>
-      <stop offset="1" stop-color="#F59E0B"/>
-    </linearGradient>
-    <linearGradient id="accentRose" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#9F1239"/>
-      <stop offset="1" stop-color="#F43F5E"/>
-    </linearGradient>
-    <filter id="shadow" x="-80" y="-80" width="1600" height="1140" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
-      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
-      <feOffset dy="18"/>
-      <feGaussianBlur stdDeviation="20"/>
-      <feColorMatrix type="matrix" values="0 0 0 0 0.0588 0 0 0 0 0.0941 0 0 0 0 0.1568 0 0 0 0.12 0"/>
-      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1"/>
-      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1" result="shape"/>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#25364A" flood-opacity="0.1"/>
     </filter>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-      <path d="M0 0L10 5L0 10V0Z" fill="#516173"/>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#4B5B70"/>
     </marker>
     <style>
-      .title { font: 700 34px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: #17202A; }
-      .subtitle { font: 500 15px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: #536273; }
-      .section { font: 700 15px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: #203040; letter-spacing: 0.08em; text-transform: uppercase; }
-      .cardTitle { font: 700 20px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: #182431; }
-      .cardText { font: 500 14px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: #506072; }
-      .cardTextOnDark { font: 500 14px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: #FFFFFF; }
-      .small { font: 600 12px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: #667789; }
-      .mono { font: 600 12px 'Consolas', 'Courier New', monospace; fill: #203040; }
-      .chip { font: 700 12px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: #FFFFFF; }
-      .folder { font: 600 13px 'Consolas', 'Courier New', monospace; fill: #213243; }
-      .note { font: 600 12px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: #314253; }
-      .outline { fill: url(#panel); stroke: #D7E0E8; stroke-width: 1.5; }
-      .thin { stroke: #AEBECD; stroke-width: 1.5; }
-      .arrow { stroke: #516173; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
-      .dash { stroke-dasharray: 7 7; }
+      .title { font: 700 34px 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', sans-serif; fill: #192635; }
+      .subtitle { font: 500 16px 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', sans-serif; fill: #4E5F73; }
+      .section { font: 700 14px 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', sans-serif; fill: #25364A; letter-spacing: 0.05em; }
+      .boxTitle { font: 700 18px 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', sans-serif; fill: #1B2A3A; }
+      .body { font: 500 13px 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', sans-serif; fill: #495B6E; }
+      .chip { font: 700 12px 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', sans-serif; fill: #FFFFFF; }
+      .panel { fill: #FFFFFF; stroke: #D8E2EC; stroke-width: 1.5; filter: url(#softShadow); }
+      .subpanel { fill: #FFFFFF; stroke: #D8E2EC; stroke-width: 1.3; filter: url(#softShadow); }
+      .soft { fill: #FFFFFF; stroke: #D8E2EC; stroke-width: 1.3; }
+      .sectionBand { fill: url(#headerBand); stroke: #D8E2EC; stroke-width: 1.5; filter: url(#softShadow); }
+      .line { stroke: #4B5B70; stroke-width: 2.4; fill: none; marker-end: url(#arrow); }
+      .divider { stroke: #D8E2EC; stroke-width: 1.4; stroke-linecap: round; }
     </style>
   </defs>
 
-  <rect x="20" y="20" width="1400" height="940" rx="34" fill="url(#bg)"/>
+  <rect x="16" y="16" width="1248" height="728" rx="28" fill="url(#bg)"/>
 
-  <circle cx="1280" cy="120" r="74" fill="#DCEBFF" fill-opacity="0.58"/>
-  <circle cx="180" cy="880" r="118" fill="#E2F2E7" fill-opacity="0.56"/>
-  <circle cx="1360" cy="860" r="92" fill="#FCE4D2" fill-opacity="0.7"/>
+  <text x="48" y="74" class="title">jakal-flow: 아키텍처와 실행 흐름</text>
+  <text x="48" y="102" class="subtitle">인터페이스와 오케스트레이션을 분리하고, 저장소별 상태/로그/메모리/문서/리포트를 독립적으로 유지합니다.</text>
 
-  <text x="68" y="86" class="title">jakal-flow Architecture</text>
-  <text x="68" y="114" class="subtitle">Interfaces stay separate from orchestration. Each managed repository gets its own traceable workspace with safe revisions, logs, reports, and review checkpoints.</text>
+  <rect x="44" y="132" width="1192" height="90" rx="18" class="sectionBand"/>
+  <line x1="64" y1="166" x2="1216" y2="166" class="divider"/>
+  <text x="64" y="160" class="section">진입 지점</text>
 
-  <g filter="url(#shadow)">
-    <rect x="52" y="150" width="1336" height="116" rx="26" class="outline"/>
-  </g>
-  <text x="78" y="184" class="section">Entry Points</text>
+  <rect x="66" y="172" width="210" height="34" rx="12" fill="#2463EB"/>
+  <text x="84" y="194" class="chip">CLI: init-repo / run / resume</text>
 
-  <rect x="78" y="202" width="248" height="42" rx="18" fill="url(#accentBlue)"/>
-  <text x="102" y="229" class="chip">CLI</text>
-  <text x="180" y="229" class="cardTextOnDark">init-repo / run / resume / status / report</text>
+  <rect x="296" y="172" width="240" height="34" rx="12" fill="#0F766E"/>
+  <text x="314" y="194" class="chip">데스크톱 UI: React + Tauri</text>
 
-  <rect x="374" y="202" width="314" height="42" rx="18" fill="url(#accentTeal)"/>
-  <text x="398" y="229" class="chip">Desktop UI</text>
-  <text x="509" y="229" class="cardTextOnDark">React + Tauri shell for setup, flow editing, run control, closeout</text>
+  <rect x="556" y="172" width="250" height="34" rx="12" fill="#B45309"/>
+  <text x="574" y="194" class="chip">공유 뷰어: 읽기 전용 모니터</text>
 
-  <rect x="738" y="202" width="278" height="42" rx="18" fill="url(#accentAmber)"/>
-  <text x="762" y="229" class="chip">Share Viewer</text>
-  <text x="883" y="229" class="cardTextOnDark">Read-only remote monitor served from the local share server</text>
+  <rect x="826" y="172" width="390" height="34" rx="12" fill="#BE185D"/>
+  <text x="844" y="194" class="chip">설정: 모델 / 샌드박스 / 승인 / 검증</text>
 
-  <rect x="1064" y="202" width="290" height="42" rx="18" fill="url(#accentRose)"/>
-  <text x="1088" y="229" class="chip">Program Settings</text>
-  <text x="1223" y="229" class="cardTextOnDark">Model, sandbox, approval, verification defaults, parallel workers</text>
+  <rect x="44" y="248" width="300" height="288" rx="18" class="panel"/>
+  <text x="64" y="276" class="section">제어 계층</text>
 
-  <g filter="url(#shadow)">
-    <rect x="52" y="302" width="320" height="238" rx="28" class="outline"/>
-    <rect x="406" y="302" width="628" height="398" rx="28" class="outline"/>
-    <rect x="1068" y="302" width="320" height="398" rx="28" class="outline"/>
-  </g>
+  <rect x="64" y="294" width="260" height="72" rx="14" fill="#F4F8FF" stroke="#CBDCF5"/>
+  <text x="80" y="320" class="boxTitle">React + Tauri 쉘</text>
+  <text x="80" y="340" class="body">프로젝트 설정, 계획 편집, 실행 제어, 체크포인트 승인.</text>
 
-  <text x="78" y="336" class="section">Control Layer</text>
-  <text x="432" y="336" class="section">Orchestration Core</text>
-  <text x="1094" y="336" class="section">External Systems</text>
+  <rect x="64" y="382" width="260" height="72" rx="14" fill="#F4FFFD" stroke="#C9ECE4"/>
+  <text x="80" y="408" class="boxTitle">ui_bridge.py</text>
+  <text x="80" y="428" class="body">UI 이벤트를 JSON 브리지 명령으로 변환하고 상태를 갱신.</text>
 
-  <rect x="80" y="360" width="264" height="60" rx="18" fill="#F5FAFF" stroke="#CDE1F6" stroke-width="1.5"/>
-  <text x="102" y="388" class="cardTitle">Tauri Shell + React Screens</text>
-  <text x="102" y="409" class="cardText">Project setup, plan editor, run controls, checkpoint approval, share-link actions.</text>
+  <rect x="64" y="470" width="260" height="52" rx="14" fill="#FFF9F1" stroke="#F0DDBE"/>
+  <text x="80" y="500" class="boxTitle">share_server.py + public_tunnel.py</text>
 
-  <rect x="80" y="438" width="264" height="62" rx="18" fill="#F4FFFD" stroke="#C8EEE6" stroke-width="1.5"/>
-  <text x="102" y="466" class="cardTitle">ui_bridge.py</text>
-  <text x="102" y="487" class="cardText">JSON bridge that turns desktop events into orchestrator commands and reloads project state.</text>
+  <rect x="364" y="248" width="542" height="288" rx="18" class="panel"/>
+  <text x="384" y="276" class="section">오케스트레이션 코어</text>
 
-  <rect x="80" y="518" width="264" height="62" rx="18" fill="#FFF9F1" stroke="#F7DFC1" stroke-width="1.5"/>
-  <text x="102" y="546" class="cardTitle">share_server.py + public_tunnel.py</text>
-  <text x="102" y="567" class="cardText">Serve masked live status, optional public URL, and temporary read-only sessions.</text>
+  <rect x="384" y="294" width="502" height="92" rx="14" fill="#EEF4FF" stroke="#CDDCF3"/>
+  <text x="402" y="322" class="boxTitle">orchestrator.py</text>
+  <text x="402" y="342" class="body">계획 실행, 안전 리비전, 롤백, 재시도, 체크포인트 흐름 관리.</text>
+  <text x="402" y="360" class="body">직렬 블록 실행과 DAG 병렬 실행, 클로즈아웃을 지원.</text>
 
-  <rect x="432" y="360" width="576" height="84" rx="22" fill="#EEF5FF" stroke="#CFE0F7" stroke-width="1.5"/>
-  <text x="458" y="392" class="cardTitle">orchestrator.py</text>
-  <text x="458" y="414" class="cardText">Owns plan execution, safe revision tracking, block retries, rollback, checkpoint flow, serial runs, parallel batches, and closeout.</text>
-  <rect x="886" y="376" width="102" height="28" rx="14" fill="url(#accentBlue)"/>
-  <text x="906" y="394" class="chip">safe revision</text>
-  <rect x="886" y="410" width="102" height="28" rx="14" fill="url(#accentRose)"/>
-  <text x="914" y="428" class="chip">rollback</text>
+  <rect x="384" y="402" width="156" height="54" rx="12" class="subpanel"/>
+  <text x="398" y="425" class="boxTitle">planning.py</text>
+  <text x="398" y="442" class="body">PLAN / MID_TERM</text>
 
-  <rect x="432" y="466" width="178" height="82" rx="18" fill="#FFFFFF" stroke="#D8E3ED" stroke-width="1.5"/>
-  <text x="454" y="495" class="cardTitle">planning.py</text>
-  <text x="454" y="516" class="cardText">Saved plan, mid-term plan, execution prompts, scope guard, DAG-ready steps.</text>
+  <rect x="556" y="402" width="156" height="54" rx="12" class="subpanel"/>
+  <text x="570" y="425" class="boxTitle">codex_runner.py</text>
+  <text x="570" y="442" class="body">프롬프트 + 이벤트</text>
 
-  <rect x="630" y="466" width="178" height="82" rx="18" fill="#FFFFFF" stroke="#D8E3ED" stroke-width="1.5"/>
-  <text x="652" y="495" class="cardTitle">codex_runner.py</text>
-  <text x="652" y="516" class="cardText">Runs Codex non-interactively, stores prompts, output, events, diagnostics.</text>
+  <rect x="728" y="402" width="158" height="54" rx="12" class="subpanel"/>
+  <text x="742" y="425" class="boxTitle">git_ops.py</text>
+  <text x="742" y="442" class="body">커밋 / 리셋</text>
 
-  <rect x="828" y="466" width="178" height="82" rx="18" fill="#FFFFFF" stroke="#D8E3ED" stroke-width="1.5"/>
-  <text x="850" y="495" class="cardTitle">git_ops.py</text>
-  <text x="850" y="516" class="cardText">Clone, commit, push, worktree setup, cherry-pick, reset, clean, conflict handling.</text>
+  <rect x="384" y="472" width="156" height="54" rx="12" class="subpanel"/>
+  <text x="398" y="495" class="boxTitle">workspace.py</text>
+  <text x="398" y="512" class="body">저장소 격리</text>
 
-  <rect x="432" y="566" width="178" height="82" rx="18" fill="#FFFFFF" stroke="#D8E3ED" stroke-width="1.5"/>
-  <text x="454" y="595" class="cardTitle">workspace.py</text>
-  <text x="454" y="616" class="cardText">Maps repository identity to an isolated project root under the managed workspace.</text>
+  <rect x="556" y="472" width="156" height="54" rx="12" class="subpanel"/>
+  <text x="570" y="495" class="boxTitle">memory.py</text>
+  <text x="570" y="512" class="body">추적 가능한 메모리</text>
 
-  <rect x="630" y="566" width="178" height="82" rx="18" fill="#FFFFFF" stroke="#D8E3ED" stroke-width="1.5"/>
-  <text x="652" y="595" class="cardTitle">memory.py + reporting.py</text>
-  <text x="652" y="616" class="cardText">Success and failure memory, block reviews, status reports, PR-ready failure bundles.</text>
+  <rect x="728" y="472" width="158" height="54" rx="12" class="subpanel"/>
+  <text x="742" y="495" class="boxTitle">reporting.py</text>
+  <text x="742" y="512" class="body">리포트 / 실패 번들</text>
 
-  <rect x="828" y="566" width="178" height="82" rx="18" fill="#FFFFFF" stroke="#D8E3ED" stroke-width="1.5"/>
-  <text x="850" y="595" class="cardTitle">models.py + utils.py</text>
-  <text x="850" y="616" class="cardText">Typed state, runtime settings, JSONL helpers, timestamps, normalization utilities.</text>
+  <rect x="926" y="248" width="310" height="288" rx="18" class="panel"/>
+  <text x="946" y="276" class="section">외부 시스템</text>
 
-  <rect x="1094" y="360" width="268" height="72" rx="18" fill="#F4F8FF" stroke="#D2DEF2" stroke-width="1.5"/>
-  <text x="1116" y="389" class="cardTitle">Codex CLI</text>
-  <text x="1116" y="410" class="cardText">Prompt execution with event streams and usage telemetry.</text>
+  <rect x="946" y="294" width="270" height="56" rx="12" fill="#F4F8FF" stroke="#CFDDF1"/>
+  <text x="962" y="318" class="boxTitle">Codex CLI</text>
+  <text x="962" y="336" class="body">실행 + 이벤트 스트림 + 사용량</text>
 
-  <rect x="1094" y="450" width="268" height="72" rx="18" fill="#FFF8F2" stroke="#F3D8BC" stroke-width="1.5"/>
-  <text x="1116" y="479" class="cardTitle">Managed Git Repository</text>
-  <text x="1116" y="500" class="cardText">Repo root used for code edits, test commands, commits, and safe reset targets.</text>
+  <rect x="946" y="362" width="270" height="56" rx="12" fill="#FFF8F2" stroke="#F0D7C2"/>
+  <text x="962" y="386" class="boxTitle">관리 대상 Git 저장소</text>
+  <text x="962" y="404" class="body">코드 수정, 테스트, 커밋, 안전 리셋 기준점</text>
 
-  <rect x="1094" y="540" width="268" height="72" rx="18" fill="#F5FBF7" stroke="#D0E9D7" stroke-width="1.5"/>
-  <text x="1116" y="569" class="cardTitle">GitHub / Remote Origin</text>
-  <text x="1116" y="590" class="cardText">Push safe commits, detect PR context, and post failure comments when allowed.</text>
+  <rect x="946" y="430" width="270" height="56" rx="12" fill="#F5FBF7" stroke="#CFE8D7"/>
+  <text x="962" y="454" class="boxTitle">GitHub / 원격 저장소</text>
+  <text x="962" y="472" class="body">검증된 커밋 푸시, PR 업데이트</text>
 
-  <rect x="1094" y="630" width="268" height="72" rx="18" fill="#FFF3F5" stroke="#F4D4DC" stroke-width="1.5"/>
-  <text x="1116" y="659" class="cardTitle">Browser / Tunnel Endpoint</text>
-  <text x="1116" y="680" class="cardText">Temporary read-only monitoring via local host, reverse proxy, or Quick Tunnel.</text>
+  <rect x="44" y="560" width="1192" height="164" rx="18" class="panel"/>
+  <text x="64" y="588" class="section">프로젝트별 워크스페이스</text>
+  <text x="64" y="608" class="body">관리되는 저장소마다 projects/&lt;repo_slug&gt;/ 아래에 산출물을 분리 저장합니다.</text>
 
-  <g filter="url(#shadow)">
-    <rect x="52" y="736" width="1336" height="188" rx="28" class="outline"/>
-  </g>
-  <text x="78" y="770" class="section">Per-Project Workspace</text>
-  <text x="78" y="794" class="cardText">The core works against an isolated project root, not the global app state. Every repository keeps its own docs, state, memory, logs, and reports.</text>
+  <rect x="64" y="626" width="154" height="74" rx="12" class="soft"/>
+  <text x="80" y="654" class="boxTitle">repo/</text>
+  <text x="80" y="672" class="body">작업 트리</text>
 
-  <rect x="84" y="822" width="214" height="74" rx="18" fill="#FFFFFF" stroke="#D8E3ED" stroke-width="1.5"/>
-  <text x="106" y="852" class="cardTitle">repo/</text>
-  <text x="106" y="873" class="cardText">Working tree, test command target, local git identity.</text>
+  <rect x="232" y="626" width="154" height="74" rx="12" class="soft"/>
+  <text x="248" y="654" class="boxTitle">docs/</text>
+  <text x="248" y="672" class="body">PLAN, 리뷰 문서</text>
 
-  <rect x="318" y="822" width="214" height="74" rx="18" fill="#FFFFFF" stroke="#D8E3ED" stroke-width="1.5"/>
-  <text x="340" y="852" class="cardTitle">docs/</text>
-  <text x="340" y="873" class="cardText">PLAN, MID_TERM_PLAN, SCOPE_GUARD, BLOCK_REVIEW, CLOSEOUT_REPORT.</text>
+  <rect x="400" y="626" width="154" height="74" rx="12" class="soft"/>
+  <text x="416" y="654" class="boxTitle">memory/</text>
+  <text x="416" y="672" class="body">성공/실패 패턴</text>
 
-  <rect x="552" y="822" width="214" height="74" rx="18" fill="#FFFFFF" stroke="#D8E3ED" stroke-width="1.5"/>
-  <text x="574" y="852" class="cardTitle">memory/</text>
-  <text x="574" y="873" class="cardText">success_patterns.jsonl, failure_patterns.jsonl, task_summaries.jsonl.</text>
+  <rect x="568" y="626" width="154" height="74" rx="12" class="soft"/>
+  <text x="584" y="654" class="boxTitle">logs/</text>
+  <text x="584" y="672" class="body">jsonl 추적 로그</text>
 
-  <rect x="786" y="822" width="214" height="74" rx="18" fill="#FFFFFF" stroke="#D8E3ED" stroke-width="1.5"/>
-  <text x="808" y="852" class="cardTitle">logs/</text>
-  <text x="808" y="873" class="cardText">passes.jsonl, blocks.jsonl, test logs, UI events, block event files.</text>
+  <rect x="736" y="626" width="154" height="74" rx="12" class="soft"/>
+  <text x="752" y="654" class="boxTitle">reports/</text>
+  <text x="752" y="672" class="body">최신/실패 리포트</text>
 
-  <rect x="1020" y="822" width="164" height="74" rx="18" fill="#FFFFFF" stroke="#D8E3ED" stroke-width="1.5"/>
-  <text x="1042" y="852" class="cardTitle">reports/</text>
-  <text x="1042" y="873" class="cardText">latest_report, failure bundle, optional Word closeout.</text>
+  <rect x="904" y="626" width="154" height="74" rx="12" class="soft"/>
+  <text x="920" y="654" class="boxTitle">state/</text>
+  <text x="920" y="672" class="body">체크포인트 등</text>
 
-  <rect x="1204" y="822" width="158" height="74" rx="18" fill="#FFFFFF" stroke="#D8E3ED" stroke-width="1.5"/>
-  <text x="1226" y="852" class="cardTitle">state/</text>
-  <text x="1226" y="873" class="cardText">loop state, checkpoints, UI control, share sessions.</text>
+  <rect x="1072" y="626" width="144" height="74" rx="12" class="soft"/>
+  <text x="1088" y="654" class="boxTitle">metadata.json</text>
+  <text x="1088" y="672" class="body">프로젝트 설정</text>
 
-  <path d="M210 244V290" class="arrow"/>
-  <path d="M532 244V290" class="arrow"/>
-  <path d="M876 244V290" class="arrow"/>
-  <path d="M1209 244V290" class="arrow"/>
+  <path d="M170 206V238" class="line"/>
+  <path d="M416 206V238" class="line"/>
+  <path d="M680 206V238" class="line"/>
+  <path d="M1020 206V238" class="line"/>
 
-  <path d="M344 469H404" class="arrow"/>
-  <path d="M344 550H404" class="arrow"/>
-  <path d="M610 507H630" class="thin"/>
-  <path d="M808 507H828" class="thin"/>
-  <path d="M610 607H630" class="thin"/>
-  <path d="M808 607H828" class="thin"/>
+  <path d="M324 418H364" class="line"/>
+  <path d="M906 322H926" class="line"/>
+  <path d="M906 390H926" class="line"/>
+  <path d="M906 458H926" class="line"/>
 
-  <path d="M1008 402H1080" class="arrow"/>
-  <path d="M1008 507H1080" class="arrow"/>
-  <path d="M1008 607H1080" class="arrow"/>
-  <path d="M1230 702V808" class="arrow"/>
-  <path d="M720 700V808" class="arrow"/>
-
-  <path d="M1088 730C1040 760 1008 774 952 808" class="arrow dash"/>
-  <path d="M286 730C354 760 420 780 510 808" class="arrow dash"/>
-
-  <rect x="86" y="286" width="142" height="26" rx="13" fill="url(#accentBlue)"/>
-  <text x="114" y="303" class="chip">commands</text>
-  <rect x="470" y="710" width="148" height="28" rx="14" fill="url(#accentTeal)"/>
-  <text x="492" y="728" class="chip">serial or DAG parallel</text>
-  <rect x="644" y="710" width="136" height="28" rx="14" fill="url(#accentAmber)"/>
-  <text x="667" y="728" class="chip">checkpoint review</text>
-  <rect x="806" y="710" width="134" height="28" rx="14" fill="url(#accentRose)"/>
-  <text x="833" y="728" class="chip">failure bundle</text>
-
-  <text x="1142" y="728" class="small">Share server reads masked status from workspace state and logs.</text>
-  <text x="80" y="944" class="note">Design intent: UI, orchestration, storage, git integration, and remote monitoring stay decoupled so the system remains maintainable while preserving rollback and traceability.</text>
+  <path d="M640 536V612" class="line"/>
+  <path d="M1080 486V612" class="line"/>
 </svg>

@@ -1,14 +1,14 @@
 {
   "command": [
-    "C:\\Users\\alber\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Cloudflare.cloudflared_Microsoft.Winget.Source_8wekyb3d8bbwe\\cloudflared.exe",
+    "C:\\Users\\alber\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Cloudflare.cloudflared_Microsoft.Winget.Source_8wekyb3d8bbwe\\cloudflared.EXE",
     "tunnel",
     "--url",
-    "http://0.0.0.0:55180",
+    "http://127.0.0.1:56871",
     "--no-autoupdate"
   ],
-  "pid": 40800,
+  "pid": 26748,
   "provider": "cloudflare-quick-tunnel",
-  "public_url": "https://subsequent-bibliography-optimize-misc.trycloudflare.com",
-  "started_at": "2026-03-26T12:47:26+00:00",
-  "target_url": "http://0.0.0.0:55180"
+  "public_url": "https://walter-hobbies-laser-classical.trycloudflare.com",
+  "started_at": "2026-03-26T23:42:26+00:00",
+  "target_url": "http://127.0.0.1:56871"
 }

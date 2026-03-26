@@ -94,6 +94,10 @@ def project_detail_content_signature(project: ProjectContext, detail_level: str)
         project.paths.ml_experiment_results_svg_file,
         project.paths.block_review_file,
         project.paths.execution_flow_svg_file,
+        project.paths.state_dir / "share_sessions.json",
+        project.paths.workspace_root / "share_server.json",
+        project.paths.workspace_root / "public_tunnel.json",
+        project.paths.workspace_root / "share_server_config.json",
     ]
     if str(detail_level).strip().lower() == "full":
         tracked_files.extend(

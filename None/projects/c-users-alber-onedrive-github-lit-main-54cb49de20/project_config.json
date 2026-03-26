@@ -27,6 +27,7 @@
   "model_slug_input": "auto",
   "no_progress_limit": 3,
   "output_cost_per_million_usd": 0.0,
+  "parallel_worker_mode": "auto",
   "parallel_workers": 4,
   "per_pass_cost_usd": 0.0,
   "provider_api_key_env": "OPENAI_API_KEY",

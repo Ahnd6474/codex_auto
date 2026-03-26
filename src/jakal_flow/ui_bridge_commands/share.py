@@ -8,6 +8,7 @@ from ..share import (
     DEFAULT_SHARE_TTL_MINUTES,
     ShareServerConfig,
     create_share_session,
+    project_share_payload,
     public_session_summary,
     revoke_share_session,
     share_server_status_payload,
@@ -110,7 +111,14 @@ def build_share_command_handlers(
             {"session_id": session.session_id, "expires_at": session.expires_at},
         )
         detail = ctx.detail_payload(project)
-        detail["created_share_session"] = public_session_summary(ctx.workspace_root, project, session, include_token=True)
+        detail["share"] = project_share_payload(ctx.workspace_root, project)
+        detail["created_share_session"] = public_session_summary(
+            ctx.workspace_root,
+            project,
+            session,
+            include_token=True,
+            server=detail["share"]["server"],
+        )
         if quick_tunnel_warning:
             detail["share_tunnel_warning"] = quick_tunnel_warning
         return detail
@@ -128,7 +136,14 @@ def build_share_command_handlers(
             {"session_id": session.session_id},
         )
         detail = ctx.detail_payload(project)
-        detail["revoked_share_session"] = public_session_summary(ctx.workspace_root, project, session, include_token=False)
+        detail["share"] = project_share_payload(ctx.workspace_root, project)
+        detail["revoked_share_session"] = public_session_summary(
+            ctx.workspace_root,
+            project,
+            session,
+            include_token=False,
+            server=detail["share"]["server"],
+        )
         return detail
 
     return {
