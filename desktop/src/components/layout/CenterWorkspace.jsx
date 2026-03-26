@@ -235,6 +235,7 @@ export function CenterWorkspace({
             detail={detail}
             planDraft={planDraft}
             form={form}
+            programSettings={programSettings}
             busy={busy}
             modelPresets={modelPresets}
             modelCatalog={modelCatalog}

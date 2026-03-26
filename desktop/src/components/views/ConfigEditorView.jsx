@@ -1,14 +1,20 @@
 import { useI18n } from "../../i18n";
 import {
   AUTO_REASONING_OPTION,
+  applyProviderDefaults,
   autoRoutingPresetLabel,
   configReasoningOptions,
   defaultModelForRuntime,
+  defaultBillingMode,
   defaultReasoningOption,
+  defaultProviderApiKeyEnv,
+  defaultProviderBaseUrl,
   filterModelCatalogByProvider,
   findModelCatalogEntry,
   normalizedLocalModelProvider,
   normalizedModelProvider,
+  providerSupportsAutoModel,
+  providerSupportsCatalog,
   reasoningEffortLabel,
   runtimeSummary,
   selectedConfigReasoning,
@@ -57,7 +63,8 @@ function effortDescription(modelLabel, effort, language) {
 }
 
 function updateRuntimeModel(currentRuntime, modelCatalog, nextModel, nextEffort = null) {
-  const model = String(nextModel || "").trim().toLowerCase() || "auto";
+  const providerAllowsAuto = providerSupportsAutoModel(currentRuntime?.model_provider || "openai");
+  const model = String(nextModel || "").trim().toLowerCase() || (providerAllowsAuto ? "auto" : "");
   const supported = configReasoningOptions(modelCatalog, model, currentRuntime?.effort || "medium");
   const preferred = nextEffort || selectedConfigReasoning(modelCatalog, { ...currentRuntime, model });
   const selection = supported.includes(preferred) ? preferred : supported[0] || "medium";
@@ -74,15 +81,7 @@ function updateRuntimeModel(currentRuntime, modelCatalog, nextModel, nextEffort 
 }
 
 function updateRuntimeProvider(currentRuntime, modelCatalog, nextProvider, nextLocalProvider = null) {
-  const modelProvider = nextProvider === "oss" ? "oss" : "openai";
-  const localModelProvider = modelProvider === "oss" ? (nextLocalProvider === "lmstudio" ? "lmstudio" : "ollama") : "";
-  const nextRuntime = {
-    ...currentRuntime,
-    model_provider: modelProvider,
-    local_model_provider: localModelProvider,
-    model_preset: "",
-    model_selection_mode: "slug",
-  };
+  const nextRuntime = applyProviderDefaults(currentRuntime, nextProvider, nextLocalProvider);
   const resolvedModel = defaultModelForRuntime(modelCatalog, nextRuntime);
   return updateRuntimeModel(
     {
@@ -107,8 +106,10 @@ export function ConfigEditorView({
   const { language, t } = useI18n();
   const selectedProvider = normalizedModelProvider(runtime);
   const selectedLocalProvider = normalizedLocalModelProvider(runtime);
+  const providerHasCatalog = providerSupportsCatalog(selectedProvider);
+  const providerHasAutoModel = providerSupportsAutoModel(selectedProvider);
   const scopedModelCatalog = filterModelCatalogByProvider(modelCatalog, runtime);
-  const selectedModel = runtime.model || defaultModelForRuntime(modelCatalog, runtime) || "auto";
+  const selectedModel = runtime.model || defaultModelForRuntime(modelCatalog, runtime) || (providerHasAutoModel ? "auto" : "");
   const selectedCatalogEntry = findModelCatalogEntry(scopedModelCatalog, selectedModel);
   const supportedEfforts = configReasoningOptions(scopedModelCatalog, selectedModel, runtime.effort || "medium");
   const selectedEffort = selectedConfigReasoning(scopedModelCatalog, runtime);
@@ -120,8 +121,8 @@ export function ConfigEditorView({
     ? visibleModels
     : [
         {
-          model: selectedModel || "auto",
-          display_name: selectedCatalogEntry?.display_name || selectedModel || "Auto",
+          model: selectedModel || "",
+          display_name: selectedCatalogEntry?.display_name || selectedModel || t("common.none"),
           hidden: false,
         },
       ];
@@ -249,6 +250,9 @@ export function ConfigEditorView({
                 disabled={busy}
               >
                 <option value="openai">{t("option.providerOpenAI")}</option>
+                <option value="openrouter">{t("option.providerOpenRouter")}</option>
+                <option value="opencdk">{t("option.providerOpenCDK")}</option>
+                <option value="local_openai">{t("option.providerLocalCompatible")}</option>
                 <option value="oss">{t("option.providerOSS")}</option>
               </select>
             </label>
@@ -268,6 +272,42 @@ export function ConfigEditorView({
                   <option value="ollama">{t("option.localProviderOllama")}</option>
                   <option value="lmstudio">{t("option.localProviderLmStudio")}</option>
                 </select>
+              </label>
+            ) : null}
+            {selectedProvider !== "oss" ? (
+              <label className="field">
+                <span>{t("field.providerBaseUrl")}</span>
+                <input
+                  value={runtime.provider_base_url || defaultProviderBaseUrl(selectedProvider)}
+                  onChange={(event) =>
+                    onChangeForm((current) => ({
+                      ...current,
+                      runtime: {
+                        ...current.runtime,
+                        provider_base_url: event.target.value,
+                      },
+                    }))
+                  }
+                  disabled={busy}
+                />
+              </label>
+            ) : null}
+            {selectedProvider !== "oss" ? (
+              <label className="field">
+                <span>{t("field.providerApiKeyEnv")}</span>
+                <input
+                  value={runtime.provider_api_key_env || defaultProviderApiKeyEnv(selectedProvider)}
+                  onChange={(event) =>
+                    onChangeForm((current) => ({
+                      ...current,
+                      runtime: {
+                        ...current.runtime,
+                        provider_api_key_env: event.target.value,
+                      },
+                    }))
+                  }
+                  disabled={busy}
+                />
               </label>
             ) : null}
             <label className="field">
@@ -290,6 +330,108 @@ export function ConfigEditorView({
                 disabled={busy}
               />
             </label>
+            <label className="field">
+              <span>{t("field.billingMode")}</span>
+              <select
+                value={runtime.billing_mode || defaultBillingMode(selectedProvider)}
+                onChange={(event) =>
+                  onChangeForm((current) => ({
+                    ...current,
+                    runtime: {
+                      ...current.runtime,
+                      billing_mode: event.target.value,
+                    },
+                  }))
+                }
+                disabled={busy}
+              >
+                <option value="included">{t("option.billingIncluded")}</option>
+                <option value="token">{t("option.billingToken")}</option>
+                <option value="per_pass">{t("option.billingPerPass")}</option>
+              </select>
+            </label>
+            {(runtime.billing_mode || defaultBillingMode(selectedProvider)) === "token" ? (
+              <>
+                <label className="field">
+                  <span>{t("field.inputTokenRate")}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.0001"
+                    value={runtime.input_cost_per_million_usd || 0}
+                    onChange={(event) =>
+                      onChangeForm((current) => ({
+                        ...current,
+                        runtime: {
+                          ...current.runtime,
+                          input_cost_per_million_usd: Number.parseFloat(event.target.value || "0") || 0,
+                        },
+                      }))
+                    }
+                    disabled={busy}
+                  />
+                </label>
+                <label className="field">
+                  <span>{t("field.outputTokenRate")}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.0001"
+                    value={runtime.output_cost_per_million_usd || 0}
+                    onChange={(event) =>
+                      onChangeForm((current) => ({
+                        ...current,
+                        runtime: {
+                          ...current.runtime,
+                          output_cost_per_million_usd: Number.parseFloat(event.target.value || "0") || 0,
+                        },
+                      }))
+                    }
+                    disabled={busy}
+                  />
+                </label>
+                <label className="field">
+                  <span>{t("field.reasoningTokenRate")}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.0001"
+                    value={runtime.reasoning_output_cost_per_million_usd || 0}
+                    onChange={(event) =>
+                      onChangeForm((current) => ({
+                        ...current,
+                        runtime: {
+                          ...current.runtime,
+                          reasoning_output_cost_per_million_usd: Number.parseFloat(event.target.value || "0") || 0,
+                        },
+                      }))
+                    }
+                    disabled={busy}
+                  />
+                </label>
+              </>
+            ) : null}
+            {(runtime.billing_mode || defaultBillingMode(selectedProvider)) === "per_pass" ? (
+              <label className="field">
+                <span>{t("field.perPassRate")}</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.0001"
+                  value={runtime.per_pass_cost_usd || 0}
+                  onChange={(event) =>
+                    onChangeForm((current) => ({
+                      ...current,
+                      runtime: {
+                        ...current.runtime,
+                        per_pass_cost_usd: Number.parseFloat(event.target.value || "0") || 0,
+                      },
+                    }))
+                  }
+                  disabled={busy}
+                />
+              </label>
+            ) : null}
             <label className="field field--wide">
               <span>{t("field.extraPrompt")}</span>
               <textarea
@@ -343,12 +485,12 @@ export function ConfigEditorView({
                 }
                 disabled={busy}
               >
-                {recommendedModels.map((item) => (
-                  <option key={item.model} value={item.model}>
-                    {item.display_name}
+                {(recommendedModels.length ? recommendedModels : allModels).map((item) => (
+                  <option key={item.model || "custom"} value={item.model}>
+                    {item.display_name || item.model || t("common.none")}
                   </option>
                 ))}
-                {additionalModels.length ? (
+                {providerHasCatalog && additionalModels.length ? (
                   <optgroup label={t("config.additionalModels")}>
                     {additionalModels.map((item) => (
                       <option key={item.model} value={item.model}>
@@ -378,6 +520,7 @@ export function ConfigEditorView({
                 />
               ))}
             </div>
+            {!providerHasCatalog ? <p className="muted">{providerHasAutoModel ? t("config.providerPresetModelHint") : t("config.customProviderModelHint")}</p> : null}
           </div>
         </div>
       </div>

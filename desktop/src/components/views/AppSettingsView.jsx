@@ -1,4 +1,11 @@
 import { useI18n } from "../../i18n";
+import {
+  applyProviderDefaults,
+  defaultBillingMode,
+  defaultProviderApiKeyEnv,
+  defaultProviderBaseUrl,
+  normalizeDashboardVisibility,
+} from "../../utils";
 
 export function AppSettingsView({
   settings,
@@ -14,6 +21,22 @@ export function AppSettingsView({
   const { language, languageOptions, setLanguage, t } = useI18n();
   const activeShare = shareDetail?.active_session || null;
   const shareServer = shareDetail?.server || null;
+  const dashboardVisibility = normalizeDashboardVisibility(settings?.dashboard_visibility);
+  const dashboardOptions = [
+    ["status", t("common.status")],
+    ["remaining_steps", t("dashboard.remainingSteps")],
+    ["checkpoint_pending", t("dashboard.checkpointPending")],
+    ["input_tokens", t("dashboard.inputTokens")],
+    ["output_tokens", t("dashboard.outputTokens")],
+    ["estimated_remaining", t("dashboard.estimatedRemaining")],
+    ["estimated_cost", t("dashboard.estimatedCost")],
+    ["actual_cost", t("dashboard.actualCost")],
+    ["codex_plan", t("dashboard.codexPlan")],
+    ["rate_limits", t("dashboard.rateLimits")],
+    ["runtime_card", t("dashboard.runtime")],
+    ["codex_usage_card", t("dashboard.codexUsage")],
+    ["word_report_card", t("reports.closeoutReport")],
+  ];
 
   return (
     <section className="workspace-view">
@@ -61,6 +84,34 @@ export function AppSettingsView({
               <span>{t("option.developerMode")}</span>
             </label>
           </div>
+
+          <div className="subsection">
+            <div className="subsection__header">
+              <strong>{t("settings.dashboardPreferences")}</strong>
+              <span>{t("settings.dashboardPreferencesDescription")}</span>
+            </div>
+            <div className="choice-list">
+              {dashboardOptions.map(([key, label]) => (
+                <label className="choice-radio" key={key}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(dashboardVisibility[key])}
+                    onChange={(event) =>
+                      onChangeSettings((current) => ({
+                        ...current,
+                        dashboard_visibility: {
+                          ...normalizeDashboardVisibility(current?.dashboard_visibility),
+                          [key]: event.target.checked,
+                        },
+                      }))
+                    }
+                    disabled={busy}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="form-section">
@@ -76,14 +127,15 @@ export function AppSettingsView({
                   value={settings.model_provider || "openai"}
                   onChange={(event) =>
                     onChangeSettings((current) => ({
-                      ...current,
-                      model_provider: event.target.value,
-                      local_model_provider: event.target.value === "oss" ? (current.local_model_provider || "ollama") : "",
+                      ...applyProviderDefaults(current, event.target.value),
                     }))
                   }
                   disabled={busy}
                 >
                   <option value="openai">{t("option.providerOpenAI")}</option>
+                  <option value="openrouter">{t("option.providerOpenRouter")}</option>
+                  <option value="opencdk">{t("option.providerOpenCDK")}</option>
+                  <option value="local_openai">{t("option.providerLocalCompatible")}</option>
                   <option value="oss">{t("option.providerOSS")}</option>
                 </select>
               </label>
@@ -100,6 +152,38 @@ export function AppSettingsView({
                   </select>
                 </label>
               ) : null}
+              {String(settings.model_provider || "openai").trim().toLowerCase() !== "oss" ? (
+                <label className="field">
+                  <span>{t("field.providerBaseUrl")}</span>
+                  <input
+                    value={settings.provider_base_url || defaultProviderBaseUrl(settings.model_provider)}
+                    onChange={(event) => onChangeSettings((current) => ({ ...current, provider_base_url: event.target.value }))}
+                    disabled={busy}
+                  />
+                </label>
+              ) : null}
+              {String(settings.model_provider || "openai").trim().toLowerCase() !== "oss" ? (
+                <label className="field">
+                  <span>{t("field.providerApiKeyEnv")}</span>
+                  <input
+                    value={settings.provider_api_key_env || defaultProviderApiKeyEnv(settings.model_provider)}
+                    onChange={(event) => onChangeSettings((current) => ({ ...current, provider_api_key_env: event.target.value }))}
+                    disabled={busy}
+                  />
+                </label>
+              ) : null}
+              <label className="field">
+                <span>{t("field.billingMode")}</span>
+                <select
+                  value={settings.billing_mode || defaultBillingMode(settings.model_provider)}
+                  onChange={(event) => onChangeSettings((current) => ({ ...current, billing_mode: event.target.value }))}
+                  disabled={busy}
+                >
+                  <option value="included">{t("option.billingIncluded")}</option>
+                  <option value="token">{t("option.billingToken")}</option>
+                  <option value="per_pass">{t("option.billingPerPass")}</option>
+                </select>
+              </label>
               <label className="field">
                 <span>{t("field.approvalMode")}</span>
                 <select
@@ -124,6 +208,45 @@ export function AppSettingsView({
                   <option value="read-only">read-only</option>
                 </select>
               </label>
+              {String(settings.billing_mode || defaultBillingMode(settings.model_provider)).trim().toLowerCase() === "token" ? (
+                <>
+                  <label className="field">
+                    <span>{t("field.inputTokenRate")}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      value={settings.input_cost_per_million_usd || 0}
+                      onChange={(event) => onChangeSettings((current) => ({ ...current, input_cost_per_million_usd: Number.parseFloat(event.target.value || "0") || 0 }))}
+                      disabled={busy}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{t("field.outputTokenRate")}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      value={settings.output_cost_per_million_usd || 0}
+                      onChange={(event) => onChangeSettings((current) => ({ ...current, output_cost_per_million_usd: Number.parseFloat(event.target.value || "0") || 0 }))}
+                      disabled={busy}
+                    />
+                  </label>
+                </>
+              ) : null}
+              {String(settings.billing_mode || defaultBillingMode(settings.model_provider)).trim().toLowerCase() === "per_pass" ? (
+                <label className="field">
+                  <span>{t("field.perPassRate")}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.0001"
+                    value={settings.per_pass_cost_usd || 0}
+                    onChange={(event) => onChangeSettings((current) => ({ ...current, per_pass_cost_usd: Number.parseFloat(event.target.value || "0") || 0 }))}
+                    disabled={busy}
+                  />
+                </label>
+              ) : null}
               <label className="field">
                 <span>{t("field.checkpointInterval")}</span>
                 <input

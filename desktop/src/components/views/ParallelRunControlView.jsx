@@ -1,6 +1,6 @@
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { canEditStep, REASONING_OPTIONS, reasoningEffortLabel, statusTone } from "../../utils";
+import { canEditStep, formatDurationCompact, formatUsd, REASONING_OPTIONS, reasoningEffortLabel, statusTone } from "../../utils";
 
 function normalizeListText(value) {
   const rawItems = Array.isArray(value) ? value : String(value || "").split(/[\r\n,]+/);
@@ -79,6 +79,10 @@ export function ParallelRunControlView({
   const layers = buildDagLayers(steps);
   const readyNodes = readyPendingSteps(steps);
   const selectedStep = steps.find((step) => step.step_id === selectedStepId) || null;
+  const runtimeInsights = detail?.runtime_insights || {};
+  const executionEstimate = runtimeInsights?.execution || {};
+  const costEstimate = runtimeInsights?.cost || {};
+  const selectedStepEstimate = (executionEstimate.step_estimates || []).find((item) => item.step_id === selectedStepId) || null;
   const editableStep = canEditStep(selectedStep, busy);
   const completedCount = steps.filter((step) => step.status === "completed").length;
   const { language, t } = useI18n();
@@ -105,9 +109,17 @@ export function ParallelRunControlView({
           <span>{t("run.parallelReady")}</span>
           <strong>{readyNodes.length}</strong>
         </div>
+        <div className="metric-card metric-card--info">
+          <span>{t("run.estimatedRemaining")}</span>
+          <strong>{formatDurationCompact(executionEstimate.remaining_seconds ?? 0, language)}</strong>
+        </div>
         <div className={`metric-card metric-card--${statusTone(planDraft?.closeout_status)}`}>
           <span>{t("run.closeout")}</span>
           <strong>{displayStatus(planDraft?.closeout_status || "not_started", language)}</strong>
+        </div>
+        <div className="metric-card">
+          <span>{t("run.estimatedCost")}</span>
+          <strong>{formatUsd(costEstimate.estimated_total_cost_usd ?? 0, language)}</strong>
         </div>
       </div>
 
@@ -173,6 +185,14 @@ export function ParallelRunControlView({
           </div>
           {selectedStep ? (
             <div className="step-editor-grid">
+              <div className="field field--wide">
+                <span>{t("run.stepEstimate")}</span>
+                <strong>
+                  {formatDurationCompact(selectedStepEstimate?.estimated_duration_seconds ?? 0, language)}
+                  {" | "}
+                  {t("run.currentRemaining")}: {formatDurationCompact(selectedStepEstimate?.remaining_seconds ?? 0, language)}
+                </strong>
+              </div>
               <label className="field field--wide">
                 <span>{t("field.title")}</span>
                 <input value={selectedStep.title || ""} onChange={(event) => onUpdateStepField("title", event.target.value)} disabled={!editableStep} />

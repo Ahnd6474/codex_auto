@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { codexUsageBuckets, rateLimitRemainingLabel, rateLimitWindowSummary, statusTone } from "../../utils";
+import { codexUsageBuckets, formatUsd, rateLimitRemainingLabel, rateLimitWindowSummary, statusTone } from "../../utils";
 
 function ToolTab({ value, activeTab, onChange, label }) {
   return (
@@ -14,6 +14,8 @@ function ToolTab({ value, activeTab, onChange, label }) {
 export function BottomToolPanel({ activeTab, onChangeTab, data }) {
   const tokenUsage = data?.token_usage || {};
   const codexStatus = data?.codex_status || {};
+  const runtimeInsights = data?.runtime_insights || {};
+  const costEstimate = runtimeInsights?.cost || {};
   const account = codexStatus.account || {};
   const gitStatus = data?.git_status || {};
   const testRuns = data?.test_runs || [];
@@ -54,8 +56,16 @@ export function BottomToolPanel({ activeTab, onChangeTab, data }) {
               <strong>{tokenUsage.total_tokens ?? 0}</strong>
             </div>
             <div className="metric-card">
+              <span>{t("tool.estimatedCost")}</span>
+              <strong>{formatUsd(costEstimate.estimated_total_cost_usd ?? 0, language)}</strong>
+            </div>
+            <div className="metric-card">
               <span>{language === "ko" ? "요금제" : "Plan"}</span>
               <strong>{account.plan_type || t("common.unavailable")}</strong>
+            </div>
+            <div className="dense-row">
+              <strong>{t("dashboard.actualCost")}</strong>
+              <span>{formatUsd(costEstimate?.recent?.estimated_cost_usd ?? 0, language)}</span>
             </div>
             {usageBuckets.map((bucket) => (
               <div className="metric-card" key={bucket.key}>

@@ -181,6 +181,21 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(runtime.model, "qwen2.5-coder:0.5b")
         self.assertEqual(runtime.model_preset, "")
 
+    def test_runtime_from_payload_applies_openrouter_defaults(self) -> None:
+        runtime = runtime_from_payload(
+            {
+                "model_provider": "openrouter",
+                "model_slug_input": "openai/gpt-4.1-mini",
+                "billing_mode": "token",
+            }
+        )
+
+        self.assertEqual(runtime.model_provider, "openrouter")
+        self.assertEqual(runtime.provider_base_url, "https://openrouter.ai/api/v1")
+        self.assertEqual(runtime.provider_api_key_env, "OPENROUTER_API_KEY")
+        self.assertEqual(runtime.model, "openai/gpt-4.1-mini")
+        self.assertEqual(runtime.billing_mode, "token")
+
     def test_bootstrap_exposes_workspace_and_model_presets(self) -> None:
         with TemporaryTestDir() as temp_dir:
             with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
@@ -230,6 +245,8 @@ class UIBridgeTests(unittest.TestCase):
             self.assertIn("bottom_panels", detail)
             self.assertIn("github", detail)
             self.assertEqual(detail["codex_status"]["account"]["email"], "demo@example.com")
+            self.assertIn("runtime_insights", detail)
+            self.assertIn("runtime_insights", detail["bottom_panels"])
 
             listing = run_command("list-projects", workspace_root)
             self.assertEqual(len(listing["projects"]), 1)

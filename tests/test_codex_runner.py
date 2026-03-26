@@ -32,7 +32,7 @@ class CodexRunnerTests(unittest.TestCase):
             runner = CodexRunner("codex.cmd")
             attempts = {"count": 0}
 
-            def fake_run(command, input, capture_output, check):
+            def fake_run(command, input, capture_output, check, env=None):
                 attempts["count"] += 1
                 output_file = Path(command[command.index("-o") + 1])
                 if attempts["count"] == 1:
@@ -81,7 +81,7 @@ class CodexRunnerTests(unittest.TestCase):
             runner = CodexRunner("codex.cmd")
             attempts = {"count": 0}
 
-            def fake_run(command, input, capture_output, check):
+            def fake_run(command, input, capture_output, check, env=None):
                 attempts["count"] += 1
                 return subprocess.CompletedProcess(
                     command,
@@ -121,7 +121,7 @@ class CodexRunnerTests(unittest.TestCase):
             runner = CodexRunner("codex.cmd")
             observed_commands: list[list[str]] = []
 
-            def fake_run(command, input, capture_output, check):
+            def fake_run(command, input, capture_output, check, env=None):
                 observed_commands.append(command)
                 output_file = Path(command[command.index("-o") + 1])
                 output_file.write_text("Auto response", encoding="utf-8")
@@ -153,7 +153,7 @@ class CodexRunnerTests(unittest.TestCase):
             runner = CodexRunner("codex.cmd")
             observed_inputs: list[bytes] = []
 
-            def fake_run(command, input, capture_output, check):
+            def fake_run(command, input, capture_output, check, env=None):
                 observed_inputs.append(input)
                 output_file = Path(command[command.index("-o") + 1])
                 output_file.write_text("Fast response", encoding="utf-8")
@@ -190,7 +190,7 @@ class CodexRunnerTests(unittest.TestCase):
             runner = CodexRunner("codex.cmd")
             observed_commands: list[list[str]] = []
 
-            def fake_run(command, input, capture_output, check):
+            def fake_run(command, input, capture_output, check, env=None):
                 observed_commands.append(command)
                 output_file = Path(command[command.index("-o") + 1])
                 output_file.write_text("OSS response", encoding="utf-8")
@@ -210,6 +210,52 @@ class CodexRunnerTests(unittest.TestCase):
             self.assertIn("--local-provider", observed_commands[0])
             self.assertIn("ollama", observed_commands[0])
             self.assertIn("qwen2.5-coder:0.5b", observed_commands[0])
+
+    def test_run_pass_applies_openrouter_base_url_and_api_key_env(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_temp:
+            temp_root = Path(raw_temp)
+            repo_dir = temp_root / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            manager = WorkspaceManager(temp_root / "workspace")
+            context = manager.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=RuntimeOptions(
+                    model_provider="openrouter",
+                    provider_base_url="https://openrouter.ai/api/v1",
+                    provider_api_key_env="OPENROUTER_API_KEY",
+                    model="openai/gpt-4.1-mini",
+                    effort="medium",
+                ),
+            )
+            runner = CodexRunner("codex.cmd")
+            observed_commands: list[list[str]] = []
+            observed_envs: list[dict[str, str]] = []
+
+            def fake_run(command, input, capture_output, check, env=None):
+                observed_commands.append(command)
+                observed_envs.append(dict(env or {}))
+                output_file = Path(command[command.index("-o") + 1])
+                output_file.write_text("OpenRouter response", encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+
+            with mock.patch.dict("os.environ", {"OPENROUTER_API_KEY": "router-secret"}, clear=False), mock.patch(
+                "jakal_flow.codex_runner.subprocess.run",
+                side_effect=fake_run,
+            ):
+                runner.run_pass(
+                    context=context,
+                    prompt="Use the OpenRouter endpoint",
+                    pass_type="demo pass",
+                    block_index=1,
+                    search_enabled=False,
+                )
+
+            self.assertEqual(len(observed_commands), 1)
+            self.assertIn("-c", observed_commands[0])
+            self.assertIn('openai_base_url="https://openrouter.ai/api/v1"', observed_commands[0])
+            self.assertEqual(observed_envs[0]["OPENAI_API_KEY"], "router-secret")
+            self.assertEqual(observed_envs[0]["OPENAI_BASE_URL"], "https://openrouter.ai/api/v1")
 
 
 if __name__ == "__main__":

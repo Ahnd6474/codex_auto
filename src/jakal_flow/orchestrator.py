@@ -1268,6 +1268,7 @@ class Orchestrator:
                     "changed_files": changed_files,
                     "test_results": test_result.to_dict() if test_result else None,
                     "usage": run_result.usage,
+                    "duration_seconds": run_result.duration_seconds,
                     "codex_attempt_count": run_result.attempt_count,
                     "codex_diagnostics": run_result.diagnostics,
                     "codex_return_code": run_result.returncode,
@@ -1567,14 +1568,25 @@ class Orchestrator:
         target["status"] = "approved"
         target["approved_at"] = now_utc_iso()
         target["review_notes"] = review_notes.strip()
-        if push and context.metadata.current_safe_revision:
+        remote_url = self.git.remote_url(context.paths.repo_dir, "origin")
+        if push and context.runtime.allow_push and remote_url:
             self.git.push(context.paths.repo_dir, context.metadata.branch)
             target["pushed"] = True
+        else:
+            target["pushed"] = False
+            if not push:
+                target["push_skipped_reason"] = "not_requested"
+            elif not context.runtime.allow_push:
+                target["push_skipped_reason"] = "push_disabled"
+            elif not remote_url:
+                target["push_skipped_reason"] = "missing_remote"
         write_json(context.paths.checkpoint_state_file, data)
+        plan_state = self.load_execution_plan_state(context)
+        context.loop_state.current_checkpoint_id = None
         context.loop_state.pending_checkpoint_approval = False
         context.loop_state.stop_requested = False
         context.loop_state.stop_reason = None
-        context.metadata.current_status = "ready"
+        context.metadata.current_status = self._status_from_plan_state(plan_state)
         self.workspace.save_project(context)
         return target
 
@@ -1873,6 +1885,7 @@ class Orchestrator:
                 "changed_files": run_result.changed_files,
                 "test_results": test_result.to_dict() if test_result else None,
                 "usage": run_result.usage,
+                "duration_seconds": run_result.duration_seconds,
                 "codex_attempt_count": run_result.attempt_count,
                 "codex_diagnostics": run_result.diagnostics,
                 "codex_return_code": run_result.returncode,

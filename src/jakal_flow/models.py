@@ -51,6 +51,14 @@ def _float_or_none(value: Any) -> float | None:
 class RuntimeOptions:
     model_provider: str = "openai"
     local_model_provider: str = ""
+    provider_base_url: str = ""
+    provider_api_key_env: str = ""
+    billing_mode: str = "included"
+    input_cost_per_million_usd: float = 0.0
+    cached_input_cost_per_million_usd: float = 0.0
+    output_cost_per_million_usd: float = 0.0
+    reasoning_output_cost_per_million_usd: float = 0.0
+    per_pass_cost_usd: float = 0.0
     model: str = "auto"
     model_preset: str = "auto"
     model_selection_mode: str = "slug"
@@ -222,6 +230,7 @@ class CodexRunResult:
     usage: dict[str, int] = field(default_factory=dict)
     last_message: str | None = None
     attempt_count: int = 1
+    duration_seconds: float = 0.0
     diagnostics: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

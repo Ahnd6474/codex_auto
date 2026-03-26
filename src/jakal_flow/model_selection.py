@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from .model_constants import AUTO_MODEL_SLUG, VALID_REASONING_EFFORTS
 from .models import RuntimeOptions
-from .model_providers import normalize_model_provider
+from .model_providers import normalize_model_provider, provider_supports_auto_model
 
 MODEL_MODE_SLUG = "slug"
 MODEL_MODE_CODEX = "codex"
@@ -190,7 +190,8 @@ class ModelSelection:
 
 
 def model_selection_from_runtime(runtime: RuntimeOptions) -> ModelSelection:
-    if normalize_model_provider(getattr(runtime, "model_provider", "")) == "oss":
+    provider = normalize_model_provider(getattr(runtime, "model_provider", ""))
+    if not provider_supports_auto_model(provider):
         inferred_mode = MODEL_MODE_SLUG
     else:
         inferred_mode = MODEL_MODE_CODEX if "codex" in runtime.model.lower() else MODEL_MODE_SLUG

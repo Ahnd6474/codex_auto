@@ -1,15 +1,22 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import time
 from pathlib import Path
 
 from .codex_app_server import is_auto_model, resolve_codex_path
-from .model_providers import normalize_local_model_provider, normalize_model_provider
+from .model_providers import (
+    normalize_local_model_provider,
+    normalize_model_provider,
+    provider_preset,
+    provider_supports_auto_model,
+    provider_uses_openai_compatible_api,
+)
 from .models import CodexRunResult, ProjectContext
-from .utils import compact_text, decode_process_output, ensure_dir, parse_json_text, read_text, write_json, write_text
+from .utils import compact_text, decode_process_output, ensure_dir, get_env_or_dotenv, parse_json_text, read_text, write_json, write_text
 
 
 class CodexRunner:
@@ -36,12 +43,17 @@ class CodexRunner:
         formatted_prompt = self._format_prompt(context, prompt)
         write_text(prompt_file, formatted_prompt)
 
+        provider = normalize_model_provider(getattr(context.runtime, "model_provider", ""))
         command = [self.codex_path]
-        if normalize_model_provider(getattr(context.runtime, "model_provider", "")) == "oss":
+        child_env = os.environ.copy()
+        if provider == "oss":
             command.append("--oss")
             local_provider = normalize_local_model_provider(getattr(context.runtime, "local_model_provider", ""))
             if local_provider:
                 command.extend(["--local-provider", local_provider])
+        else:
+            command.extend(self._provider_config_overrides(context))
+            child_env.update(self._provider_environment(context))
         command.extend(["-a", context.runtime.approval_mode])
         if search_enabled:
             command.append("--search")
@@ -76,16 +88,19 @@ class CodexRunner:
         stderr = ""
         completed: subprocess.CompletedProcess[bytes] | None = None
         attempt_records: list[dict[str, object]] = []
+        started_monotonic = time.monotonic()
         for attempt_index in range(1, self._TRANSIENT_RETRY_LIMIT + 2):
             try:
                 output_file.unlink(missing_ok=True)
             except OSError:
                 pass
+            attempt_started_monotonic = time.monotonic()
             completed = subprocess.run(
                 command,
                 input=formatted_prompt.encode("utf-8"),
                 capture_output=True,
                 check=False,
+                env=child_env,
             )
             stdout = decode_process_output(completed.stdout)
             stderr = decode_process_output(completed.stderr)
@@ -112,6 +127,7 @@ class CodexRunner:
                     "stdout_excerpt": compact_text(stdout, 500),
                     "stderr_excerpt": compact_text(stderr, 500),
                     "last_message_excerpt": compact_text(attempt_last_message, 500),
+                    "duration_seconds": round(max(0.0, time.monotonic() - attempt_started_monotonic), 3),
                 }
             )
             if unexpected_token_detected and completed.returncode != 0 and attempt_index <= self._TRANSIENT_RETRY_LIMIT:
@@ -146,6 +162,7 @@ class CodexRunner:
             usage=usage,
             last_message=read_text(output_file).strip() or None,
             attempt_count=len(attempt_records),
+            duration_seconds=round(max(0.0, time.monotonic() - started_monotonic), 3),
             diagnostics=diagnostics,
         )
 
@@ -215,3 +232,35 @@ class CodexRunner:
             write_text(block_dir / f"{attempt_basename}.stderr.log", stderr)
         if last_message:
             write_text(block_dir / f"{attempt_basename}.last_message.txt", last_message)
+
+    def _provider_config_overrides(self, context: ProjectContext) -> list[str]:
+        provider = normalize_model_provider(getattr(context.runtime, "model_provider", ""))
+        if not provider_uses_openai_compatible_api(provider) or provider == "openai":
+            return []
+        overrides: list[str] = []
+        preset = provider_preset(provider)
+        base_url = str(getattr(context.runtime, "provider_base_url", "") or "").strip() or preset.default_base_url
+        if base_url:
+            overrides.extend(["-c", f"openai_base_url={self._toml_string(base_url)}"])
+        return overrides
+
+    def _provider_environment(self, context: ProjectContext) -> dict[str, str]:
+        provider = normalize_model_provider(getattr(context.runtime, "model_provider", ""))
+        if not provider_uses_openai_compatible_api(provider):
+            return {}
+        preset = provider_preset(provider)
+        provider_base_url = str(getattr(context.runtime, "provider_base_url", "") or "").strip() or preset.default_base_url
+        api_key_env_name = str(getattr(context.runtime, "provider_api_key_env", "") or "").strip() or preset.default_api_key_env
+        dotenv_path = context.paths.repo_dir / ".env"
+        env_updates: dict[str, str] = {}
+        if provider_base_url:
+            env_updates["OPENAI_BASE_URL"] = provider_base_url
+        if api_key_env_name:
+            api_key = get_env_or_dotenv(api_key_env_name, dotenv_path).strip()
+            if api_key:
+                env_updates["OPENAI_API_KEY"] = api_key
+        return env_updates
+
+    def _toml_string(self, value: str) -> str:
+        escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'

@@ -1,6 +1,6 @@
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { canEditStep, REASONING_OPTIONS, reasoningEffortLabel, statusTone } from "../../utils";
+import { canEditStep, formatDurationCompact, formatUsd, REASONING_OPTIONS, reasoningEffortLabel, statusTone } from "../../utils";
 
 function FlowNode({ step, selected, onSelect, language, t }) {
   const tone = statusTone(step.status);
@@ -38,6 +38,10 @@ export function RunControlView({
 }) {
   const steps = planDraft?.steps || [];
   const selectedStep = steps.find((step) => step.step_id === selectedStepId) || null;
+  const runtimeInsights = detail?.runtime_insights || {};
+  const executionEstimate = runtimeInsights?.execution || {};
+  const costEstimate = runtimeInsights?.cost || {};
+  const selectedStepEstimate = (executionEstimate.step_estimates || []).find((item) => item.step_id === selectedStepId) || null;
   const editableStep = canEditStep(selectedStep, busy);
   const completedCount = steps.filter((step) => step.status === "completed").length;
   const executionMode = String(planDraft?.execution_mode || detail?.runtime?.execution_mode || "serial").trim().toLowerCase() === "parallel" ? "parallel" : "serial";
@@ -66,6 +70,10 @@ export function RunControlView({
           <span>{t("run.stopAfterStep")}</span>
           <strong>{detail?.run_control?.stop_after_current_step ? t("common.on") : t("common.off")}</strong>
         </div>
+        <div className="metric-card metric-card--info">
+          <span>{t("run.estimatedRemaining")}</span>
+          <strong>{formatDurationCompact(executionEstimate.remaining_seconds ?? 0, language)}</strong>
+        </div>
         <div className={`metric-card metric-card--${executionMode === "parallel" ? "info" : "neutral"}`}>
           <span>{t("run.executionMode")}</span>
           <strong>{executionMode === "parallel" ? t("option.executionParallel") : t("option.executionSerial")}</strong>
@@ -73,6 +81,10 @@ export function RunControlView({
         <div className={`metric-card metric-card--${statusTone(planDraft?.closeout_status)}`}>
           <span>{t("run.closeout")}</span>
           <strong>{displayStatus(planDraft?.closeout_status || "not_started", language)}</strong>
+        </div>
+        <div className="metric-card">
+          <span>{t("run.estimatedCost")}</span>
+          <strong>{formatUsd(costEstimate.estimated_total_cost_usd ?? 0, language)}</strong>
         </div>
       </div>
 
@@ -136,6 +148,14 @@ export function RunControlView({
           </div>
           {selectedStep ? (
             <div className="step-editor-grid">
+              <div className="field field--wide">
+                <span>{t("run.stepEstimate")}</span>
+                <strong>
+                  {formatDurationCompact(selectedStepEstimate?.estimated_duration_seconds ?? 0, language)}
+                  {" | "}
+                  {t("run.currentRemaining")}: {formatDurationCompact(selectedStepEstimate?.remaining_seconds ?? 0, language)}
+                </strong>
+              </div>
               <label className="field field--wide">
                 <span>{t("field.title")}</span>
                 <input value={selectedStep.title || ""} onChange={(event) => onUpdateStepField("title", event.target.value)} disabled={!editableStep} />

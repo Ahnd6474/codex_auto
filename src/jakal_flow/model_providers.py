@@ -1,15 +1,84 @@
 from __future__ import annotations
 
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from .model_constants import (
+    BILLING_MODE_INCLUDED,
+    BILLING_MODE_PER_PASS,
+    BILLING_MODE_TOKEN,
     DEFAULT_LOCAL_MODEL_PROVIDER,
     DEFAULT_MODEL_PROVIDER,
     VALID_LOCAL_MODEL_PROVIDERS,
+    VALID_BILLING_MODES,
     VALID_MODEL_PROVIDERS,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderPreset:
+    provider: str
+    display_name: str
+    description: str
+    default_base_url: str = ""
+    default_api_key_env: str = ""
+    default_billing_mode: str = BILLING_MODE_INCLUDED
+    supports_auto_model: bool = False
+    supports_catalog: bool = False
+    is_local: bool = False
+
+
+PROVIDER_PRESETS: dict[str, ProviderPreset] = {
+    "openai": ProviderPreset(
+        provider="openai",
+        display_name="OpenAI / Codex Cloud",
+        description="Use the installed Codex CLI with OpenAI-hosted models and the native model catalog.",
+        default_api_key_env="OPENAI_API_KEY",
+        default_billing_mode=BILLING_MODE_INCLUDED,
+        supports_auto_model=True,
+        supports_catalog=True,
+    ),
+    "openrouter": ProviderPreset(
+        provider="openrouter",
+        display_name="OpenRouter",
+        description="Use an OpenAI-compatible OpenRouter endpoint through Codex CLI base URL overrides.",
+        default_base_url="https://openrouter.ai/api/v1",
+        default_api_key_env="OPENROUTER_API_KEY",
+        default_billing_mode=BILLING_MODE_TOKEN,
+        supports_auto_model=False,
+        supports_catalog=False,
+    ),
+    "opencdk": ProviderPreset(
+        provider="opencdk",
+        display_name="OpenCDK",
+        description="Use an OpenAI-compatible OpenCDK endpoint through Codex CLI base URL overrides.",
+        default_api_key_env="OPENCDK_API_KEY",
+        default_billing_mode=BILLING_MODE_TOKEN,
+        supports_auto_model=False,
+        supports_catalog=False,
+    ),
+    "local_openai": ProviderPreset(
+        provider="local_openai",
+        display_name="Local OpenAI-Compatible",
+        description="Use any local server that exposes an OpenAI-compatible API, such as vLLM, llama.cpp, or LocalAI.",
+        default_base_url="http://127.0.0.1:1234/v1",
+        default_billing_mode=BILLING_MODE_INCLUDED,
+        supports_auto_model=False,
+        supports_catalog=False,
+        is_local=True,
+    ),
+    "oss": ProviderPreset(
+        provider="oss",
+        display_name="Local OSS",
+        description="Use Codex CLI OSS mode through a local provider such as Ollama or LM Studio.",
+        default_billing_mode=BILLING_MODE_PER_PASS,
+        supports_auto_model=False,
+        supports_catalog=False,
+        is_local=True,
+    ),
+}
 
 
 def normalize_model_provider(value: str, fallback: str = DEFAULT_MODEL_PROVIDER) -> str:
@@ -24,6 +93,32 @@ def normalize_local_model_provider(value: str, fallback: str = "") -> str:
     if normalized in VALID_LOCAL_MODEL_PROVIDERS:
         return normalized
     return fallback
+
+
+def provider_preset(value: str, fallback: str = DEFAULT_MODEL_PROVIDER) -> ProviderPreset:
+    normalized = normalize_model_provider(value, fallback=fallback)
+    return PROVIDER_PRESETS.get(normalized, PROVIDER_PRESETS[DEFAULT_MODEL_PROVIDER])
+
+
+def provider_supports_auto_model(value: str) -> bool:
+    return provider_preset(value).supports_auto_model
+
+
+def provider_supports_catalog(value: str) -> bool:
+    return provider_preset(value).supports_catalog
+
+
+def provider_uses_openai_compatible_api(value: str) -> bool:
+    return normalize_model_provider(value) in {"openai", "openrouter", "opencdk", "local_openai"}
+
+
+def normalize_billing_mode(value: str, provider: str, fallback: str | None = None) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in VALID_BILLING_MODES:
+        return normalized
+    if fallback and fallback in VALID_BILLING_MODES:
+        return fallback
+    return provider_preset(provider).default_billing_mode
 
 
 def discover_local_model_catalog(third_party_root: Path | None = None) -> list[dict[str, Any]]:

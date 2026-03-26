@@ -24,9 +24,18 @@ export function detailApplySignature(detail = null, runningJob = null) {
 export const AUTO_REASONING_OPTION = "auto";
 export const REASONING_OPTIONS = ["low", "medium", "high", "xhigh"];
 export const MODEL_REASONING_OPTIONS = [AUTO_REASONING_OPTION, ...REASONING_OPTIONS];
+export const MODEL_PROVIDER_OPTIONS = ["openai", "openrouter", "opencdk", "local_openai", "oss"];
 export const PROGRAM_RUNTIME_KEYS = [
   "model_provider",
   "local_model_provider",
+  "provider_base_url",
+  "provider_api_key_env",
+  "billing_mode",
+  "input_cost_per_million_usd",
+  "cached_input_cost_per_million_usd",
+  "output_cost_per_million_usd",
+  "reasoning_output_cost_per_million_usd",
+  "per_pass_cost_usd",
   "approval_mode",
   "sandbox_mode",
   "checkpoint_interval_blocks",
@@ -36,11 +45,34 @@ export const PROGRAM_RUNTIME_KEYS = [
   "execution_mode",
   "parallel_workers",
 ];
-export const PROGRAM_UI_KEYS = ["ui_theme"];
+export const DEFAULT_DASHBOARD_VISIBILITY = Object.freeze({
+  status: true,
+  remaining_steps: true,
+  checkpoint_pending: true,
+  input_tokens: true,
+  output_tokens: true,
+  estimated_remaining: true,
+  estimated_cost: true,
+  actual_cost: true,
+  codex_plan: true,
+  rate_limits: true,
+  runtime_card: true,
+  codex_usage_card: true,
+  word_report_card: true,
+});
+export const PROGRAM_UI_KEYS = ["ui_theme", "developer_mode", "dashboard_visibility"];
 
 const DEFAULT_PROGRAM_RUNTIME = {
   model_provider: "openai",
   local_model_provider: "ollama",
+  provider_base_url: "",
+  provider_api_key_env: "OPENAI_API_KEY",
+  billing_mode: "included",
+  input_cost_per_million_usd: 0,
+  cached_input_cost_per_million_usd: 0,
+  output_cost_per_million_usd: 0,
+  reasoning_output_cost_per_million_usd: 0,
+  per_pass_cost_usd: 0,
   approval_mode: "never",
   sandbox_mode: "danger-full-access",
   checkpoint_interval_blocks: 1,
@@ -53,7 +85,16 @@ const DEFAULT_PROGRAM_RUNTIME = {
 const DEFAULT_PROGRAM_UI = {
   ui_theme: "dark",
   developer_mode: false,
+  dashboard_visibility: DEFAULT_DASHBOARD_VISIBILITY,
 };
+
+export function normalizeDashboardVisibility(value) {
+  const source = value && typeof value === "object" ? value : {};
+  return Object.entries(DEFAULT_DASHBOARD_VISIBILITY).reduce((visibility, [key, fallback]) => {
+    visibility[key] = source[key] === undefined ? fallback : Boolean(source[key]);
+    return visibility;
+  }, {});
+}
 
 export function reasoningEffortLabel(value, language = "en") {
   const normalized = String(value || "").trim().toLowerCase();
@@ -105,6 +146,7 @@ export function programSettingsFromRuntime(runtime) {
       settings[key] = source[key];
     }
   });
+  settings.dashboard_visibility = normalizeDashboardVisibility(settings.dashboard_visibility);
   return settings;
 }
 
@@ -126,6 +168,37 @@ export function applyProgramSettingsToForm(form, programSettings) {
   return {
     ...(cloneValue(form) || {}),
     runtime: applyProgramSettings(form?.runtime, programSettings),
+  };
+}
+
+export function applyProviderDefaults(runtime = {}, nextProvider = "openai", nextLocalProvider = null) {
+  const provider = MODEL_PROVIDER_OPTIONS.includes(String(nextProvider || "").trim().toLowerCase())
+    ? String(nextProvider || "").trim().toLowerCase()
+    : "openai";
+  const previousProvider = normalizedModelProvider(runtime);
+  const localProvider = provider === "oss" ? (String(nextLocalProvider || runtime?.local_model_provider || "ollama").trim().toLowerCase() === "lmstudio" ? "lmstudio" : "ollama") : "";
+  const supportsAuto = providerSupportsAutoModel(provider);
+  const currentModel = String(runtime?.model_slug_input || runtime?.model || "").trim().toLowerCase();
+  return {
+    ...(cloneValue(runtime) || {}),
+    model_provider: provider,
+    local_model_provider: localProvider,
+    provider_base_url:
+      previousProvider === provider
+        ? String(runtime?.provider_base_url || "").trim() || defaultProviderBaseUrl(provider)
+        : defaultProviderBaseUrl(provider),
+    provider_api_key_env:
+      previousProvider === provider
+        ? String(runtime?.provider_api_key_env || "").trim() || defaultProviderApiKeyEnv(provider)
+        : defaultProviderApiKeyEnv(provider),
+    billing_mode:
+      previousProvider === provider
+        ? String(runtime?.billing_mode || "").trim() || defaultBillingMode(provider)
+        : defaultBillingMode(provider),
+    model: supportsAuto ? (currentModel || "auto") : currentModel,
+    model_preset: supportsAuto ? String(runtime?.model_preset || "auto").trim().toLowerCase() || "auto" : "",
+    model_selection_mode: "slug",
+    model_slug_input: supportsAuto ? (currentModel || "auto") : currentModel,
   };
 }
 
@@ -503,8 +576,75 @@ export function findModelCatalogEntry(modelCatalog = [], model = "") {
   return modelCatalog.find((item) => String(item?.model || "").trim().toLowerCase() === target) || null;
 }
 
+export function defaultProviderBaseUrl(provider = "openai") {
+  switch (String(provider || "").trim().toLowerCase()) {
+    case "openrouter":
+      return "https://openrouter.ai/api/v1";
+    case "local_openai":
+      return "http://127.0.0.1:1234/v1";
+    default:
+      return "";
+  }
+}
+
+export function defaultProviderApiKeyEnv(provider = "openai") {
+  switch (String(provider || "").trim().toLowerCase()) {
+    case "openrouter":
+      return "OPENROUTER_API_KEY";
+    case "opencdk":
+      return "OPENCDK_API_KEY";
+    case "openai":
+      return "OPENAI_API_KEY";
+    default:
+      return "";
+  }
+}
+
+export function defaultBillingMode(provider = "openai") {
+  switch (String(provider || "").trim().toLowerCase()) {
+    case "openrouter":
+    case "opencdk":
+      return "token";
+    case "oss":
+      return "per_pass";
+    default:
+      return "included";
+  }
+}
+
+export function providerSupportsAutoModel(provider = "openai") {
+  return String(provider || "").trim().toLowerCase() === "openai";
+}
+
+export function providerSupportsCatalog(provider = "openai") {
+  const normalized = String(provider || "").trim().toLowerCase();
+  return normalized === "openai" || normalized === "oss";
+}
+
+export function providerDisplayName(provider = "openai", localProvider = "") {
+  const normalized = String(provider || "").trim().toLowerCase();
+  if (normalized === "oss") {
+    const local = String(localProvider || "").trim().toLowerCase();
+    if (local === "lmstudio") {
+      return "Local/LM Studio";
+    }
+    return "Local/Ollama";
+  }
+  if (normalized === "openrouter") {
+    return "OpenRouter";
+  }
+  if (normalized === "opencdk") {
+    return "OpenCDK";
+  }
+  if (normalized === "local_openai") {
+    return "Local OpenAI-Compatible";
+  }
+  return "OpenAI/Codex";
+}
+
 export function normalizedModelProvider(runtime = {}) {
-  return String(runtime?.model_provider || "openai").trim().toLowerCase() === "oss" ? "oss" : "openai";
+  const normalized = String(runtime?.model_provider || "openai").trim().toLowerCase();
+  return MODEL_PROVIDER_OPTIONS.includes(normalized) ? normalized : "openai";
 }
 
 export function normalizedLocalModelProvider(runtime = {}) {
@@ -514,6 +654,20 @@ export function normalizedLocalModelProvider(runtime = {}) {
 export function filterModelCatalogByProvider(modelCatalog = [], runtime = {}) {
   const provider = normalizedModelProvider(runtime);
   const localProvider = normalizedLocalModelProvider(runtime);
+  if (!providerSupportsCatalog(provider)) {
+    const currentModel = String(runtime?.model_slug_input || runtime?.model || "").trim();
+    if (!currentModel) {
+      return [];
+    }
+    return [
+      {
+        model: currentModel,
+        display_name: currentModel,
+        hidden: false,
+        provider,
+      },
+    ];
+  }
   return (modelCatalog || []).filter((item) => {
     const itemProvider = String(item?.provider || "openai").trim().toLowerCase() || "openai";
     if (itemProvider !== provider) {
@@ -528,13 +682,17 @@ export function filterModelCatalogByProvider(modelCatalog = [], runtime = {}) {
 }
 
 export function defaultModelForRuntime(modelCatalog = [], runtime = {}) {
+  const provider = normalizedModelProvider(runtime);
+  if (!providerSupportsCatalog(provider)) {
+    return String(runtime?.model_slug_input || runtime?.model || "").trim().toLowerCase();
+  }
   const scopedCatalog = filterModelCatalogByProvider(modelCatalog, runtime);
   const visible = scopedCatalog.filter((item) => !item?.hidden);
   const preferred = visible[0] || scopedCatalog[0] || null;
   if (preferred?.model) {
     return preferred.model;
   }
-  return normalizedModelProvider(runtime) === "oss" ? "" : "auto";
+  return provider === "oss" ? "" : "auto";
 }
 
 export function supportedReasoningOptions(modelCatalog = [], model = "", fallback = "medium") {
@@ -637,6 +795,45 @@ export function rateLimitWindowSummary(window, language = "en") {
   });
 }
 
+export function formatDurationCompact(seconds, language = "en") {
+  const total = Math.max(0, Math.round(Number(seconds || 0)));
+  if (!Number.isFinite(total) || total <= 0) {
+    return normalizeLanguage(language) === "ko" ? "0초" : "0s";
+  }
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const remainingSeconds = total % 60;
+  if (normalizeLanguage(language) === "ko") {
+    if (hours > 0) {
+      return `${hours}시간 ${minutes}분`;
+    }
+    if (minutes > 0) {
+      return `${minutes}분 ${remainingSeconds}초`;
+    }
+    return `${remainingSeconds}초`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${remainingSeconds}s`;
+  }
+  return `${remainingSeconds}s`;
+}
+
+export function formatUsd(value, language = "en") {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount)) {
+    return normalizeLanguage(language) === "ko" ? "알 수 없음" : "Unavailable";
+  }
+  return new Intl.NumberFormat(normalizeLanguage(language) === "ko" ? "ko-KR" : "en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: amount > 0 && amount < 1 ? 4 : 2,
+    maximumFractionDigits: amount > 0 && amount < 1 ? 4 : 2,
+  }).format(amount);
+}
+
 export function firstSelectableStepId(plan) {
   const steps = plan?.steps || [];
   const pending = steps.find((step) => step.status !== "completed");
@@ -644,16 +841,14 @@ export function firstSelectableStepId(plan) {
 }
 
 export function runtimeSummary(runtime, modelPresets = [], language = "en", modelCatalog = []) {
-  const providerPrefix =
-    normalizedModelProvider(runtime) === "oss"
-      ? `Local/${normalizedLocalModelProvider(runtime) === "lmstudio" ? "LM Studio" : "Ollama"}`
-      : "OpenAI/Codex";
+  const provider = normalizedModelProvider(runtime);
+  const providerPrefix = providerDisplayName(provider, normalizedLocalModelProvider(runtime));
   const executionSuffix =
     String(runtime?.execution_mode || "serial").trim().toLowerCase() === "parallel"
       ? ` | parallel x${Math.max(1, Number.parseInt(String(runtime?.parallel_workers || 2), 10) || 1)}`
       : " | serial";
   const preset = modelPresets.find((item) => item.preset_id === runtime?.model_preset);
-  if (preset && normalizedModelProvider(runtime) !== "oss") {
+  if (preset && providerSupportsAutoModel(provider)) {
     const summary = `${providerPrefix} | ${preset.summary}${executionSuffix}`;
     return runtime?.use_fast_mode ? `${summary} | /fast` : summary;
   }

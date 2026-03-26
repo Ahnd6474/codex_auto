@@ -19,7 +19,13 @@ from .model_selection import (
     normalize_model_preset_id,
     normalize_reasoning_effort,
 )
-from .model_providers import normalize_local_model_provider, normalize_model_provider
+from .model_providers import (
+    normalize_billing_mode,
+    normalize_local_model_provider,
+    normalize_model_provider,
+    provider_preset,
+    provider_supports_auto_model,
+)
 from .models import ExecutionPlanState, ProjectContext, RuntimeOptions
 from .orchestrator import Orchestrator
 from .public_tunnel import public_tunnel_status_payload, start_cloudflare_quick_tunnel, stop_public_tunnel_process
@@ -214,6 +220,16 @@ def coerce_positive_int(value: Any, default: int, minimum: int = 1) -> int:
     return max(minimum, parsed)
 
 
+def coerce_nonnegative_float(value: Any, default: float = 0.0) -> float:
+    try:
+        parsed = float(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+    if parsed < 0:
+        return default
+    return parsed
+
+
 def coerce_bool(value: Any, default: bool) -> bool:
     if isinstance(value, bool):
         return value
@@ -283,6 +299,7 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
         str(merged.get("model_provider", DEFAULT_MODEL_PROVIDER)),
         fallback=DEFAULT_MODEL_PROVIDER,
     )
+    provider = provider_preset(merged["model_provider"])
     merged["local_model_provider"] = normalize_local_model_provider(
         str(merged.get("local_model_provider", "")),
         fallback="",
@@ -292,6 +309,24 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
             merged["local_model_provider"] = DEFAULT_LOCAL_MODEL_PROVIDER
     else:
         merged["local_model_provider"] = ""
+    merged["provider_base_url"] = str(merged.get("provider_base_url", "")).strip()
+    if not merged["provider_base_url"] and provider.default_base_url:
+        merged["provider_base_url"] = provider.default_base_url
+    merged["provider_api_key_env"] = str(merged.get("provider_api_key_env", "")).strip()
+    if not merged["provider_api_key_env"] and provider.default_api_key_env:
+        merged["provider_api_key_env"] = provider.default_api_key_env
+    merged["billing_mode"] = normalize_billing_mode(
+        str(merged.get("billing_mode", "")),
+        merged["model_provider"],
+        fallback=provider.default_billing_mode,
+    )
+    merged["input_cost_per_million_usd"] = coerce_nonnegative_float(merged.get("input_cost_per_million_usd", 0.0))
+    merged["cached_input_cost_per_million_usd"] = coerce_nonnegative_float(merged.get("cached_input_cost_per_million_usd", 0.0))
+    merged["output_cost_per_million_usd"] = coerce_nonnegative_float(merged.get("output_cost_per_million_usd", 0.0))
+    merged["reasoning_output_cost_per_million_usd"] = coerce_nonnegative_float(
+        merged.get("reasoning_output_cost_per_million_usd", 0.0)
+    )
+    merged["per_pass_cost_usd"] = coerce_nonnegative_float(merged.get("per_pass_cost_usd", 0.0))
     merged["model"] = str(merged.get("model", "")).strip().lower()
     merged["model_preset"] = normalize_model_preset_id(str(merged.get("model_preset", "")), fallback="")
     merged["effort_selection_mode"] = str(merged.get("effort_selection_mode", "")).strip().lower()
@@ -304,12 +339,14 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
 
     if not merged["model"]:
         preset = model_preset_by_id(merged["model_preset"] or DEFAULT_MODEL_PRESET_ID)
-        merged["model"] = preset.model
+        merged["model"] = preset.model if provider_supports_auto_model(merged["model_provider"]) else ""
     preset = model_preset_by_id(merged["model_preset"] or DEFAULT_MODEL_PRESET_ID)
     if not merged["effort"]:
         merged["effort"] = preset.effort
     merged["effort"] = normalize_reasoning_effort(merged["effort"], fallback=preset.effort)
-    if merged["model_provider"] != "oss" and merged["model"] == AUTO_MODEL_SLUG:
+    if not provider_supports_auto_model(merged["model_provider"]) and merged["model"] == AUTO_MODEL_SLUG:
+        merged["model"] = ""
+    if provider_supports_auto_model(merged["model_provider"]) and merged["model"] == AUTO_MODEL_SLUG:
         if merged["model_preset"]:
             merged["effort"] = model_preset_by_id(merged["model_preset"]).effort
         else:
@@ -321,7 +358,9 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
     elif merged["model_preset"]:
         merged["model_preset"] = ""
     merged["model_selection_mode"] = str(merged.get("model_selection_mode", "slug")).strip() or "slug"
-    merged["model_slug_input"] = str(merged.get("model_slug_input", merged["model"])).strip() or merged["model"]
+    merged["model_slug_input"] = str(merged.get("model_slug_input", merged["model"])).strip().lower() or merged["model"]
+    if not merged["model"] and merged["model_slug_input"]:
+        merged["model"] = merged["model_slug_input"]
     return RuntimeOptions(**merged)
 
 
@@ -664,7 +703,7 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
     if command == "approve-checkpoint":
         project = resolve_project(orchestrator, payload)
         review_notes = str(payload.get("review_notes", "")).strip()
-        push = bool(payload.get("push", True))
+        push = coerce_bool(payload.get("push", True), True)
         orchestrator.approve_checkpoint(
             project.metadata.repo_url,
             project.metadata.branch,

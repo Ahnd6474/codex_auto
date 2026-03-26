@@ -1,6 +1,7 @@
+import { useEffect, useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { commandLabel, deriveExecutionProgress, executionProgressCaption } from "../../utils";
+import { commandLabel, deriveExecutionProgress, executionProgressCaption, formatDurationCompact, formatUsd } from "../../utils";
 
 function stepLabel(step) {
   return [step?.step_id, step?.title].filter(Boolean).join(" - ");
@@ -9,6 +10,18 @@ function stepLabel(step) {
 export function RunProgressPanel({ detail, planDraft, activeJob }) {
   const { language, t } = useI18n();
   const progress = deriveExecutionProgress(detail, planDraft, activeJob);
+  const runtimeInsights = detail?.runtime_insights || {};
+  const executionEstimate = runtimeInsights?.execution || {};
+  const costEstimate = runtimeInsights?.cost || {};
+  const [nowTick, setNowTick] = useState(Date.now());
+
+  useEffect(() => {
+    if (!progress.isActive) {
+      return undefined;
+    }
+    const timer = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [progress.isActive]);
 
   if (!progress.isActive) {
     return null;
@@ -29,6 +42,9 @@ export function RunProgressPanel({ detail, planDraft, activeJob }) {
 
   const progressSummary = executionProgressCaption(progress.plan, language);
   const percentLabel = progress.indeterminate ? t("status.running") : t("run.progressPercent", { percent: progress.percent ?? 0 });
+  const runningStepElapsedSeconds = progress.runningStep?.started_at
+    ? Math.max(0, Math.round((nowTick - new Date(progress.runningStep.started_at).getTime()) / 1000))
+    : 0;
   const badgeLabel =
     progress.phase === "debugging"
       ? displayStatus(progress.status || "running:debugging", language)
@@ -64,6 +80,9 @@ export function RunProgressPanel({ detail, planDraft, activeJob }) {
           <span>{t("run.completedStepsSummary", { completed: progress.completedSteps, total: progress.totalSteps })}</span>
         ) : null}
         {progress.readyIds.length > 1 ? <span>{t("run.readyNodeSummary", { count: progress.readyIds.length })}</span> : null}
+        <span>{t("run.currentElapsed")}: {formatDurationCompact(runningStepElapsedSeconds, language)}</span>
+        <span>{t("run.currentRemaining")}: {formatDurationCompact(executionEstimate.remaining_seconds ?? 0, language)}</span>
+        <span>{t("run.estimatedCost")}: {formatUsd(costEstimate.estimated_total_cost_usd ?? 0, language)}</span>
         <span>{percentLabel}</span>
       </div>
 

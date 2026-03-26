@@ -1,6 +1,6 @@
 # jakal-flow
 
-`jakal-flow` is a production-oriented Python CLI for managing multiple repositories inside an isolated workspace and repeatedly running a traceable Codex-driven improvement loop against them through Codex CLI, including both the default OpenAI/Codex cloud models and local OSS providers such as Ollama.
+`jakal-flow` is a production-oriented Python CLI for managing multiple repositories inside an isolated workspace and repeatedly running a traceable Codex-driven improvement loop against them through Codex CLI, including OpenAI/Codex cloud models, OpenAI-compatible providers such as OpenRouter or OpenCDK, and local model backends ranging from Codex OSS mode to generic OpenAI-compatible local servers.
 
 It is designed around a saved project plan:
 
@@ -55,8 +55,9 @@ npm.cmd run tauri:dev
 The Tauri shell keeps the Python orchestration backend and adds:
 
 - a React setup screen for managed projects, GitHub link mode, model preset selection, and verification commands
-- OpenAI/Codex cloud and local OSS model-provider selection, including local provider routing such as Ollama
+- OpenAI/Codex cloud, OpenRouter, OpenCDK, local OpenAI-compatible endpoints, and local OSS model-provider selection
 - a flow screen with prompt editing, plan generation, step editing, run control, closeout, and stop-after-step requests
+- estimated execution time and cost panels, including live remaining-time updates while a run is active
 - background job polling through a Python JSON bridge instead of keeping UI execution state only in memory
 - desktop UI trace files under each managed project for stop requests and UI event history
 
@@ -126,6 +127,25 @@ python -m jakal_flow run \
   --model-provider oss \
   --local-model-provider ollama \
   --model qwen2.5-coder:0.5b \
+  --effort medium \
+  --approval-mode never \
+  --sandbox-mode workspace-write \
+  --test-cmd "python -m pytest" \
+  --max-blocks 1
+```
+
+Run against an OpenAI-compatible provider such as OpenRouter:
+
+```bash
+python -m jakal_flow run \
+  --repo-url https://github.com/example/project.git \
+  --branch main \
+  --workspace-root .jakal-flow-workspace \
+  --model-provider openrouter \
+  --provider-base-url https://openrouter.ai/api/v1 \
+  --provider-api-key-env OPENROUTER_API_KEY \
+  --billing-mode token \
+  --model openai/gpt-4.1-mini \
   --effort medium \
   --approval-mode never \
   --sandbox-mode workspace-write \

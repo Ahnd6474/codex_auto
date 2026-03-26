@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .codex_app_server import fetch_codex_backend_snapshot
+from .model_providers import normalize_local_model_provider, normalize_model_provider, provider_preset
 from .models import ExecutionPlanState, ProjectContext
 from .orchestrator import Orchestrator
+from .runtime_insights import build_runtime_insights
 from .share import project_share_payload
 from .utils import compact_text, read_json, read_jsonl_tail, read_last_jsonl, read_text, write_json
 
@@ -148,12 +150,13 @@ def project_summary(orchestrator: Orchestrator, project: ProjectContext, plan_st
     remaining = [step.step_id for step in plan.steps if step.status != "completed"]
     recent_blocks = read_jsonl_tail(project.paths.block_log_file, 5)
     recent_statuses = [str(item.get("status", "")) for item in recent_blocks][-3:]
-    runtime_provider = str(getattr(project.runtime, "model_provider", "openai") or "openai").strip()
-    local_provider = str(getattr(project.runtime, "local_model_provider", "") or "").strip()
+    runtime_provider = normalize_model_provider(str(getattr(project.runtime, "model_provider", "openai") or "openai").strip())
+    local_provider = normalize_local_model_provider(str(getattr(project.runtime, "local_model_provider", "") or "").strip())
+    preset = provider_preset(runtime_provider)
     if runtime_provider == "oss":
-        provider_summary = f"local/{local_provider or 'oss'}"
+        provider_summary = f"{preset.display_name}/{local_provider or 'oss'}"
     else:
-        provider_summary = "openai"
+        provider_summary = preset.display_name
     lines = [
         f"Name: {project.metadata.display_name or project.metadata.slug}",
         f"Directory: {project.metadata.repo_path}",
@@ -335,6 +338,7 @@ def bottom_panel_payload(
 ) -> dict[str, Any]:
     latest_block = read_last_jsonl(context.paths.block_log_file) or {}
     latest_pass = read_last_jsonl(context.paths.pass_log_file) or {}
+    usage = recent_usage(context)
     return {
         "execution_log_lines": build_activity_lines(context, plan_state) if detail_level == "full" else [],
         "event_json": {
@@ -343,7 +347,8 @@ def bottom_panel_payload(
             "run_control": safe_json(context.paths.ui_control_file, default={}) or {},
             "loop_state": safe_json(context.paths.loop_state_file, default={}) or {},
         },
-        "token_usage": recent_usage(context),
+        "token_usage": usage,
+        "runtime_insights": build_runtime_insights(context, plan_state, usage),
         "codex_status": codex_status,
         "test_runs": read_jsonl_tail(context.paths.logs_dir / "test_runs.jsonl", 12 if detail_level == "full" else 5),
         "git_status": {
@@ -461,6 +466,7 @@ def _build_project_detail_base_payload(
     plan_state = orchestrator.load_execution_plan_state(project)
     control = load_run_control(project)
     recent_usage_payload = recent_usage(project)
+    runtime_insights = build_runtime_insights(project, plan_state, recent_usage_payload)
     if normalized_detail_level == "full":
         recent_blocks = read_jsonl_tail(project.paths.block_log_file, 8)
         recent_passes = read_jsonl_tail(project.paths.pass_log_file, 12)
@@ -507,6 +513,7 @@ def _build_project_detail_base_payload(
         "recent_blocks": recent_blocks,
         "recent_passes": recent_passes,
         "recent_usage": recent_usage_payload,
+        "runtime_insights": runtime_insights,
         "codex_status": {},
         "run_control": control,
         "latest_block": latest_block,
@@ -523,6 +530,7 @@ def _build_project_detail_base_payload(
         "stats": project_stats(plan_state),
         "codex_status": {},
         "activity": activity,
+        "runtime_insights": runtime_insights,
         "snapshot": snapshot,
         "run_control": control,
         "recent_blocks": recent_blocks,

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import sys
 
-from .model_constants import DEFAULT_LOCAL_MODEL_PROVIDER, DEFAULT_MODEL_PROVIDER
+from .model_constants import DEFAULT_LOCAL_MODEL_PROVIDER, DEFAULT_MODEL_PROVIDER, VALID_MODEL_PROVIDERS
 from .models import RuntimeOptions
 from .orchestrator import Orchestrator
 
@@ -26,8 +26,8 @@ def build_parser() -> argparse.ArgumentParser:
         target.add_argument(
             "--model-provider",
             default=DEFAULT_MODEL_PROVIDER,
-            choices=[DEFAULT_MODEL_PROVIDER, "oss"],
-            help="Codex model provider: OpenAI/Codex cloud or local OSS mode",
+            choices=sorted(VALID_MODEL_PROVIDERS),
+            help="Codex/OpenAI-compatible provider preset to use for this project",
         )
         target.add_argument(
             "--local-model-provider",
@@ -36,6 +36,14 @@ def build_parser() -> argparse.ArgumentParser:
             help="Local provider to use when --model-provider oss is selected",
         )
         target.add_argument("--model", default="auto", help="Model slug passed to Codex CLI, or auto to use Codex defaults")
+        target.add_argument("--provider-base-url", default="", help="Override the OpenAI-compatible base URL used for non-default providers")
+        target.add_argument("--provider-api-key-env", default="", help="Environment variable name that stores the provider API key")
+        target.add_argument("--billing-mode", default="", help="Cost estimate mode: included, token, or per_pass")
+        target.add_argument("--input-cost-per-million-usd", type=float, default=0.0, help="Estimated USD per 1M input tokens")
+        target.add_argument("--cached-input-cost-per-million-usd", type=float, default=0.0, help="Estimated USD per 1M cached input tokens")
+        target.add_argument("--output-cost-per-million-usd", type=float, default=0.0, help="Estimated USD per 1M output tokens")
+        target.add_argument("--reasoning-output-cost-per-million-usd", type=float, default=0.0, help="Estimated USD per 1M reasoning output tokens")
+        target.add_argument("--per-pass-cost-usd", type=float, default=0.0, help="Estimated USD charged per Codex/API pass when using per_pass billing")
         target.add_argument("--fast", action="store_true", help="Prefix Codex prompts with /fast before execution")
         target.add_argument("--word-report", action="store_true", help="Generate a .docx closeout report after closeout completes")
         target.add_argument("--effort", default="medium", help="Reasoning effort override: low, medium, high, xhigh")
@@ -83,6 +91,14 @@ def runtime_from_args(args: argparse.Namespace) -> RuntimeOptions:
     return RuntimeOptions(
         model_provider=args.model_provider,
         local_model_provider=args.local_model_provider if args.model_provider == "oss" else "",
+        provider_base_url=args.provider_base_url,
+        provider_api_key_env=args.provider_api_key_env,
+        billing_mode=args.billing_mode,
+        input_cost_per_million_usd=args.input_cost_per_million_usd,
+        cached_input_cost_per_million_usd=args.cached_input_cost_per_million_usd,
+        output_cost_per_million_usd=args.output_cost_per_million_usd,
+        reasoning_output_cost_per_million_usd=args.reasoning_output_cost_per_million_usd,
+        per_pass_cost_usd=args.per_pass_cost_usd,
         model=args.model,
         use_fast_mode=args.fast,
         generate_word_report=args.word_report,

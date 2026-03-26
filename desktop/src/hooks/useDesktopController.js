@@ -31,6 +31,8 @@ import {
 } from "../utils";
 import { usePersistentState } from "./usePersistentState";
 
+const AUTO_SYNC_INTERVAL_MS = 5000;
+
 export function useDesktopController() {
   const { language } = useI18n();
   const [workspaceRoot, setWorkspaceRoot] = useState("");
@@ -389,6 +391,78 @@ export function useDesktopController() {
     pendingAction,
     projectDetail?.detail_level,
     projectDetail?.project?.repo_id,
+    selectedProjectId,
+    sidebarTab,
+    workspaceRoot,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function syncDesktopState() {
+      if (!workspaceRoot || activeJobId || pendingAction || loadingProjectId) {
+        return;
+      }
+      try {
+        const runningJob = await syncRunningJobSnapshot(activeJobId);
+        if (cancelled || runningJob) {
+          return;
+        }
+
+        const listing = await bridgeRequest("list-projects", null, workspaceRoot || null);
+        if (cancelled) {
+          return;
+        }
+        const nextProjects = applyListingPayload(listing, null);
+        if (!selectedProjectId) {
+          if (nextProjects.length) {
+            setSelectedProjectId(nextProjects[0].repo_id);
+          }
+          return;
+        }
+
+        const repoStillExists = nextProjects.some((project) => project.repo_id === selectedProjectId);
+        if (!repoStillExists) {
+          if (nextProjects.length) {
+            setSelectedProjectId(nextProjects[0].repo_id);
+          } else {
+            clearSelectedProjectState(defaultRuntime);
+          }
+          return;
+        }
+
+        const detailLevel = needsExpandedProjectDetail({ centerTab, sidebarTab, bottomCollapsed, bottomTab }) ? "full" : "core";
+        const detail = await fetchProjectDetail(selectedProjectId, {
+          refreshCodexStatus: false,
+          detailLevel,
+        });
+        if (!cancelled) {
+          applyProjectDetail(detail, { preserveSelectedStep: true, runningJob: null });
+        }
+      } catch {
+        // Keep background sync quiet; manual refresh still surfaces explicit errors.
+      }
+    }
+
+    if (!workspaceRoot || activeJobId) {
+      return undefined;
+    }
+
+    const handle = window.setInterval(() => {
+      void syncDesktopState();
+    }, AUTO_SYNC_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(handle);
+    };
+  }, [
+    activeJobId,
+    bottomCollapsed,
+    bottomTab,
+    centerTab,
+    defaultRuntime,
+    loadingProjectId,
+    pendingAction,
     selectedProjectId,
     sidebarTab,
     workspaceRoot,
