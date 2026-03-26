@@ -469,6 +469,20 @@ const STRINGS = {
   },
 };
 
+STRINGS.en["action.deleteAll"] = "Delete All";
+STRINGS.en["message.allProjectsDeleted"] = "All projects removed from jakal-flow.";
+STRINGS.en["option.generateWordReport"] = "Word Report Creation";
+STRINGS.en["prompt.confirmDeleteAllProjects"] =
+  "Remove all projects from jakal-flow? The managed docs, logs, and state will be deleted, but the original repository folders will stay in place.";
+STRINGS.en["sidebar.projectContextDelete"] = "Right-click to open project actions";
+
+STRINGS.ko["action.deleteAll"] = "전부 삭제";
+STRINGS.ko["message.allProjectsDeleted"] = "모든 프로젝트를 제거했습니다.";
+STRINGS.ko["option.generateWordReport"] = "Word 보고서 제작";
+STRINGS.ko["prompt.confirmDeleteAllProjects"] =
+  "모든 프로젝트를 삭제할까요? 관리 중인 문서, 로그, 상태만 삭제되고 원본 저장소 폴더는 그대로 유지됩니다.";
+STRINGS.ko["sidebar.projectContextDelete"] = "우클릭으로 프로젝트 메뉴 열기";
+
 function titleCase(text) {
   if (!text) {
     return "";
