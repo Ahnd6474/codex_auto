@@ -24,6 +24,7 @@ MAX_PUBLIC_LOG_LINE_CHARS = 240
 MAX_PUBLIC_LOG_LINES = 12
 DEFAULT_VIEWER_PATH = "/share/view"
 DEFAULT_SHARE_PUBLIC_BASE_URL = ""
+_UNSET = object()
 
 TOKEN_PATTERNS = [
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),
@@ -495,9 +496,14 @@ def public_session_summary(
     context: ProjectContext,
     session: ShareSession,
     include_token: bool = False,
+    *,
+    server: dict[str, Any] | None = None,
+    state: ShareServerState | None | object = _UNSET,
 ) -> dict[str, Any]:
-    state = load_share_server_state(workspace_root)
-    server = share_server_status_payload(workspace_root)
+    if state is _UNSET:
+        state = load_share_server_state(workspace_root)
+    if server is None:
+        server = share_server_status_payload(workspace_root)
     viewer_path = str(server.get("viewer_path") or (state.viewer_path if state is not None else DEFAULT_VIEWER_PATH))
     local_url = None
     local_base = str(server.get("base_url") or (state.base_url if state is not None else "")).strip()
@@ -526,13 +532,22 @@ def public_session_summary(
 
 def project_share_payload(workspace_root: Path, context: ProjectContext) -> dict[str, Any]:
     sessions = load_share_sessions(context)
+    state = load_share_server_state(workspace_root)
+    server = share_server_status_payload(workspace_root)
     public_sessions = [
-        public_session_summary(workspace_root, context, session, include_token=False)
+        public_session_summary(
+            workspace_root,
+            context,
+            session,
+            include_token=False,
+            server=server,
+            state=state,
+        )
         for session in sorted(sessions, key=lambda item: item.created_at, reverse=True)
     ]
     active = next((item for item in public_sessions if item.get("active")), None)
     return {
-        "server": share_server_status_payload(workspace_root),
+        "server": server,
         "sessions": public_sessions,
         "active_session": active,
     }

@@ -43,6 +43,7 @@ export const PROGRAM_RUNTIME_KEYS = [
   "workflow_mode",
   "ml_max_cycles",
   "execution_mode",
+  "parallel_worker_mode",
   "parallel_workers",
 ];
 export const DEFAULT_DASHBOARD_VISIBILITY = Object.freeze({
@@ -88,7 +89,8 @@ const DEFAULT_PROGRAM_RUNTIME = {
   workflow_mode: "standard",
   ml_max_cycles: 3,
   execution_mode: "serial",
-  parallel_workers: 2,
+  parallel_worker_mode: "auto",
+  parallel_workers: 0,
 };
 const DEFAULT_PROGRAM_UI = {
   ui_theme: "dark",
@@ -965,9 +967,12 @@ export function runtimeSummary(runtime, modelPresets = [], language = "en", mode
     String(runtime?.workflow_mode || "standard").trim().toLowerCase() === "ml"
       ? ` | ${translate(language, "option.workflowML")}`
       : ` | ${translate(language, "option.workflowStandard")}`;
+  const autoParallelWorkers = String(runtime?.parallel_worker_mode || "auto").trim().toLowerCase() !== "manual";
   const executionSuffix =
     String(runtime?.execution_mode || "serial").trim().toLowerCase() === "parallel"
-      ? ` | parallel x${Math.max(1, Number.parseInt(String(runtime?.parallel_workers || 2), 10) || 1)}`
+      ? autoParallelWorkers
+        ? ` | parallel ${String(translate(language, "preset.auto") || "auto").trim().toLowerCase() || "auto"}`
+        : ` | parallel x${Math.max(1, Number.parseInt(String(runtime?.parallel_workers || 4), 10) || 1)}`
       : " | serial";
   const preset = modelPresets.find((item) => item.preset_id === runtime?.model_preset);
   if (preset && providerSupportsAutoModel(provider)) {

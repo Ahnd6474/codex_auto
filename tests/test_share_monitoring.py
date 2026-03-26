@@ -20,6 +20,7 @@ from jakal_flow.share import (
     create_share_session,
     load_share_sessions,
     process_is_running,
+    project_share_payload,
     public_monitor_status,
     revoke_share_session,
     save_share_sessions,
@@ -196,6 +197,70 @@ class ShareMonitoringTests(unittest.TestCase):
             self.assertNotIn("/Users/alice/project", json.dumps(status))
             self.assertNotIn("stdout_file", json.dumps(status))
             self.assertTrue(any("[masked]" in line or "[path]" in line for line in status["recent_logs"]))
+
+    def test_project_share_payload_reuses_server_status_for_multiple_sessions(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            _orchestrator, project = create_project(workspace_root, repo_dir)
+            create_share_session(project, expires_in_minutes=60, created_by="test")
+            create_share_session(project, expires_in_minutes=60, created_by="test")
+
+            server_payload = {
+                "viewer_path": "/share/view",
+                "base_url": "http://127.0.0.1:8080",
+                "host": "127.0.0.1",
+                "share_base_url": "https://share.example.com/base",
+            }
+
+            with mock.patch("jakal_flow.share.share_server_status_payload", return_value=server_payload) as server_mock, mock.patch(
+                "jakal_flow.share.load_share_server_state",
+                return_value=None,
+            ) as state_mock:
+                payload = project_share_payload(workspace_root, project)
+
+            self.assertEqual(server_mock.call_count, 1)
+            self.assertEqual(state_mock.call_count, 1)
+            self.assertEqual(len(payload["sessions"]), 2)
+            self.assertEqual(payload["server"]["share_base_url"], "https://share.example.com/base")
+
+    def test_share_logs_api_builds_monitor_status_once(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            _orchestrator, project = create_project(workspace_root, repo_dir)
+            session = create_share_session(project, expires_in_minutes=60, created_by="test")
+
+            server = ShareHTTPServer(("127.0.0.1", 0), ShareRequestHandler, workspace_root=workspace_root)
+            thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True)
+            thread.start()
+            try:
+                monitor_payload = {
+                    "project": {"display_name": "Share Demo", "slug": project.metadata.slug},
+                    "overall_run_status": "setup_ready",
+                    "current_phase": "setup_ready",
+                    "current_block_index": 0,
+                    "current_task": {"title": "", "step": None},
+                    "latest_test_result": None,
+                    "recent_logs": ["line-1", "line-2"],
+                    "last_updated_at": "2026-03-26T10:00:00+00:00",
+                }
+                with mock.patch("jakal_flow.share_server.public_monitor_status", return_value=monitor_payload) as monitor_mock:
+                    base_url = f"http://127.0.0.1:{server.server_address[1]}"
+                    response = urllib.request.urlopen(
+                        f"{base_url}/share/api/logs?session={session.session_id}&token={session.viewer_token}"
+                    )
+                    payload = json.loads(response.read().decode("utf-8"))
+
+                self.assertEqual(monitor_mock.call_count, 1)
+                self.assertEqual(payload["items"], ["line-1", "line-2"])
+                self.assertEqual(payload["last_updated_at"], "2026-03-26T10:00:00+00:00")
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
 
     def test_share_status_api_enforces_token_and_returns_read_only_shape(self) -> None:
         with TemporaryTestDir() as temp_dir:

@@ -32,6 +32,7 @@ Maximize safe frontier width. Prefer plans that create at least one credible par
 For any steps that may run in parallel, provide non-empty `owned_paths` and make them as narrow as possible.
 Prefer exact files or leaf directories over broad package roots so the scheduler can batch more work safely.
 Keep exact-path ownership exclusive across the same ready wave.
+If a wide fan-out needs one small contract-freezing or coordination step first, add that narrow prerequisite instead of collapsing the whole plan back to serial.
 Do not put risky, tightly coupled, shared-contract, or same-file refactors in the same parallel-ready wave.
 If a step needs broad repo-wide edits or merge-sensitive refactors, keep it isolated rather than pretending it is parallel-safe.
 Do not include the final closeout sweep inside the normal task list. The app runs a separate closeout block after all planned tasks finish.

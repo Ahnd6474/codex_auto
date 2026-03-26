@@ -23,6 +23,7 @@ export function AppSettingsView({
   const dashboardVisibility = normalizeDashboardVisibility(settings?.dashboard_visibility);
   const interfaceBusy = false;
   const runtimeBusy = busy;
+  const autoParallelWorkers = String(settings?.parallel_worker_mode || "auto").trim().toLowerCase() !== "manual";
   const dashboardOptions = [
     ["status", t("common.status")],
     ["remaining_steps", t("dashboard.remainingSteps")],
@@ -272,15 +273,32 @@ export function AppSettingsView({
                 <input
                   type="number"
                   min="1"
-                  value={settings.parallel_workers || 2}
+                  value={settings.parallel_workers > 0 ? settings.parallel_workers : 4}
                   onChange={(event) =>
                     onChangeSettings((current) => ({
                       ...current,
                       parallel_workers: Math.max(1, Number.parseInt(event.target.value || "1", 10) || 1),
                     }))
                   }
+                  disabled={runtimeBusy || autoParallelWorkers}
+                />
+              </label>
+              <label className="choice-radio">
+                <input
+                  type="checkbox"
+                  checked={autoParallelWorkers}
+                  onChange={(event) =>
+                    onChangeSettings((current) => ({
+                      ...current,
+                      parallel_worker_mode: event.target.checked ? "auto" : "manual",
+                      parallel_workers: event.target.checked
+                        ? Math.max(0, Number.parseInt(String(current.parallel_workers || "0"), 10) || 0)
+                        : Math.max(1, Number.parseInt(String(current.parallel_workers || "4"), 10) || 4),
+                    }))
+                  }
                   disabled={runtimeBusy}
                 />
+                <span>{t("preset.auto")}</span>
               </label>
               <label className="field">
                 <span>{t("field.codexPath")}</span>

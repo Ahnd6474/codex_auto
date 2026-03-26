@@ -23,6 +23,7 @@ from jakal_flow.model_selection import (
 )
 from jakal_flow.models import CandidateTask, CodexRunResult, CommandResult, ExecutionPlanState, ExecutionStep, RuntimeOptions, TestRunResult
 from jakal_flow.orchestrator import Orchestrator
+from jakal_flow.parallel_resources import build_parallel_resource_plan
 from jakal_flow.planning import (
     DEBUGGER_PARALLEL_PROMPT_FILENAME,
     DEBUGGER_PROMPT_FILENAME,
@@ -245,6 +246,29 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         batches = orchestrator.pending_execution_batches(plan_state)
 
         self.assertEqual([[step.step_id for step in batch] for batch in batches], [["ST2", "ST3"]])
+
+    def test_parallel_resource_plan_auto_caps_workers_by_cpu_quarter(self) -> None:
+        with mock.patch("jakal_flow.parallel_resources.os.cpu_count", return_value=16), mock.patch(
+            "jakal_flow.parallel_resources._detect_memory_bytes",
+            return_value=(64 * 1024**3, 32 * 1024**3),
+        ):
+            plan = build_parallel_resource_plan("auto", 0)
+
+        self.assertEqual(plan.worker_mode, "auto")
+        self.assertEqual(plan.cpu_logical_count, 16)
+        self.assertEqual(plan.cpu_parallel_limit, 4)
+        self.assertEqual(plan.recommended_workers, 4)
+
+    def test_parallel_resource_plan_manual_respects_resource_cap(self) -> None:
+        with mock.patch("jakal_flow.parallel_resources.os.cpu_count", return_value=12), mock.patch(
+            "jakal_flow.parallel_resources._detect_memory_bytes",
+            return_value=(64 * 1024**3, 32 * 1024**3),
+        ):
+            plan = build_parallel_resource_plan("manual", 6)
+
+        self.assertEqual(plan.worker_mode, "manual")
+        self.assertEqual(plan.cpu_parallel_limit, 3)
+        self.assertEqual(plan.recommended_workers, 3)
 
     def test_pending_execution_batches_keeps_parent_child_owned_paths_together(self) -> None:
         orchestrator = Orchestrator(Path.cwd() / ".tmp_pending_batches_workspace")
@@ -1302,11 +1326,13 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn('"owned_paths": ["repo-relative paths or directories this step primarily owns"]', parallel_plan_template)
         self.assertIn("DAG execution tree", parallel_plan_template)
         self.assertIn("Maximize safe frontier width", parallel_plan_template)
+        self.assertIn("contract-freezing or coordination step", parallel_plan_template)
         self.assertIn("{reference_notes}", parallel_plan_template)
         self.assertIn("src/jakal_flow/docs/REFERENCE_GUIDE.md", parallel_plan_template)
         self.assertIn('"metadata": {', ml_plan_template)
         self.assertIn("Prevent data leakage", ml_plan_template)
         self.assertIn("Maximize safe experiment frontier width", ml_plan_template)
+        self.assertIn("small coordination node", ml_plan_template)
         self.assertIn("{workflow_mode}", ml_plan_template)
         self.assertIn("{task_title}", serial_step_template)
         self.assertIn("{display_description}", serial_step_template)

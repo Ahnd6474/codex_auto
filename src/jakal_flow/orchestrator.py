@@ -13,6 +13,7 @@ from .git_ops import GitOps
 from .memory import MemoryStore
 from .model_selection import normalize_reasoning_effort
 from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, LoopState, MLExperimentRecord, MLModeState, ProjectContext, ProjectPaths, RepoMetadata, RuntimeOptions, TestRunResult
+from .parallel_resources import build_parallel_resource_plan, normalize_parallel_worker_mode
 from .planning import (
     FINALIZATION_PROMPT_FILENAME,
     attempt_history_entry,
@@ -671,7 +672,8 @@ class Orchestrator:
             **{
                 **previous_runtime.to_dict(),
                 "execution_mode": "parallel",
-                "parallel_workers": self._parallel_worker_count(runtime.parallel_workers),
+                "parallel_worker_mode": normalize_parallel_worker_mode(getattr(runtime, "parallel_worker_mode", "auto")),
+                "parallel_workers": max(0, int(getattr(runtime, "parallel_workers", 0) or 0)),
                 "allow_push": True,
                 "approval_mode": runtime.approval_mode,
                 "sandbox_mode": runtime.sandbox_mode,
@@ -681,7 +683,8 @@ class Orchestrator:
         )
         context.metadata.current_status = "running:parallel"
         context.metadata.last_run_at = batch_started_at
-        context.loop_state.current_task = f"Parallel batch {batch_label}"
+        resolved_worker_count = self._parallel_worker_count(context.runtime)
+        context.loop_state.current_task = f"Parallel batch {batch_label} (workers {resolved_worker_count})"
         self.save_execution_plan_state(context, plan_state)
         self.workspace.save_project(context)
 
@@ -697,7 +700,7 @@ class Orchestrator:
         failure_extra: dict[str, object] | None = None
 
         try:
-            worker_limit = min(len(ordered_targets), self._parallel_worker_count(context.runtime.parallel_workers))
+            worker_limit = min(len(ordered_targets), self._parallel_worker_count(context.runtime))
             with ThreadPoolExecutor(max_workers=worker_limit) as executor:
                 future_map = {
                     executor.submit(
@@ -978,12 +981,14 @@ class Orchestrator:
         normalized = str(value or "").strip().lower()
         return "parallel" if normalized == "parallel" else "serial"
 
-    def _parallel_worker_count(self, value: object) -> int:
-        try:
-            parsed = int(str(value).strip())
-        except (TypeError, ValueError):
-            return 2
-        return max(1, min(parsed, 8))
+    def _parallel_worker_plan(self, runtime: RuntimeOptions):
+        return build_parallel_resource_plan(
+            getattr(runtime, "parallel_worker_mode", "auto"),
+            getattr(runtime, "parallel_workers", 0),
+        )
+
+    def _parallel_worker_count(self, runtime: RuntimeOptions) -> int:
+        return self._parallel_worker_plan(runtime).recommended_workers
 
     def _parallel_worker_slug(self, step: ExecutionStep, worker_index: int) -> str:
         raw = f"{worker_index:02d}-{step.step_id.strip().lower() or 'step'}"

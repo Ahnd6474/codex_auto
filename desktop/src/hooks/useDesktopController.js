@@ -1,6 +1,6 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { bridgeRequest, listBridgeJobs, startBridgeJob, subscribeBridgeEvents } from "../api";
+import { bridgeRequest, startBridgeJob, subscribeBridgeEvents } from "../api";
 import { BRIDGE_COMMANDS } from "../bridgeProtocol";
 import { bridgeEventJob, bridgeEventProject, isJobUpdatedEvent, isProjectChangedEvent } from "../controller/bridgeEvents";
 import {
@@ -20,18 +20,24 @@ import {
   buildProjectPayload,
   cloneValue,
   commandLabel,
-  detailApplySignature,
   firstSelectableStepId,
-  mergeProjectDetailCodexStatus,
   programSettingsFromRuntime,
   projectFormFromDetail,
-  sanitizeProjectDetailForJobState,
-  sanitizeProjectListForJobState,
-  shouldKeepUnsavedPlan,
   shouldReplaceVisibleProject,
-  workspaceStatsFromProjects,
 } from "../utils";
-import { loadProjectDetail } from "../controller/projectDetails";
+import {
+  fetchProjectDetail,
+  fetchProjectDetailBySelector,
+  loadInitialDesktopState,
+  loadProjectListing,
+  syncRunningJobSnapshot,
+} from "../controller/projectQueries";
+import {
+  applyActiveJobState,
+  applyListingState,
+  applyProjectDetailState,
+  clearSelectedProjectState as clearProjectSelectionState,
+} from "../controller/projectStore";
 import { usePersistentState } from "./usePersistentState";
 
 export function useDesktopController() {
@@ -115,38 +121,42 @@ export function useDesktopController() {
     activeJobRef.current = activeJob;
   }, [activeJob]);
 
-  async function fetchProjectDetailBySelector(selector, options = {}) {
-    return loadProjectDetail(bridgeRequest, selector, workspaceRoot || null, {
-      refreshCodexStatus: options.refreshCodexStatus ?? false,
-      includeFull: (options.detailLevel ?? "full") === "full",
+  function applyCurrentJobSnapshot(jobSnapshot) {
+    return applyActiveJobState({
+      jobSnapshot,
+      setActiveJobId,
+      setActiveJob,
+      activeJobRef,
     });
   }
 
-  async function fetchProjectDetail(repoId, options = {}) {
-    return fetchProjectDetailBySelector({ repoId }, options);
-  }
-
-  function applyListingPayload(listing, runningJob = null) {
-    const nextProjects = sanitizeProjectListForJobState(listing?.projects || [], runningJob);
-    setProjects(nextProjects);
-    setWorkspaceStats(workspaceStatsFromProjects(nextProjects));
-    return nextProjects;
-  }
-
-  async function syncRunningJobSnapshot(preferredJobId = "") {
-    const jobs = await listBridgeJobs();
-    const preferredJob = preferredJobId ? jobs.find((job) => job.id === preferredJobId) || null : null;
-    const runningJob = preferredJob?.status === "running" ? preferredJob : jobs.find((job) => job.status === "running") || null;
-    if (runningJob) {
-      setActiveJobId(runningJob.id);
-      setActiveJob(runningJob);
-      activeJobRef.current = runningJob;
-      return runningJob;
-    }
-    setActiveJobId("");
-    setActiveJob(preferredJob && preferredJob.status !== "running" ? preferredJob : null);
-    activeJobRef.current = preferredJob && preferredJob.status !== "running" ? preferredJob : null;
-    return null;
+  function applyProjectDetail(detail, options = {}) {
+    return applyProjectDetailState({
+      detail,
+      options,
+      refs: {
+        lastAppliedDetailSignatureRef,
+      },
+      state: {
+        projectDetail,
+        modelCatalog,
+        activeJob,
+        defaultRuntime,
+        storedProgramSettings,
+        planDirty,
+      },
+      setters: {
+        transition: startTransition,
+        setProjectDetail,
+        setModelCatalog,
+        setShareSettings,
+        setLoadingProjectId,
+        setProjectForm,
+        setPlanDraft,
+        setSelectedStepId,
+        setPlanDirty,
+      },
+    });
   }
 
   useEffect(() => {
@@ -154,7 +164,7 @@ export function useDesktopController() {
 
     async function initialize() {
       try {
-        const bootstrap = await bridgeRequest(BRIDGE_COMMANDS.BOOTSTRAP);
+        const { bootstrap, listing, jobSnapshot } = await loadInitialDesktopState(bridgeRequest);
         if (cancelled) {
           return;
         }
@@ -166,12 +176,16 @@ export function useDesktopController() {
         setStoredProgramSettings(nextProgramSettings);
         setProgramSettings(nextProgramSettings);
         setProjectForm(blankProjectForm(applyProgramSettings(bootstrap.default_runtime, nextProgramSettings)));
-        const listing = await bridgeRequest(BRIDGE_COMMANDS.LIST_PROJECTS, null, bootstrap.workspace_root);
-        const runningJob = await syncRunningJobSnapshot();
+        const runningJob = applyCurrentJobSnapshot(jobSnapshot);
         if (cancelled) {
           return;
         }
-        const nextProjects = applyListingPayload(listing, runningJob);
+        const nextProjects = applyListingState({
+          listing,
+          runningJob,
+          setProjects,
+          setWorkspaceStats,
+        });
         if (!nextProjects.some((item) => item.repo_id === selectedProjectId)) {
           setSelectedProjectId(nextProjects[0]?.repo_id || "");
         }
@@ -188,55 +202,13 @@ export function useDesktopController() {
     };
   }, []);
 
-  function applyProjectDetail(detail, options = {}) {
-    const mergedDetail = mergeProjectDetailCodexStatus(detail, projectDetail?.codex_status, modelCatalog);
-    const normalizedDetail = sanitizeProjectDetailForJobState(mergedDetail, options.runningJob ?? activeJob);
-    const applySignature = detailApplySignature(normalizedDetail, options.runningJob ?? activeJob);
-    if (
-      !options.force &&
-      applySignature &&
-      lastAppliedDetailSignatureRef.current === applySignature &&
-      normalizedDetail?.project?.repo_id === projectDetail?.project?.repo_id
-    ) {
-      setLoadingProjectId("");
-      return;
-    }
-    const preserveDirtyPlan = shouldKeepUnsavedPlan(
-      projectDetail?.project?.repo_id,
-      normalizedDetail?.project?.repo_id,
-      options.preserveDirtyPlan ?? planDirty,
-    );
-    lastAppliedDetailSignatureRef.current = applySignature;
-    startTransition(() => {
-      setProjectDetail(normalizedDetail);
-      setModelCatalog(normalizedDetail?.codex_status?.model_catalog || modelCatalog);
-      setShareSettings(shareSettingsFromDetail(normalizedDetail));
-      setLoadingProjectId("");
-      setProjectForm((current) => {
-        if (current.project_dir && preserveDirtyPlan) {
-          return current;
-        }
-        return applyProgramSettingsToForm(projectFormFromDetail(normalizedDetail, defaultRuntime), storedProgramSettings);
-      });
-      if (!preserveDirtyPlan) {
-        setPlanDraft(cloneValue(normalizedDetail.plan));
-        if (options.preserveSelectedStep) {
-          setSelectedStepId((current) => current || firstSelectableStepId(normalizedDetail.plan));
-        } else {
-          setSelectedStepId(firstSelectableStepId(normalizedDetail.plan));
-        }
-        setPlanDirty(false);
-      }
-    });
-  }
-
   useEffect(() => {
     let cancelled = false;
 
     async function loadSelectedProject() {
       try {
         setLoadingProjectId(selectedProjectId);
-        const detail = await fetchProjectDetail(selectedProjectId, {
+        const detail = await fetchProjectDetail(bridgeRequest, selectedProjectId, workspaceRoot, {
           refreshCodexStatus: false,
           detailLevel: wantsExpandedDetail ? "full" : "core",
         });
@@ -302,11 +274,16 @@ export function useDesktopController() {
           if (job.result?.project && shouldReplaceVisibleProject(selectedProjectId, job.result.project.repo_id)) {
             applyProjectDetail(job.result, { preserveDirtyPlan: false, runningJob: null, force: true });
           }
-          const listing = await bridgeRequest(BRIDGE_COMMANDS.LIST_PROJECTS, null, workspaceRoot || null);
+          const listing = await loadProjectListing(bridgeRequest, workspaceRoot);
           if (cancelled) {
             return;
           }
-          applyListingPayload(listing, null);
+          applyListingState({
+            listing,
+            runningJob: null,
+            setProjects,
+            setWorkspaceStats,
+          });
           setMessage(
             job.status === "completed"
               ? messagePayload(
@@ -335,14 +312,19 @@ export function useDesktopController() {
       const eventRepoId = String(project?.repo_id || "").trim();
       bridgeRefreshInFlightRef.current = true;
       try {
-        const listing = await bridgeRequest(BRIDGE_COMMANDS.LIST_PROJECTS, null, workspaceRoot || null);
+        const listing = await loadProjectListing(bridgeRequest, workspaceRoot);
         if (cancelled) {
           return;
         }
         const runningJob = activeJobRef.current?.status === "running" ? activeJobRef.current : null;
-        applyListingPayload(listing, runningJob);
+        applyListingState({
+          listing,
+          runningJob,
+          setProjects,
+          setWorkspaceStats,
+        });
         if (selectedProjectId && (!eventRepoId || eventRepoId === selectedProjectId)) {
-          const detail = await fetchProjectDetail(selectedProjectId, {
+          const detail = await fetchProjectDetail(bridgeRequest, selectedProjectId, workspaceRoot, {
             refreshCodexStatus: false,
             detailLevel: wantsExpandedDetail ? "full" : "core",
           });
@@ -384,8 +366,13 @@ export function useDesktopController() {
   ]);
 
   async function refreshProjects() {
-    const listing = await bridgeRequest(BRIDGE_COMMANDS.LIST_PROJECTS, null, workspaceRoot || null);
-    const nextProjects = applyListingPayload(listing, activeJob?.status === "running" ? activeJob : null);
+    const listing = await loadProjectListing(bridgeRequest, workspaceRoot);
+    const nextProjects = applyListingState({
+      listing,
+      runningJob: activeJob?.status === "running" ? activeJob : null,
+      setProjects,
+      setWorkspaceStats,
+    });
     if (!selectedProjectId && nextProjects.length) {
       setSelectedProjectId(nextProjects[0].repo_id);
     }
@@ -393,13 +380,18 @@ export function useDesktopController() {
 
   async function forceRefresh() {
     try {
-      const runningJob = await syncRunningJobSnapshot(activeJobId);
-
-      const listing = await bridgeRequest(BRIDGE_COMMANDS.LIST_PROJECTS, null, workspaceRoot || null);
-      const nextProjects = applyListingPayload(listing, runningJob);
+      const jobSnapshot = await syncRunningJobSnapshot(activeJobId);
+      const runningJob = applyCurrentJobSnapshot(jobSnapshot);
+      const listing = await loadProjectListing(bridgeRequest, workspaceRoot);
+      const nextProjects = applyListingState({
+        listing,
+        runningJob,
+        setProjects,
+        setWorkspaceStats,
+      });
 
       if (selectedProjectId) {
-        const detail = await fetchProjectDetail(selectedProjectId, {
+        const detail = await fetchProjectDetail(bridgeRequest, selectedProjectId, workspaceRoot, {
           refreshCodexStatus: true,
           detailLevel: wantsExpandedDetail ? "full" : "core",
         });
@@ -426,7 +418,7 @@ export function useDesktopController() {
     setLoadingProjectId(repoId);
     setSelectedProjectId(repoId);
     try {
-      const detail = await fetchProjectDetail(repoId, {
+      const detail = await fetchProjectDetail(bridgeRequest, repoId, workspaceRoot, {
         refreshCodexStatus: options.refreshCodexStatus ?? false,
         detailLevel: options.detailLevel ?? "core",
       });
@@ -459,15 +451,22 @@ export function useDesktopController() {
   }
 
   function clearSelectedProjectState(nextRuntime = defaultRuntime) {
-    lastAppliedDetailSignatureRef.current = "";
-    setProjectDetail(null);
-    setSelectedProjectId("");
-    setSelectedStepId("");
-    setPlanDirty(false);
-    setLoadingProjectId("");
-    setProjectForm(blankProjectForm(nextRuntime));
-    setPlanDraft(emptyPlanDraft());
-    setShareSettings(defaultShareSettings());
+    clearProjectSelectionState({
+      defaultRuntime: nextRuntime,
+      refs: {
+        lastAppliedDetailSignatureRef,
+      },
+      setters: {
+        setProjectDetail,
+        setSelectedProjectId,
+        setSelectedStepId,
+        setPlanDirty,
+        setLoadingProjectId,
+        setProjectForm,
+        setPlanDraft,
+        setShareSettings,
+      },
+    });
   }
 
   function updateSelectedStep(field, value) {
@@ -786,7 +785,9 @@ export function useDesktopController() {
         workspaceRoot || null,
       );
       const detail = await fetchProjectDetailBySelector(
+        bridgeRequest,
         { projectDir: projectForm.project_dir.trim() },
+        workspaceRoot,
         { refreshCodexStatus: false, detailLevel: wantsExpandedDetail ? "full" : "core" },
       );
       applyProjectDetail(detail, { preserveSelectedStep: true });

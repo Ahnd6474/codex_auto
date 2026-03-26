@@ -105,7 +105,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
     def _serve_status(self, query: str) -> None:
         try:
             project, session = self._validated_project(query)
-            self._write_json(HTTPStatus.OK, self._status_payload(project, session))
+            orchestrator = Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
+            self._write_json(HTTPStatus.OK, self._status_payload(project, session, orchestrator=orchestrator))
         except ValueError as exc:
             self._write_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
         except KeyError:
@@ -120,7 +121,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             offset = max(0, int(self._query_arg(query, "offset") or "0"))
             orchestrator = Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
             plan_state = orchestrator.load_execution_plan_state(project)
-            lines = public_monitor_status(project, plan_state, log_limit=50).get("recent_logs", [])
+            status_payload = public_monitor_status(project, plan_state, log_limit=50)
+            lines = status_payload.get("recent_logs", [])
             items = lines[offset : offset + limit]
             self._write_json(
                 HTTPStatus.OK,
@@ -129,7 +131,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
                     "offset": offset,
                     "limit": limit,
                     "total": len(lines),
-                    "last_updated_at": public_monitor_status(project, plan_state, log_limit=1).get("last_updated_at"),
+                    "last_updated_at": status_payload.get("last_updated_at"),
                 },
             )
         except ValueError as exc:
@@ -160,13 +162,14 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
 
         last_payload = ""
         last_heartbeat = time.monotonic()
+        orchestrator = Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
         try:
             self._write_sse_comment("connected")
             self._write_sse_event("ready", {"ok": True})
             while True:
                 project, session = resolve_shared_session(self.server.workspace_root, session.session_id)  # type: ignore[attr-defined]
                 validate_share_session(session, self._query_arg(query, "token"))
-                payload = self._status_payload(project, session)
+                payload = self._status_payload(project, session, orchestrator=orchestrator)
                 serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
                 if serialized != last_payload:
                     self._write_sse_event("status", payload)
@@ -183,8 +186,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         except PermissionError as exc:
             self._write_sse_event("error", {"error": str(exc)})
 
-    def _status_payload(self, project, session) -> dict[str, Any]:
-        orchestrator = Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
+    def _status_payload(self, project, session, *, orchestrator: Orchestrator | None = None) -> dict[str, Any]:
+        orchestrator = orchestrator or Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
         plan_state = orchestrator.load_execution_plan_state(project)
         payload = public_monitor_status(project, plan_state, log_limit=8)
         payload["share_session"] = {

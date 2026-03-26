@@ -111,7 +111,8 @@ test("program settings helpers keep global runtime controls separate from projec
     workflow_mode: "standard",
     ml_max_cycles: 3,
     execution_mode: "serial",
-    parallel_workers: 2,
+    parallel_worker_mode: "auto",
+    parallel_workers: 0,
     developer_mode: false,
     ui_theme: "dark",
     dashboard_visibility: {
@@ -160,7 +161,8 @@ test("program settings helpers keep global runtime controls separate from projec
       workflow_mode: "standard",
       ml_max_cycles: 3,
       execution_mode: "serial",
-      parallel_workers: 2,
+      parallel_worker_mode: "auto",
+      parallel_workers: 0,
     },
   );
 
@@ -197,7 +199,8 @@ test("program settings helpers keep global runtime controls separate from projec
         workflow_mode: "standard",
         ml_max_cycles: 3,
         execution_mode: "serial",
-        parallel_workers: 2,
+        parallel_worker_mode: "auto",
+        parallel_workers: 0,
       },
     },
   );
@@ -680,8 +683,8 @@ test("runtimeSummary reflects execution mode in preset and direct model summarie
   );
   assert.equal(runtimeSummary({ model: "gpt-5.4" }), "OpenAI/Codex | Standard Mode | gpt-5.4 | reasoning High | serial");
   assert.equal(
-    runtimeSummary({ model: "gpt-5.4", effort: "high", execution_mode: "parallel", parallel_workers: 4 }, []),
-    "OpenAI/Codex | Standard Mode | gpt-5.4 | reasoning High | parallel x4",
+    runtimeSummary({ model: "gpt-5.4", effort: "high", execution_mode: "parallel", parallel_worker_mode: "auto" }, []),
+    "OpenAI/Codex | Standard Mode | gpt-5.4 | reasoning High | parallel auto",
   );
   assert.equal(runtimeSummary({}, undefined), "No model selected");
   assert.match(runtimeSummary({ model: "gpt-5.4", effort: "high" }, [], "ko"), /^OpenAI\/Codex \| .* \| gpt-5\.4 .* serial$/);

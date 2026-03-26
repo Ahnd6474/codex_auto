@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import redirect_stderr, redirect_stdout
+import io
 import json
 from pathlib import Path
 import shutil
@@ -10,6 +12,7 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from jakal_flow.cli import main as cli_main
 from jakal_flow.models import ExecutionPlanState, ExecutionStep
 from jakal_flow.ui_bridge import progress_caption, run_command, runtime_from_payload
 
@@ -125,11 +128,32 @@ class UIBridgeTests(unittest.TestCase):
         self.assertFalse(runtime.allow_push)
         self.assertTrue(runtime.require_checkpoint_approval)
         self.assertEqual(runtime.execution_mode, "parallel")
+        self.assertEqual(runtime.parallel_worker_mode, "manual")
         self.assertEqual(runtime.parallel_workers, 2)
         self.assertEqual(runtime.no_progress_limit, 1)
         self.assertEqual(runtime.regression_limit, 3)
         self.assertEqual(runtime.empty_cycle_limit, 1)
         self.assertEqual(runtime.checkpoint_interval_blocks, 1)
+
+    def test_runtime_from_payload_defaults_parallel_workers_to_auto_mode(self) -> None:
+        runtime = runtime_from_payload({"execution_mode": "parallel"})
+
+        self.assertEqual(runtime.execution_mode, "parallel")
+        self.assertEqual(runtime.parallel_worker_mode, "auto")
+        self.assertEqual(runtime.parallel_workers, 0)
+
+    def test_runtime_from_payload_accepts_manual_parallel_worker_mode(self) -> None:
+        runtime = runtime_from_payload(
+            {
+                "execution_mode": "parallel",
+                "parallel_worker_mode": "manual",
+                "parallel_workers": "3",
+            }
+        )
+
+        self.assertEqual(runtime.execution_mode, "parallel")
+        self.assertEqual(runtime.parallel_worker_mode, "manual")
+        self.assertEqual(runtime.parallel_workers, 3)
 
     def test_runtime_from_payload_normalizes_legacy_auto_model_presets(self) -> None:
         runtime = runtime_from_payload(
@@ -261,6 +285,7 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(detail["codex_status"]["account"]["email"], "demo@example.com")
             self.assertIn("runtime_insights", detail)
             self.assertIn("runtime_insights", detail["bottom_panels"])
+            self.assertIn("parallel", detail["runtime_insights"])
 
             listing = run_command("list-projects", workspace_root)
             self.assertEqual(len(listing["projects"]), 1)
@@ -825,6 +850,106 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(listing["projects"][0]["status"], "setup_ready")
             self.assertEqual(listing["workspace"]["ready_like"], 1)
             self.assertEqual(listing["workspace"]["running"], 0)
+
+    def test_cli_list_repos_skips_unreadable_execution_plan_state(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_one = temp_dir / "repo-one"
+            repo_two = temp_dir / "repo-two"
+            repo_one.mkdir(parents=True, exist_ok=True)
+            repo_two.mkdir(parents=True, exist_ok=True)
+
+            base_payload = {
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", side_effect=[repo_one / ".venv", repo_two / ".venv"]), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail_one = run_command(
+                    "save-project-setup",
+                    workspace_root,
+                    {
+                        **base_payload,
+                        "project_dir": str(repo_one),
+                        "display_name": "Repo One",
+                    },
+                )
+                detail_two = run_command(
+                    "save-project-setup",
+                    workspace_root,
+                    {
+                        **base_payload,
+                        "project_dir": str(repo_two),
+                        "display_name": "Repo Two",
+                    },
+                )
+
+            broken_plan = Path(detail_one["project"]["project_root"]) / "state" / "EXECUTION_PLAN.json"
+            broken_plan.write_text("{not-json", encoding="utf-8")
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                exit_code = cli_main(["list-repos", "--workspace-root", str(workspace_root)])
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(len(payload), 2)
+            self.assertEqual({item["slug"] for item in payload}, {detail_one["project"]["slug"], detail_two["project"]["slug"]})
+            repo_one_entry = next(item for item in payload if item["slug"] == detail_one["project"]["slug"])
+            self.assertEqual(repo_one_entry["status"], "setup_ready")
+            self.assertEqual(stderr.getvalue(), "")
+
+    def test_cli_list_repos_uses_metadata_status_without_loading_plan_when_not_needed(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Lazy Status Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with mock.patch(
+                "jakal_flow.cli.Orchestrator.load_execution_plan_state",
+                side_effect=AssertionError("list-repos should not load plan for stable metadata statuses"),
+            ), redirect_stdout(stdout), redirect_stderr(stderr):
+                exit_code = cli_main(["list-repos", "--workspace-root", str(workspace_root)])
+
+            self.assertEqual(exit_code, 0)
+            listed = json.loads(stdout.getvalue())
+            self.assertEqual(len(listed), 1)
+            self.assertEqual(listed[0]["slug"], detail["project"]["slug"])
+            self.assertEqual(listed[0]["status"], "setup_ready")
+            self.assertEqual(stderr.getvalue(), "")
 
     def test_save_project_setup_clears_stale_pending_checkpoint_when_approval_is_disabled(self) -> None:
         with TemporaryTestDir() as temp_dir:

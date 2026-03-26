@@ -28,34 +28,27 @@ from .model_providers import (
 )
 from .models import ExecutionPlanState, ProjectContext, RuntimeOptions
 from .orchestrator import Orchestrator
+from .parallel_resources import normalize_parallel_worker_mode
 from .process_supervisor import terminate_process, wait_for_condition
 from .public_tunnel import public_tunnel_status_payload, start_cloudflare_quick_tunnel, stop_public_tunnel_process
 from .runtime_services import CodexBackendSnapshotService
 from .share import (
     DEFAULT_SHARE_HOST,
     DEFAULT_SHARE_PORT,
-    DEFAULT_SHARE_PUBLIC_BASE_URL,
-    DEFAULT_SHARE_TTL_MINUTES,
     ShareServerConfig,
-    create_share_session,
     load_share_server_config,
     load_share_server_state,
-    project_share_payload,
-    public_session_summary,
-    revoke_share_session,
     save_share_server_config,
     share_server_status_payload,
 )
-from .ui_bridge_payloads import (
-    checkpoint_payload,
-    config_payload,
-    history_payload,
-    list_projects_payload,
-    managed_workspace_tree,
-    progress_caption,
-    project_detail_payload,
-    report_payload,
+from .ui_bridge_commands import (
+    BridgeCommandContext,
+    build_project_command_handlers,
+    build_read_model_handlers,
+    build_run_command_handlers,
+    build_share_command_handlers,
 )
+from .ui_bridge_payloads import progress_caption, project_detail_payload
 from .utils import append_jsonl, normalize_workflow_mode, now_utc_iso, parse_json_text, read_json, write_json
 
 
@@ -270,6 +263,14 @@ def coerce_positive_int(value: Any, default: int, minimum: int = 1) -> int:
     return max(minimum, parsed)
 
 
+def coerce_nonnegative_int(value: Any, default: int = 0) -> int:
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+    return max(0, parsed)
+
+
 def coerce_nonnegative_float(value: Any, default: float = 0.0) -> float:
     try:
         parsed = float(str(value).strip())
@@ -335,9 +336,14 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
         merged.get("checkpoint_interval_blocks", 1),
         default=1,
     )
-    merged["parallel_workers"] = coerce_positive_int(
-        merged.get("parallel_workers", 2),
-        default=2,
+    raw_parallel_worker_mode = merged.get("parallel_worker_mode", "auto")
+    if "parallel_worker_mode" not in payload and "parallel_workers" in payload:
+        raw_parallel_worker_mode = "manual"
+    merged["parallel_worker_mode"] = normalize_parallel_worker_mode(raw_parallel_worker_mode)
+    merged["parallel_workers"] = (
+        coerce_nonnegative_int(merged.get("parallel_workers", 0), default=0)
+        if merged["parallel_worker_mode"] == "auto"
+        else coerce_positive_int(merged.get("parallel_workers", 2), default=2)
     )
     merged["ml_max_cycles"] = coerce_positive_int(
         merged.get("ml_max_cycles", 3),
@@ -524,6 +530,46 @@ def common_project_inputs(payload: dict[str, Any]) -> tuple[Path, RuntimeOptions
     return project_dir, runtime, branch, origin_url, display_name
 
 
+def bridge_command_handlers() -> dict[str, Any]:
+    return {
+        **build_read_model_handlers(
+            bootstrap_payload=bootstrap_payload,
+            resolve_project=resolve_project,
+            coerce_bool=coerce_bool,
+            codex_snapshot_service=_codex_snapshot_service,
+        ),
+        **build_project_command_handlers(
+            resolve_project=resolve_project,
+            common_project_inputs=common_project_inputs,
+            parse_plan_state=parse_plan_state,
+            append_ui_event=append_ui_event,
+            save_run_control=save_run_control,
+            default_run_control=default_run_control,
+        ),
+        **build_share_command_handlers(
+            resolve_project=resolve_project,
+            coerce_positive_int=coerce_positive_int,
+            append_ui_event=append_ui_event,
+            start_share_server_process=start_share_server_process,
+            stop_share_server_process=stop_share_server_process,
+            start_public_tunnel=lambda workspace_root, target_url: start_cloudflare_quick_tunnel(workspace_root, target_url),
+            stop_public_tunnel=lambda workspace_root: stop_public_tunnel_process(workspace_root),
+            save_share_server_config=save_share_server_config,
+        ),
+        **build_run_command_handlers(
+            resolve_project=resolve_project,
+            common_project_inputs=common_project_inputs,
+            parse_plan_state=parse_plan_state,
+            append_ui_event=append_ui_event,
+            save_run_control=save_run_control,
+            default_run_control=default_run_control,
+            request_stop_after_current_step=request_stop_after_current_step,
+            stop_requested=stop_requested,
+            coerce_bool=coerce_bool,
+        ),
+    }
+
+
 def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     payload = payload or {}
     orchestrator = orchestrator_for(workspace_root)
@@ -537,468 +583,17 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
             **kwargs,
         )
 
-    if command == "bootstrap":
-        return bootstrap_payload(workspace_root)
-
-    if command == "list-projects":
-        return list_projects_payload(orchestrator)
-
-    if command == "load-project":
-        project = resolve_project(orchestrator, payload)
-        if coerce_bool(payload.get("refresh_codex_status", True), True):
-            _codex_snapshot_service.invalidate(project.runtime.codex_path)
-        return detail_payload(
-            project,
-            refresh_codex_status=coerce_bool(payload.get("refresh_codex_status", True), True),
-            detail_level=str(payload.get("detail_level", "full")).strip().lower() or "full",
+    handler = bridge_command_handlers().get(command)
+    if handler is None:
+        raise ValueError(f"Unsupported bridge command: {command}")
+    return handler(
+        BridgeCommandContext(
+            workspace_root=workspace_root,
+            payload=payload,
+            orchestrator=orchestrator,
+            detail_payload=detail_payload,
         )
-
-    if command == "load-project-core":
-        project = resolve_project(orchestrator, payload)
-        if coerce_bool(payload.get("refresh_codex_status", False), False):
-            _codex_snapshot_service.invalidate(project.runtime.codex_path)
-        return detail_payload(
-            project,
-            refresh_codex_status=coerce_bool(payload.get("refresh_codex_status", False), False),
-            detail_level="core",
-        )
-
-    if command == "load-project-history":
-        project = resolve_project(orchestrator, payload)
-        return history_payload(project)
-
-    if command == "load-project-reports":
-        project = resolve_project(orchestrator, payload)
-        return report_payload(project)
-
-    if command == "load-project-config":
-        project = resolve_project(orchestrator, payload)
-        return config_payload(project)
-
-    if command == "load-project-workspace":
-        project = resolve_project(orchestrator, payload)
-        return {"workspace_tree": managed_workspace_tree(project)}
-
-    if command == "load-project-checkpoints":
-        project = resolve_project(orchestrator, payload)
-        return checkpoint_payload(project)
-
-    if command == "load-project-share":
-        project = resolve_project(orchestrator, payload)
-        return {"share": project_share_payload(orchestrator.workspace.workspace_root, project)}
-
-    if command == "delete-project":
-        project = resolve_project(orchestrator, payload)
-        repo_id = project.metadata.repo_id
-        project_dir = str(project.metadata.repo_path)
-        display_name = project.metadata.display_name or project.metadata.slug
-        orchestrator.workspace.delete_project(repo_id)
-        listing = list_projects_payload(orchestrator)
-        return {
-            "deleted": {
-                "repo_id": repo_id,
-                "project_dir": project_dir,
-                "display_name": display_name,
-            },
-            "projects": listing["projects"],
-            "workspace": listing["workspace"],
-        }
-
-    if command == "delete-all-projects":
-        orchestrator.workspace.delete_all_projects()
-        listing = list_projects_payload(orchestrator)
-        return {
-            "deleted_all": True,
-            "projects": listing["projects"],
-            "workspace": listing["workspace"],
-        }
-
-    if command == "get_share_server_status":
-        return share_server_status_payload(workspace_root)
-
-    if command == "get_public_tunnel_status":
-        return public_tunnel_status_payload(workspace_root)
-
-    if command == "save_share_server_config":
-        config = save_share_server_config(
-            workspace_root,
-            ShareServerConfig(
-                bind_host=str(payload.get("bind_host", DEFAULT_SHARE_HOST)).strip() or DEFAULT_SHARE_HOST,
-                preferred_port=coerce_positive_int(payload.get("preferred_port", DEFAULT_SHARE_PORT), default=DEFAULT_SHARE_PORT, minimum=0),
-                public_base_url=str(payload.get("public_base_url", DEFAULT_SHARE_PUBLIC_BASE_URL)).strip(),
-            ),
-        )
-        result = share_server_status_payload(workspace_root)
-        result["config"] = config.to_dict()
-        return result
-
-    if command == "start_share_server":
-        host = str(payload.get("host", "")).strip() or None
-        port = (
-            coerce_positive_int(payload.get("port", DEFAULT_SHARE_PORT), default=DEFAULT_SHARE_PORT, minimum=0)
-            if "port" in payload
-            else None
-        )
-        public_base_url = str(payload.get("public_base_url", "")).strip() if "public_base_url" in payload else None
-        return start_share_server_process(workspace_root, host=host, port=port, public_base_url=public_base_url)
-
-    if command == "stop_share_server":
-        return stop_share_server_process(workspace_root)
-
-    if command == "start_public_tunnel":
-        target_url = str(payload.get("target_url", "")).strip()
-        if not target_url:
-            status = share_server_status_payload(workspace_root)
-            target_url = str(status.get("base_url") or "").strip()
-        return start_cloudflare_quick_tunnel(workspace_root, target_url)
-
-    if command == "stop_public_tunnel":
-        return stop_public_tunnel_process(workspace_root)
-
-    if command == "save-project-setup":
-        project_dir, runtime, branch, origin_url, display_name = common_project_inputs(payload)
-        project = orchestrator.setup_local_project(
-            project_dir=project_dir,
-            runtime=runtime,
-            branch=branch,
-            origin_url=origin_url,
-            display_name=display_name,
-        )
-        save_run_control(project, default_run_control())
-        append_ui_event(project, "project-saved", "Saved project setup from the desktop shell.")
-        return detail_payload(project)
-
-    if command == "generate-plan":
-        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(payload)
-        prompt = str(payload.get("prompt", "")).strip()
-        if not prompt:
-            raise ValueError("prompt is required.")
-        max_steps = max(1, int(str(payload.get("max_steps", runtime.max_blocks) or runtime.max_blocks)))
-        existing = orchestrator.local_project(project_dir)
-        project, plan_state = orchestrator.generate_execution_plan(
-            project_dir=project_dir,
-            runtime=runtime,
-            project_prompt=prompt,
-            branch=branch,
-            max_steps=max_steps,
-            origin_url=origin_url,
-        )
-        append_ui_event(
-            project,
-            "plan-generated",
-            f"Generated a new execution plan with {len(plan_state.steps)} step(s).",
-            {"max_steps": max_steps},
-        )
-        if existing is None and payload.get("display_name"):
-            project.metadata.display_name = str(payload.get("display_name")).strip()
-            orchestrator.workspace.save_project(project)
-        return detail_payload(project)
-
-    if command == "save-plan":
-        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(payload)
-        raw_plan = payload.get("plan", {})
-        if not isinstance(raw_plan, dict):
-            raise ValueError("plan payload must be an object.")
-        plan_state = parse_plan_state(raw_plan)
-        project, _saved = orchestrator.update_execution_plan(
-            project_dir=project_dir,
-            runtime=runtime,
-            plan_state=plan_state,
-            branch=branch,
-            origin_url=origin_url,
-        )
-        append_ui_event(project, "plan-saved", "Saved the edited execution plan.")
-        return detail_payload(project)
-
-    if command == "reset-plan":
-        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(payload)
-        plan_state = ExecutionPlanState(default_test_command=runtime.test_cmd)
-        project, _saved = orchestrator.update_execution_plan(
-            project_dir=project_dir,
-            runtime=runtime,
-            plan_state=plan_state,
-            branch=branch,
-            origin_url=origin_url,
-        )
-        append_ui_event(project, "plan-reset", "Reset the execution plan and cleared the prompt.")
-        return detail_payload(project)
-
-    if command == "request-stop":
-        project = resolve_project(orchestrator, payload)
-        control = request_stop_after_current_step(project, request_source=str(payload.get("source", "desktop-ui")).strip() or "desktop-ui")
-        return {
-            "repo_id": project.metadata.repo_id,
-            "project_dir": str(project.metadata.repo_path),
-            "run_control": control,
-        }
-
-    if command == "create_share_session":
-        project = resolve_project(orchestrator, payload)
-        expires_in_minutes = coerce_positive_int(
-            payload.get("expires_in_minutes", DEFAULT_SHARE_TTL_MINUTES),
-            default=DEFAULT_SHARE_TTL_MINUTES,
-        )
-        bind_host = str(payload.get("bind_host", "")).strip() or None
-        preferred_port = (
-            coerce_positive_int(payload.get("preferred_port", DEFAULT_SHARE_PORT), default=DEFAULT_SHARE_PORT, minimum=0)
-            if "preferred_port" in payload
-            else None
-        )
-        public_base_url = str(payload.get("public_base_url", "")).strip() if "public_base_url" in payload else None
-        share_status = start_share_server_process(
-            workspace_root,
-            host=bind_host,
-            port=preferred_port,
-            public_base_url=public_base_url,
-        )
-        effective_bind_host = str(share_status.get("config", {}).get("bind_host", bind_host or "")).strip() or bind_host or ""
-        should_start_quick_tunnel = (
-            effective_bind_host == "0.0.0.0"
-            and not public_base_url
-            and bool(share_status.get("base_url"))
-        )
-        quick_tunnel_warning = ""
-        if should_start_quick_tunnel:
-            try:
-                start_cloudflare_quick_tunnel(workspace_root, str(share_status["base_url"]))
-            except Exception as exc:
-                quick_tunnel_warning = str(exc).strip()
-                append_ui_event(
-                    project,
-                    "share-tunnel-warning",
-                    "Automatic public tunnel startup failed; the share session was created without a public URL.",
-                    {"error": quick_tunnel_warning},
-                )
-        elif public_base_url or effective_bind_host != "0.0.0.0":
-            stop_public_tunnel_process(workspace_root)
-        session = create_share_session(
-            project,
-            expires_in_minutes=expires_in_minutes,
-            created_by=str(payload.get("created_by", "desktop-ui")).strip() or "desktop-ui",
-        )
-        append_ui_event(
-            project,
-            "share-session-created",
-            "Created a temporary read-only share session.",
-            {"session_id": session.session_id, "expires_at": session.expires_at},
-        )
-        detail = detail_payload(project)
-        detail["created_share_session"] = public_session_summary(workspace_root, project, session, include_token=True)
-        if quick_tunnel_warning:
-            detail["share_tunnel_warning"] = quick_tunnel_warning
-        return detail
-
-    if command == "revoke_share_session":
-        project = resolve_project(orchestrator, payload)
-        session_id = str(payload.get("session_id", "")).strip()
-        if not session_id:
-            raise ValueError("session_id is required.")
-        session = revoke_share_session(project, session_id)
-        append_ui_event(
-            project,
-            "share-session-revoked",
-            "Revoked a temporary read-only share session.",
-            {"session_id": session.session_id},
-        )
-        detail = detail_payload(project)
-        detail["revoked_share_session"] = public_session_summary(workspace_root, project, session, include_token=False)
-        return detail
-
-    if command == "approve-checkpoint":
-        project = resolve_project(orchestrator, payload)
-        review_notes = str(payload.get("review_notes", "")).strip()
-        push = coerce_bool(payload.get("push", True), True)
-        orchestrator.approve_checkpoint(
-            project.metadata.repo_url,
-            project.metadata.branch,
-            review_notes=review_notes,
-            push=push,
-        )
-        latest_project = orchestrator.workspace.load_project_by_id(project.metadata.repo_id)
-        append_ui_event(latest_project, "checkpoint-approved", "Approved the pending checkpoint.", {"push": push})
-        return detail_payload(latest_project)
-
-    if command == "run-plan":
-        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(payload)
-        raw_plan = payload.get("plan", {})
-        if not isinstance(raw_plan, dict):
-            raise ValueError("plan payload must be an object.")
-        plan_state = parse_plan_state(raw_plan)
-        project, saved = orchestrator.update_execution_plan(
-            project_dir=project_dir,
-            runtime=runtime,
-            plan_state=plan_state,
-            branch=branch,
-            origin_url=origin_url,
-        )
-        save_run_control(project, default_run_control())
-        append_ui_event(project, "run-started", "Started running the remaining execution steps.")
-        try:
-            while True:
-                latest_project = orchestrator.local_project(project_dir)
-                if latest_project is None:
-                    raise RuntimeError("The managed project could not be reloaded during execution.")
-                current_plan = orchestrator.load_execution_plan_state(latest_project)
-                batches = orchestrator.pending_execution_batches(current_plan)
-                if not batches:
-                    if normalize_workflow_mode(runtime.workflow_mode) == "ml":
-                        saved = current_plan
-                        project = latest_project
-                        if str(current_plan.closeout_status).strip().lower() != "completed":
-                            append_ui_event(project, "closeout-started", "Started ML cycle closeout.")
-                            project, saved = orchestrator.run_execution_closeout(
-                                project_dir=project_dir,
-                                runtime=runtime,
-                                branch=branch,
-                                origin_url=origin_url,
-                            )
-                            append_ui_event(
-                                project,
-                                "closeout-finished",
-                                f"ML cycle closeout finished with status {saved.closeout_status}.",
-                                {"status": saved.closeout_status, "commit_hash": saved.closeout_commit_hash},
-                            )
-                            if saved.closeout_status != "completed":
-                                break
-                        project, saved, continued, reason = orchestrator.prepare_next_ml_cycle(
-                            project_dir=project_dir,
-                            runtime=runtime,
-                            branch=branch,
-                            origin_url=origin_url,
-                        )
-                        if continued:
-                            append_ui_event(
-                                project,
-                                "plan-generated",
-                                f"Generated the next ML execution cycle with {len(saved.steps)} step(s).",
-                                {"workflow_mode": "ml", "step_count": len(saved.steps)},
-                            )
-                            continue
-                        append_ui_event(
-                            project,
-                            "ml-cycle-stopped",
-                            f"ML loop stopped: {reason}.",
-                            {"reason": reason},
-                        )
-                    break
-                if stop_requested(latest_project):
-                    append_ui_event(latest_project, "run-paused", "Paused before the next step because a stop was requested.")
-                    break
-                batch = batches[0]
-                if (
-                    len(batch) > 1
-                    and str(current_plan.execution_mode).strip().lower() == "parallel"
-                    and runtime.parallel_workers > 1
-                ):
-                    step_ids = [item.step_id for item in batch]
-                    append_ui_event(
-                        latest_project,
-                        "batch-started",
-                        f"Running parallel batch: {', '.join(step_ids)}",
-                        {"step_ids": step_ids, "execution_mode": "parallel"},
-                    )
-                    for step in batch:
-                        append_ui_event(
-                            latest_project,
-                            "step-started",
-                            f"Running {step.step_id}: {step.title}",
-                            {"step_id": step.step_id, "title": step.title, "execution_mode": "parallel"},
-                        )
-                    project, saved, result_steps = orchestrator.run_parallel_execution_batch(
-                        project_dir=project_dir,
-                        runtime=runtime,
-                        step_ids=step_ids,
-                        branch=branch,
-                        origin_url=origin_url,
-                    )
-                    for result_step in result_steps:
-                        append_ui_event(
-                            project,
-                            "step-finished",
-                            f"{result_step.step_id} finished with status {result_step.status}.",
-                            {
-                                "step_id": result_step.step_id,
-                                "status": result_step.status,
-                                "commit_hash": result_step.commit_hash,
-                            },
-                        )
-                    append_ui_event(
-                        project,
-                        "batch-finished",
-                        f"Parallel batch finished for {', '.join(step_ids)}.",
-                        {
-                            "step_ids": step_ids,
-                            "statuses": {item.step_id: item.status for item in result_steps},
-                        },
-                    )
-                    if any(item.status != "completed" for item in result_steps):
-                        break
-                    continue
-                step = batch[0]
-                append_ui_event(
-                    latest_project,
-                    "step-started",
-                    f"Running {step.step_id}: {step.title}",
-                    {"step_id": step.step_id, "title": step.title},
-                )
-                project, saved, result_step = orchestrator.run_saved_execution_step(
-                    project_dir=project_dir,
-                    runtime=runtime,
-                    step_id=step.step_id,
-                    branch=branch,
-                    origin_url=origin_url,
-                )
-                append_ui_event(
-                    project,
-                    "step-finished",
-                    f"{result_step.step_id} finished with status {result_step.status}.",
-                    {
-                        "step_id": result_step.step_id,
-                        "status": result_step.status,
-                        "commit_hash": result_step.commit_hash,
-                    },
-                )
-                if result_step.status != "completed":
-                    break
-            latest = orchestrator.local_project(project_dir)
-            if latest is not None:
-                append_ui_event(latest, "run-finished", "Finished the run loop for the current project.")
-                return detail_payload(latest)
-            return detail_payload(project)
-        finally:
-            latest = orchestrator.local_project(project_dir)
-            if latest is not None:
-                save_run_control(latest, default_run_control())
-
-    if command == "run-closeout":
-        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(payload)
-        raw_plan = payload.get("plan", {})
-        if not isinstance(raw_plan, dict):
-            raise ValueError("plan payload must be an object.")
-        plan_state = parse_plan_state(raw_plan)
-        project, _saved = orchestrator.update_execution_plan(
-            project_dir=project_dir,
-            runtime=runtime,
-            plan_state=plan_state,
-            branch=branch,
-            origin_url=origin_url,
-        )
-        append_ui_event(project, "closeout-started", "Started project closeout.")
-        project, saved = orchestrator.run_execution_closeout(
-            project_dir=project_dir,
-            runtime=runtime,
-            branch=branch,
-            origin_url=origin_url,
-        )
-        append_ui_event(
-            project,
-            "closeout-finished",
-            f"Closeout finished with status {saved.closeout_status}.",
-            {"status": saved.closeout_status, "commit_hash": saved.closeout_commit_hash},
-        )
-        return detail_payload(project)
-
-    raise ValueError(f"Unsupported bridge command: {command}")
+    )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

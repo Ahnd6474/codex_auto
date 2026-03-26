@@ -123,6 +123,19 @@ def runtime_from_args(args: argparse.Namespace) -> RuntimeOptions:
     )
 
 
+def _list_repo_status(orchestrator: Orchestrator, project) -> str:
+    if project.loop_state.pending_checkpoint_approval:
+        return "awaiting_checkpoint_approval"
+    raw_status = str(project.metadata.current_status or "").strip()
+    if raw_status and raw_status.lower() != "awaiting_checkpoint_approval":
+        return raw_status
+    try:
+        plan_state = orchestrator.load_execution_plan_state(project)
+    except Exception:
+        return raw_status or "setup_ready"
+    return effective_project_status(raw_status, plan_state, project.loop_state)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -137,11 +150,7 @@ def main(argv: list[str] | None = None) -> int:
                     "slug": item.metadata.slug,
                     "repo_url": item.metadata.repo_url,
                     "branch": item.metadata.branch,
-                    "status": effective_project_status(
-                        item.metadata.current_status,
-                        orchestrator.load_execution_plan_state(item),
-                        item.loop_state,
-                    ),
+                    "status": _list_repo_status(orchestrator, item),
                     "last_run_at": item.metadata.last_run_at,
                     "safe_revision": item.metadata.current_safe_revision,
                 }

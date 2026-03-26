@@ -29,6 +29,7 @@ export function DashboardView({ detail, planDraft, form, busy, modelPresets, mod
   const runtimeInsights = detail?.runtime_insights || {};
   const executionEstimate = runtimeInsights?.execution || {};
   const costEstimate = runtimeInsights?.cost || {};
+  const parallelInsight = runtimeInsights?.parallel || {};
   const account = codexStatus.account || {};
   const usageBuckets = codexUsageBuckets(codexStatus, language);
   const dashboardVisibility = normalizeDashboardVisibility(programSettings?.dashboard_visibility);
@@ -91,6 +92,11 @@ export function DashboardView({ detail, planDraft, form, busy, modelPresets, mod
                 <strong>{t("dashboard.runtime")}</strong>
               </div>
               <p>{runtimeSummary(detail?.runtime || {}, modelPresets, language, modelCatalog)}</p>
+              {String(detail?.runtime?.execution_mode || "serial").trim().toLowerCase() === "parallel" ? (
+                <p>
+                  {t("field.parallelWorkers")}: {parallelInsight.recommended_workers ?? 1} / {parallelInsight.cpu_parallel_limit ?? 1}
+                </p>
+              ) : null}
               <p>{t("run.estimatedTotal")}: {formatDurationCompact(executionEstimate.estimated_total_seconds ?? 0, language)}</p>
               <p>{t("common.branch")}: {detail?.project?.branch || t("common.unknown")}</p>
               <p>{t("dashboard.origin")}: {detail?.project?.origin_url || t("common.localOnly")}</p>

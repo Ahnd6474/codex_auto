@@ -82,7 +82,8 @@ class RuntimeOptions:
     workflow_mode: str = "standard"
     ml_max_cycles: int = 3
     execution_mode: str = "serial"
-    parallel_workers: int = 2
+    parallel_worker_mode: str = "auto"
+    parallel_workers: int = 0
     extra_prompt: str = ""
     init_plan_prompt: str = ""
     approval_mode: str = "never"

@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 
 from .models import LoopCounters, LoopState, ProjectContext, ProjectPaths, RepoMetadata, RuntimeOptions
+from .parallel_resources import normalize_parallel_worker_mode
 from .utils import ensure_dir, now_utc_iso, read_json, stable_repo_identity, write_json
 
 
@@ -236,6 +237,9 @@ class WorkspaceManager:
         )
         if metadata.repo_kind == "local":
             paths.repo_dir = metadata.repo_path
+        if "parallel_worker_mode" not in runtime_data and "parallel_workers" in runtime_data:
+            runtime_data["parallel_worker_mode"] = "manual"
+        runtime_data["parallel_worker_mode"] = normalize_parallel_worker_mode(runtime_data.get("parallel_worker_mode", "auto"))
         runtime = RuntimeOptions(**runtime_data)
         counters_data = loop_state_data.get("counters", {})
         loop_state = LoopState(

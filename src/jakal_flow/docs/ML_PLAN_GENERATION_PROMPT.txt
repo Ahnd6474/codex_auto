@@ -31,6 +31,7 @@ Planning goals:
 - Use non-empty, narrow `owned_paths` for nodes that may run in parallel.
 - Prefer experiment-specific config files, output directories, run manifests, or leaf source directories over broad shared roots so more experiments can run concurrently.
 - Keep exact-path ownership exclusive across the same ready wave.
+- If several experiments need one small coordination node first, isolate that prerequisite instead of serializing the entire cycle.
 - If a task needs broad repo-wide refactors or shared-file churn, isolate it instead of pretending it is parallel-safe.
 - Do not include the final aggregation/closeout sweep inside the normal task list. The app runs a separate closeout block after the planned tasks finish.
 

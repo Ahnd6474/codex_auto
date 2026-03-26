@@ -91,6 +91,7 @@ export function ConfigEditorView({
   const providerHasAutoModel = providerSupportsAutoModel(selectedProvider);
   const scopedModelCatalog = filterModelCatalogByProvider(modelCatalog, runtime);
   const selectedModel = runtime.model || defaultModelForRuntime(modelCatalog, runtime) || (providerHasAutoModel ? "auto" : "");
+  const autoParallelWorkers = String(runtime.parallel_worker_mode || "auto").trim().toLowerCase() !== "manual";
   const selectedCatalogEntry = findModelCatalogEntry(scopedModelCatalog, selectedModel);
   const supportedEfforts = configReasoningOptions(scopedModelCatalog, selectedModel, runtime.effort || "medium");
   const selectedEffort = selectedConfigReasoning(scopedModelCatalog, runtime);
@@ -219,7 +220,7 @@ export function ConfigEditorView({
             <input
               type="number"
               min="1"
-              value={runtime.parallel_workers || 2}
+              value={runtime.parallel_workers > 0 ? runtime.parallel_workers : 4}
               onChange={(event) =>
                 onChangeForm((current) => ({
                   ...current,
@@ -229,8 +230,28 @@ export function ConfigEditorView({
                   },
                 }))
               }
+              disabled={busy || autoParallelWorkers}
+            />
+          </label>
+          <label className="choice-radio">
+            <input
+              type="checkbox"
+              checked={autoParallelWorkers}
+              onChange={(event) =>
+                onChangeForm((current) => ({
+                  ...current,
+                  runtime: {
+                    ...current.runtime,
+                    parallel_worker_mode: event.target.checked ? "auto" : "manual",
+                    parallel_workers: event.target.checked
+                      ? Math.max(0, Number.parseInt(String(current.runtime?.parallel_workers || "0"), 10) || 0)
+                      : Math.max(1, Number.parseInt(String(current.runtime?.parallel_workers || "4"), 10) || 4),
+                  },
+                }))
+              }
               disabled={busy}
             />
+            <span>{t("preset.auto")}</span>
           </label>
           <label className="choice-radio">
             <input

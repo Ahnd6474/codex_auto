@@ -7,6 +7,7 @@ from typing import Any
 from .model_constants import BILLING_MODE_INCLUDED, BILLING_MODE_PER_PASS, BILLING_MODE_TOKEN
 from .model_providers import normalize_billing_mode
 from .models import ExecutionPlanState, ProjectContext, RuntimeOptions
+from .parallel_resources import build_parallel_resource_plan
 from .utils import read_jsonl_tail
 
 
@@ -236,6 +237,10 @@ def build_runtime_insights(
     recent_passes = read_jsonl_tail(context.paths.pass_log_file, 25)
     recent_cost = estimate_usage_cost(recent_usage_payload, context.runtime, pass_count=len(recent_passes))
     remaining_cost = estimate_usage_cost(remaining_usage, context.runtime, pass_count=len(running_steps) + len(pending_steps))
+    parallel_plan = build_parallel_resource_plan(
+        getattr(context.runtime, "parallel_worker_mode", "auto"),
+        getattr(context.runtime, "parallel_workers", 0),
+    )
 
     effort_baselines = []
     for effort, duration in EFFORT_DURATION_BASELINES_SECONDS.items():
@@ -272,4 +277,5 @@ def build_runtime_insights(
             "recent_usage": recent_cost.get("usage", {}),
             "remaining_usage": remaining_cost.get("usage", {}),
         },
+        "parallel": parallel_plan.to_dict(),
     }
