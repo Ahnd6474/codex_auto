@@ -491,10 +491,11 @@ pre {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 12px;
+  padding: 12px 12px 44px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  scroll-padding-bottom: 44px;
 }
 
 .view-header,
@@ -613,8 +614,9 @@ pre {
   flex: 1;
   min-width: 0;
   margin-top: 0;
-  padding: 2px 0;
+  padding: 2px 0 28px;
   overflow: auto;
+  scroll-padding-bottom: 28px;
 }
 
 .sidebar-panel__header {

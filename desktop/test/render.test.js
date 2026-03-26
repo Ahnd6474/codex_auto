@@ -695,8 +695,9 @@ test("DashboardView hides cards that are disabled in program settings", async ()
 
   assert.match(html, /Remaining Steps/);
   assert.match(html, /Input Tokens/);
-  assert.match(html, /5h Usage/);
-  assert.doesNotMatch(html, /7d Usage/);
+  assert.match(html, /Estimated Remaining/);
+  assert.match(html, /7d Usage/);
+  assert.doesNotMatch(html, /5h Usage/);
   assert.doesNotMatch(html, /Status/);
   assert.doesNotMatch(html, /Runtime/);
   assert.doesNotMatch(html, /Closeout Report/);
@@ -743,9 +744,11 @@ test("AppSettingsView exposes dashboard visibility controls", async () => {
     },
   );
 
-  assert.match(html, /Show only the dashboard cards you want to keep visible\./);
+  assert.doesNotMatch(html, /Show only the dashboard cards you want to keep visible\./);
+  assert.match(html, /Status/);
   assert.match(html, /5h Usage/);
   assert.match(html, /7d Usage/);
+  assert.match(html, /Closeout Report/);
   assert.match(html, /Codex Spark/);
   assert.match(html, /Custom Model Slug/);
   assert.match(html, /Codex Usage/);

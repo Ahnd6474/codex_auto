@@ -115,7 +115,7 @@ test("program settings helpers keep global runtime controls separate from projec
     developer_mode: false,
     ui_theme: "dark",
     dashboard_visibility: {
-      status: false,
+      status: true,
       remaining_steps: true,
       checkpoint_pending: false,
       input_tokens: false,
@@ -124,12 +124,12 @@ test("program settings helpers keep global runtime controls separate from projec
       estimated_cost: false,
       actual_cost: false,
       codex_plan: false,
-      rate_limit_window_5h: true,
-      rate_limit_window_7d: false,
+      rate_limit_window_5h: false,
+      rate_limit_window_7d: true,
       rate_limit_codex_spark: false,
-      runtime_card: true,
+      runtime_card: false,
       codex_usage_card: false,
-      word_report_card: false,
+      word_report_card: true,
     },
   });
 

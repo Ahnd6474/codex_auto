@@ -46,7 +46,7 @@ export const PROGRAM_RUNTIME_KEYS = [
   "parallel_workers",
 ];
 export const DEFAULT_DASHBOARD_VISIBILITY = Object.freeze({
-  status: false,
+  status: true,
   remaining_steps: true,
   checkpoint_pending: false,
   input_tokens: false,
@@ -55,12 +55,12 @@ export const DEFAULT_DASHBOARD_VISIBILITY = Object.freeze({
   estimated_cost: false,
   actual_cost: false,
   codex_plan: false,
-  rate_limit_window_5h: true,
-  rate_limit_window_7d: false,
+  rate_limit_window_5h: false,
+  rate_limit_window_7d: true,
   rate_limit_codex_spark: false,
-  runtime_card: true,
+  runtime_card: false,
   codex_usage_card: false,
-  word_report_card: false,
+  word_report_card: true,
 });
 export const PROGRAM_UI_KEYS = ["ui_theme", "developer_mode", "dashboard_visibility"];
 
