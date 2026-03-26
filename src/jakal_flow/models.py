@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 from typing import Any
+import re
 
 
 def _normalize(value: Any) -> Any:
@@ -15,6 +16,26 @@ def _normalize(value: Any) -> Any:
     if isinstance(value, list):
         return [_normalize(item) for item in value]
     return value
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        items = value
+    elif isinstance(value, str):
+        items = re.split(r"[\r\n,]+", value)
+    else:
+        return []
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        text = str(item).strip()
+        if not text:
+            continue
+        if text in seen:
+            continue
+        seen.add(text)
+        normalized.append(text)
+    return normalized
 
 
 @dataclass(slots=True)
@@ -237,6 +258,8 @@ class ExecutionStep:
     success_criteria: str = ""
     reasoning_effort: str = ""
     parallel_group: str = ""
+    depends_on: list[str] = field(default_factory=list)
+    owned_paths: list[str] = field(default_factory=list)
     status: str = "pending"
     started_at: str | None = None
     completed_at: str | None = None
@@ -260,6 +283,8 @@ class ExecutionStep:
             success_criteria=str(data.get("success_criteria", "")).strip(),
             reasoning_effort=str(data.get("reasoning_effort", data.get("effort", ""))).strip().lower(),
             parallel_group=str(data.get("parallel_group", "")).strip(),
+            depends_on=_string_list(data.get("depends_on", [])),
+            owned_paths=_string_list(data.get("owned_paths", [])),
             status=str(data.get("status", "pending")).strip() or "pending",
             started_at=data.get("started_at"),
             completed_at=data.get("completed_at"),

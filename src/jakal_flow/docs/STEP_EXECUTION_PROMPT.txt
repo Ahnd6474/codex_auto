@@ -9,6 +9,9 @@ Current task:
 - Title: {task_title}
 - UI description: {display_description}
 - Success criteria: {success_criteria}
+- Depends on: {depends_on}
+- Owned paths:
+{owned_paths}
 
 Codex execution instruction:
 {codex_description}

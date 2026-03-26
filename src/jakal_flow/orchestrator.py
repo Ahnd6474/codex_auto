@@ -221,27 +221,8 @@ class Orchestrator:
         return context, saved
 
     def save_execution_plan_state(self, context: ProjectContext, plan_state: ExecutionPlanState) -> ExecutionPlanState:
-        normalized_steps: list[ExecutionStep] = []
-        fallback_effort = normalize_reasoning_effort(context.runtime.effort, fallback="high")
         execution_mode = self._normalize_execution_mode(plan_state.execution_mode or context.runtime.execution_mode)
-        for index, step in enumerate(plan_state.steps, start=1):
-            normalized_steps.append(
-                ExecutionStep(
-                    step_id=f"ST{index}",
-                    title=step.title.strip(),
-                    display_description=step.display_description.strip(),
-                    codex_description=step.codex_description.strip() or step.display_description.strip() or step.title.strip(),
-                    test_command=step.test_command.strip() or plan_state.default_test_command or context.runtime.test_cmd,
-                    success_criteria=step.success_criteria.strip(),
-                    reasoning_effort=normalize_reasoning_effort(step.reasoning_effort, fallback=fallback_effort),
-                    parallel_group=step.parallel_group.strip() if execution_mode == "parallel" else "",
-                    status=step.status if step.status else "pending",
-                    started_at=step.started_at,
-                    completed_at=step.completed_at,
-                    commit_hash=step.commit_hash,
-                    notes=step.notes.strip(),
-                )
-            )
+        normalized_steps = self._normalize_execution_steps(context, plan_state.steps, plan_state.default_test_command, execution_mode)
         closeout_ready = self._all_steps_completed(normalized_steps)
         closeout_status = plan_state.closeout_status.strip() or "not_started"
         closeout_started_at = plan_state.closeout_started_at
@@ -271,7 +252,7 @@ class Orchestrator:
         write_json(context.paths.execution_plan_file, state.to_dict())
         write_text(
             context.paths.plan_file,
-            execution_plan_markdown(context, state.plan_title, state.project_prompt, state.summary, state.steps),
+            execution_plan_markdown(context, state.plan_title, state.project_prompt, state.summary, state.execution_mode, state.steps),
         )
         mid_term_text, _ = build_mid_term_plan_from_plan_items(
             execution_steps_to_plan_items(state.steps),
@@ -283,7 +264,7 @@ class Orchestrator:
         write_json(context.paths.checkpoint_state_file, {"checkpoints": [checkpoint.to_dict() for checkpoint in checkpoints]})
         write_text(context.paths.checkpoint_timeline_file, checkpoint_timeline_markdown(checkpoints))
         flow_title = state.plan_title or context.metadata.display_name or context.metadata.slug
-        write_text(context.paths.execution_flow_svg_file, execution_plan_svg(f"{flow_title} execution flow", state.steps))
+        write_text(context.paths.execution_flow_svg_file, execution_plan_svg(f"{flow_title} execution flow", state.steps, state.execution_mode))
         return state
 
     def pending_execution_batches(self, plan_state: ExecutionPlanState) -> list[list[ExecutionStep]]:
@@ -292,6 +273,17 @@ class Orchestrator:
             return []
         if self._normalize_execution_mode(plan_state.execution_mode) != "parallel":
             return [[step] for step in remaining]
+        if self._plan_uses_dag_parallelism(plan_state.steps):
+            completed_ids = {step.step_id for step in plan_state.steps if step.status == "completed"}
+            ready = [
+                step
+                for step in plan_state.steps
+                if step.status != "completed"
+                and all(dep in completed_ids for dep in step.depends_on)
+            ]
+            if not ready:
+                raise RuntimeError("No dependency-ready execution step is available. Check the DAG dependencies for cycles or blocked nodes.")
+            return self._dag_ready_batches(ready)
 
         batches: list[list[ExecutionStep]] = []
         index = 0
@@ -310,6 +302,141 @@ class Orchestrator:
             batches.append(batch)
         return batches
 
+    def _normalize_execution_steps(
+        self,
+        context: ProjectContext,
+        steps: list[ExecutionStep],
+        default_test_command: str,
+        execution_mode: str,
+    ) -> list[ExecutionStep]:
+        fallback_effort = normalize_reasoning_effort(context.runtime.effort, fallback="high")
+        raw_ids: list[str] = []
+        seen_ids: set[str] = set()
+        for index, step in enumerate(steps, start=1):
+            candidate = step.step_id.strip() or f"TMP{index}"
+            if candidate in seen_ids:
+                candidate = f"TMP{index}"
+            seen_ids.add(candidate)
+            raw_ids.append(candidate)
+        id_map = {raw_id: f"ST{index}" for index, raw_id in enumerate(raw_ids, start=1)}
+        normalized_steps: list[ExecutionStep] = []
+        for raw_id, step in zip(raw_ids, steps, strict=False):
+            depends_on: list[str] = []
+            owned_paths: list[str] = []
+            if execution_mode == "parallel":
+                for dependency in step.depends_on:
+                    ref = dependency.strip()
+                    if not ref:
+                        continue
+                    if ref not in id_map:
+                        raise ValueError(f"Unknown dependency reference: {ref}")
+                    if ref == raw_id:
+                        raise ValueError(f"{raw_id} cannot depend on itself.")
+                    depends_on.append(id_map[ref])
+                seen_dependencies: set[str] = set()
+                depends_on = [dep for dep in depends_on if not (dep in seen_dependencies or seen_dependencies.add(dep))]
+                seen_paths: set[str] = set()
+                for path in step.owned_paths:
+                    normalized_path = self._normalize_owned_path(path)
+                    if not normalized_path or normalized_path in seen_paths:
+                        continue
+                    seen_paths.add(normalized_path)
+                    owned_paths.append(normalized_path)
+            normalized_steps.append(
+                ExecutionStep(
+                    step_id=id_map[raw_id],
+                    title=step.title.strip(),
+                    display_description=step.display_description.strip(),
+                    codex_description=step.codex_description.strip() or step.display_description.strip() or step.title.strip(),
+                    test_command=step.test_command.strip() or default_test_command or context.runtime.test_cmd,
+                    success_criteria=step.success_criteria.strip(),
+                    reasoning_effort=normalize_reasoning_effort(step.reasoning_effort, fallback=fallback_effort),
+                    parallel_group=step.parallel_group.strip() if execution_mode == "parallel" else "",
+                    depends_on=depends_on,
+                    owned_paths=owned_paths,
+                    status=step.status if step.status else "pending",
+                    started_at=step.started_at,
+                    completed_at=step.completed_at,
+                    commit_hash=step.commit_hash,
+                    notes=step.notes.strip(),
+                )
+            )
+        if execution_mode == "parallel" and self._plan_uses_dag_parallelism(normalized_steps):
+            self._validate_parallel_execution_steps(normalized_steps)
+        return normalized_steps
+
+    def _normalize_owned_path(self, value: str) -> str:
+        normalized = str(value).strip().replace("\\", "/")
+        while normalized.startswith("./"):
+            normalized = normalized[2:]
+        return normalized.rstrip("/")
+
+    def _plan_uses_dag_parallelism(self, steps: list[ExecutionStep]) -> bool:
+        return any(step.depends_on or step.owned_paths for step in steps)
+
+    def _validate_parallel_execution_steps(self, steps: list[ExecutionStep]) -> None:
+        step_ids = {step.step_id for step in steps}
+        indegree = {step.step_id: 0 for step in steps}
+        edges: dict[str, list[str]] = {step.step_id: [] for step in steps}
+        for step in steps:
+            for dependency in step.depends_on:
+                if dependency not in step_ids:
+                    raise ValueError(f"Unknown dependency reference: {dependency}")
+                if dependency == step.step_id:
+                    raise ValueError(f"{step.step_id} cannot depend on itself.")
+                indegree[step.step_id] += 1
+                edges[dependency].append(step.step_id)
+        ready = [step.step_id for step in steps if indegree[step.step_id] == 0]
+        visited = 0
+        while ready:
+            current = ready.pop(0)
+            visited += 1
+            for neighbor in edges[current]:
+                indegree[neighbor] -= 1
+                if indegree[neighbor] == 0:
+                    ready.append(neighbor)
+        if visited != len(steps):
+            raise ValueError("Parallel execution plan contains a dependency cycle.")
+
+    def _dag_ready_batches(self, ready_steps: list[ExecutionStep]) -> list[list[ExecutionStep]]:
+        batches: list[list[ExecutionStep]] = []
+        current_batch: list[ExecutionStep] = []
+        current_paths: list[str] = []
+        for step in ready_steps:
+            if not step.owned_paths:
+                if current_batch:
+                    batches.append(current_batch)
+                    current_batch = []
+                    current_paths = []
+                batches.append([step])
+                continue
+            conflict = any(
+                self._owned_paths_conflict(candidate_path, existing_path)
+                for candidate_path in step.owned_paths
+                for existing_path in current_paths
+            )
+            if conflict and current_batch:
+                batches.append(current_batch)
+                current_batch = [step]
+                current_paths = list(step.owned_paths)
+                continue
+            current_batch.append(step)
+            current_paths.extend(step.owned_paths)
+        if current_batch:
+            batches.append(current_batch)
+        return batches or [[step] for step in ready_steps]
+
+    def _owned_paths_conflict(self, left: str, right: str) -> bool:
+        normalized_left = self._normalize_owned_path(left).lower()
+        normalized_right = self._normalize_owned_path(right).lower()
+        if not normalized_left or not normalized_right:
+            return False
+        return (
+            normalized_left == normalized_right
+            or normalized_left.startswith(f"{normalized_right}/")
+            or normalized_right.startswith(f"{normalized_left}/")
+        )
+
     def run_saved_execution_step(
         self,
         project_dir: Path,
@@ -322,12 +449,19 @@ class Orchestrator:
         plan_state = self.load_execution_plan_state(context)
         if not plan_state.steps:
             raise RuntimeError("No saved execution plan exists for this project.")
+        ready_step_ids: set[str] | None = None
+        if self._normalize_execution_mode(plan_state.execution_mode) == "parallel" and self._plan_uses_dag_parallelism(plan_state.steps):
+            ready_step_ids = {item.step_id for batch in self.pending_execution_batches(plan_state) for item in batch}
 
         target_step: ExecutionStep | None = None
         for step in plan_state.steps:
             if step.status == "completed":
                 continue
             if step_id and step.step_id != step_id:
+                continue
+            if ready_step_ids is not None and step.step_id not in ready_step_ids:
+                if step_id:
+                    raise RuntimeError(f"{step.step_id} is not dependency-ready yet.")
                 continue
             target_step = step
             break
@@ -438,9 +572,14 @@ class Orchestrator:
                 ordered_targets.append(step)
         if len(ordered_targets) < 2:
             raise RuntimeError("No remaining parallel batch steps were found.")
-        parallel_groups = {step.parallel_group.strip() for step in ordered_targets}
-        if "" in parallel_groups or len(parallel_groups) != 1:
-            raise RuntimeError("Parallel execution batch steps must share one non-empty parallel group.")
+        allowed_batches = [
+            [item.step_id for item in batch]
+            for batch in self.pending_execution_batches(plan_state)
+            if len(batch) > 1
+        ]
+        requested_signature = [step.step_id for step in ordered_targets]
+        if requested_signature not in allowed_batches:
+            raise RuntimeError("Requested parallel batch is not currently ready in the execution DAG.")
 
         batch_label = ", ".join(step.step_id for step in ordered_targets)
         batch_started_at = now_utc_iso()
@@ -1343,9 +1482,11 @@ class Orchestrator:
         details = step.codex_description or step.display_description or "Complete the saved execution checkpoint with a small, safe change."
         success = step.success_criteria or "The verification command exits successfully."
         ui_hint = step.display_description.strip()
+        dependency_hint = f" Dependencies: {', '.join(step.depends_on)}." if step.depends_on else ""
+        ownership_hint = f" Owned paths: {', '.join(step.owned_paths)}." if step.owned_paths else ""
         if ui_hint and ui_hint != details:
-            return f"UI description: {ui_hint}. Execution instruction: {details} Verification command: {test_command}. Success criteria: {success}"
-        return f"{details} Verification command: {test_command}. Success criteria: {success}"
+            return f"UI description: {ui_hint}. Execution instruction: {details}.{dependency_hint}{ownership_hint} Verification command: {test_command}. Success criteria: {success}"
+        return f"{details}.{dependency_hint}{ownership_hint} Verification command: {test_command}. Success criteria: {success}"
 
     def _all_steps_completed(self, steps: list[ExecutionStep]) -> bool:
         return bool(steps) and all(step.status == "completed" for step in steps)

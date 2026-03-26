@@ -906,6 +906,8 @@ export function useDesktopController() {
       success_criteria: translate(language, "run.stepSuccessCriteria"),
       reasoning_effort: projectForm.runtime?.effort || "high",
       parallel_group: "",
+      depends_on: [],
+      owned_paths: [],
       status: "pending",
       notes: "",
     };
