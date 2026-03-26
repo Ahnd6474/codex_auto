@@ -13,11 +13,8 @@ export function IdeToolbar({
   onGeneratePlan,
   onRunPlan,
   onRunCloseout,
-  onApproveCheckpoint,
-  onToggleBottom,
 }) {
   const status = activeJob?.status === "running" ? "running" : projectDetail?.project?.current_status || "idle";
-  const checkpointPending = Boolean(projectDetail?.checkpoints?.pending);
   const projectName = projectDetail?.project?.display_name || projectDetail?.project?.slug || null;
   const { language, t } = useI18n();
   const statusLabel = activeJob?.status === "running" ? commandLabel(activeJob.command, language) : displayStatus(status, language);
@@ -61,12 +58,6 @@ export function IdeToolbar({
         </button>
         <button className="toolbar-button" onClick={onRunCloseout} type="button" disabled={busy}>
           {t("action.closeout")}
-        </button>
-        <button className="toolbar-button" onClick={onApproveCheckpoint} type="button" disabled={busy || !checkpointPending}>
-          {t("action.approveCheckpoint")}
-        </button>
-        <button className="toolbar-button toolbar-button--ghost" onClick={onToggleBottom} type="button" title={t("toolbar.toggleBottom")}>
-          {t("toolbar.bottom")}
         </button>
       </div>
     </header>

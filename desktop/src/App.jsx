@@ -1,30 +1,22 @@
 import { useEffect, useRef } from "react";
 import { CenterWorkspace } from "./components/layout/CenterWorkspace";
-import { BottomToolPanel } from "./components/layout/BottomToolPanel";
 import { IdeToolbar } from "./components/layout/IdeToolbar";
 import { SidebarPane } from "./components/layout/SidebarPane";
-import { Splitter } from "./components/layout/Splitter";
 import { useDesktopController } from "./hooks/useDesktopController";
 import { useI18n } from "./i18n";
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
 
 export default function App() {
   const controller = useDesktopController();
   const { t } = useI18n();
   const keybindingActionsRef = useRef({
     setCenterTab: controller.setCenterTab,
-    setBottomCollapsed: controller.setBottomCollapsed,
   });
 
   useEffect(() => {
     keybindingActionsRef.current = {
       setCenterTab: controller.setCenterTab,
-      setBottomCollapsed: controller.setBottomCollapsed,
     };
-  }, [controller.setBottomCollapsed, controller.setCenterTab]);
+  }, [controller.setCenterTab]);
 
   useEffect(() => {
     const nextTheme = controller.programSettings?.ui_theme === "light" ? "light" : "dark";
@@ -33,17 +25,13 @@ export default function App() {
 
   useEffect(() => {
     function handleKeyDown(event) {
-      const { setCenterTab, setBottomCollapsed } = keybindingActionsRef.current;
+      const { setCenterTab } = keybindingActionsRef.current;
       if (!(event.ctrlKey || event.metaKey)) {
         return;
       }
       if (event.key >= "1" && event.key <= "6") {
         const tabs = ["run", "dashboard", "reports", "history", "config", "app-settings"];
         setCenterTab(tabs[Number.parseInt(event.key, 10) - 1]);
-        event.preventDefault();
-      }
-      if (event.key.toLowerCase() === "b") {
-        setBottomCollapsed((current) => !current);
         event.preventDefault();
       }
     }
@@ -67,8 +55,6 @@ export default function App() {
         onGeneratePlan={controller.generatePlan}
         onRunPlan={controller.runPlan}
         onRunCloseout={controller.runCloseout}
-        onApproveCheckpoint={controller.approveCheckpoint}
-        onToggleBottom={() => controller.setBottomCollapsed((current) => !current)}
       />
 
       {controller.message ? (
@@ -109,7 +95,6 @@ export default function App() {
             detail={detail}
             form={controller.projectForm}
             programSettings={controller.programSettings}
-            programSettingsDirty={controller.programSettingsDirty}
             planDraft={controller.planDraft}
             shareSettings={controller.shareSettings}
             selectedStepId={controller.selectedStepId}
@@ -119,9 +104,7 @@ export default function App() {
             onChangeForm={controller.setProjectForm}
             onChangeProgramSettings={controller.setProgramSettings}
             onChooseDirectory={controller.chooseDirectory}
-            onSaveProject={controller.saveProject}
             onDeleteProject={controller.deleteProject}
-            onSaveProgramSettings={controller.saveProgramSettings}
             onGenerateShareLink={controller.generateShareLink}
             onCopyShareLink={controller.copyShareLink}
             onRevokeShareLink={controller.revokeShareLink}
@@ -146,15 +129,6 @@ export default function App() {
             onMoveStep={controller.moveStep}
             activeJob={controller.activeJob}
           />
-
-          {!controller.bottomCollapsed ? (
-            <>
-              <Splitter axis="horizontal" onResize={(delta) => controller.setBottomHeight((current) => clamp(current - delta, 160, 420))} />
-              <div className="ide-pane ide-pane--bottom" style={{ height: `${controller.bottomHeight}px` }}>
-                <BottomToolPanel activeTab={controller.bottomTab} onChangeTab={controller.setBottomTab} data={detail?.bottom_panels} />
-              </div>
-            </>
-          ) : null}
         </div>
       </div>
     </main>

@@ -14,6 +14,14 @@
   --text: #e6eaf1;
   --text-muted: #a7afbb;
   --text-dim: #848d99;
+  --toolbar-surface: rgba(37, 39, 43, 0.92);
+  --toolbar-pill-bg: rgba(255, 255, 255, 0.035);
+  --toolbar-pill-border: #454b56;
+  --button-bg-start: #373a40;
+  --button-bg-end: #31343a;
+  --button-accent-start: #41699b;
+  --button-accent-end: #365880;
+  --button-accent-border: #4d79ad;
   --success: #4ea36d;
   --warning: #d3a954;
   --danger: #c85d61;
@@ -41,6 +49,14 @@
   --text: #17212f;
   --text-muted: #5d6878;
   --text-dim: #788396;
+  --toolbar-surface: linear-gradient(180deg, #d6e2ef, #c9d8ea);
+  --toolbar-pill-bg: rgba(255, 255, 255, 0.92);
+  --toolbar-pill-border: #afc0d5;
+  --button-bg-start: #eef3f9;
+  --button-bg-end: #dde7f2;
+  --button-accent-start: #4579b5;
+  --button-accent-end: #2f5f97;
+  --button-accent-border: #3568a4;
   --success: #2f8a58;
   --warning: #b27a1f;
   --danger: #bb4c50;
@@ -137,7 +153,7 @@ pre {
   align-items: center;
   gap: 10px;
   padding: 6px 8px;
-  background: rgba(37, 39, 43, 0.92);
+  background: var(--toolbar-surface);
   border-radius: var(--radius);
 }
 
@@ -157,8 +173,8 @@ pre {
   min-width: 0;
   padding: 5px 8px;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid var(--border);
+  background: var(--toolbar-pill-bg);
+  border: 1px solid var(--toolbar-pill-border);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -199,7 +215,7 @@ pre {
 
 .toolbar-button {
   border: 1px solid var(--border);
-  background: linear-gradient(180deg, #373a40, #31343a);
+  background: linear-gradient(180deg, var(--button-bg-start), var(--button-bg-end));
   color: var(--text);
   border-radius: var(--radius-sm);
   padding: 7px 10px;
@@ -223,8 +239,8 @@ pre {
 }
 
 .toolbar-button--accent {
-  background: linear-gradient(180deg, #41699b, #365880);
-  border-color: #4d79ad;
+  background: linear-gradient(180deg, var(--button-accent-start), var(--button-accent-end));
+  border-color: var(--button-accent-border);
 }
 
 .toolbar-button--ghost {
@@ -389,6 +405,12 @@ pre {
   justify-content: center;
   font-size: 13px;
   font-weight: 700;
+}
+
+.sidebar-icon__svg {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 .sidebar-icon:hover {

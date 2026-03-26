@@ -21,7 +21,6 @@ export function CenterWorkspace({
   form,
   shareSettings,
   programSettings,
-  programSettingsDirty,
   planDraft,
   selectedStepId,
   modelPresets,
@@ -30,9 +29,7 @@ export function CenterWorkspace({
   onChangeForm,
   onChangeProgramSettings,
   onChooseDirectory,
-  onSaveProject,
   onDeleteProject,
-  onSaveProgramSettings,
   onGenerateShareLink,
   onCopyShareLink,
   onRevokeShareLink,
@@ -53,15 +50,26 @@ export function CenterWorkspace({
   activeJob,
 }) {
   const { t } = useI18n();
+  const developerMode = Boolean(programSettings?.developer_mode);
+
+  const visibleTabs = [
+    ["run", t("tab.flow")],
+    ["dashboard", t("tab.dashboard")],
+    ...(developerMode
+      ? [
+          ["reports", t("tab.reports")],
+          ["history", t("tab.history")],
+        ]
+      : []),
+    ["config", t("tab.config")],
+  ];
 
   return (
     <section className="workspace-area">
       <div className="workspace-tabs">
-        <WorkspaceTab value="run" activeTab={activeTab} onChange={onChangeTab} label={t("tab.flow")} />
-        <WorkspaceTab value="dashboard" activeTab={activeTab} onChange={onChangeTab} label={t("tab.dashboard")} />
-        <WorkspaceTab value="reports" activeTab={activeTab} onChange={onChangeTab} label={t("tab.reports")} />
-        <WorkspaceTab value="history" activeTab={activeTab} onChange={onChangeTab} label={t("tab.history")} />
-        <WorkspaceTab value="config" activeTab={activeTab} onChange={onChangeTab} label={t("tab.config")} />
+        {visibleTabs.map(([value, label]) => (
+          <WorkspaceTab key={value} value={value} activeTab={activeTab} onChange={onChangeTab} label={label} />
+        ))}
       </div>
 
       {activeTab === "run" ? (
@@ -90,9 +98,20 @@ export function CenterWorkspace({
           onMoveStep={onMoveStep}
         />
       ) : null}
-      {activeTab === "dashboard" ? <DashboardView detail={detail} planDraft={planDraft} modelPresets={modelPresets} modelCatalog={modelCatalog} activeJob={activeJob} /> : null}
-      {activeTab === "reports" ? <ReportsView reports={detail?.reports} /> : null}
-      {activeTab === "history" ? <HistoryView history={detail?.history} /> : null}
+      {activeTab === "dashboard" ? (
+        <DashboardView
+          detail={detail}
+          planDraft={planDraft}
+          form={form}
+          busy={busy}
+          modelPresets={modelPresets}
+          modelCatalog={modelCatalog}
+          activeJob={activeJob}
+          onChangeForm={onChangeForm}
+        />
+      ) : null}
+      {developerMode && activeTab === "reports" ? <ReportsView reports={detail?.reports} /> : null}
+      {developerMode && activeTab === "history" ? <HistoryView history={detail?.history} /> : null}
       {activeTab === "config" ? (
         <ConfigEditorView
           form={form}
@@ -101,7 +120,6 @@ export function CenterWorkspace({
           busy={busy}
           onChangeForm={onChangeForm}
           onChooseDirectory={onChooseDirectory}
-          onSaveProject={onSaveProject}
           onDeleteProject={onDeleteProject}
         />
       ) : null}
@@ -110,10 +128,8 @@ export function CenterWorkspace({
           settings={programSettings}
           shareSettings={shareSettings}
           shareDetail={detail?.share}
-          dirty={programSettingsDirty}
           busy={busy}
           onChangeSettings={onChangeProgramSettings}
-          onSaveSettings={onSaveProgramSettings}
           onGenerateShareLink={onGenerateShareLink}
           onCopyShareLink={onCopyShareLink}
           onRevokeShareLink={onRevokeShareLink}

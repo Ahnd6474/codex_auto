@@ -3,6 +3,45 @@ import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import { statusTone } from "../../utils";
 
+function SidebarProjectsIcon() {
+  return (
+    <svg aria-hidden="true" className="sidebar-icon__svg" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M4.75 7.25A2.5 2.5 0 0 1 7.25 4.75h5.1c.66 0 1.3.26 1.77.73l5.15 5.15c.47.47.73 1.1.73 1.77v4.35a2.5 2.5 0 0 1-2.5 2.5h-10a2.5 2.5 0 0 1-2.5-2.5v-9.5Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path d="M13 4.9v5.35a1 1 0 0 0 1 1h5.1" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+      <path d="M8.5 14.25h7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M8.5 17.25h5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SidebarExplorerIcon() {
+  return (
+    <svg aria-hidden="true" className="sidebar-icon__svg" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M4.75 7.75a2 2 0 0 1 2-2h3.1l1.35 1.5H17.25a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6.75a2 2 0 0 1-2-2v-8.5Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path d="M4.75 9.25h14.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SidebarCheckpointsIcon() {
+  return (
+    <svg aria-hidden="true" className="sidebar-icon__svg" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="7.25" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M12 8.25v4.25l2.75 1.75" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function SidebarSectionTabs({ activeTab, onChange, tabs }) {
   return (
     <div className="sidebar-rail">
@@ -112,9 +151,9 @@ export function SidebarPane({
     return (workspaceTree || []).map((node) => filterTree(node, normalizedQuery)).filter(Boolean);
   }, [workspaceFilter, workspaceTree]);
   const tabs = [
-    ["projects", "P", t("common.project")],
-    ["workspace", "F", t("sidebar.explorer")],
-    ["plans", "C", t("sidebar.checkpoints")],
+    ["projects", <SidebarProjectsIcon key="projects-icon" />, t("common.project")],
+    ["workspace", <SidebarExplorerIcon key="workspace-icon" />, t("sidebar.explorer")],
+    ["plans", <SidebarCheckpointsIcon key="plans-icon" />, t("sidebar.checkpoints")],
   ];
 
   return (

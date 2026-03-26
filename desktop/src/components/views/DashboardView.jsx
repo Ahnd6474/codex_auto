@@ -11,7 +11,7 @@ function Stat({ label, value, tone = "neutral" }) {
   );
 }
 
-export function DashboardView({ detail, planDraft, modelPresets, modelCatalog, activeJob }) {
+export function DashboardView({ detail, planDraft, form, busy, modelPresets, modelCatalog, activeJob, onChangeForm }) {
   const { language, t } = useI18n();
   const usage = detail?.snapshot?.recent_usage || {};
   const codexStatus = detail?.codex_status || {};
@@ -75,6 +75,32 @@ export function DashboardView({ detail, planDraft, modelPresets, modelCatalog, a
           ) : (
             <div className="empty-block">{codexStatus.error || t("common.unavailable")}</div>
           )}
+        </div>
+      </div>
+
+      <div className="overview-grid">
+        <div className="content-card">
+          <div className="content-card__header">
+            <strong>{t("reports.closeoutReport")}</strong>
+          </div>
+          <label className="choice-radio">
+            <input
+              type="checkbox"
+              checked={Boolean(form?.runtime?.generate_word_report)}
+              onChange={(event) =>
+                onChangeForm((current) => ({
+                  ...current,
+                  runtime: {
+                    ...current.runtime,
+                    generate_word_report: event.target.checked,
+                  },
+                }))
+              }
+              disabled={busy}
+            />
+            <span>{t("option.generateWordReport")}</span>
+          </label>
+          <p>{t("config.wordReportDescription")}</p>
         </div>
       </div>
     </section>

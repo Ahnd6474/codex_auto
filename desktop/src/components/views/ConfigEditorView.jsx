@@ -75,7 +75,6 @@ export function ConfigEditorView({
   busy,
   onChangeForm,
   onChooseDirectory,
-  onSaveProject,
   onDeleteProject,
 }) {
   const runtime = form.runtime || {};
@@ -109,9 +108,6 @@ export function ConfigEditorView({
         <div className="field-row">
           <button className="toolbar-button" onClick={onDeleteProject} type="button" disabled={busy || !form.project_dir?.trim()}>
             {t("action.delete")}
-          </button>
-          <button className="toolbar-button toolbar-button--accent" onClick={onSaveProject} type="button" disabled={busy}>
-            {t("action.saveConfiguration")}
           </button>
         </div>
       </div>
@@ -175,30 +171,12 @@ export function ConfigEditorView({
             />
             <span>{t("option.useFastMode")}</span>
           </label>
-          <label className="choice-radio">
-            <input
-              type="checkbox"
-              checked={Boolean(runtime.generate_word_report)}
-              onChange={(event) =>
-                onChangeForm((current) => ({
-                  ...current,
-                  runtime: {
-                    ...current.runtime,
-                    generate_word_report: event.target.checked,
-                  },
-                }))
-              }
-              disabled={busy}
-            />
-            <span>{t("option.generateWordReport")}</span>
-          </label>
           <p>{t("config.fastModeDescription")}</p>
-          <p>{t("config.wordReportDescription")}</p>
 
           <div className="subsection">
             <div className="subsection__header">
-              <strong>{t("config.developerMode")}</strong>
-              <span>{t("config.developerModeDescription")}</span>
+              <strong>{t("config.advancedModelSettings")}</strong>
+              <span>{t("config.advancedModelSettingsDescription")}</span>
             </div>
             <label className="field">
               <span>{t("field.customModelSlug")}</span>

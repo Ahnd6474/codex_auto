@@ -4,10 +4,8 @@ export function AppSettingsView({
   settings,
   shareSettings,
   shareDetail,
-  dirty,
   busy,
   onChangeSettings,
-  onSaveSettings,
   onGenerateShareLink,
   onCopyShareLink,
   onRevokeShareLink,
@@ -25,9 +23,6 @@ export function AppSettingsView({
           <h2>{t("tab.programSettings")}</h2>
           <p>{t("settings.programSettingsDescription")}</p>
         </div>
-        <button className="toolbar-button toolbar-button--accent" onClick={onSaveSettings} type="button" disabled={busy || !dirty}>
-          {t("action.saveProgramSettings")}
-        </button>
       </div>
 
       <div className="form-layout">
@@ -55,6 +50,15 @@ export function AppSettingsView({
                 disabled={busy}
               />
               <span>{t("option.lightMode")}</span>
+            </label>
+            <label className="choice-radio">
+              <input
+                type="checkbox"
+                checked={Boolean(settings.developer_mode)}
+                onChange={(event) => onChangeSettings((current) => ({ ...current, developer_mode: event.target.checked }))}
+                disabled={busy}
+              />
+              <span>{t("option.developerMode")}</span>
             </label>
           </div>
         </div>

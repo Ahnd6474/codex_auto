@@ -33,6 +33,7 @@ const DEFAULT_PROGRAM_RUNTIME = {
 };
 const DEFAULT_PROGRAM_UI = {
   ui_theme: "dark",
+  developer_mode: false,
 };
 
 export function reasoningEffortLabel(value, language = "en") {
