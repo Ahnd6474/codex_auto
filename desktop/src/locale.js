@@ -470,6 +470,8 @@ const STRINGS = {
 };
 
 STRINGS.en["action.deleteAll"] = "Delete All";
+STRINGS.en["config.advancedModelSettings"] = "Advanced Settings";
+STRINGS.en["config.advancedModelSettingsDescription"] = "Advanced Settings";
 STRINGS.en["message.allProjectsDeleted"] = "All projects removed from jakal-flow.";
 STRINGS.en["option.generateWordReport"] = "Word Report Creation";
 STRINGS.en["prompt.confirmDeleteAllProjects"] =
@@ -477,6 +479,8 @@ STRINGS.en["prompt.confirmDeleteAllProjects"] =
 STRINGS.en["sidebar.projectContextDelete"] = "Right-click to open project actions";
 
 STRINGS.ko["action.deleteAll"] = "전부 삭제";
+STRINGS.ko["config.advancedModelSettings"] = "고급 설정";
+STRINGS.ko["config.advancedModelSettingsDescription"] = "고급 설정";
 STRINGS.ko["message.allProjectsDeleted"] = "모든 프로젝트를 제거했습니다.";
 STRINGS.ko["option.generateWordReport"] = "Word 보고서 제작";
 STRINGS.ko["prompt.confirmDeleteAllProjects"] =

@@ -99,7 +99,6 @@ export function DashboardView({ detail, planDraft, form, busy, modelPresets, mod
             />
             <span>{t("option.generateWordReport")}</span>
           </label>
-          <p>{t("config.wordReportDescription")}</p>
         </div>
       </div>
     </section>
