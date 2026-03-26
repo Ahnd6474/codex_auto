@@ -115,19 +115,21 @@ test("program settings helpers keep global runtime controls separate from projec
     developer_mode: false,
     ui_theme: "dark",
     dashboard_visibility: {
-      status: true,
+      status: false,
       remaining_steps: true,
-      checkpoint_pending: true,
-      input_tokens: true,
-      output_tokens: true,
+      checkpoint_pending: false,
+      input_tokens: false,
+      output_tokens: false,
       estimated_remaining: true,
-      estimated_cost: true,
-      actual_cost: true,
-      codex_plan: true,
-      rate_limits: true,
+      estimated_cost: false,
+      actual_cost: false,
+      codex_plan: false,
+      rate_limit_window_5h: true,
+      rate_limit_window_7d: false,
+      rate_limit_codex_spark: false,
       runtime_card: true,
-      codex_usage_card: true,
-      word_report_card: true,
+      codex_usage_card: false,
+      word_report_card: false,
     },
   });
 
@@ -204,6 +206,7 @@ test("program settings helpers keep global runtime controls separate from projec
 test("blankProjectForm seeds runtime defaults without mutating the source runtime", () => {
   const defaultRuntime = {
     model_preset: "default",
+    generate_word_report: false,
     max_blocks: 9,
     test_cmd: "pytest -q",
   };
@@ -213,17 +216,20 @@ test("blankProjectForm seeds runtime defaults without mutating the source runtim
 
   assert.deepEqual(defaultRuntime, {
     model_preset: "default",
+    generate_word_report: false,
     max_blocks: 9,
     test_cmd: "pytest -q",
   });
   assert.equal(form.branch, "main");
   assert.equal(form.github_mode, "existing");
   assert.equal(form.runtime.max_blocks, 9);
+  assert.equal(form.runtime.generate_word_report, false);
 });
 
 test("blankProjectForm falls back to repository defaults when runtime is missing", () => {
   const form = blankProjectForm(null);
 
+  assert.equal(form.runtime.generate_word_report, true);
   assert.equal(form.runtime.max_blocks, 5);
   assert.equal(form.runtime.test_cmd, "python -m pytest");
 });
