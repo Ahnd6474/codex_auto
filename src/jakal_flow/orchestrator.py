@@ -414,6 +414,214 @@ class Orchestrator:
 
         return context, plan_state, target_step
 
+    def run_parallel_execution_batch(
+        self,
+        project_dir: Path,
+        runtime: RuntimeOptions,
+        step_ids: list[str],
+        branch: str = "main",
+        origin_url: str = "",
+    ) -> tuple[ProjectContext, ExecutionPlanState, list[ExecutionStep]]:
+        context = self.setup_local_project(project_dir=project_dir, runtime=runtime, branch=branch, origin_url=origin_url)
+        plan_state = self.load_execution_plan_state(context)
+        if not plan_state.steps:
+            raise RuntimeError("No saved execution plan exists for this project.")
+        if len(step_ids) < 2:
+            raise ValueError("Parallel execution batch requires at least two step ids.")
+
+        ordered_targets: list[ExecutionStep] = []
+        requested = {step_id.strip() for step_id in step_ids if step_id.strip()}
+        for step in plan_state.steps:
+            if step.step_id in requested:
+                if step.status == "completed":
+                    raise RuntimeError(f"{step.step_id} is already completed.")
+                ordered_targets.append(step)
+        if len(ordered_targets) < 2:
+            raise RuntimeError("No remaining parallel batch steps were found.")
+
+        batch_label = ", ".join(step.step_id for step in ordered_targets)
+        batch_started_at = now_utc_iso()
+        for step in plan_state.steps:
+            if step.step_id in requested:
+                step.status = "running"
+                step.started_at = step.started_at or batch_started_at
+                step.notes = ""
+            elif step.status == "running":
+                step.status = "paused"
+        plan_state.default_test_command = runtime.test_cmd
+        plan_state.execution_mode = "parallel"
+        plan_state = self.save_execution_plan_state(context, plan_state)
+
+        previous_runtime = context.runtime
+        context.runtime = RuntimeOptions(
+            **{
+                **previous_runtime.to_dict(),
+                "execution_mode": "parallel",
+                "parallel_workers": self._parallel_worker_count(runtime.parallel_workers),
+                "allow_push": True,
+                "approval_mode": runtime.approval_mode,
+                "sandbox_mode": runtime.sandbox_mode,
+                "require_checkpoint_approval": False,
+                "checkpoint_interval_blocks": 1,
+            }
+        )
+        context.metadata.current_status = "running:parallel"
+        context.metadata.last_run_at = batch_started_at
+        context.loop_state.current_task = f"Parallel batch {batch_label}"
+        self.save_execution_plan_state(context, plan_state)
+        self.workspace.save_project(context)
+
+        reporter = Reporter(context)
+        base_revision = context.metadata.current_safe_revision or self.git.current_revision(context.paths.repo_dir)
+        batch_token = f"{now_utc_iso().replace(':', '').replace('-', '')}-{uuid4().hex[:8]}"
+        worker_results: list[dict[str, object]] = []
+        merged_commit_hashes: list[str] = []
+        group_test_result: TestRunResult | None = None
+        rollback_status = "not_needed"
+        final_status = "completed"
+        batch_summary = ""
+
+        try:
+            with ThreadPoolExecutor(max_workers=self._parallel_worker_count(context.runtime.parallel_workers)) as executor:
+                future_map = {
+                    executor.submit(
+                        self._run_parallel_step_worker,
+                        context,
+                        runtime,
+                        step,
+                        base_revision,
+                        batch_token,
+                        index,
+                    ): step.step_id
+                    for index, step in enumerate(ordered_targets, start=1)
+                }
+                by_step_id: dict[str, dict[str, object]] = {}
+                for future in as_completed(future_map):
+                    result = future.result()
+                    by_step_id[str(result["step_id"])] = result
+                worker_results = [by_step_id[step.step_id] for step in ordered_targets]
+
+            failed_worker = next((item for item in worker_results if str(item.get("status")) != "completed"), None)
+            if failed_worker is not None:
+                final_status = "failed"
+                rollback_status = "not_needed"
+                batch_summary = str(failed_worker.get("notes") or "Parallel worker failed.").strip()
+                for step in ordered_targets:
+                    step.status = "failed"
+                    step.notes = batch_summary if step.step_id == failed_worker.get("step_id") else "Parallel batch aborted because another worker failed."
+                context.metadata.current_status = "failed"
+            else:
+                try:
+                    for result in worker_results:
+                        worker_commit = str(result.get("commit_hash") or "").strip()
+                        if not worker_commit:
+                            raise RuntimeError(f"{result.get('step_id')} completed without a commit to merge.")
+                        self.git.cherry_pick(context.paths.repo_dir, worker_commit)
+                        merged_commit_hashes.append(self.git.current_revision(context.paths.repo_dir))
+                except Exception as exc:
+                    self.git.abort_cherry_pick(context.paths.repo_dir)
+                    self.git.hard_reset(context.paths.repo_dir, base_revision)
+                    rollback_status = "rolled_back_to_safe_revision"
+                    final_status = "failed"
+                    batch_summary = str(exc).strip() or "Parallel merge failed."
+                    for step in ordered_targets:
+                        step.status = "failed"
+                        step.notes = batch_summary
+                    context.metadata.current_status = "failed"
+                else:
+                    if merged_commit_hashes:
+                        close_block_index = max(1, context.loop_state.block_index + len(ordered_targets))
+                        group_test_result = self._run_test_command(context, close_block_index, "parallel-batch-pass")
+                        reporter.save_test_result(close_block_index, "parallel-batch-pass", group_test_result)
+                    if group_test_result and group_test_result.returncode != 0:
+                        self.git.hard_reset(context.paths.repo_dir, base_revision)
+                        rollback_status = "rolled_back_to_safe_revision"
+                        final_status = "failed"
+                        batch_summary = "Parallel batch verification failed and merged changes were rolled back."
+                        group_test_result = None
+                        for step in ordered_targets:
+                            step.status = "failed"
+                            step.notes = batch_summary
+                        context.metadata.current_status = "failed"
+                    else:
+                        batch_summary = group_test_result.summary if group_test_result else "Parallel batch completed successfully."
+                        for index, step in enumerate(ordered_targets):
+                            step.status = "completed"
+                            step.completed_at = now_utc_iso()
+                            step.commit_hash = merged_commit_hashes[index] if index < len(merged_commit_hashes) else None
+                            worker_note = str(worker_results[index].get("test_summary") or "").strip()
+                            step.notes = worker_note if worker_note else batch_summary
+                        if merged_commit_hashes:
+                            last_commit = merged_commit_hashes[-1]
+                            context.metadata.current_safe_revision = last_commit
+                            context.loop_state.current_safe_revision = last_commit
+                            context.loop_state.last_commit_hash = last_commit
+                            if context.runtime.allow_push and self.git.remote_url(context.paths.repo_dir, "origin"):
+                                self.git.push(context.paths.repo_dir, context.metadata.branch)
+                        context.metadata.current_status = self._status_from_plan_state(plan_state)
+
+            next_block_index = context.loop_state.block_index
+            combined_changed_files: list[str] = []
+            for index, step in enumerate(ordered_targets):
+                next_block_index += 1
+                worker_result = worker_results[index] if index < len(worker_results) else {}
+                pass_entry = deepcopy(worker_result.get("pass_log") or {})
+                block_entry = deepcopy(worker_result.get("block_log") or {})
+                changed_files = sorted(set(str(item) for item in worker_result.get("changed_files", []) if str(item).strip()))
+                combined_changed_files.extend(changed_files)
+                pass_entry.update(
+                    {
+                        "repository_id": context.metadata.repo_id,
+                        "repository_slug": context.metadata.slug,
+                        "block_index": next_block_index,
+                        "selected_task": step.title,
+                        "commit_hash": step.commit_hash if step.status == "completed" else None,
+                        "rollback_status": rollback_status if step.status != "completed" else "not_needed",
+                        "changed_files": changed_files,
+                        "test_results": group_test_result.to_dict() if group_test_result and step.status == "completed" else None,
+                    }
+                )
+                block_entry.update(
+                    {
+                        "repository_id": context.metadata.repo_id,
+                        "repository_slug": context.metadata.slug,
+                        "block_index": next_block_index,
+                        "status": "completed" if step.status == "completed" else "failed",
+                        "selected_task": step.title,
+                        "changed_files": changed_files,
+                        "test_summary": step.notes or batch_summary,
+                        "commit_hashes": [step.commit_hash] if step.commit_hash else [],
+                        "rollback_status": rollback_status if step.status != "completed" else "not_needed",
+                    }
+                )
+                reporter.log_pass(pass_entry)
+                reporter.log_block(block_entry)
+                reporter.append_attempt_history(
+                    attempt_history_entry(
+                        next_block_index,
+                        step.title,
+                        "completed" if step.status == "completed" else "parallel batch failed",
+                        [step.commit_hash] if step.commit_hash else [],
+                    )
+                )
+            context.loop_state.block_index = next_block_index
+            context.loop_state.last_block_completed_at = now_utc_iso()
+            reporter.write_block_review(
+                reflection_markdown(
+                    f"Parallel batch {batch_label}",
+                    batch_summary or "Parallel batch finished.",
+                    sorted(set(combined_changed_files)),
+                    [item for item in merged_commit_hashes if item],
+                )
+            )
+            return context, self.save_execution_plan_state(context, plan_state), ordered_targets
+        finally:
+            context.runtime = previous_runtime
+            context.metadata.last_run_at = now_utc_iso()
+            self.workspace.save_project(context)
+            for result in worker_results:
+                self._cleanup_parallel_worker(context.paths.repo_dir, result)
+
     def run_execution_closeout(
         self,
         project_dir: Path,
