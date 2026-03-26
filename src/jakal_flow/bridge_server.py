@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from queue import Queue
 from threading import Lock, Thread
 import sys
 import time

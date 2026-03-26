@@ -8,6 +8,7 @@ import sys
 from .model_constants import DEFAULT_LOCAL_MODEL_PROVIDER, DEFAULT_MODEL_PROVIDER, VALID_MODEL_PROVIDERS
 from .models import RuntimeOptions
 from .orchestrator import Orchestrator
+from .status_views import effective_project_status
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -136,7 +137,11 @@ def main(argv: list[str] | None = None) -> int:
                     "slug": item.metadata.slug,
                     "repo_url": item.metadata.repo_url,
                     "branch": item.metadata.branch,
-                    "status": item.metadata.current_status,
+                    "status": effective_project_status(
+                        item.metadata.current_status,
+                        orchestrator.load_execution_plan_state(item),
+                        item.loop_state,
+                    ),
                     "last_run_at": item.metadata.last_run_at,
                     "safe_revision": item.metadata.current_safe_revision,
                 }

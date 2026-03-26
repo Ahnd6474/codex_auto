@@ -28,7 +28,7 @@ from .model_providers import (
 )
 from .models import ExecutionPlanState, ProjectContext, RuntimeOptions
 from .orchestrator import Orchestrator
-from .process_supervisor import spawn_background_process, terminate_process, wait_for_condition
+from .process_supervisor import terminate_process, wait_for_condition
 from .public_tunnel import public_tunnel_status_payload, start_cloudflare_quick_tunnel, stop_public_tunnel_process
 from .runtime_services import CodexBackendSnapshotService
 from .share import (
