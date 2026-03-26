@@ -357,7 +357,7 @@ def prompt_to_execution_plan_prompt(
     repo_inputs: dict[str, str],
     user_prompt: str,
     max_steps: int,
-    execution_mode: str,
+    execution_mode: str = "serial",
     template_text: str | None = None,
 ) -> str:
     template = template_text or load_source_prompt_template(PLAN_GENERATION_PROMPT_FILENAME)
