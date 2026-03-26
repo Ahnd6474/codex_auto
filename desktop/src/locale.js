@@ -584,6 +584,8 @@ STRINGS.en["config.advancedModelSettings"] = "Advanced Settings";
 STRINGS.en["config.advancedModelSettingsDescription"] = "Advanced Settings";
 STRINGS.en["message.allProjectsDeleted"] = "All projects removed from jakal-flow.";
 STRINGS.en["option.generateWordReport"] = "Word Report Creation";
+STRINGS.en["option.lightMode"] = "Light Mode";
+STRINGS.en["option.developerMode"] = "Developer Mode";
 STRINGS.en["prompt.confirmDeleteAllProjects"] =
   "Remove all projects from jakal-flow? The managed docs, logs, and state will be deleted, but the original repository folders will stay in place.";
 STRINGS.en["sidebar.projectContextDelete"] = "Right-click to open project actions";
@@ -593,14 +595,21 @@ STRINGS.ko["config.advancedModelSettings"] = "고급 설정";
 STRINGS.ko["config.advancedModelSettingsDescription"] = "고급 설정";
 STRINGS.ko["message.allProjectsDeleted"] = "모든 프로젝트를 제거했습니다.";
 STRINGS.ko["option.generateWordReport"] = "Word 보고서 제작";
+STRINGS.ko["option.lightMode"] = "밝은 모드";
+STRINGS.ko["option.developerMode"] = "개발자 모드";
 STRINGS.ko["prompt.confirmDeleteAllProjects"] =
   "모든 프로젝트를 삭제할까요? 관리 중인 문서, 로그, 상태만 삭제되고 원본 저장소 폴더는 그대로 유지됩니다.";
 STRINGS.ko["sidebar.projectContextDelete"] = "우클릭으로 프로젝트 메뉴 열기";
 
-const ALL_STRINGS = {
-  ...STRINGS,
-  ...GENERATED_STRINGS,
-};
+const ALL_STRINGS = Object.fromEntries(
+  Array.from(new Set([...Object.keys(STRINGS), ...Object.keys(GENERATED_STRINGS)])).map((language) => [
+    language,
+    {
+      ...(STRINGS[language] || {}),
+      ...(GENERATED_STRINGS[language] || {}),
+    },
+  ]),
+);
 
 function titleCase(text) {
   if (!text) {
