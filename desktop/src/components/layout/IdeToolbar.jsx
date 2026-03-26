@@ -1,6 +1,6 @@
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { commandLabel, progressCaption, statusTone } from "../../utils";
+import { commandLabel, statusTone, toolbarProgressCaption } from "../../utils";
 
 export function IdeToolbar({
   projectDetail,
@@ -38,7 +38,7 @@ export function IdeToolbar({
         </div>
         <div className="toolbar-status toolbar-status--neutral">
           <span>{t("toolbar.plan")}</span>
-          <strong>{progressCaption(planDraft, language)}</strong>
+          <strong>{toolbarProgressCaption(planDraft)}</strong>
         </div>
       </div>
 

@@ -10,7 +10,8 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from jakal_flow.ui_bridge import run_command, runtime_from_payload
+from jakal_flow.models import ExecutionPlanState, ExecutionStep
+from jakal_flow.ui_bridge import progress_caption, run_command, runtime_from_payload
 
 
 def local_temp_root() -> Path:
@@ -86,6 +87,21 @@ def fake_codex_snapshot() -> mock.Mock:
 
 
 class UIBridgeTests(unittest.TestCase):
+    def test_progress_caption_reports_ready_nodes_for_parallel_dag(self) -> None:
+        caption = progress_caption(
+            ExecutionPlanState(
+                execution_mode="parallel",
+                steps=[
+                    ExecutionStep(step_id="ST1", title="Root", status="completed"),
+                    ExecutionStep(step_id="ST2", title="Frontend", depends_on=["ST1"], owned_paths=["desktop/src"]),
+                    ExecutionStep(step_id="ST3", title="Backend", depends_on=["ST1"], owned_paths=["src/jakal_flow"]),
+                    ExecutionStep(step_id="ST4", title="Closeout", depends_on=["ST2", "ST3"], owned_paths=["docs"]),
+                ],
+            )
+        )
+
+        self.assertEqual(caption, "Completed 1/4 steps, ready: ST2, ST3")
+
     def test_runtime_from_payload_coerces_invalid_scalar_values(self) -> None:
         runtime = runtime_from_payload(
             {
