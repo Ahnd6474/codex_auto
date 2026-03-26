@@ -150,10 +150,11 @@ Initialization:
 1. Creates an isolated project directory under the workspace
 2. Clones or updates the target repository into `repo/`
 3. Scans `README.md`, `AGENTS.md`, and `repo/docs/**`
-4. Creates or refreshes `docs/PLAN.md` from repository context or an optional plan prompt
-5. Creates `docs/SCOPE_GUARD.md`, `docs/MID_TERM_PLAN.md`, memory files, and loop state
-6. Builds a checkpoint timeline from the saved plan
-7. Records the current safe git revision
+4. Uses `src/codex_auto/docs/REFERENCE_GUIDE.md` as the default planning preference guide when the request leaves implementation choices unspecified
+5. Creates or refreshes `docs/PLAN.md` from repository context or an optional plan prompt
+6. Creates `docs/SCOPE_GUARD.md`, `docs/MID_TERM_PLAN.md`, memory files, and loop state
+7. Builds a checkpoint timeline from the saved plan
+8. Records the current safe git revision
 
 Each run block:
 
@@ -197,6 +198,7 @@ The tool creates or maintains these files for each managed repository project:
 
 Source prompt and scope templates:
 
+- `src/codex_auto/docs/REFERENCE_GUIDE.md`
 - `src/codex_auto/docs/PLAN_GENERATION_PROMPT.txt`
 - `src/codex_auto/docs/STEP_EXECUTION_PROMPT.txt`
 - `src/codex_auto/docs/FINALIZATION_PROMPT.txt`

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 import unittest
 from pathlib import Path
 import shutil
@@ -24,11 +25,16 @@ from codex_auto.orchestrator import Orchestrator
 from codex_auto.planning import (
     FINALIZATION_PROMPT_FILENAME,
     PLAN_GENERATION_PROMPT_FILENAME,
+    REFERENCE_GUIDE_FILENAME,
     SCOPE_GUARD_TEMPLATE_FILENAME,
     STEP_EXECUTION_PROMPT_FILENAME,
+    bootstrap_plan_prompt,
     execution_plan_svg,
+    load_reference_guide_text,
     load_source_prompt_template,
     parse_execution_plan_response,
+    prompt_to_execution_plan_prompt,
+    scan_repository_inputs,
     source_prompt_template_path,
 )
 from codex_auto.utils import append_jsonl, read_jsonl_tail, read_last_jsonl
@@ -295,9 +301,12 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertTrue(source_prompt_template_path(STEP_EXECUTION_PROMPT_FILENAME).exists())
         self.assertTrue(source_prompt_template_path(FINALIZATION_PROMPT_FILENAME).exists())
         self.assertTrue(source_prompt_template_path(SCOPE_GUARD_TEMPLATE_FILENAME).exists())
+        self.assertTrue(source_prompt_template_path(REFERENCE_GUIDE_FILENAME).exists())
         self.assertIn("{repo_dir}", plan_template)
         self.assertIn("{user_prompt}", plan_template)
         self.assertIn("{max_steps}", plan_template)
+        self.assertIn("{reference_notes}", plan_template)
+        self.assertIn("src/codex_auto/docs/REFERENCE_GUIDE.md", plan_template)
         self.assertIn("{task_title}", step_template)
         self.assertIn("{display_description}", step_template)
         self.assertIn("{codex_description}", step_template)
@@ -307,6 +316,40 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("{closeout_report_file}", final_template)
         self.assertIn("{test_command}", final_template)
         self.assertIn("{repo_url}", scope_template)
+
+    def test_scan_repository_inputs_and_source_reference_guide_feed_planning_prompts(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_reference_notes_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        repo_dir = temp_root / "repo"
+        (repo_dir / "docs").mkdir(parents=True, exist_ok=True)
+        (repo_dir / "README.md").write_text("README summary", encoding="utf-8")
+        (repo_dir / "AGENTS.md").write_text("AGENTS summary", encoding="utf-8")
+        (repo_dir / "docs" / "notes.md").write_text("docs summary", encoding="utf-8")
+
+        try:
+            repo_inputs = scan_repository_inputs(repo_dir)
+            self.assertIn("notes.md", repo_inputs["docs"])
+            reference_notes = load_reference_guide_text()
+            self.assertIn("JavaScript", reference_notes)
+
+            context = SimpleNamespace(
+                paths=SimpleNamespace(repo_dir=repo_dir, plan_file=temp_root / "managed-docs" / "PLAN.md"),
+                metadata=SimpleNamespace(
+                    repo_url="https://github.com/example/project.git",
+                    branch="main",
+                ),
+            )
+            plan_prompt = prompt_to_execution_plan_prompt(context, repo_inputs, "Build a desktop flow screen.", 4)
+            bootstrap_prompt = bootstrap_plan_prompt(context, repo_inputs, "Build a desktop flow screen.")
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertIn("Use the following priority order while planning:", plan_prompt)
+        self.assertIn("src/codex_auto/docs/REFERENCE_GUIDE.md", plan_prompt)
+        self.assertIn("JavaScript", plan_prompt)
+        self.assertIn("1. Follow AGENTS.md and explicit repository constraints first.", bootstrap_prompt)
+        self.assertIn("src/codex_auto/docs/REFERENCE_GUIDE.md", bootstrap_prompt)
+        self.assertIn("JavaScript", bootstrap_prompt)
 
     def test_ensure_gitignore_adds_missing_entries_once(self) -> None:
         project_dir = Path(__file__).resolve().parents[1] / ".tmp_gitignore_test"

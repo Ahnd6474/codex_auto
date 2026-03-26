@@ -21,6 +21,8 @@ PLAN_GENERATION_PROMPT_FILENAME = "PLAN_GENERATION_PROMPT.txt"
 STEP_EXECUTION_PROMPT_FILENAME = "STEP_EXECUTION_PROMPT.txt"
 FINALIZATION_PROMPT_FILENAME = "FINALIZATION_PROMPT.txt"
 SCOPE_GUARD_TEMPLATE_FILENAME = "SCOPE_GUARD_TEMPLATE.md"
+REFERENCE_GUIDE_FILENAME = "REFERENCE_GUIDE.md"
+REFERENCE_GUIDE_DISPLAY_PATH = f"src/codex_auto/docs/{REFERENCE_GUIDE_FILENAME}"
 
 
 def source_docs_dir() -> Path:
@@ -33,6 +35,11 @@ def source_prompt_template_path(name: str) -> Path:
 
 def load_source_prompt_template(name: str) -> str:
     return source_prompt_template_path(name).read_text(encoding="utf-8")
+
+
+def load_reference_guide_text() -> str:
+    text = read_text(source_prompt_template_path(REFERENCE_GUIDE_FILENAME))
+    return compact_text(text, 1500) or f"{REFERENCE_GUIDE_DISPLAY_PATH} not found."
 
 
 def scan_repository_inputs(repo_dir: Path) -> dict[str, str]:
@@ -73,6 +80,7 @@ def assess_repository_maturity(repo_dir: Path, repo_inputs: dict[str, str]) -> t
 def generate_project_plan(context: ProjectContext, repo_inputs: dict[str, str]) -> str:
     repo_name = context.metadata.repo_url.rstrip("/").split("/")[-1].removesuffix(".git")
     seed_goals = _derive_seed_goals(repo_inputs)
+    reference_notes = load_reference_guide_text()
     lines = [
         "# Project Plan",
         "",
@@ -87,6 +95,9 @@ def generate_project_plan(context: ProjectContext, repo_inputs: dict[str, str]) 
         "",
         "### AGENTS",
         repo_inputs["agents"],
+        "",
+        "### Reference Notes",
+        reference_notes,
         "",
         "### Docs",
         repo_inputs["docs"],
@@ -120,12 +131,18 @@ def is_plan_markdown(text: str) -> bool:
 
 
 def bootstrap_plan_prompt(context: ProjectContext, repo_inputs: dict[str, str], user_prompt: str) -> str:
+    reference_notes = load_reference_guide_text()
     return "\n".join(
         [
             "Draft a project plan in markdown and write it to the managed planning file outside the repo.",
             f"Target file: {context.paths.plan_file}",
             "The repository is early-stage or insufficiently documented, so the plan must be prompt-based.",
-            "Use the user's prompt as the primary product direction.",
+            "Use the following priority order while planning:",
+            "1. Follow AGENTS.md and explicit repository constraints first.",
+            "2. Use the user's prompt as the primary product direction within those constraints.",
+            f"3. Use {REFERENCE_GUIDE_DISPLAY_PATH} for unstated implementation preferences and tie-breakers.",
+            "4. Use README.md and other repository docs to align with existing structure and terminology.",
+            "5. Fall back to generic defaults only when the repository sources above do not decide the issue.",
             "Keep the plan concrete, scoped, and testable.",
             "Prefer a fully runnable prototype over competitive polish.",
             "Add directly necessary setup, integration, validation, cleanup, and supporting implementation work even if the user did not spell out each item.",
@@ -139,6 +156,8 @@ def bootstrap_plan_prompt(context: ProjectContext, repo_inputs: dict[str, str], 
             f"README:\n{repo_inputs['readme']}",
             "",
             f"AGENTS:\n{repo_inputs['agents']}",
+            "",
+            f"{REFERENCE_GUIDE_DISPLAY_PATH}:\n{reference_notes}",
             "",
             f"docs summary:\n{repo_inputs['docs']}",
             "",
@@ -293,6 +312,7 @@ def work_breakdown_prompt(
     memory_context: str,
     max_items: int,
 ) -> str:
+    reference_notes = load_reference_guide_text()
     return "\n".join(
         [
             f"You are planning work for the managed repository at {context.paths.repo_dir}.",
@@ -311,6 +331,15 @@ def work_breakdown_prompt(
             f"README:\n{repo_inputs['readme']}",
             "",
             f"AGENTS:\n{repo_inputs['agents']}",
+            "",
+            "Planning priority order:",
+            "1. Follow AGENTS.md and explicit repository constraints first.",
+            "2. Use the user request as the primary product goal within those constraints.",
+            f"3. Use {REFERENCE_GUIDE_DISPLAY_PATH} for unstated implementation preferences and tie-breakers.",
+            "4. Use README.md and other repository docs to align with the existing structure.",
+            "5. Fall back to generic defaults only if the repository sources above do not decide the issue.",
+            "",
+            f"Reference notes ({REFERENCE_GUIDE_DISPLAY_PATH}):\n{reference_notes}",
             "",
             f"Docs:\n{repo_inputs['docs']}",
             "",
@@ -337,6 +366,7 @@ def prompt_to_execution_plan_prompt(
             max_steps=max(3, max_steps),
             readme=repo_inputs["readme"],
             agents=repo_inputs["agents"],
+            reference_notes=load_reference_guide_text(),
             docs=repo_inputs["docs"],
             user_prompt=user_prompt.strip(),
         )
