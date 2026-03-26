@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import shutil
 from pathlib import Path
 
 from .models import CommandResult
@@ -113,6 +114,28 @@ class GitOps:
 
     def push(self, repo_dir: Path, branch: str) -> None:
         self.run(["push", "origin", branch], cwd=repo_dir)
+
+    def add_worktree(self, repo_dir: Path, worktree_dir: Path, branch_name: str, start_point: str) -> None:
+        worktree_dir.parent.mkdir(parents=True, exist_ok=True)
+        self.run(["worktree", "add", "-b", branch_name, str(worktree_dir), start_point], cwd=repo_dir)
+
+    def remove_worktree(self, repo_dir: Path, worktree_dir: Path, force: bool = True) -> None:
+        args = ["worktree", "remove"]
+        if force:
+            args.append("--force")
+        args.append(str(worktree_dir))
+        self.run(args, cwd=repo_dir, check=False)
+        shutil.rmtree(worktree_dir, ignore_errors=True)
+
+    def delete_branch(self, repo_dir: Path, branch_name: str, force: bool = True) -> None:
+        args = ["branch", "-D" if force else "-d", branch_name]
+        self.run(args, cwd=repo_dir, check=False)
+
+    def cherry_pick(self, repo_dir: Path, revision: str) -> None:
+        self.run(["cherry-pick", revision], cwd=repo_dir)
+
+    def abort_cherry_pick(self, repo_dir: Path) -> None:
+        self.run(["cherry-pick", "--abort"], cwd=repo_dir, check=False)
 
     def hard_reset(self, repo_dir: Path, revision: str) -> None:
         self.run(["reset", "--hard", revision], cwd=repo_dir)

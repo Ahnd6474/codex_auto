@@ -29,6 +29,8 @@ class RuntimeOptions:
     codex_base_slug: str = ""
     codex_variant_slug: str = ""
     effort: str = "medium"
+    execution_mode: str = "serial"
+    parallel_workers: int = 2
     extra_prompt: str = ""
     init_plan_prompt: str = ""
     approval_mode: str = "never"
@@ -234,6 +236,7 @@ class ExecutionStep:
     test_command: str = ""
     success_criteria: str = ""
     reasoning_effort: str = ""
+    parallel_group: str = ""
     status: str = "pending"
     started_at: str | None = None
     completed_at: str | None = None
@@ -256,6 +259,7 @@ class ExecutionStep:
             test_command=str(data.get("test_command", "")).strip(),
             success_criteria=str(data.get("success_criteria", "")).strip(),
             reasoning_effort=str(data.get("reasoning_effort", data.get("effort", ""))).strip().lower(),
+            parallel_group=str(data.get("parallel_group", "")).strip(),
             status=str(data.get("status", "pending")).strip() or "pending",
             started_at=data.get("started_at"),
             completed_at=data.get("completed_at"),
@@ -269,6 +273,7 @@ class ExecutionPlanState:
     plan_title: str = ""
     project_prompt: str = ""
     summary: str = ""
+    execution_mode: str = "serial"
     default_test_command: str = "python -m pytest"
     last_updated_at: str | None = None
     closeout_status: str = "not_started"
@@ -293,6 +298,7 @@ class ExecutionPlanState:
             plan_title=str(data.get("plan_title", data.get("title", ""))).strip(),
             project_prompt=str(data.get("project_prompt", "")).strip(),
             summary=str(data.get("summary", "")).strip(),
+            execution_mode=str(data.get("execution_mode", "serial")).strip().lower() or "serial",
             default_test_command=str(data.get("default_test_command", "python -m pytest")).strip() or "python -m pytest",
             last_updated_at=data.get("last_updated_at"),
             closeout_status=str(data.get("closeout_status", "not_started")).strip() or "not_started",

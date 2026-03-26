@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from copy import deepcopy
 import subprocess
+import shutil
 from pathlib import Path
+from uuid import uuid4
 
 from .environment import ensure_gitignore, ensure_virtualenv
 from .codex_runner import CodexRunner
 from .git_ops import GitOps
 from .memory import MemoryStore
 from .model_selection import normalize_reasoning_effort
-from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, ProjectContext, RuntimeOptions, TestRunResult
+from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, LoopState, ProjectContext, ProjectPaths, RepoMetadata, RuntimeOptions, TestRunResult
 from .planning import (
     FINALIZATION_PROMPT_FILENAME,
     PLAN_GENERATION_PROMPT_FILENAME,
@@ -42,7 +46,7 @@ from .planning import (
     load_source_prompt_template,
 )
 from .reporting import Reporter
-from .utils import decode_process_output, now_utc_iso, read_json, read_last_jsonl, read_text, write_json, write_text
+from .utils import decode_process_output, ensure_dir, now_utc_iso, read_json, read_last_jsonl, read_text, write_json, write_text
 from .workspace import WorkspaceManager
 
 
@@ -136,6 +140,7 @@ class Orchestrator:
             repo_inputs=repo_inputs,
             user_prompt=project_prompt,
             max_steps=max_steps,
+            execution_mode=self._normalize_execution_mode(runtime.execution_mode),
             template_text=planning_prompt_template,
         )
         result = runner.run_pass(
@@ -173,6 +178,7 @@ class Orchestrator:
             plan_title=plan_title.strip() or context.metadata.display_name or context.metadata.slug,
             project_prompt=project_prompt.strip(),
             summary=summary.strip(),
+            execution_mode=self._normalize_execution_mode(runtime.execution_mode),
             default_test_command=runtime.test_cmd,
             last_updated_at=now_utc_iso(),
             steps=steps,
@@ -217,6 +223,7 @@ class Orchestrator:
     def save_execution_plan_state(self, context: ProjectContext, plan_state: ExecutionPlanState) -> ExecutionPlanState:
         normalized_steps: list[ExecutionStep] = []
         fallback_effort = normalize_reasoning_effort(context.runtime.effort, fallback="high")
+        execution_mode = self._normalize_execution_mode(plan_state.execution_mode or context.runtime.execution_mode)
         for index, step in enumerate(plan_state.steps, start=1):
             normalized_steps.append(
                 ExecutionStep(
@@ -227,6 +234,7 @@ class Orchestrator:
                     test_command=step.test_command.strip() or plan_state.default_test_command or context.runtime.test_cmd,
                     success_criteria=step.success_criteria.strip(),
                     reasoning_effort=normalize_reasoning_effort(step.reasoning_effort, fallback=fallback_effort),
+                    parallel_group=step.parallel_group.strip() if execution_mode == "parallel" else "",
                     status=step.status if step.status else "pending",
                     started_at=step.started_at,
                     completed_at=step.completed_at,
@@ -250,6 +258,7 @@ class Orchestrator:
             plan_title=plan_state.plan_title.strip() or context.metadata.display_name or context.metadata.slug,
             project_prompt=plan_state.project_prompt.strip(),
             summary=plan_state.summary.strip(),
+            execution_mode=execution_mode,
             default_test_command=plan_state.default_test_command.strip() or context.runtime.test_cmd,
             last_updated_at=now_utc_iso(),
             closeout_status=closeout_status,
@@ -276,6 +285,30 @@ class Orchestrator:
         flow_title = state.plan_title or context.metadata.display_name or context.metadata.slug
         write_text(context.paths.execution_flow_svg_file, execution_plan_svg(f"{flow_title} execution flow", state.steps))
         return state
+
+    def pending_execution_batches(self, plan_state: ExecutionPlanState) -> list[list[ExecutionStep]]:
+        remaining = [step for step in plan_state.steps if step.status != "completed"]
+        if not remaining:
+            return []
+        if self._normalize_execution_mode(plan_state.execution_mode) != "parallel":
+            return [[step] for step in remaining]
+
+        batches: list[list[ExecutionStep]] = []
+        index = 0
+        while index < len(remaining):
+            current = remaining[index]
+            group = current.parallel_group.strip()
+            if not group:
+                batches.append([current])
+                index += 1
+                continue
+            batch = [current]
+            index += 1
+            while index < len(remaining) and remaining[index].parallel_group.strip() == group:
+                batch.append(remaining[index])
+                index += 1
+            batches.append(batch)
+        return batches
 
     def run_saved_execution_step(
         self,

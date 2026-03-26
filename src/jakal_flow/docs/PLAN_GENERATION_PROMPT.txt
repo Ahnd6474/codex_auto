@@ -22,6 +22,15 @@ Use the following priority order while planning:
 4. Use README.md and other repository docs to align with the existing structure.
 5. Fall back to generic defaults only if the repository sources above do not decide the issue.
 
+Requested execution mode:
+{execution_mode}
+
+If execution mode is `serial`, plan narrow sequential checkpoints.
+If execution mode is `parallel`, you may assign the same `parallel_group` only to steps that can safely start from the same base revision, touch disjoint areas, and merge later without speculative coordination.
+Keep steps in the same `parallel_group` contiguous in the output order.
+Do not put risky, tightly coupled, or same-file refactors in the same `parallel_group`.
+Do not include the final closeout sweep inside the normal task list. The app runs a separate closeout block after all planned tasks finish.
+
 Return exactly one JSON object with a top-level "tasks" array containing 3 to {max_steps} items.
 
 JSON shape:
@@ -34,6 +43,7 @@ JSON shape:
 "display_description": "one sentence or less for UI display",
 "codex_description": "one paragraph or less with the actual execution instruction for Codex",
 "reasoning_effort": "one of low, medium, high, xhigh based on expected difficulty",
+"parallel_group": "empty string for serial-only work, otherwise a short contiguous batch id like PG1",
 "success_criteria": "clear completion condition that can be judged locally"
 }}
 ]
@@ -47,6 +57,7 @@ Field requirements:
 - "display_description": very short user-facing explanation, no more than one sentence.
 - "codex_description": the actual instruction for Codex, no more than one paragraph, specific enough to execute.
 - "reasoning_effort": choose only `low`, `medium`, `high`, or `xhigh`. Use `low` for narrow mechanical edits, `medium` for normal implementation, `high` for multi-file or tricky work, and `xhigh` only for the hardest investigations or refactors.
+- "parallel_group": use `""` for serial work. In `parallel` mode, use the same short group id only for independently mergeable adjacent tasks that can run together.
 - "success_criteria": a concrete, locally judgeable done condition, describing what must be true when the block is complete.
 
 Do not include markdown fences or commentary outside the JSON.

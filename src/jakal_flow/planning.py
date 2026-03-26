@@ -357,6 +357,7 @@ def prompt_to_execution_plan_prompt(
     repo_inputs: dict[str, str],
     user_prompt: str,
     max_steps: int,
+    execution_mode: str,
     template_text: str | None = None,
 ) -> str:
     template = template_text or load_source_prompt_template(PLAN_GENERATION_PROMPT_FILENAME)
@@ -364,6 +365,7 @@ def prompt_to_execution_plan_prompt(
         return template.format(
             repo_dir=context.paths.repo_dir,
             max_steps=max(3, max_steps),
+            execution_mode=execution_mode.strip().lower() or "serial",
             readme=repo_inputs["readme"],
             agents=repo_inputs["agents"],
             reference_notes=load_reference_guide_text(),
@@ -421,6 +423,7 @@ def parse_execution_plan_response(
             str(item.get("reasoning_effort", item.get("effort", ""))),
             fallback=fallback_effort,
         )
+        parallel_group = str(item.get("parallel_group", "")).strip()
         steps.append(
             ExecutionStep(
                 step_id=f"ST{len(steps) + 1}",
@@ -430,6 +433,7 @@ def parse_execution_plan_response(
                 test_command=str(item.get("test_command", "")).strip() or default_test_command,
                 success_criteria=str(item.get("success_criteria", "")).strip(),
                 reasoning_effort=reasoning_effort,
+                parallel_group=parallel_group,
                 status="pending",
             )
         )
@@ -693,6 +697,9 @@ def execution_plan_markdown(
         "## Execution Summary",
         summary.strip() or "Codex-generated execution plan for the current repository state.",
         "",
+        "## Execution Mode",
+        context.runtime.execution_mode.strip().lower() or "serial",
+        "",
         "## Planned Steps",
     ]
     if not steps:
@@ -704,6 +711,7 @@ def execution_plan_markdown(
                 f"  - UI description: {step.display_description or step.title}",
                 f"  - Codex instruction: {step.codex_description or step.display_description or step.title}",
                 f"  - GPT reasoning: {step.reasoning_effort or context.runtime.effort or 'high'}",
+                f"  - Parallel group: {step.parallel_group or 'none'}",
                 f"  - Verification: {step.test_command or 'Use the default test command.'}",
                 f"  - Success criteria: {step.success_criteria or 'Verification command completes successfully.'}",
             ]
@@ -717,6 +725,7 @@ def execution_plan_markdown(
             "",
             "## Operating Constraints",
             "- Treat each planned step as a checkpoint.",
+            "- Only steps with the same non-empty parallel group may run together in parallel mode.",
             "- Commit and push after a verified step when an origin remote is configured.",
             "- Users may edit only steps that have not started yet.",
             "",
@@ -760,7 +769,7 @@ def execution_plan_svg(title: str, steps: list[ExecutionStep]) -> str:
         status = step.status if step.status in palette else "pending"
         fill, text_fill = palette[status]
         title_text = compact_text(step.title, 70)
-        detail_text = compact_text(step.display_description or step.test_command or "default verification", 58)
+        detail_text = compact_text(step.display_description or step.parallel_group or step.test_command or "default verification", 58)
         parts.extend(
             [
                 f'<rect x="{x}" y="{y}" rx="20" ry="20" width="{box_width}" height="{box_height}" fill="{fill}" />',
