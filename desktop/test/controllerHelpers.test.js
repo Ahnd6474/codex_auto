@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { carryProjectPromptDraft, resolveConfirmation, shouldPreserveProjectPrompt } from "../src/controllerHelpers.js";
+import { carryProjectPromptDraft, nextSidebarTab, resolveConfirmation, shouldPreserveProjectPrompt } from "../src/controllerHelpers.js";
 
 test("resolveConfirmation accepts an explicit native confirmation", async () => {
   const confirmed = await resolveConfirmation(async () => true, () => false, "Delete project?");
@@ -88,4 +88,11 @@ test("carryProjectPromptDraft preserves only the prompt for unfinished work", ()
       closeout_status: "not_started",
     },
   );
+});
+
+test("nextSidebarTab toggles the active sidebar section off on repeat click", () => {
+  assert.equal(nextSidebarTab("projects", "projects"), "");
+  assert.equal(nextSidebarTab("", "workspace"), "workspace");
+  assert.equal(nextSidebarTab("history", "plans"), "plans");
+  assert.equal(nextSidebarTab("plans", ""), "");
 });

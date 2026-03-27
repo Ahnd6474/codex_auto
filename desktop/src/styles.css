@@ -402,6 +402,11 @@ pre {
   flex: 0 0 312px;
 }
 
+.ide-pane--sidebar-collapsed {
+  width: 64px;
+  flex: 0 0 64px;
+}
+
 .ide-pane--bottom {
   background: var(--bg-panel);
 }

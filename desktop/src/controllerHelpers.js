@@ -79,3 +79,12 @@ export function needsExpandedProjectDetail({
   }
   return !bottomCollapsed && bottomTab === "tokens";
 }
+
+export function nextSidebarTab(currentTab, requestedTab) {
+  const current = String(currentTab || "").trim();
+  const requested = String(requestedTab || "").trim();
+  if (!requested) {
+    return "";
+  }
+  return current === requested ? "" : requested;
+}

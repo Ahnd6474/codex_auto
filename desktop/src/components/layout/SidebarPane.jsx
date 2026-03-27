@@ -232,212 +232,214 @@ export function SidebarPane({
     <aside className="ide-sidebar">
       <SidebarSectionTabs activeTab={activeTab} onChange={onChangeTab} tabs={tabs} />
 
-      <div className="sidebar-panel">
-        {activeTab === "projects" ? (
-          <>
-            <div className="sidebar-panel__header">
-              <strong>{t("common.project")}</strong>
-            </div>
-            <label className="sidebar-search">
-              <span>{t("common.filter")}</span>
-              <input value={projectFilter} onChange={(event) => onProjectFilterChange(event.target.value)} placeholder={t("sidebar.searchProjects")} />
-            </label>
-            <div className="action-row">
-              <button className="toolbar-button toolbar-button--ghost" onClick={onNewProject} type="button">
-                {t("action.new")}
-              </button>
-            </div>
-            <div className="sidebar-list">
-              {projects.length ? (
-                projects.map((project) => (
-                  <button
-                    key={project.repo_id}
-                    className={`sidebar-project ${project.repo_id === selectedProjectId ? "selected" : ""} ${
-                      project.repo_id === loadingProjectId ? "loading" : ""
-                    }`}
-                    onClick={() => onSelectProject(project.repo_id)}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      setContextMenu({
-                        kind: "project",
-                        id: project.repo_id,
-                        x: event.clientX,
-                        y: event.clientY,
-                      });
-                    }}
-                    title={t("sidebar.projectContextDelete")}
-                    type="button"
-                  >
-                    <div className="sidebar-project__title">
-                      <strong>{project.display_name}</strong>
-                      <span className={`status-dot status-dot--${statusTone(project.status)}`} />
-                    </div>
-                    <span>{displayStatus(project.status, language)}</span>
-                    <span>{project.detail}</span>
-                  </button>
-                ))
-              ) : (
-                <div className="empty-block">{t("sidebar.emptyProjects")}</div>
-              )}
-            </div>
-            <div className="sidebar-item">
-              <div className="sidebar-item__title">
-                <strong>{t("sidebar.repositoryLink")}</strong>
-                <span className={`status-badge status-badge--${github?.connected ? "success" : "neutral"}`}>{github?.connected ? t("common.connected") : t("common.localOnly")}</span>
+      {activeTab ? (
+        <div className="sidebar-panel">
+          {activeTab === "projects" ? (
+            <>
+              <div className="sidebar-panel__header">
+                <strong>{t("common.project")}</strong>
               </div>
-              <span>{github?.origin_url || t("sidebar.noGithubOrigin")}</span>
-            </div>
-            <div className="sidebar-item">
-              <strong>{t("common.branch")}</strong>
-              <span>{github?.branch || t("common.unknown")}</span>
-            </div>
-            <div className="sidebar-item">
-              <strong>{t("common.repoUrl")}</strong>
-              <span>{github?.repo_url || t("common.unavailable")}</span>
-            </div>
-            {contextMenu?.kind === "project" ? (
-              <div
-                className="context-menu"
-                style={{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }}
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                <button
-                  className="context-menu__item"
-                  onClick={() => {
-                    const repoId = contextMenu.id;
-                    setContextMenu(null);
-                    onArchiveProject(repoId);
-                  }}
-                  type="button"
-                >
-                  {t("action.archiveProject")}
-                </button>
-                <button
-                  className="context-menu__item"
-                  onClick={() => {
-                    const repoId = contextMenu.id;
-                    setContextMenu(null);
-                    onDeleteProject(repoId);
-                  }}
-                  type="button"
-                >
-                  {t("action.deleteProject")}
+              <label className="sidebar-search">
+                <span>{t("common.filter")}</span>
+                <input value={projectFilter} onChange={(event) => onProjectFilterChange(event.target.value)} placeholder={t("sidebar.searchProjects")} />
+              </label>
+              <div className="action-row">
+                <button className="toolbar-button toolbar-button--ghost" onClick={onNewProject} type="button">
+                  {t("action.new")}
                 </button>
               </div>
-            ) : null}
-          </>
-        ) : null}
-
-        {activeTab === "history" ? (
-          <>
-            <div className="sidebar-panel__header">
-              <strong>{t("tab.history")}</strong>
-            </div>
-            <label className="sidebar-search">
-              <span>{t("common.filter")}</span>
-              <input value={projectFilter} onChange={(event) => onProjectFilterChange(event.target.value)} placeholder={t("sidebar.searchProjects")} />
-            </label>
-            <div className="sidebar-list">
-              {historyProjects.length ? (
-                historyProjects.map((project) => (
-                  <button
-                    key={project.archive_id || project.repo_id}
-                    className={`sidebar-project ${project.archive_id === selectedHistoryId ? "selected" : ""}`}
-                    onClick={() => onSelectHistory(project.archive_id)}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      setContextMenu({
-                        kind: "history",
-                        id: project.archive_id,
-                        x: event.clientX,
-                        y: event.clientY,
-                      });
-                    }}
-                    title={t("sidebar.projectContextDelete")}
-                    type="button"
-                  >
-                    <div className="sidebar-project__title">
-                      <strong>{project.display_name}</strong>
-                      <span className={`status-dot status-dot--${statusTone(project.status)}`} />
-                    </div>
-                    <span>{displayStatus(project.status, language)}</span>
-                    <span>{project.detail}</span>
-                  </button>
-                ))
-              ) : (
-                <div className="empty-block">{t("history.noSavedRuns")}</div>
-              )}
-            </div>
-            {contextMenu?.kind === "history" ? (
-              <div
-                className="context-menu"
-                style={{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }}
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                <button
-                  className="context-menu__item"
-                  onClick={() => {
-                    const archiveId = contextMenu.id;
-                    setContextMenu(null);
-                    onDeleteHistoryEntry(archiveId);
-                  }}
-                  type="button"
-                >
-                  {t("action.deleteArchivedRun")}
-                </button>
-              </div>
-            ) : null}
-          </>
-        ) : null}
-
-        {activeTab === "workspace" ? (
-          <>
-            <div className="sidebar-panel__header">
-              <strong>{t("sidebar.explorer")}</strong>
-            </div>
-            <label className="sidebar-search">
-              <span>{t("common.filter")}</span>
-              <input value={workspaceFilter} onChange={(event) => onWorkspaceFilterChange(event.target.value)} placeholder={t("sidebar.searchFiles")} />
-            </label>
-            <div className="sidebar-tree">
-              {filteredWorkspaceTree.length ? filteredWorkspaceTree.map((node) => <TreeNode key={node.path} node={node} filter={deferredWorkspaceFilter} />) : <div className="empty-block">{t("sidebar.emptyWorkspace")}</div>}
-            </div>
-          </>
-        ) : null}
-
-        {activeTab === "plans" ? (
-          <>
-            <div className="sidebar-panel__header">
-              <strong>{t("sidebar.checkpoints")}</strong>
-            </div>
-            <div className="sidebar-group">
               <div className="sidebar-list">
-                {visibleCheckpoints.length ? (
-                  visibleCheckpoints.map((checkpoint) => {
-                    const isPendingCheckpoint =
-                      checkpoint?.status === "awaiting_review" ||
-                      checkpoint?.checkpoint_id === checkpoints?.pending?.checkpoint_id;
-                    return (
-                      <div className={`sidebar-item ${isPendingCheckpoint ? "sidebar-item--checkpoint-live" : ""}`} key={checkpoint.checkpoint_id}>
-                        <div className="sidebar-item__title">
-                          <strong>{checkpoint.checkpoint_id}</strong>
-                          <span className={`status-badge status-badge--${statusTone(checkpoint.status)} ${isPendingCheckpoint ? "status-badge--pulse" : ""}`}>
-                            {displayStatus(checkpoint.status, language)}
-                          </span>
-                        </div>
-                        <span>{checkpoint.title}</span>
-                        <span>{t("sidebar.targetBlock", { block: checkpoint.target_block })}</span>
+                {projects.length ? (
+                  projects.map((project) => (
+                    <button
+                      key={project.repo_id}
+                      className={`sidebar-project ${project.repo_id === selectedProjectId ? "selected" : ""} ${
+                        project.repo_id === loadingProjectId ? "loading" : ""
+                      }`}
+                      onClick={() => onSelectProject(project.repo_id)}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        setContextMenu({
+                          kind: "project",
+                          id: project.repo_id,
+                          x: event.clientX,
+                          y: event.clientY,
+                        });
+                      }}
+                      title={t("sidebar.projectContextDelete")}
+                      type="button"
+                    >
+                      <div className="sidebar-project__title">
+                        <strong>{project.display_name}</strong>
+                        <span className={`status-dot status-dot--${statusTone(project.status)}`} />
                       </div>
-                    );
-                  })
+                      <span>{displayStatus(project.status, language)}</span>
+                      <span>{project.detail}</span>
+                    </button>
+                  ))
                 ) : (
-                  <div className="empty-block">{t("sidebar.noRecordedCheckpoints")}</div>
+                  <div className="empty-block">{t("sidebar.emptyProjects")}</div>
                 )}
               </div>
-            </div>
-          </>
-        ) : null}
-      </div>
+              <div className="sidebar-item">
+                <div className="sidebar-item__title">
+                  <strong>{t("sidebar.repositoryLink")}</strong>
+                  <span className={`status-badge status-badge--${github?.connected ? "success" : "neutral"}`}>{github?.connected ? t("common.connected") : t("common.localOnly")}</span>
+                </div>
+                <span>{github?.origin_url || t("sidebar.noGithubOrigin")}</span>
+              </div>
+              <div className="sidebar-item">
+                <strong>{t("common.branch")}</strong>
+                <span>{github?.branch || t("common.unknown")}</span>
+              </div>
+              <div className="sidebar-item">
+                <strong>{t("common.repoUrl")}</strong>
+                <span>{github?.repo_url || t("common.unavailable")}</span>
+              </div>
+              {contextMenu?.kind === "project" ? (
+                <div
+                  className="context-menu"
+                  style={{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }}
+                  onPointerDown={(event) => event.stopPropagation()}
+                >
+                  <button
+                    className="context-menu__item"
+                    onClick={() => {
+                      const repoId = contextMenu.id;
+                      setContextMenu(null);
+                      onArchiveProject(repoId);
+                    }}
+                    type="button"
+                  >
+                    {t("action.archiveProject")}
+                  </button>
+                  <button
+                    className="context-menu__item"
+                    onClick={() => {
+                      const repoId = contextMenu.id;
+                      setContextMenu(null);
+                      onDeleteProject(repoId);
+                    }}
+                    type="button"
+                  >
+                    {t("action.deleteProject")}
+                  </button>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
+          {activeTab === "history" ? (
+            <>
+              <div className="sidebar-panel__header">
+                <strong>{t("tab.history")}</strong>
+              </div>
+              <label className="sidebar-search">
+                <span>{t("common.filter")}</span>
+                <input value={projectFilter} onChange={(event) => onProjectFilterChange(event.target.value)} placeholder={t("sidebar.searchProjects")} />
+              </label>
+              <div className="sidebar-list">
+                {historyProjects.length ? (
+                  historyProjects.map((project) => (
+                    <button
+                      key={project.archive_id || project.repo_id}
+                      className={`sidebar-project ${project.archive_id === selectedHistoryId ? "selected" : ""}`}
+                      onClick={() => onSelectHistory(project.archive_id)}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        setContextMenu({
+                          kind: "history",
+                          id: project.archive_id,
+                          x: event.clientX,
+                          y: event.clientY,
+                        });
+                      }}
+                      title={t("sidebar.projectContextDelete")}
+                      type="button"
+                    >
+                      <div className="sidebar-project__title">
+                        <strong>{project.display_name}</strong>
+                        <span className={`status-dot status-dot--${statusTone(project.status)}`} />
+                      </div>
+                      <span>{displayStatus(project.status, language)}</span>
+                      <span>{project.detail}</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="empty-block">{t("history.noSavedRuns")}</div>
+                )}
+              </div>
+              {contextMenu?.kind === "history" ? (
+                <div
+                  className="context-menu"
+                  style={{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }}
+                  onPointerDown={(event) => event.stopPropagation()}
+                >
+                  <button
+                    className="context-menu__item"
+                    onClick={() => {
+                      const archiveId = contextMenu.id;
+                      setContextMenu(null);
+                      onDeleteHistoryEntry(archiveId);
+                    }}
+                    type="button"
+                  >
+                    {t("action.deleteArchivedRun")}
+                  </button>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
+          {activeTab === "workspace" ? (
+            <>
+              <div className="sidebar-panel__header">
+                <strong>{t("sidebar.explorer")}</strong>
+              </div>
+              <label className="sidebar-search">
+                <span>{t("common.filter")}</span>
+                <input value={workspaceFilter} onChange={(event) => onWorkspaceFilterChange(event.target.value)} placeholder={t("sidebar.searchFiles")} />
+              </label>
+              <div className="sidebar-tree">
+                {filteredWorkspaceTree.length ? filteredWorkspaceTree.map((node) => <TreeNode key={node.path} node={node} filter={deferredWorkspaceFilter} />) : <div className="empty-block">{t("sidebar.emptyWorkspace")}</div>}
+              </div>
+            </>
+          ) : null}
+
+          {activeTab === "plans" ? (
+            <>
+              <div className="sidebar-panel__header">
+                <strong>{t("sidebar.checkpoints")}</strong>
+              </div>
+              <div className="sidebar-group">
+                <div className="sidebar-list">
+                  {visibleCheckpoints.length ? (
+                    visibleCheckpoints.map((checkpoint) => {
+                      const isPendingCheckpoint =
+                        checkpoint?.status === "awaiting_review" ||
+                        checkpoint?.checkpoint_id === checkpoints?.pending?.checkpoint_id;
+                      return (
+                        <div className={`sidebar-item ${isPendingCheckpoint ? "sidebar-item--checkpoint-live" : ""}`} key={checkpoint.checkpoint_id}>
+                          <div className="sidebar-item__title">
+                            <strong>{checkpoint.checkpoint_id}</strong>
+                            <span className={`status-badge status-badge--${statusTone(checkpoint.status)} ${isPendingCheckpoint ? "status-badge--pulse" : ""}`}>
+                              {displayStatus(checkpoint.status, language)}
+                            </span>
+                          </div>
+                          <span>{checkpoint.title}</span>
+                          <span>{t("sidebar.targetBlock", { block: checkpoint.target_block })}</span>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="empty-block">{t("sidebar.noRecordedCheckpoints")}</div>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : null}
     </aside>
   );
 }

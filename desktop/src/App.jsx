@@ -3,6 +3,7 @@ import { CenterWorkspace } from "./components/layout/CenterWorkspace";
 import { IdeToolbar } from "./components/layout/IdeToolbar";
 import { RunProgressPanel } from "./components/layout/RunProgressPanel";
 import { SidebarPane } from "./components/layout/SidebarPane";
+import { nextSidebarTab } from "./controllerHelpers";
 import { useDesktopController } from "./hooks/useDesktopController";
 import { useI18n } from "./i18n";
 
@@ -79,10 +80,12 @@ export default function App() {
       ) : null}
 
       <div className="ide-body">
-        <div className="ide-pane ide-pane--sidebar">
+        <div className={`ide-pane ide-pane--sidebar ${controller.sidebarTab ? "" : "ide-pane--sidebar-collapsed"}`.trim()}>
           <SidebarPane
             activeTab={controller.sidebarTab}
-            onChangeTab={controller.setSidebarTab}
+            onChangeTab={(nextTab) =>
+              controller.setSidebarTab((currentTab) => nextSidebarTab(currentTab, nextTab))
+            }
             projects={controller.filteredProjects}
             historyProjects={controller.filteredHistoryProjects}
             selectedProjectId={controller.selectedProjectId}

@@ -1044,6 +1044,45 @@ test("SidebarPane keeps only the new project action below the project search", a
   assert.match(html, /<label class="sidebar-search">[\s\S]*placeholder="Search projects"[\s\S]*<\/label>[\s\S]*>New<\/button>/);
 });
 
+test("SidebarPane hides the content panel when no sidebar icon is active", async () => {
+  const html = await renderBundledComponent(
+    "sidebar-pane-collapsed-render",
+    "./src/components/layout/SidebarPane.jsx",
+    "SidebarPane",
+    {
+      activeTab: "",
+      onChangeTab: noop,
+      projects: [],
+      historyProjects: [],
+      selectedProjectId: "",
+      selectedHistoryId: "",
+      loadingProjectId: "",
+      projectFilter: "",
+      workspaceFilter: "",
+      onProjectFilterChange: noop,
+      onWorkspaceFilterChange: noop,
+      onSelectProject: noop,
+      onSelectHistory: noop,
+      onNewProject: noop,
+      onArchiveProject: noop,
+      onDeleteProject: noop,
+      onDeleteHistoryEntry: noop,
+      workspaceTree: [],
+      checkpoints: { items: [] },
+      github: {
+        connected: false,
+        origin_url: "",
+        branch: "main",
+        repo_url: "",
+      },
+    },
+  );
+
+  assert.match(html, /sidebar-rail/);
+  assert.doesNotMatch(html, /sidebar-panel/);
+  assert.doesNotMatch(html, /Search projects/);
+});
+
 test("DashboardView hides cards that are disabled in program settings", async () => {
   const html = await renderBundledComponent(
     "dashboard-view-render",
