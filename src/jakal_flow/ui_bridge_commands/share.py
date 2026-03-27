@@ -73,6 +73,7 @@ def build_share_command_handlers(
             else None
         )
         public_base_url = str(ctx.payload.get("public_base_url", "")).strip() if "public_base_url" in ctx.payload else None
+        previous_share_status = share_server_status_payload(ctx.workspace_root)
         share_status = start_share_server_process(
             ctx.workspace_root,
             host=bind_host,
@@ -100,11 +101,22 @@ def build_share_command_handlers(
                 append_ui_event(
                     project,
                     "share-tunnel-warning",
-                    "Automatic public tunnel startup failed; the share session was created without a public URL.",
+                    "Automatic public tunnel startup failed; the share session was not created because no public URL is available.",
                     {"error": quick_tunnel_warning},
                 )
         elif public_base_url or effective_bind_host != "0.0.0.0":
             share_server_for_response["public_tunnel"] = stop_public_tunnel(ctx.workspace_root)
+        effective_share_base_url = str(share_server_for_response.get("share_base_url") or "").strip()
+        effective_share_source = str(share_server_for_response.get("share_base_url_source") or "").strip().lower()
+        if not effective_share_base_url or effective_share_source == "local":
+            stop_public_tunnel(ctx.workspace_root)
+            if not bool(previous_share_status.get("running")):
+                stop_share_server_process(ctx.workspace_root)
+            if quick_tunnel_warning:
+                raise RuntimeError(f"Public share URL could not be created. {quick_tunnel_warning}")
+            raise RuntimeError(
+                "Public share URL could not be created. Configure a public base URL or install cloudflared for automatic Quick Tunnel sharing."
+            )
         session = create_share_session(
             project,
             expires_in_minutes=expires_in_minutes,
@@ -129,8 +141,6 @@ def build_share_command_handlers(
             include_token=True,
             server=detail["share"]["server"],
         )
-        if quick_tunnel_warning:
-            detail["share_tunnel_warning"] = quick_tunnel_warning
         return detail
 
     def revoke_share(ctx: BridgeCommandContext) -> dict:

@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from jakal_flow.cli import main as cli_main
 import jakal_flow.ui_bridge_payloads as ui_bridge_payloads
 from jakal_flow.models import ExecutionPlanState, ExecutionStep
+from jakal_flow.share import share_server_status_payload
 from jakal_flow.status_views import effective_project_status
 from jakal_flow.ui_bridge import default_workspace_root, progress_caption, run_command, runtime_from_payload
 
@@ -1667,7 +1668,7 @@ class UIBridgeTests(unittest.TestCase):
             try:
                 server_status = run_command("start_share_server", workspace_root, {})
                 self.assertTrue(server_status["running"])
-                self.assertTrue(str(server_status["base_url"]).startswith("http://127.0.0.1:"))
+                self.assertTrue(str(server_status["base_url"]).startswith("http://0.0.0.0:"))
 
                 with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
                     created = run_command(
@@ -1783,7 +1784,7 @@ class UIBridgeTests(unittest.TestCase):
             finally:
                 run_command("stop_share_server", workspace_root, {})
 
-    def test_share_bridge_falls_back_to_local_share_session_when_quick_tunnel_fails(self) -> None:
+    def test_share_bridge_rejects_local_only_share_session_when_quick_tunnel_fails(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"
             repo_dir = temp_dir / "repo"
@@ -1817,21 +1818,30 @@ class UIBridgeTests(unittest.TestCase):
                     "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
                     side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
                 ):
-                    created = run_command(
-                        "create_share_session",
+                    with self.assertRaisesRegex(RuntimeError, "Public share URL could not be created"):
+                        run_command(
+                            "create_share_session",
+                            workspace_root,
+                            {
+                                "project_dir": str(repo_dir),
+                                "created_by": "unit-test",
+                                "bind_host": "0.0.0.0",
+                                "public_base_url": "",
+                            },
+                        )
+
+                status = share_server_status_payload(workspace_root)
+                self.assertFalse(status["running"])
+                with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
+                    loaded = run_command(
+                        "load-project",
                         workspace_root,
                         {
                             "project_dir": str(repo_dir),
-                            "created_by": "unit-test",
-                            "bind_host": "0.0.0.0",
-                            "public_base_url": "",
+                            "refresh_codex_status": False,
                         },
                     )
-
-                self.assertIn("created_share_session", created)
-                self.assertIn("share_tunnel_warning", created)
-                self.assertIn("quick tunnel startup failed", created["share_tunnel_warning"])
-                self.assertTrue(created["created_share_session"]["local_url"].startswith("http://127.0.0.1:"))
+                self.assertIsNone(loaded["share"]["active_session"])
             finally:
                 run_command("stop_share_server", workspace_root, {})
 

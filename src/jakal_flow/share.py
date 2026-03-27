@@ -19,7 +19,7 @@ from .utils import compact_text, decode_process_output, now_utc_iso, read_json, 
 from .workspace import WorkspaceManager
 
 
-DEFAULT_SHARE_HOST = "127.0.0.1"
+DEFAULT_SHARE_HOST = "0.0.0.0"
 DEFAULT_SHARE_PORT = 0
 DEFAULT_SHARE_TTL_MINUTES = 60
 MAX_PUBLIC_LOG_LINE_CHARS = 240
@@ -66,6 +66,13 @@ def parse_iso_datetime(value: str | None) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
+
+
+def normalize_share_bind_host(value: str) -> str:
+    text = str(value or "").strip()
+    if not text or text == "127.0.0.1":
+        return DEFAULT_SHARE_HOST
+    return text
 
 
 def iso_after_minutes(minutes: int) -> str:
@@ -169,7 +176,7 @@ class ShareServerConfig:
         except (TypeError, ValueError):
             preferred_port = DEFAULT_SHARE_PORT
         return cls(
-            bind_host=str(data.get("bind_host", DEFAULT_SHARE_HOST)).strip() or DEFAULT_SHARE_HOST,
+            bind_host=normalize_share_bind_host(str(data.get("bind_host", DEFAULT_SHARE_HOST)).strip()),
             preferred_port=preferred_port,
             public_base_url=normalize_public_base_url(str(data.get("public_base_url", DEFAULT_SHARE_PUBLIC_BASE_URL)).strip()),
         )

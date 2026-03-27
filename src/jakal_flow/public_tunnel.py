@@ -10,16 +10,22 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from .process_supervisor import hidden_window_creationflags, hidden_window_startupinfo, terminate_process
-from .utils import decode_process_output, now_utc_iso, read_json, write_json
+from .utils import append_jsonl, decode_process_output, now_utc_iso, read_json, write_json
 
 
 DEFAULT_TUNNEL_COMMAND = "cloudflared"
 DEFAULT_TUNNEL_START_TIMEOUT_SECS = 12.0
+DEFAULT_TUNNEL_INSTALL_TIMEOUT_SECS = 180.0
+DEFAULT_CLOUDFLARED_PACKAGE_ID = "Cloudflare.cloudflared"
 TRYCLOUDFLARE_URL_RE = re.compile(r"https://[-a-z0-9]+\.trycloudflare\.com", re.IGNORECASE)
 
 
 def public_tunnel_state_file(workspace_root: Path) -> Path:
     return workspace_root / "public_tunnel.json"
+
+
+def public_tunnel_install_log_file(workspace_root: Path) -> Path:
+    return workspace_root / "public_tunnel_installs.jsonl"
 
 
 @dataclass(slots=True)
@@ -127,6 +133,21 @@ def shutil_which(command: str) -> str | None:
     return which(command)
 
 
+def resolve_winget_path() -> str | None:
+    direct = shutil_which("winget")
+    if direct:
+        return direct
+    if os.name != "nt":
+        return None
+    local_appdata = Path(os.environ.get("LOCALAPPDATA", "")).expanduser()
+    if not local_appdata:
+        return None
+    candidate = local_appdata / "Microsoft" / "WindowsApps" / "winget.exe"
+    if candidate.is_file():
+        return str(candidate)
+    return None
+
+
 def resolve_cloudflared_path(candidate: str = DEFAULT_TUNNEL_COMMAND) -> str | None:
     direct = shutil_which(candidate)
     if direct:
@@ -154,6 +175,129 @@ def extract_trycloudflare_url(text: str) -> str | None:
     return match.group(0) if match else None
 
 
+def _installer_output_excerpt(stdout: str, stderr: str, max_chars: int = 400) -> str:
+    parts = [str(stdout or "").strip(), str(stderr or "").strip()]
+    combined = " | ".join(part for part in parts if part)
+    if len(combined) <= max_chars:
+        return combined
+    return f"{combined[: max_chars - 3].rstrip()}..."
+
+
+def _log_install_event(workspace_root: Path, event_type: str, **details: Any) -> None:
+    append_jsonl(
+        public_tunnel_install_log_file(workspace_root),
+        {
+            "timestamp": now_utc_iso(),
+            "event_type": event_type,
+            **details,
+        },
+    )
+
+
+def install_cloudflared_with_winget(
+    workspace_root: Path,
+    package_id: str = DEFAULT_CLOUDFLARED_PACKAGE_ID,
+) -> str:
+    existing = resolve_cloudflared_path()
+    if existing:
+        return existing
+    if os.name != "nt":
+        raise RuntimeError("Automatic cloudflared installation is only supported on Windows.")
+    winget_path = resolve_winget_path()
+    if not winget_path:
+        raise RuntimeError("cloudflared is not installed and winget is unavailable for automatic installation.")
+    command = [
+        winget_path,
+        "install",
+        "--id",
+        package_id,
+        "--exact",
+        "--source",
+        "winget",
+        "--scope",
+        "user",
+        "--accept-package-agreements",
+        "--accept-source-agreements",
+        "--disable-interactivity",
+    ]
+    _log_install_event(workspace_root, "cloudflared-install-started", command=command, package_id=package_id)
+    run_kwargs: dict[str, Any] = {
+        "check": False,
+        "capture_output": True,
+        "text": True,
+        "encoding": "utf-8",
+        "errors": "replace",
+        "timeout": DEFAULT_TUNNEL_INSTALL_TIMEOUT_SECS,
+        "creationflags": hidden_window_creationflags(),
+        "startupinfo": hidden_window_startupinfo(),
+    }
+    try:
+        completed = subprocess.run(command, **run_kwargs)
+    except subprocess.TimeoutExpired as exc:
+        excerpt = _installer_output_excerpt(str(exc.stdout or ""), str(exc.stderr or ""))
+        _log_install_event(
+            workspace_root,
+            "cloudflared-install-timeout",
+            command=command,
+            package_id=package_id,
+            output_excerpt=excerpt,
+        )
+        raise RuntimeError("Automatic cloudflared installation timed out.") from exc
+    except (OSError, ValueError):
+        if os.name != "nt" or run_kwargs["startupinfo"] is None:
+            raise
+        run_kwargs["startupinfo"] = None
+        completed = subprocess.run(command, **run_kwargs)
+    stdout = str(completed.stdout or "")
+    stderr = str(completed.stderr or "")
+    excerpt = _installer_output_excerpt(stdout, stderr)
+    if completed.returncode != 0:
+        _log_install_event(
+            workspace_root,
+            "cloudflared-install-failed",
+            command=command,
+            package_id=package_id,
+            returncode=int(completed.returncode),
+            output_excerpt=excerpt,
+        )
+        detail = f" {excerpt}" if excerpt else ""
+        raise RuntimeError(
+            f"Automatic cloudflared installation failed via winget (exit {completed.returncode}).{detail}".strip()
+        )
+    resolved = resolve_cloudflared_path()
+    if not resolved:
+        _log_install_event(
+            workspace_root,
+            "cloudflared-install-missing-binary",
+            command=command,
+            package_id=package_id,
+            output_excerpt=excerpt,
+        )
+        raise RuntimeError("cloudflared installation reported success, but the executable could not be found afterward.")
+    _log_install_event(
+        workspace_root,
+        "cloudflared-install-succeeded",
+        command=command,
+        package_id=package_id,
+        command_path=resolved,
+        output_excerpt=excerpt,
+    )
+    return resolved
+
+
+def ensure_cloudflared_path(workspace_root: Path, candidate: str = DEFAULT_TUNNEL_COMMAND) -> str:
+    resolved = resolve_cloudflared_path(candidate)
+    if resolved:
+        return resolved
+    candidate_text = str(candidate or "").strip()
+    candidate_name = Path(candidate_text).name.lower() if candidate_text else DEFAULT_TUNNEL_COMMAND
+    if candidate_name not in {"cloudflared", "cloudflared.exe"}:
+        raise RuntimeError(f"cloudflared executable was not found: {candidate_text}")
+    if os.name == "nt":
+        return install_cloudflared_with_winget(workspace_root)
+    raise RuntimeError("cloudflared is not installed or not on PATH.")
+
+
 def normalize_tunnel_target_url(target_url: str) -> str:
     text = str(target_url).strip().rstrip("/")
     if not text:
@@ -177,9 +321,7 @@ def start_cloudflare_quick_tunnel(workspace_root: Path, target_url: str, cloudfl
     if current.get("running"):
         stop_public_tunnel_process(workspace_root)
 
-    resolved_command = resolve_cloudflared_path(cloudflared_path)
-    if not resolved_command:
-        raise RuntimeError("cloudflared is not installed or not on PATH.")
+    resolved_command = ensure_cloudflared_path(workspace_root, cloudflared_path)
 
     command = [resolved_command, "tunnel", "--url", resolved_target, "--no-autoupdate"]
     popen_kwargs = {
