@@ -1,28 +1,22 @@
 # jakal-flow
 
-`jakal-flow` is a production-oriented Python CLI for managing multiple repositories inside an isolated workspace and repeatedly running a traceable Codex-driven improvement loop against them through Codex CLI, including OpenAI/Codex cloud models, OpenAI-compatible providers such as OpenRouter or OpenCDK, and local model backends ranging from Codex OSS mode to generic OpenAI-compatible local servers.
+`jakal-flow` is a production-oriented Python CLI and desktop shell for running a traceable Codex-driven improvement loop across multiple repositories inside an isolated workspace. It keeps orchestration, logs, plans, memory, reports, rollback state, and share sessions separated per managed repository instead of collapsing everything into a single repo-local state model.
 
-One of the main real-world uses for this project is running sustained automation against repositories such as [`Ahnd6474/lit`](https://github.com/Ahnd6474/lit), where the goal is not a one-off patch but a tracked multi-block implementation loop with plans, checkpoints, rollback safety, and reports.
-
-It is designed around a saved project plan:
-
-- `docs/PLAN.md`: stores the current project plan or reviewed execution plan snapshot
-- `docs/MID_TERM_PLAN.md`: regenerated at block boundaries and kept as a strict subset of the saved plan
-- `docs/CHECKPOINT_TIMELINE.md`: derived from the saved plan and used for review boundaries
+For the Korean guide, see [README.ko.md](README.ko.md).
 
 ## Flow
 
 ![jakal-flow flow chart (EN)](assets/readme-flow.svg)
 
+## Highlights
 
-한국어 문서는 [README.ko.md](README.ko.md)에서 볼 수 있습니다.
-
-## Main Use Cases
-
-- continuously improving a primary repository such as [`Ahnd6474/lit`](https://github.com/Ahnd6474/lit) across multiple safe execution blocks
-- managing several repositories at once without mixing their plans, logs, memory, reports, or rollback state
-- running the same Codex-driven workflow across OpenAI/Codex cloud, OpenAI-compatible providers, and local OSS backends
-- reviewing progress through the desktop UI while preserving a Python-first automation backend and structured project history
+- Multi-repository workspace management under `projects/<repo_slug>/`
+- Python-first orchestration with a React + Tauri desktop shell on top
+- OpenAI / Codex cloud, OpenRouter, OpenCDK, local OpenAI-compatible servers, and Codex OSS local-provider runs
+- Standard software workflow and ML experiment workflow with automatic cycle replanning
+- Parallel DAG step execution with owned-path safety checks and safe-revision rollback
+- Structured project artifacts: plans, checkpoints, logs, memory, reports, SVG views, and UI event history
+- Read-only monitoring links backed by the local share server, optional public base URL, or automatic Cloudflare Quick Tunnel
 
 ## Project Layout
 
@@ -46,61 +40,84 @@ workspace_root/
 python -m pip install -e .
 ```
 
+This installs:
+
+- `jakal-flow`
+- `jakal-flow-ui-bridge`
+
 ## Desktop UI
 
-The current desktop UI lives under `desktop/` as a React + Tauri app.
+The desktop shell lives under `desktop/` and keeps the Python orchestration backend intact through `python -m jakal_flow.ui_bridge`.
 
 Development prerequisites:
 
 - Node.js 20+
 - Rust toolchain with Tauri prerequisites for your OS
-- Python 3.11+ available to the Tauri shell so it can call `python -m jakal_flow.ui_bridge`
+- Python 3.11+ on `PATH`, or set `JAKAL_FLOW_PYTHON`
 
-Run the desktop shell in development:
+Run it in development:
 
 ```bash
 cd desktop
 npm.cmd install
+npm.cmd run test
 npm.cmd run tauri:dev
 ```
 
-The Tauri shell keeps the Python orchestration backend and adds:
+Build it:
 
-- a React setup screen for managed projects, GitHub link mode, model preset selection, and verification commands
-- OpenAI/Codex cloud, OpenRouter, OpenCDK, local OpenAI-compatible endpoints, and local OSS model-provider selection
-- a flow screen with prompt editing, plan generation, step editing, run control, closeout, and stop-after-step requests
-- estimated execution time and cost panels, including live remaining-time updates while a run is active
-- background job polling through a Python JSON bridge instead of keeping UI execution state only in memory
-- desktop UI trace files under each managed project for stop requests and UI event history
+```bash
+cd desktop
+npm.cmd run tauri:build
+```
 
-The desktop app lets you:
+The desktop app adds:
 
-- start from a managed project screen with working directory, display name, GitHub connection mode, and verification command inputs
-- keep managed projects in a reusable list with saved status, summaries, and runtime settings
-- generate, edit, reorder, and persist execution-plan steps
-- switch between the standard software workflow and an ML experiment workflow with automatic cycle replanning
-- always use the parallel DAG execution tree for the remaining steps, letting the scheduler naturally fall back to single-step execution when no safe parallel wave exists, and inspect activity/snapshot traces
-- request stop-after-step and run a separate closeout block after all plan steps complete
-- generate a temporary read-only monitoring link, copy it, and revoke it from the desktop UI
-- keep the Python orchestration backend, workspace layout, logs, reports, and rollback behavior intact
+- managed-project setup with saved runtime settings and project summaries
+- model preset and provider selection, including local-provider discovery for OSS runs
+- plan generation, step editing, stop-after-step requests, closeout, and background job polling
+- estimated time and cost panels driven by runtime billing settings and Codex usage events
+- read-only share link creation and revocation without replacing the Python workspace model
 
-Static website assets are kept separately under `website/`, including the share viewer served by the local monitoring server.
+## Runtime Support
 
-The read-only monitoring flow supports both local-only access and external access through either a user-provided public base URL or an automatic Cloudflare Quick Tunnel:
+Provider presets currently wired into the implementation:
 
-1. start the desktop app
-2. if you want a stable custom domain, start your own reverse proxy or tunnel and note its public base URL
-3. open a managed project, set the share bind host to `0.0.0.0`, optionally enter a public base URL, then generate a share link
-4. if `public_base_url` is empty and `cloudflared` is installed, `jakal-flow` will start a temporary Cloudflare Quick Tunnel automatically and use that public URL
-5. open the generated link on another browser or device
-6. the remote page opens a live event stream for masked status, current task, recent logs, latest test result, and last updated time, with 5-second polling as a fallback
-7. revoke the link in the desktop UI to deny further access
+- `openai`
+- `openrouter`
+- `opencdk`
+- `local_openai`
+- `oss`
 
-The core app still keeps network exposure separate from orchestration. It starts the local share server, stores temporary share sessions, and can generate links that use either a manually supplied public base URL or an automatic temporary Cloudflare Quick Tunnel. Quick Tunnels are convenient for free ad-hoc phone access, but they still depend on your local machine being online and are not a replacement for permanent hosting.
+Local OSS runs support:
 
-## Main Commands
+- `ollama`
+- `lmstudio`
 
-Initialize a managed repository:
+Workflow modes:
+
+- `standard`
+- `ml`
+
+Execution mode is currently normalized to the parallel DAG scheduler across CLI and desktop flows.
+
+## Share Viewer
+
+The read-only monitoring flow is backed by the local Python share server and keeps public access separate from orchestration:
+
+1. Start the desktop app.
+2. Open a managed project.
+3. Configure the share bind host and optional public base URL.
+4. Generate a share link.
+5. If `public_base_url` is empty and `cloudflared` is installed, `jakal-flow` can start a temporary Cloudflare Quick Tunnel automatically.
+6. Open the generated link from another browser or device.
+7. Revoke the session from the desktop UI when you are done.
+
+The shared page exposes masked status, current task, recent logs, latest test result, and last-updated time.
+
+## CLI Examples
+
+Initialize a managed repository and generate the first saved plan:
 
 ```bash
 python -m jakal_flow init-repo \
@@ -109,13 +126,13 @@ python -m jakal_flow init-repo \
   --workspace-root .jakal-flow-workspace \
   --model gpt-5.4 \
   --effort high \
-  --plan-prompt "Build a safe project plan for this repository focused on a narrow MVP and strong tests." \
+  --plan-prompt "Build a safe project plan focused on a narrow MVP and strong tests." \
   --approval-mode never \
   --sandbox-mode workspace-write \
   --test-cmd "python -m pytest"
 ```
 
-Run two improvement blocks:
+Run two standard improvement blocks and generate a Word closeout report:
 
 ```bash
 python -m jakal_flow run \
@@ -124,13 +141,14 @@ python -m jakal_flow run \
   --workspace-root .jakal-flow-workspace \
   --model gpt-5.4 \
   --effort high \
+  --word-report \
   --approval-mode never \
   --sandbox-mode workspace-write \
   --test-cmd "python -m pytest" \
   --max-blocks 2
 ```
 
-Run against a local OSS model through Codex CLI's local-provider mode:
+Run through Codex OSS mode with a local provider:
 
 ```bash
 python -m jakal_flow run \
@@ -147,24 +165,7 @@ python -m jakal_flow run \
   --max-blocks 1
 ```
 
-Run one ML workflow cycle and allow automatic replanning for up to three cycles:
-
-```bash
-python -m jakal_flow run \
-  --repo-url https://github.com/Ahnd6474/lit.git \
-  --branch main \
-  --workspace-root .jakal-flow-workspace \
-  --model gpt-5.4 \
-  --effort high \
-  --workflow-mode ml \
-  --ml-max-cycles 3 \
-  --approval-mode never \
-  --sandbox-mode workspace-write \
-  --test-cmd "python -m pytest" \
-  --max-blocks 6
-```
-
-Run against an OpenAI-compatible provider such as OpenRouter:
+Run against an OpenAI-compatible endpoint such as OpenRouter:
 
 ```bash
 python -m jakal_flow run \
@@ -183,6 +184,40 @@ python -m jakal_flow run \
   --max-blocks 1
 ```
 
+Run against a local OpenAI-compatible server:
+
+```bash
+python -m jakal_flow run \
+  --repo-url https://github.com/Ahnd6474/lit.git \
+  --branch main \
+  --workspace-root .jakal-flow-workspace \
+  --model-provider local_openai \
+  --provider-base-url http://127.0.0.1:1234/v1 \
+  --model llama-3.1-8b-instruct \
+  --effort medium \
+  --approval-mode never \
+  --sandbox-mode workspace-write \
+  --test-cmd "python -m pytest" \
+  --max-blocks 1
+```
+
+Run an ML workflow with automatic cycle replanning:
+
+```bash
+python -m jakal_flow run \
+  --repo-url https://github.com/Ahnd6474/lit.git \
+  --branch main \
+  --workspace-root .jakal-flow-workspace \
+  --model gpt-5.4 \
+  --effort high \
+  --workflow-mode ml \
+  --ml-max-cycles 3 \
+  --approval-mode never \
+  --sandbox-mode workspace-write \
+  --test-cmd "python -m pytest" \
+  --max-blocks 6
+```
+
 Resume a managed repository:
 
 ```bash
@@ -198,52 +233,41 @@ python -m jakal_flow resume \
   --max-blocks 1
 ```
 
-List all managed repositories:
+Inspect managed repositories and reports:
 
 ```bash
 python -m jakal_flow list-repos --workspace-root .jakal-flow-workspace
-```
-
-Inspect status, history, and reports:
-
-```bash
-python -m jakal_flow status --repo-url https://github.com/Ahnd6474/lit.git --branch main
-python -m jakal_flow history --repo-url https://github.com/Ahnd6474/lit.git --branch main --limit 20
-python -m jakal_flow report --repo-url https://github.com/Ahnd6474/lit.git --branch main
+python -m jakal_flow status --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
+python -m jakal_flow history --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace --limit 20
+python -m jakal_flow report --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
 ```
 
 ## How It Works
 
 Initialization:
 
-1. Creates an isolated project directory under the workspace
-2. Clones or updates the target repository into `repo/`
-3. Scans `README.md`, `AGENTS.md`, and `repo/docs/**`
-4. Uses `src/jakal_flow/docs/REFERENCE_GUIDE.md` as the default planning preference guide when the request leaves implementation choices unspecified
-5. Creates or refreshes `docs/PLAN.md` from repository context or an optional plan prompt
-6. Creates `docs/SCOPE_GUARD.md`, `docs/MID_TERM_PLAN.md`, memory files, and loop state
-7. Builds a checkpoint timeline from the saved plan
-8. Records the current safe git revision
+1. Creates an isolated project directory under the workspace.
+2. Clones or updates the target repository into `repo/`.
+3. Scans `README.md`, `AGENTS.md`, and `repo/docs/**`.
+4. Uses `src/jakal_flow/docs/REFERENCE_GUIDE.md` as a planning preference guide when the repository does not resolve a choice.
+5. Creates or refreshes `docs/PLAN.md`, `docs/SCOPE_GUARD.md`, `docs/MID_TERM_PLAN.md`, memory files, and loop state.
+6. Builds the checkpoint timeline and records the current safe revision.
 
 Each run block:
 
-1. Retrieves relevant memory from prior attempts
-2. Rebuilds a mid-term plan from the saved plan
-3. Generates 2-3 candidate tasks and selects one
-4. Runs one search-enabled Codex pass for the selected block
-5. Runs tests after the pass
-   If the repository tree, verification command, and environment fingerprint exactly match a prior validated run, `jakal-flow` replays the cached verification result instead of rerunning the same suite.
-6. Commits only safe validated changes
-7. Stops at checkpoint boundaries for user review when approval is required
-8. Pushes to GitHub when the user approves a checkpoint in the GUI
-9. Rolls back to the previous safe revision on regression
-10. Saves structured logs, reports, block review, and memory summaries
-11. When a failure occurs, writes a PR-ready failure bundle under `reports/` and tries to post it to the open PR if a GitHub token is available
-12. When a parallel cherry-pick merge hits a Git conflict, aborts to the last safe revision and records the conflict procedure instead of auto-picking source code blindly
+1. Loads memory and the saved plan context.
+2. Rebuilds the mid-term subset from the saved plan.
+3. Generates or updates the execution plan.
+4. Executes dependency-ready steps through the parallel scheduler.
+5. Runs verification, with cache replay when repository state and test fingerprint match a validated run exactly.
+6. Commits only safe validated changes.
+7. Rolls back to the previous safe revision on regression or unsafe merge outcomes.
+8. Writes logs, reports, SVG summaries, review notes, and memory updates.
+9. Optionally pushes validated commits when `--allow-push` is enabled and an `origin` remote is configured.
 
-## Repository Files Managed Per Project
+## Managed Project Artifacts
 
-The tool creates or maintains these files for each managed repository project:
+Each managed project can contain files such as:
 
 - `docs/PLAN.md`
 - `docs/MID_TERM_PLAN.md`
@@ -252,53 +276,36 @@ The tool creates or maintains these files for each managed repository project:
 - `docs/BLOCK_REVIEW.md`
 - `docs/CHECKPOINT_TIMELINE.md`
 - `docs/CLOSEOUT_REPORT.md`
+- `docs/EXECUTION_FLOW.svg`
 - `docs/ML_EXPERIMENT_REPORT.md`
+- `docs/ML_EXPERIMENT_RESULTS.svg`
 - `docs/RESEARCH_NOTES.md`
 - `docs/attempt_history.md`
-- `state/LOOP_STATE.json`
-- `state/CHECKPOINTS.json`
-- `state/ML_MODE_STATE.json`
-- `state/ML_STEP_REPORT.json`
-- `state/ml_experiments/*.json`
-- `state/verification_cache/*.json`
-- `state/share_sessions.json`
 - `memory/success_patterns.jsonl`
 - `memory/failure_patterns.jsonl`
 - `memory/task_summaries.jsonl`
 - `logs/passes.jsonl`
 - `logs/blocks.jsonl`
+- `logs/test_runs.jsonl`
 - `logs/ui_events.jsonl`
 - `reports/latest_report.json`
 - `reports/*pr_failure.json`
 - `reports/*pr_failure.md`
 - `reports/latest_pr_failure_status.json`
+- `state/LOOP_STATE.json`
+- `state/CHECKPOINTS.json`
+- `state/ML_MODE_STATE.json`
+- `state/ML_STEP_REPORT.json`
+- `state/UI_RUN_CONTROL.json`
+- `state/ml_experiments/*.json`
+- `state/share_sessions.json`
+- `state/verification_cache/*.json`
 - `metadata.json`
 - `project_config.json`
-- `state/UI_RUN_CONTROL.json`
-
-Source prompt and scope templates:
-
-- `src/jakal_flow/docs/REFERENCE_GUIDE.md`
-- `src/jakal_flow/docs/PLAN_GENERATION_SERIAL_PROMPT.txt`
-- `src/jakal_flow/docs/PLAN_GENERATION_PARALLEL_PROMPT.txt`
-- `src/jakal_flow/docs/STEP_EXECUTION_SERIAL_PROMPT.txt`
-- `src/jakal_flow/docs/STEP_EXECUTION_PARALLEL_PROMPT.txt`
-- `src/jakal_flow/docs/FINALIZATION_PROMPT.txt`
-- `src/jakal_flow/docs/ML_PLAN_GENERATION_PROMPT.txt`
-- `src/jakal_flow/docs/ML_STEP_EXECUTION_PROMPT.txt`
-- `src/jakal_flow/docs/ML_FINALIZATION_PROMPT.txt`
-- `src/jakal_flow/docs/SCOPE_GUARD_TEMPLATE.md`
 
 ## Notes
 
-- `codex exec` is invoked through subprocess in non-interactive mode and JSON event streams are saved under `logs/block_*/`
-- local OSS runs are still executed through Codex CLI, using its `--oss` and `--local-provider` flags when a project runtime selects a local provider
-- the GUI saves both the resolved execution model slug and the selected preset in `project_config.json`; auto-model presets are normalized to `auto`, `low`, `medium`, `high`, or `xhigh`, and previously saved custom model slugs are still preserved
-- `reasoning.effort` is passed through to Codex using `low`, `medium`, `high`, or `xhigh`; saved execution-plan steps can override the project default per step
-- `--workflow-mode ml` switches the planner/executor/closeout prompts into an ML experiment loop with structured experiment reports and automatic next-cycle planning until a stop condition or `--ml-max-cycles` is reached
-- token usage is aggregated from `turn.completed` JSON events and surfaced in the GUI dashboard and pass logs
-- each repository gets its own isolated workspace subtree; no mutable state is shared across projects
-- local git user identity is configured in the managed clone for automated commits
-- `--allow-push` pushes safe commits to `origin` after successful blocks
-- set `JAKAL_FLOW_GITHUB_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN` if you want automatic PR failure comments
-- default `--max-blocks` is `1` for safer operation; increase it explicitly when needed
+- `codex exec` is invoked non-interactively and JSON event streams are persisted under `logs/block_*/`.
+- Local OSS runs still go through Codex CLI, using its OSS and local-provider flow.
+- The desktop bridge forces UTF-8 stdio on Windows so JSON payloads and Korean text survive the bridge boundary.
+- Default CLI behavior is conservative: `--max-blocks` defaults to `1`, and pushing requires explicit `--allow-push`.
