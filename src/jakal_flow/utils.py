@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from html import escape
 import json
 import locale
 import os
@@ -204,6 +205,61 @@ def compact_text(value: str, max_chars: int = 3_000) -> str:
     if len(stripped) <= max_chars:
         return stripped
     return f"{stripped[: max_chars - 3].rstrip()}..."
+
+
+def wrap_svg_text(value: str, max_chars_per_line: int, max_lines: int = 2) -> list[str]:
+    normalized = re.sub(r"\s+", " ", value).strip()
+    if not normalized or max_chars_per_line <= 0 or max_lines <= 0:
+        return []
+    words = normalized.split(" ")
+    lines: list[str] = []
+    current_words: list[str] = []
+    index = 0
+    while index < len(words):
+        word = words[index]
+        candidate = " ".join([*current_words, word]) if current_words else word
+        if len(candidate) <= max_chars_per_line:
+            current_words.append(word)
+            index += 1
+            continue
+        if current_words:
+            if len(lines) == max_lines - 1:
+                lines.append(compact_text(" ".join([*current_words, *words[index:]]), max_chars_per_line))
+                return lines
+            lines.append(" ".join(current_words))
+            current_words = []
+            continue
+        if len(lines) == max_lines - 1:
+            lines.append(compact_text(word, max_chars_per_line))
+            return lines
+        lines.append(compact_text(word, max_chars_per_line))
+        index += 1
+    if current_words and len(lines) < max_lines:
+        lines.append(" ".join(current_words))
+    return lines
+
+
+def svg_text_element(
+    x: float,
+    y: float,
+    lines: list[str],
+    *,
+    fill: str,
+    font_size: int,
+    font_family: str,
+    font_weight: str | int | None = None,
+    line_height: int | None = None,
+) -> str:
+    if not lines:
+        return ""
+    weight_attr = f' font-weight="{font_weight}"' if font_weight is not None else ""
+    dy = line_height or int(font_size * 1.3)
+    first, *rest = lines
+    tspans = "".join(f'<tspan x="{x}" dy="{dy}">{escape(line)}</tspan>' for line in rest)
+    return (
+        f'<text x="{x}" y="{y}" fill="{fill}" font-family="{font_family}" '
+        f'font-size="{font_size}"{weight_attr}>{escape(first)}{tspans}</text>'
+    )
 
 
 def normalize_workflow_mode(value: Any, fallback: str = "standard") -> str:

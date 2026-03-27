@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import importlib
 from types import SimpleNamespace
-import unittest
 from pathlib import Path
 import shutil
 import sys
+import tempfile
+import unittest
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -21,7 +22,7 @@ from jakal_flow.model_selection import (
     model_selection_from_runtime,
     normalize_model_preset_id,
 )
-from jakal_flow.models import CandidateTask, CodexRunResult, CommandResult, ExecutionPlanState, ExecutionStep, RuntimeOptions, TestRunResult
+from jakal_flow.models import CandidateTask, CodexRunResult, CommandResult, ExecutionPlanState, ExecutionStep, MLExperimentRecord, RuntimeOptions, TestRunResult
 from jakal_flow.orchestrator import Orchestrator
 from jakal_flow.parallel_resources import build_parallel_resource_plan
 from jakal_flow.planning import (
@@ -1236,6 +1237,39 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("ST2", svg)
         self.assertIn("#0f766e", svg)
         self.assertIn("#cbd5e1", svg)
+
+    def test_execution_plan_svg_wraps_long_text_inside_boxes(self) -> None:
+        svg = execution_plan_svg(
+            "demo flow with a very long title that should wrap instead of overflowing the card boundary",
+            [
+                ExecutionStep(
+                    step_id="ST1",
+                    title="A deliberately long execution step title that should wrap across multiple lines",
+                    display_description="A deliberately long description that should stay inside the SVG card instead of spilling outside the box boundary.",
+                    status="running",
+                )
+            ],
+        )
+
+        self.assertIn("<tspan", svg)
+        self.assertIn("execution step title", svg)
+        self.assertIn("description that should s...", svg)
+
+    def test_ml_results_svg_wraps_long_labels(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            svg = Orchestrator(Path(tmpdir))._ml_results_svg(
+                [
+                    MLExperimentRecord(
+                        experiment_id="EXP-1",
+                        step_id="STEP-WITH-A-LONG-ID",
+                        primary_metric="very_long_metric_name_that_should_wrap_inside_the_chart_label",
+                        metric_value=0.9132,
+                    )
+                ]
+            )
+
+        self.assertIn("<tspan", svg)
+        self.assertIn("STEP-WITH-A-LONG-ID", svg)
 
     def test_model_selection_resolves_direct_slug_without_builder(self) -> None:
         selection = ModelSelection(mode=MODEL_MODE_SLUG, direct_slug="gpt-5.4", effort="high")

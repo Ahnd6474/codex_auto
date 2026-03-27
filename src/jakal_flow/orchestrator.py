@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
-from html import escape
 import shutil
 from pathlib import Path
 from uuid import uuid4
@@ -53,7 +52,7 @@ from .planning import (
 )
 from .reporting import Reporter
 from .status_views import status_from_plan_state
-from .utils import compact_text, ensure_dir, normalize_workflow_mode, now_utc_iso, parse_json_text, read_json, read_last_jsonl, read_text, similarity_score, write_json, write_text
+from .utils import compact_text, ensure_dir, normalize_workflow_mode, now_utc_iso, parse_json_text, read_json, read_last_jsonl, read_text, similarity_score, svg_text_element, wrap_svg_text, write_json, write_text
 from .verification import VerificationRunner
 from .workspace import WorkspaceManager
 
@@ -2057,6 +2056,7 @@ class Orchestrator:
         )
 
     def _ml_results_svg(self, records: list[MLExperimentRecord]) -> str:
+        font_family = "Segoe UI, Malgun Gothic, sans-serif"
         numeric = [record for record in records if record.metric_value is not None]
         if not numeric:
             return (
@@ -2067,7 +2067,7 @@ class Orchestrator:
                 "</svg>"
             )
         width = 960
-        row_height = 42
+        row_height = 58
         margin_x = 40
         margin_y = 52
         chart_width = 560
@@ -2079,7 +2079,7 @@ class Orchestrator:
         parts = [
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img">',
             '<rect width="100%" height="100%" fill="#f8fafc" />',
-            f'<text x="{margin_x}" y="30" fill="#0f172a" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="24" font-weight="700">ML experiment results</text>',
+            svg_text_element(margin_x, 30, ["ML experiment results"], fill="#0f172a", font_size=24, font_family=font_family, font_weight="700"),
         ]
         for index, record in enumerate(numeric):
             y = margin_y + index * row_height
@@ -2089,10 +2089,10 @@ class Orchestrator:
             label = f"{record.step_id or record.experiment_id}: {record.primary_metric or 'metric'}"
             parts.extend(
                 [
-                    f'<text x="{margin_x}" y="{y + 18}" fill="#0f172a" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="13">{escape(label)}</text>',
-                    f'<rect x="{margin_x}" y="{y + 24}" rx="8" ry="8" width="{chart_width}" height="12" fill="#e2e8f0" />',
-                    f'<rect x="{margin_x}" y="{y + 24}" rx="8" ry="8" width="{bar_width:.1f}" height="12" fill="#2563eb" />',
-                    f'<text x="{margin_x + chart_width + 20}" y="{y + 35}" fill="#0f172a" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="12">{value:.6g}</text>',
+                    svg_text_element(margin_x, y + 16, wrap_svg_text(compact_text(label, 110), 44, max_lines=2), fill="#0f172a", font_size=13, font_family=font_family, line_height=15),
+                    f'<rect x="{margin_x}" y="{y + 34}" rx="8" ry="8" width="{chart_width}" height="12" fill="#e2e8f0" />',
+                    f'<rect x="{margin_x}" y="{y + 34}" rx="8" ry="8" width="{bar_width:.1f}" height="12" fill="#2563eb" />',
+                    svg_text_element(margin_x + chart_width + 20, y + 45, [f"{value:.6g}"], fill="#0f172a", font_size=12, font_family=font_family),
                 ]
             )
         parts.append("</svg>")

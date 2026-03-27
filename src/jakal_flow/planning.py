@@ -3,12 +3,11 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from html import escape
 from pathlib import Path
 
 from .model_selection import normalize_reasoning_effort
 from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, ProjectContext
-from .utils import compact_text, normalize_workflow_mode, now_utc_iso, parse_json_text, read_text, similarity_score, tokenize, write_text
+from .utils import compact_text, normalize_workflow_mode, now_utc_iso, parse_json_text, read_text, similarity_score, svg_text_element, tokenize, wrap_svg_text, write_text
 
 
 @dataclass(slots=True)
@@ -975,9 +974,10 @@ def _execution_graph_levels(steps: list[ExecutionStep]) -> list[list[ExecutionSt
 
 
 def execution_plan_svg(title: str, steps: list[ExecutionStep], execution_mode: str = "parallel") -> str:
+    font_family = "Segoe UI, Malgun Gothic, sans-serif"
     width = 1180
     box_width = 220
-    box_height = 120
+    box_height = 136
     gap_x = 32
     gap_y = 36
     margin_x = 40
@@ -995,7 +995,7 @@ def execution_plan_svg(title: str, steps: list[ExecutionStep], execution_mode: s
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img">',
         '<rect width="100%" height="100%" fill="#f8fafc" />',
-        f'<text x="{margin_x}" y="34" fill="#0f172a" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="24" font-weight="700">{escape(title)}</text>',
+        svg_text_element(margin_x, 34, wrap_svg_text(title, 70, max_lines=2), fill="#0f172a", font_size=24, font_family=font_family, font_weight="700", line_height=28),
     ]
     uses_dag = execution_mode.strip().lower() == "parallel" and any(step.depends_on or step.owned_paths for step in steps)
     if uses_dag:
@@ -1003,7 +1003,7 @@ def execution_plan_svg(title: str, steps: list[ExecutionStep], execution_mode: s
         dag_margin_x = 48
         dag_margin_y = 68
         dag_box_width = 220
-        dag_box_height = 112
+        dag_box_height = 136
         dag_gap_x = 92
         dag_gap_y = 28
         dag_width = max(
@@ -1017,13 +1017,13 @@ def execution_plan_svg(title: str, steps: list[ExecutionStep], execution_mode: s
         parts = [
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{dag_width}" height="{dag_height}" viewBox="0 0 {dag_width} {dag_height}" role="img">',
             '<rect width="100%" height="100%" fill="#f8fafc" />',
-            f'<text x="{dag_margin_x}" y="34" fill="#0f172a" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="24" font-weight="700">{escape(title)}</text>',
+            svg_text_element(dag_margin_x, 34, wrap_svg_text(title, 70, max_lines=2), fill="#0f172a", font_size=24, font_family=font_family, font_weight="700", line_height=28),
         ]
         positions: dict[str, tuple[float, float]] = {}
         for level_index, level in enumerate(levels):
             x = dag_margin_x + level_index * (dag_box_width + dag_gap_x)
             parts.append(
-                f'<text x="{x}" y="56" fill="#475569" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="13" font-weight="600">Layer {level_index + 1}</text>'
+                svg_text_element(x, 56, [f"Layer {level_index + 1}"], fill="#475569", font_size=13, font_family=font_family, font_weight="600")
             )
             for row_index, step in enumerate(level):
                 y = dag_margin_y + row_index * (dag_box_height + dag_gap_y)
@@ -1053,18 +1053,18 @@ def execution_plan_svg(title: str, steps: list[ExecutionStep], execution_mode: s
             x, y = positions[step.step_id]
             status = step.status if step.status in palette else "pending"
             fill, text_fill = palette[status]
-            title_text = compact_text(step.title, 70)
+            title_lines = wrap_svg_text(compact_text(step.title, 90), 24, max_lines=2)
             detail_source = step.display_description or (", ".join(step.depends_on) if step.depends_on else "")
             if not detail_source and step.owned_paths:
                 detail_source = f"{len(step.owned_paths)} owned path(s)"
-            detail_text = compact_text(detail_source or "no DAG metadata", 58)
+            detail_lines = wrap_svg_text(compact_text(detail_source or "no DAG metadata", 96), 28, max_lines=2)
             parts.extend(
                 [
                     f'<rect x="{x}" y="{y}" rx="20" ry="20" width="{dag_box_width}" height="{dag_box_height}" fill="{fill}" />',
-                    f'<text x="{x + 18}" y="{y + 26}" fill="{text_fill}" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="14" font-weight="700">{escape(step.step_id)}</text>',
-                    f'<text x="{x + 18}" y="{y + 50}" fill="{text_fill}" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="13">{escape(title_text)}</text>',
-                    f'<text x="{x + 18}" y="{y + 76}" fill="{text_fill}" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="11">{escape(detail_text)}</text>',
-                    f'<text x="{x + 18}" y="{y + 96}" fill="{text_fill}" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="11">{escape(status)}</text>',
+                    svg_text_element(x + 18, y + 26, [step.step_id], fill=text_fill, font_size=14, font_family=font_family, font_weight="700"),
+                    svg_text_element(x + 18, y + 48, title_lines, fill=text_fill, font_size=13, font_family=font_family, line_height=16),
+                    svg_text_element(x + 18, y + 82, detail_lines, fill=text_fill, font_size=11, font_family=font_family, line_height=14),
+                    svg_text_element(x + 18, y + 120, [status], fill=text_fill, font_size=11, font_family=font_family),
                 ]
             )
         parts.append("</svg>")
@@ -1076,15 +1076,19 @@ def execution_plan_svg(title: str, steps: list[ExecutionStep], execution_mode: s
         y = margin_y + row * (box_height + gap_y)
         status = step.status if step.status in palette else "pending"
         fill, text_fill = palette[status]
-        title_text = compact_text(step.title, 70)
-        detail_text = compact_text(step.display_description or step.parallel_group or step.test_command or "default verification", 58)
+        title_lines = wrap_svg_text(compact_text(step.title, 90), 24, max_lines=2)
+        detail_lines = wrap_svg_text(
+            compact_text(step.display_description or step.parallel_group or step.test_command or "default verification", 96),
+            28,
+            max_lines=2,
+        )
         parts.extend(
             [
                 f'<rect x="{x}" y="{y}" rx="20" ry="20" width="{box_width}" height="{box_height}" fill="{fill}" />',
-                f'<text x="{x + 18}" y="{y + 28}" fill="{text_fill}" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="14" font-weight="700">{escape(step.step_id)}</text>',
-                f'<text x="{x + 18}" y="{y + 54}" fill="{text_fill}" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="13">{escape(title_text)}</text>',
-                f'<text x="{x + 18}" y="{y + 82}" fill="{text_fill}" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="11">{escape(detail_text)}</text>',
-                f'<text x="{x + 18}" y="{y + 102}" fill="{text_fill}" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="11">{escape(status)}</text>',
+                svg_text_element(x + 18, y + 28, [step.step_id], fill=text_fill, font_size=14, font_family=font_family, font_weight="700"),
+                svg_text_element(x + 18, y + 54, title_lines, fill=text_fill, font_size=13, font_family=font_family, line_height=16),
+                svg_text_element(x + 18, y + 88, detail_lines, fill=text_fill, font_size=11, font_family=font_family, line_height=14),
+                svg_text_element(x + 18, y + 124, [status], fill=text_fill, font_size=11, font_family=font_family),
             ]
         )
         if col < per_row - 1 and index + 1 < len(steps) and (index + 1) // per_row == row:
