@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import quote
 
 from .models import ExecutionPlanState, ProjectContext
+from .planning import execution_plan_svg
 from .run_control import load_run_control
 from .status_views import effective_project_status
 from .utils import compact_text, decode_process_output, now_utc_iso, read_json, read_jsonl_tail, read_last_jsonl, write_json
@@ -523,6 +524,38 @@ def public_remote_control_state(context: ProjectContext, plan_state: ExecutionPl
     }
 
 
+def public_execution_flow_svg(context: ProjectContext, plan_state: ExecutionPlanState) -> str:
+    safe_steps = []
+    for step in plan_state.steps:
+        detail = mask_public_text(step.display_description or "", max_chars=96)
+        if not detail and step.depends_on:
+            detail = ", ".join(step.depends_on)
+        if not detail and step.owned_paths:
+            detail = f"{len(step.owned_paths)} owned path(s)"
+        safe_steps.append(
+            step.__class__(
+                step_id=step.step_id,
+                title=mask_public_text(step.title, max_chars=90) or step.step_id,
+                display_description=detail,
+                codex_description="",
+                test_command="",
+                success_criteria="",
+                reasoning_effort=step.reasoning_effort,
+                parallel_group="",
+                depends_on=list(step.depends_on),
+                owned_paths=[],
+                status=step.status,
+                started_at=step.started_at,
+                completed_at=step.completed_at,
+                commit_hash=None,
+                notes="",
+                metadata={},
+            )
+        )
+    flow_title = mask_public_text(f"{context.metadata.display_name or context.metadata.slug} execution flow", max_chars=90)
+    return execution_plan_svg(flow_title or "Execution flow", safe_steps, plan_state.execution_mode)
+
+
 def public_monitor_status(context: ProjectContext, plan_state: ExecutionPlanState, log_limit: int = 8) -> dict[str, Any]:
     status = effective_project_status(context.metadata.current_status, plan_state, context.loop_state)
     return {
@@ -542,6 +575,10 @@ def public_monitor_status(context: ProjectContext, plan_state: ExecutionPlanStat
         "last_updated_at": last_updated_timestamp(context, plan_state),
         "run_control": public_run_control(context),
         "remote_control": public_remote_control_state(context, plan_state),
+        "flow": {
+            "available": True,
+            "step_count": len(plan_state.steps),
+        },
     }
 
 

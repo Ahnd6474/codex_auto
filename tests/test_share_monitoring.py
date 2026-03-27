@@ -24,6 +24,7 @@ from jakal_flow.share import (
     load_share_sessions,
     process_is_running,
     project_share_payload,
+    public_execution_flow_svg,
     public_monitor_status,
     revoke_share_session,
     save_share_sessions,
@@ -234,6 +235,50 @@ class ShareMonitoringTests(unittest.TestCase):
             self.assertNotIn("stdout_file", json.dumps(status))
             self.assertTrue(any("[masked]" in line or "[path]" in line for line in status["recent_logs"]))
 
+    def test_public_execution_flow_svg_masks_sensitive_step_text(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            orchestrator, project = create_project(workspace_root, repo_dir)
+            save_plan_payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Share Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": project.runtime.to_dict(),
+                "plan": {
+                    "execution_mode": "parallel",
+                    "workflow_mode": "standard",
+                    "steps": [
+                        {
+                            "step_id": "ST1",
+                            "title": "Use C:\\secret\\repo and token=ghp_abcdefghijklmnopqrstuvwxyz123456",
+                            "display_description": "Touch /Users/alice/project/.env safely",
+                            "codex_description": "internal",
+                            "test_command": "python -m pytest",
+                            "success_criteria": "done",
+                            "reasoning_effort": "high",
+                            "depends_on": [],
+                            "owned_paths": ["src/jakal_flow/share.py"],
+                            "status": "pending",
+                        }
+                    ],
+                },
+            }
+            with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: _fake_codex_snapshot()):
+                run_command("save-plan", workspace_root, save_plan_payload)
+            project = Orchestrator(workspace_root).local_project(repo_dir)
+            assert project is not None
+            svg = public_execution_flow_svg(project, orchestrator.load_execution_plan_state(project))
+
+            self.assertIn("<svg", svg)
+            self.assertIn("ST1", svg)
+            self.assertNotIn("ghp_", svg)
+            self.assertNotIn("C:\\secret\\repo", svg)
+            self.assertNotIn("/Users/alice/project", svg)
+            self.assertTrue("[masked]" in svg or "[path]" in svg)
+
     def test_project_share_payload_reuses_server_status_for_multiple_sessions(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"
@@ -424,6 +469,7 @@ class ShareMonitoringTests(unittest.TestCase):
         self.assertIn('pathname.endsWith("/share/view")', script)
         self.assertIn('shareEndpoint("api/status")', script)
         self.assertIn('shareEndpoint("api/events")', script)
+        self.assertIn('shareEndpoint("api/flow.svg")', script)
         self.assertIn('shareEndpoint("api/control")', script)
         self.assertIn('builtInEnglishShareTranslations', script)
         self.assertIn('language === "en" ? builtInEnglishShareTranslations : {}', script)
@@ -476,6 +522,63 @@ class ShareMonitoringTests(unittest.TestCase):
                 self.assertIn("recent_logs", payload)
                 self.assertIn("latest_test_result", payload)
                 self.assertIn("remote_control", payload)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
+    def test_share_flow_svg_api_serves_masked_svg(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            orchestrator, project = create_project(workspace_root, repo_dir)
+            save_plan_payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Share Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": project.runtime.to_dict(),
+                "plan": {
+                    "execution_mode": "parallel",
+                    "workflow_mode": "standard",
+                    "steps": [
+                        {
+                            "step_id": "ST1",
+                            "title": "Flow path C:\\secret\\repo",
+                            "display_description": "Inspect /Users/alice/project/.env",
+                            "codex_description": "internal",
+                            "test_command": "python -m pytest",
+                            "success_criteria": "done",
+                            "reasoning_effort": "high",
+                            "depends_on": [],
+                            "owned_paths": ["src/jakal_flow/share_server.py"],
+                            "status": "pending",
+                        }
+                    ],
+                },
+            }
+            with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: _fake_codex_snapshot()):
+                run_command("save-plan", workspace_root, save_plan_payload)
+            project = Orchestrator(workspace_root).local_project(repo_dir)
+            assert project is not None
+            session = create_share_session(project, expires_in_minutes=60, created_by="test")
+
+            server = ShareHTTPServer(("127.0.0.1", 0), ShareRequestHandler, workspace_root=workspace_root)
+            thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True)
+            thread.start()
+            try:
+                base_url = f"http://127.0.0.1:{server.server_address[1]}"
+                response = urllib.request.urlopen(
+                    f"{base_url}/share/api/flow.svg?session={session.session_id}&token={session.viewer_token}"
+                )
+                svg = response.read().decode("utf-8")
+
+                self.assertIn("image/svg+xml", response.headers.get("Content-Type", ""))
+                self.assertIn("<svg", svg)
+                self.assertIn("ST1", svg)
+                self.assertNotIn("C:\\secret\\repo", svg)
+                self.assertNotIn("/Users/alice/project", svg)
             finally:
                 server.shutdown()
                 server.server_close()

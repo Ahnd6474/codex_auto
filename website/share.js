@@ -59,6 +59,13 @@ const builtInEnglishShareTranslations = {
   control_state_unavailable: "No action available",
   control_action_pausing: "Requesting pause",
   control_action_resuming: "Starting resume",
+  flow_label: "Execution flow",
+  flow_title: "Live execution map",
+  flow_state_loading: "Loading flow",
+  flow_state_ready: "Flow ready",
+  flow_state_unavailable: "Flow unavailable",
+  flow_empty: "Waiting for the latest flow chart...",
+  flow_alt: "Execution flow chart",
 };
 
 const shareTranslations = Object.fromEntries(
@@ -156,6 +163,15 @@ function setRefreshNote(value) {
   }
 }
 
+function setFlowState(label, tone = "neutral") {
+  const node = document.getElementById("flow-state");
+  if (!node) {
+    return;
+  }
+  node.textContent = label;
+  node.className = `pill pill--${tone}`;
+}
+
 function setControlState(label, tone = "neutral") {
   const node = document.getElementById("control-state");
   if (!node) {
@@ -202,6 +218,10 @@ function applyStaticTranslations() {
   setText("log-tail", t("log_waiting"));
   setText("access-label", t("access_label"));
   setText("error-title", t("error_unable_load"));
+  setText("flow-label", t("flow_label"));
+  setText("flow-title", t("flow_title"));
+  setText("flow-state", t("flow_state_loading"));
+  setText("flow-empty", t("flow_empty"));
   setText("control-label", t("control_label"));
   setText("control-title", t("control_title"));
   setText("control-state", t("control_idle"));
@@ -214,6 +234,10 @@ function applyStaticTranslations() {
   const resumeButton = document.getElementById("resume-button");
   if (resumeButton) {
     resumeButton.textContent = t("resume_run");
+  }
+  const flowChart = document.getElementById("flow-chart");
+  if (flowChart) {
+    flowChart.alt = t("flow_alt");
   }
 }
 
@@ -276,6 +300,34 @@ function renderControls(payload, controlBusy = false, busyAction = "") {
   }
   setControlState(t("control_state_unavailable"), "neutral");
   setText("control-help", t("control_help_unavailable"));
+}
+
+function renderFlow(session, token, payload, state) {
+  const flowChart = document.getElementById("flow-chart");
+  const flowEmpty = document.getElementById("flow-empty");
+  if (!flowChart || !flowEmpty) {
+    return;
+  }
+  const flow = payload.flow || {};
+  if (!flow.available) {
+    flowChart.hidden = true;
+    flowEmpty.hidden = false;
+    flowEmpty.textContent = t("flow_empty");
+    setFlowState(t("flow_state_unavailable"), "neutral");
+    return;
+  }
+  const revision = `${payload.last_updated_at || ""}:${payload.current_phase || ""}:${flow.step_count || 0}`;
+  if (state.lastFlowRevision !== revision) {
+    const url = shareEndpoint("api/flow.svg");
+    url.searchParams.set("session", session);
+    url.searchParams.set("token", token);
+    url.searchParams.set("rev", revision || "0");
+    flowChart.src = url.toString();
+    state.lastFlowRevision = revision;
+  }
+  flowChart.hidden = false;
+  flowEmpty.hidden = true;
+  setFlowState(t("flow_state_ready"), "success");
 }
 
 async function fetchStatus(session, token) {
@@ -369,10 +421,14 @@ async function bootstrap() {
   let controlBusy = false;
   let currentControlAction = "";
   let latestPayload = null;
+  const flowState = {
+    lastFlowRevision: "",
+  };
 
   const applyPayload = (payload) => {
     latestPayload = payload;
     renderStatus(payload);
+    renderFlow(session, token, payload, flowState);
     renderControls(payload, controlBusy, currentControlAction);
   };
 
@@ -461,6 +517,18 @@ async function bootstrap() {
   if (resumeButton) {
     resumeButton.addEventListener("click", () => {
       void postControl("resume");
+    });
+  }
+  const flowChart = document.getElementById("flow-chart");
+  if (flowChart) {
+    flowChart.addEventListener("error", () => {
+      flowChart.hidden = true;
+      setText("flow-empty", t("flow_empty"));
+      const flowEmpty = document.getElementById("flow-empty");
+      if (flowEmpty) {
+        flowEmpty.hidden = false;
+      }
+      setFlowState(t("flow_state_unavailable"), "neutral");
     });
   }
 

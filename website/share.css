@@ -175,6 +175,7 @@ h1 {
 }
 
 .card--logs,
+.card--flow,
 .card--controls,
 .card--error {
   margin-top: 16px;
@@ -198,6 +199,19 @@ pre {
   font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 0.92rem;
   line-height: 1.6;
+}
+
+.flow-frame {
+  display: grid;
+  gap: 10px;
+}
+
+#flow-chart {
+  width: 100%;
+  height: auto;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .control-actions {
