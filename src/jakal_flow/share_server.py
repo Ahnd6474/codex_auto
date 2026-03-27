@@ -23,6 +23,7 @@ from .share import (
     can_resume_from_remote,
     load_share_server_state,
     mask_public_text,
+    public_execution_flow_svg,
     public_monitor_status,
     resolve_shared_session,
     share_server_log_file,
@@ -174,6 +175,9 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/share/api/logs":
             self._serve_logs(parsed.query)
+            return
+        if parsed.path == "/share/api/flow.svg":
+            self._serve_flow_svg(parsed.query)
             return
         self._write_json(HTTPStatus.NOT_FOUND, {"error": "Not found."})
 
@@ -363,6 +367,25 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             self._write_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
         except RuntimeError as exc:
             self._write_json(HTTPStatus.CONFLICT, {"error": str(exc)})
+        except KeyError:
+            self._write_json(HTTPStatus.NOT_FOUND, {"error": "Unknown share session."})
+        except PermissionError as exc:
+            self._write_json(HTTPStatus.FORBIDDEN, {"error": str(exc)})
+
+    def _serve_flow_svg(self, query: str) -> None:
+        try:
+            project, _session = self._validated_project(query)
+            orchestrator = Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
+            plan_state = orchestrator.load_execution_plan_state(project)
+            raw = public_execution_flow_svg(project, plan_state).encode("utf-8")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "image/svg+xml; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+        except ValueError as exc:
+            self._write_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
         except KeyError:
             self._write_json(HTTPStatus.NOT_FOUND, {"error": "Unknown share session."})
         except PermissionError as exc:
