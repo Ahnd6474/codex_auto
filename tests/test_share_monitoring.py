@@ -29,9 +29,10 @@ from jakal_flow.share import (
     revoke_share_session,
     save_share_sessions,
     share_server_status_payload,
+    normalize_share_bind_host,
     validate_share_session,
 )
-from jakal_flow.public_tunnel import normalize_tunnel_target_url
+from jakal_flow.public_tunnel import ensure_cloudflared_path, install_cloudflared_with_winget, normalize_tunnel_target_url
 from jakal_flow.share_server import ShareHTTPServer, ShareRequestHandler
 from jakal_flow.ui_bridge import run_command
 from jakal_flow.utils import append_jsonl
@@ -136,6 +137,52 @@ class ShareMonitoringTests(unittest.TestCase):
             normalize_tunnel_target_url("https://example.com/base"),
             "https://example.com/base",
         )
+
+    def test_normalize_share_bind_host_migrates_legacy_localhost_default(self) -> None:
+        self.assertEqual(normalize_share_bind_host("127.0.0.1"), "0.0.0.0")
+        self.assertEqual(normalize_share_bind_host(""), "0.0.0.0")
+        self.assertEqual(normalize_share_bind_host("0.0.0.0"), "0.0.0.0")
+
+    def test_install_cloudflared_with_winget_uses_user_scope_and_returns_installed_binary(self) -> None:
+        workspace_root = Path("C:/tmp/share-install-demo")
+        expected_path = "C:/Users/demo/AppData/Local/Microsoft/WinGet/Links/cloudflared.exe"
+
+        with mock.patch("jakal_flow.public_tunnel.os.name", "nt"), mock.patch(
+            "jakal_flow.public_tunnel.resolve_winget_path",
+            return_value="C:/Users/demo/AppData/Local/Microsoft/WindowsApps/winget.exe",
+        ), mock.patch(
+            "jakal_flow.public_tunnel.resolve_cloudflared_path",
+            side_effect=[None, expected_path],
+        ), mock.patch(
+            "jakal_flow.public_tunnel.subprocess.run",
+            return_value=mock.Mock(returncode=0, stdout="installed", stderr=""),
+        ) as run_mock, mock.patch(
+            "jakal_flow.public_tunnel.append_jsonl",
+        ):
+            resolved = install_cloudflared_with_winget(workspace_root)
+
+        self.assertEqual(resolved, expected_path)
+        command = run_mock.call_args.args[0]
+        self.assertEqual(command[0], "C:/Users/demo/AppData/Local/Microsoft/WindowsApps/winget.exe")
+        self.assertIn("--scope", command)
+        self.assertIn("user", command)
+        self.assertIn("--disable-interactivity", command)
+        self.assertIn("Cloudflare.cloudflared", command)
+
+    def test_ensure_cloudflared_path_auto_installs_on_windows_when_missing(self) -> None:
+        workspace_root = Path("C:/tmp/share-install-demo")
+
+        with mock.patch("jakal_flow.public_tunnel.resolve_cloudflared_path", return_value=None), mock.patch(
+            "jakal_flow.public_tunnel.os.name",
+            "nt",
+        ), mock.patch(
+            "jakal_flow.public_tunnel.install_cloudflared_with_winget",
+            return_value="C:/Users/demo/AppData/Local/Microsoft/WinGet/Links/cloudflared.exe",
+        ) as install_mock:
+            resolved = ensure_cloudflared_path(workspace_root)
+
+        self.assertTrue(resolved.endswith("cloudflared.exe"))
+        install_mock.assert_called_once_with(workspace_root)
 
     @mock.patch("jakal_flow.share.os.name", "nt")
     @mock.patch("jakal_flow.share.subprocess.run")

@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import sys
 import unittest
 from unittest import mock
@@ -17,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from jakal_flow.cli import main as cli_main
 import jakal_flow.ui_bridge_payloads as ui_bridge_payloads
 from jakal_flow.models import ExecutionPlanState, ExecutionStep
+from jakal_flow.share import share_server_status_payload
 from jakal_flow.status_views import effective_project_status
 from jakal_flow.ui_bridge import default_workspace_root, progress_caption, run_command, runtime_from_payload
 
@@ -553,6 +555,63 @@ class UIBridgeTests(unittest.TestCase):
                 )
 
             self.assertEqual(restarted["project"]["display_name"], "Delete Demo Restarted")
+
+    def test_delete_project_removes_readonly_git_objects_inside_managed_workspace(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            (repo_dir / "README.md").write_text("demo", encoding="utf-8")
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Readonly Delete Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            managed_root = Path(detail["project"]["project_root"])
+            readonly_object = (
+                managed_root
+                / ".parallel_runs"
+                / "demo-batch"
+                / "02-st3"
+                / "repo"
+                / ".local"
+                / "targets"
+                / "sample-seed"
+                / ".git"
+                / "objects"
+                / "22"
+                / "cbf345e35e7bffda12b26f45bbc8dc86e2a97d"
+            )
+            readonly_object.parent.mkdir(parents=True, exist_ok=True)
+            readonly_object.write_text("git-object", encoding="utf-8")
+            os.chmod(readonly_object, stat.S_IREAD)
+
+            deleted = run_command(
+                "delete-project",
+                workspace_root,
+                {
+                    "repo_id": detail["project"]["repo_id"],
+                },
+            )
+
+            self.assertEqual(deleted["deleted"]["display_name"], "Readonly Delete Demo")
+            self.assertFalse(managed_root.exists())
+            self.assertTrue(repo_dir.exists())
 
     def test_archive_all_projects_moves_registry_but_keeps_local_repos(self) -> None:
         with TemporaryTestDir() as temp_dir:
@@ -1875,7 +1934,7 @@ class UIBridgeTests(unittest.TestCase):
             try:
                 server_status = run_command("start_share_server", workspace_root, {})
                 self.assertTrue(server_status["running"])
-                self.assertTrue(str(server_status["base_url"]).startswith("http://127.0.0.1:"))
+                self.assertTrue(str(server_status["base_url"]).startswith("http://0.0.0.0:"))
 
                 with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
                     created = run_command(
@@ -1991,7 +2050,7 @@ class UIBridgeTests(unittest.TestCase):
             finally:
                 run_command("stop_share_server", workspace_root, {})
 
-    def test_share_bridge_falls_back_to_local_share_session_when_quick_tunnel_fails(self) -> None:
+    def test_share_bridge_rejects_local_only_share_session_when_quick_tunnel_fails(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"
             repo_dir = temp_dir / "repo"
@@ -2025,21 +2084,30 @@ class UIBridgeTests(unittest.TestCase):
                     "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
                     side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
                 ):
-                    created = run_command(
-                        "create_share_session",
+                    with self.assertRaisesRegex(RuntimeError, "Public share URL could not be created"):
+                        run_command(
+                            "create_share_session",
+                            workspace_root,
+                            {
+                                "project_dir": str(repo_dir),
+                                "created_by": "unit-test",
+                                "bind_host": "0.0.0.0",
+                                "public_base_url": "",
+                            },
+                        )
+
+                status = share_server_status_payload(workspace_root)
+                self.assertFalse(status["running"])
+                with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
+                    loaded = run_command(
+                        "load-project",
                         workspace_root,
                         {
                             "project_dir": str(repo_dir),
-                            "created_by": "unit-test",
-                            "bind_host": "0.0.0.0",
-                            "public_base_url": "",
+                            "refresh_codex_status": False,
                         },
                     )
-
-                self.assertIn("created_share_session", created)
-                self.assertIn("share_tunnel_warning", created)
-                self.assertIn("quick tunnel startup failed", created["share_tunnel_warning"])
-                self.assertTrue(created["created_share_session"]["local_url"].startswith("http://127.0.0.1:"))
+                self.assertIsNone(loaded["share"]["active_session"])
             finally:
                 run_command("stop_share_server", workspace_root, {})
 

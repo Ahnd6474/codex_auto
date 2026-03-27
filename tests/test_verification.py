@@ -84,6 +84,34 @@ class VerificationRunnerTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_root, ignore_errors=True)
 
+    def test_verification_runner_strips_inherited_pythonpath(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_verification_env_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        try:
+            context = self._build_context(temp_root)
+            runner = VerificationRunner()
+            completed = subprocess.CompletedProcess(
+                args=["python", "-m", "pytest"],
+                returncode=0,
+                stdout=b"green\n",
+                stderr=b"",
+            )
+
+            with mock.patch.object(runner, "_compute_state_fingerprint", return_value="state-a"), mock.patch.object(
+                runner,
+                "_environment_fingerprint",
+                return_value="env-a",
+            ), mock.patch.dict("os.environ", {"PYTHONPATH": r"C:\leaked\src"}, clear=False), mock.patch(
+                "jakal_flow.verification.subprocess.run",
+                return_value=completed,
+            ) as mocked_run:
+                runner.run(context=context, block_index=1, label="block-search-pass", command="python -m pytest")
+
+            self.assertEqual(mocked_run.call_count, 1)
+            self.assertNotIn("PYTHONPATH", mocked_run.call_args.kwargs["env"])
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -58,7 +58,7 @@ from .planning import (
 )
 from .reporting import Reporter
 from .status_views import status_from_plan_state
-from .utils import compact_text, ensure_dir, normalize_workflow_mode, now_utc_iso, parse_json_text, read_json, read_last_jsonl, read_text, similarity_score, svg_text_element, wrap_svg_text, write_json, write_text
+from .utils import compact_text, ensure_dir, normalize_workflow_mode, now_utc_iso, parse_json_text, read_json, read_last_jsonl, read_text, remove_tree, similarity_score, svg_text_element, wrap_svg_text, write_json, write_text
 from .verification import VerificationRunner
 from .workspace import WorkspaceManager
 
@@ -2737,7 +2737,7 @@ class Orchestrator:
         if branch_name:
             self.git.delete_branch(repo_dir, branch_name, force=True)
         if isinstance(worker_root, Path):
-            shutil.rmtree(worker_root, ignore_errors=True)
+            remove_tree(worker_root, ignore_errors=True)
 
     def _next_logged_block_index(self, context: ProjectContext) -> int:
         latest_logged_block = read_last_jsonl(context.paths.block_log_file)
@@ -4394,8 +4394,9 @@ class Orchestrator:
             "recommended_action": "automatic_merge_debugger",
             "files": files,
             "procedure": (
-                "Try the parallel merge debugger first. If recovery still fails, keep the base branch safe revision, "
-                "inspect each conflicted file intentionally, then rerun the batch after the overlap is resolved."
+                "Hand merge conflicts to the parallel merge debugger first so it can resolve the final merged code intentionally. "
+                "If recovery still fails, keep the base branch safe revision, inspect each conflicted file intentionally, "
+                "then rerun the batch after the overlap is resolved."
             ),
         }
 

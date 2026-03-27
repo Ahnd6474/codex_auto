@@ -210,7 +210,7 @@ Reasoning effort levels:
 | Local-only monitor link | Yes |
 | Network-ready bind mode (`0.0.0.0`) | Yes |
 | Public base URL override | Yes |
-| Automatic Cloudflare Quick Tunnel | Yes, when `cloudflared` is installed |
+| Automatic Cloudflare Quick Tunnel | Yes, and on Windows the app can auto-install `cloudflared` through `winget` when needed |
 | Temporary session creation and revocation | Yes |
 | Masked status / task / log viewer | Yes |
 | Live updates with polling fallback | Yes |

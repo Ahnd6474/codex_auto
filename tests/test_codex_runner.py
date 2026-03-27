@@ -293,6 +293,34 @@ class CodexRunnerTests(unittest.TestCase):
             self.assertEqual(observed_envs[0]["OPENAI_API_KEY"], "router-secret")
             self.assertEqual(observed_envs[0]["OPENAI_BASE_URL"], "https://openrouter.ai/api/v1")
 
+    def test_run_pass_strips_inherited_pythonpath_from_child_env(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_temp:
+            temp_root = Path(raw_temp)
+            context = self._context(temp_root)
+            runner = CodexRunner("codex.cmd")
+            observed_envs: list[dict[str, str]] = []
+
+            def fake_run(command, input, capture_output, check, env=None):
+                observed_envs.append(dict(env or {}))
+                output_file = Path(command[command.index("-o") + 1])
+                output_file.write_text("Sanitized response", encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+
+            with mock.patch.dict("os.environ", {"PYTHONPATH": r"C:\leaked\src"}, clear=False), mock.patch(
+                "jakal_flow.codex_runner.subprocess.run",
+                side_effect=fake_run,
+            ):
+                runner.run_pass(
+                    context=context,
+                    prompt="Apply the requested fix",
+                    pass_type="demo pass",
+                    block_index=1,
+                    search_enabled=False,
+                )
+
+            self.assertEqual(len(observed_envs), 1)
+            self.assertNotIn("PYTHONPATH", observed_envs[0])
+
 
 if __name__ == "__main__":
     unittest.main()

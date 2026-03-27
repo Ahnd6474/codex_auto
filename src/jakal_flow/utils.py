@@ -6,6 +6,8 @@ import json
 import locale
 import os
 import re
+import shutil
+import stat
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -224,6 +226,34 @@ def decode_process_output(data: bytes) -> str:
         except UnicodeDecodeError:
             continue
     return data.decode("utf-8", errors="replace")
+
+
+def sanitized_subprocess_env(extra: dict[str, str] | None = None) -> dict[str, str]:
+    env = os.environ.copy()
+    # Desktop bridge launches the backend with repo-local PYTHONPATH so this
+    # project can import itself. Child processes operating on managed repos
+    # should not inherit that path and accidentally import the wrong package.
+    env.pop("PYTHONPATH", None)
+    if extra:
+        env.update(extra)
+    return env
+
+
+def remove_tree(path: Path, ignore_errors: bool = False) -> None:
+    target = Path(path)
+    if not target.exists():
+        return
+
+    def _handle_remove_readonly(func, failed_path, exc_info) -> None:
+        try:
+            os.chmod(failed_path, stat.S_IWRITE | stat.S_IREAD)
+            func(failed_path)
+        except OSError:
+            if ignore_errors:
+                return
+            raise exc_info[1]
+
+    shutil.rmtree(target, ignore_errors=ignore_errors, onerror=_handle_remove_readonly)
 
 
 def compact_text(value: str, max_chars: int = 3_000) -> str:

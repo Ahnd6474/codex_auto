@@ -8,7 +8,7 @@ from pathlib import Path
 from time import monotonic
 
 from .models import ProjectContext, TestRunResult
-from .utils import decode_process_output, ensure_dir, now_utc_iso, read_json, read_text, write_json, write_text
+from .utils import decode_process_output, ensure_dir, now_utc_iso, read_json, read_text, sanitized_subprocess_env, write_json, write_text
 
 RELEVANT_ENV_FILES = (
     "pyproject.toml",
@@ -65,6 +65,7 @@ class VerificationRunner:
             shell=True,
             capture_output=True,
             check=False,
+            env=sanitized_subprocess_env(),
         )
         duration_seconds = round(max(0.0, monotonic() - start), 3)
         stdout = decode_process_output(completed.stdout)

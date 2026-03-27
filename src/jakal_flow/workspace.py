@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from .models import LoopCounters, LoopState, ProjectContext, ProjectPaths, RepoMetadata, RuntimeOptions
 from .parallel_resources import normalize_parallel_worker_mode
-from .utils import ensure_dir, now_utc_iso, read_json, stable_repo_identity, write_json
+from .utils import ensure_dir, now_utc_iso, read_json, remove_tree, stable_repo_identity, write_json
 
 
 class WorkspaceManager:
@@ -244,7 +244,7 @@ class WorkspaceManager:
         resolved_root = project_root.resolve()
         if not self._managed_root_is_within(resolved_root, expected_parent):
             raise RuntimeError(f"Refusing to delete unexpected project root: {resolved_root}")
-        shutil.rmtree(resolved_root)
+        remove_tree(resolved_root)
 
     def _active_registry_item(self, context: ProjectContext) -> dict[str, str]:
         return {

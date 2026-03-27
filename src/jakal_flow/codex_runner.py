@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 import time
@@ -17,7 +16,7 @@ from .model_providers import (
     provider_uses_openai_compatible_api,
 )
 from .models import CodexRunResult, ProjectContext
-from .utils import compact_text, decode_process_output, ensure_dir, get_env_or_dotenv, parse_json_text, read_text, write_json, write_text
+from .utils import compact_text, decode_process_output, ensure_dir, get_env_or_dotenv, parse_json_text, read_text, sanitized_subprocess_env, write_json, write_text
 
 
 class CodexRunner:
@@ -47,7 +46,7 @@ class CodexRunner:
 
         provider = normalize_model_provider(getattr(context.runtime, "model_provider", ""))
         command = [self.codex_path]
-        child_env = os.environ.copy()
+        child_env = sanitized_subprocess_env()
         if provider == "oss":
             command.append("--oss")
             local_provider = normalize_local_model_provider(getattr(context.runtime, "local_model_provider", ""))
@@ -55,7 +54,7 @@ class CodexRunner:
                 command.extend(["--local-provider", local_provider])
         else:
             command.extend(self._provider_config_overrides(context))
-            child_env.update(self._provider_environment(context))
+            child_env = sanitized_subprocess_env(self._provider_environment(context))
         command.extend(["-a", context.runtime.approval_mode])
         if search_enabled:
             command.append("--search")

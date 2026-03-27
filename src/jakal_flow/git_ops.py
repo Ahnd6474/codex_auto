@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import os
 import subprocess
-import shutil
 from pathlib import Path
 
 from .models import CommandResult
-from .utils import decode_process_output
+from .utils import decode_process_output, remove_tree
 
 
 class GitCommandError(RuntimeError):
@@ -169,7 +168,7 @@ class GitOps:
             args.append("--force")
         args.append(str(worktree_dir))
         self.run(args, cwd=repo_dir, check=False)
-        shutil.rmtree(worktree_dir, ignore_errors=True)
+        remove_tree(worktree_dir, ignore_errors=True)
 
     def delete_branch(self, repo_dir: Path, branch_name: str, force: bool = True) -> None:
         args = ["branch", "-D" if force else "-d", branch_name]
