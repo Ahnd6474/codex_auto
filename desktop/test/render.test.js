@@ -269,6 +269,56 @@ test("CenterWorkspace renders the parallel execution tree for parallel plans", a
   assert.doesNotMatch(html, /Flow Chart/);
 });
 
+test("CenterWorkspace prefers the live detail plan while a run is active", async () => {
+  const html = await renderBundledComponent(
+    "parallel-workspace-live-plan-render",
+    "./src/components/layout/CenterWorkspace.jsx",
+    "CenterWorkspace",
+    baseWorkspaceProps({
+      detail: {
+        project: {
+          current_status: "running:parallel",
+        },
+        runtime: {
+          execution_mode: "parallel",
+          effort: "medium",
+        },
+        plan: {
+          project_prompt: "Ship the live UI",
+          execution_mode: "parallel",
+          closeout_status: "not_started",
+          steps: [
+            { step_id: "ST1", title: "Plan", status: "completed" },
+            { step_id: "ST2", title: "Build", status: "running", depends_on: ["ST1"], owned_paths: ["desktop/src"] },
+            { step_id: "ST3", title: "Backend", status: "running", depends_on: ["ST1"], owned_paths: ["src/jakal_flow"] },
+          ],
+        },
+      },
+      planDraft: {
+        project_prompt: "Ship the stale UI",
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [
+          { step_id: "ST1", title: "Plan", status: "completed" },
+          { step_id: "ST2", title: "Build", status: "pending", depends_on: ["ST1"], owned_paths: ["desktop/src"] },
+          { step_id: "ST3", title: "Backend", status: "pending", depends_on: ["ST1"], owned_paths: ["src/jakal_flow"] },
+        ],
+      },
+      selectedStepId: "ST2",
+      busy: true,
+      activeJob: {
+        status: "running",
+        command: "run-plan",
+      },
+    }),
+  );
+
+  const runningBadgeMatches = html.match(/status-badge--info">Running<\/span>/g) || [];
+  assert.match(html, /Running: Parallel/);
+  assert.match(html, /Ship the live UI/);
+  assert.equal(runningBadgeMatches.length, 3);
+});
+
 test("IdeToolbar renders the active command and DAG-ready progress text", async () => {
   const html = await renderBundledComponent(
     "ide-toolbar-render",
@@ -308,6 +358,54 @@ test("IdeToolbar renders the active command and DAG-ready progress text", async 
   assert.match(html, /Completed 1\/3 steps, ready: ST2, ST3/);
   assert.match(html, /Program Settings/);
   assert.doesNotMatch(html, />Closeout<\/button>/);
+});
+
+test("IdeToolbar prefers the live plan progress while a run is active", async () => {
+  const html = await renderBundledComponent(
+    "ide-toolbar-live-plan-render",
+    "./src/components/layout/IdeToolbar.jsx",
+    "IdeToolbar",
+    {
+      projectDetail: {
+        project: {
+          display_name: "Demo",
+          current_status: "running:parallel",
+        },
+        plan: {
+          execution_mode: "parallel",
+          closeout_status: "not_started",
+          steps: [
+            { step_id: "ST1", status: "completed" },
+            { step_id: "ST2", status: "running", depends_on: ["ST1"], owned_paths: ["desktop/src"] },
+            { step_id: "ST3", status: "running", depends_on: ["ST1"], owned_paths: ["src/jakal_flow"] },
+          ],
+        },
+      },
+      planDraft: {
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [
+          { step_id: "ST1", status: "completed" },
+          { step_id: "ST2", status: "pending", depends_on: ["ST1"], owned_paths: ["desktop/src"] },
+          { step_id: "ST3", status: "pending", depends_on: ["ST1"], owned_paths: ["src/jakal_flow"] },
+        ],
+      },
+      busy: true,
+      activeJob: {
+        status: "running",
+        command: "run-plan",
+      },
+      activeCenterTab: "run",
+      onRefresh: noop,
+      onOpenSettings: noop,
+      onGeneratePlan: noop,
+      onRunPlan: noop,
+      onRunCloseout: noop,
+      onApproveCheckpoint: noop,
+    },
+  );
+
+  assert.match(html, /Completed 1\/3 steps, running: ST2, ST3/);
 });
 
 test("IdeToolbar exposes checkpoint approval when a checkpoint is waiting for review", async () => {
