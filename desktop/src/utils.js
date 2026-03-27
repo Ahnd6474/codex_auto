@@ -1,5 +1,17 @@
 import { normalizeLanguage, translate } from "./locale.js";
 
+export function defaultCodexPath() {
+  const platform = String(globalThis.process?.platform || "").trim().toLowerCase();
+  if (platform === "win32") {
+    return "codex.cmd";
+  }
+  const userAgent = String(globalThis.navigator?.userAgent || "").toLowerCase();
+  if (userAgent.includes("windows")) {
+    return "codex.cmd";
+  }
+  return "codex";
+}
+
 export function cloneValue(value) {
   if (value === null || value === undefined) {
     return value;
@@ -83,7 +95,7 @@ const DEFAULT_PROGRAM_RUNTIME = {
   approval_mode: "never",
   sandbox_mode: "danger-full-access",
   checkpoint_interval_blocks: 1,
-  codex_path: "codex.cmd",
+  codex_path: defaultCodexPath(),
   allow_push: true,
   require_checkpoint_approval: false,
   workflow_mode: "standard",

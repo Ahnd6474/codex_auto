@@ -1,161 +1,179 @@
-<svg width="1280" height="760" viewBox="0 0 1280 760" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+<svg width="1280" height="860" viewBox="0 0 1280 860" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">jakal-flow architecture overview</title>
-  <desc id="desc">A high-level flow from CLI and Desktop UI to orchestration core, external systems, and per-project workspace.</desc>
+  <desc id="desc">A high-level flow from entry points to the orchestration core, external systems, and the per-project workspace.</desc>
   <defs>
-    <linearGradient id="bg" x1="70" y1="40" x2="1210" y2="720" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#F3F7FF"/>
-      <stop offset="1" stop-color="#EEF7F2"/>
+    <linearGradient id="bg" x1="48" y1="30" x2="1232" y2="820" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F4F7FF"/>
+      <stop offset="1" stop-color="#EEF8F2"/>
     </linearGradient>
-    <linearGradient id="headerBand" x1="44" y1="132" x2="1236" y2="222" gradientUnits="userSpaceOnUse">
+    <linearGradient id="band" x1="52" y1="152" x2="1228" y2="256" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#EEF4FF"/>
       <stop offset="1" stop-color="#F5FBF7"/>
     </linearGradient>
-    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="160%">
-      <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#25364A" flood-opacity="0.1"/>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#25364A" flood-opacity="0.10"/>
     </filter>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
-      <path d="M0 0L10 5L0 10Z" fill="#4B5B70"/>
+      <path d="M0 0L10 5L0 10Z" fill="#5B6B80"/>
     </marker>
     <style>
       .title { font: 700 34px 'Inter', 'Segoe UI', sans-serif; fill: #192635; }
       .subtitle { font: 500 16px 'Inter', 'Segoe UI', sans-serif; fill: #4E5F73; }
       .section { font: 700 14px 'Inter', 'Segoe UI', sans-serif; fill: #25364A; letter-spacing: 0.08em; }
-      .boxTitle { font: 700 18px 'Inter', 'Segoe UI', sans-serif; fill: #1B2A3A; }
-      .body { font: 500 13px 'Inter', 'Segoe UI', sans-serif; fill: #495B6E; }
-      .chip { font: 700 12px 'Inter', 'Segoe UI', sans-serif; fill: #FFFFFF; }
-      .panel { fill: #FFFFFF; stroke: #D8E2EC; stroke-width: 1.5; filter: url(#softShadow); }
-      .subpanel { fill: #FFFFFF; stroke: #D8E2EC; stroke-width: 1.3; filter: url(#softShadow); }
+      .boxTitle { font: 700 17px 'Inter', 'Segoe UI', sans-serif; fill: #1B2A3A; }
+      .body { font: 500 12px 'Inter', 'Segoe UI', sans-serif; fill: #495B6E; }
+      .chipLabel { font: 700 11px 'Inter', 'Segoe UI', sans-serif; fill: #FFFFFF; }
+      .chipSub { font: 600 10px 'Inter', 'Segoe UI', sans-serif; fill: rgba(255,255,255,0.92); }
+      .panel { fill: #FFFFFF; stroke: #D8E2EC; stroke-width: 1.5; filter: url(#shadow); }
+      .subpanel { fill: #FFFFFF; stroke: #D8E2EC; stroke-width: 1.3; filter: url(#shadow); }
       .soft { fill: #FFFFFF; stroke: #D8E2EC; stroke-width: 1.3; }
-      .sectionBand { fill: url(#headerBand); stroke: #D8E2EC; stroke-width: 1.5; filter: url(#softShadow); }
-      .line { stroke: #4B5B70; stroke-width: 2.4; fill: none; marker-end: url(#arrow); }
+      .sectionBand { fill: url(#band); stroke: #D8E2EC; stroke-width: 1.5; filter: url(#shadow); }
+      .line { stroke: #5B6B80; stroke-width: 2.4; fill: none; marker-end: url(#arrow); }
       .divider { stroke: #D8E2EC; stroke-width: 1.4; stroke-linecap: round; }
     </style>
   </defs>
 
-  <rect x="16" y="16" width="1248" height="728" rx="28" fill="url(#bg)"/>
+  <rect x="16" y="16" width="1248" height="828" rx="28" fill="url(#bg)"/>
 
   <text x="48" y="74" class="title">jakal-flow: architecture and execution flow</text>
-  <text x="48" y="102" class="subtitle">Interfaces remain decoupled from orchestration. Each managed repository keeps isolated state, logs, memory, docs, and reports.</text>
+  <text x="48" y="104" class="subtitle">Interfaces stay decoupled from orchestration.</text>
+  <text x="48" y="128" class="subtitle">Each managed repository keeps isolated state, logs, memory, docs, and reports.</text>
 
-  <rect x="44" y="132" width="1192" height="90" rx="18" class="sectionBand"/>
-  <line x1="64" y1="166" x2="1216" y2="166" class="divider"/>
-  <text x="64" y="160" class="section">ENTRY POINTS</text>
+  <rect x="44" y="152" width="1192" height="116" rx="18" class="sectionBand"/>
+  <line x1="64" y1="188" x2="1216" y2="188" class="divider"/>
+  <text x="64" y="180" class="section">ENTRY POINTS</text>
 
-  <rect x="66" y="172" width="210" height="34" rx="12" fill="#2463EB"/>
-  <text x="84" y="194" class="chip">CLI: init-repo / run / resume</text>
+  <rect x="66" y="202" width="220" height="50" rx="14" fill="#2463EB"/>
+  <text x="84" y="223" class="chipLabel">CLI</text>
+  <text x="84" y="241" class="chipSub">init-repo / run / resume</text>
 
-  <rect x="296" y="172" width="240" height="34" rx="12" fill="#0F766E"/>
-  <text x="314" y="194" class="chip">Desktop UI: React + Tauri</text>
+  <rect x="304" y="202" width="220" height="50" rx="14" fill="#0F766E"/>
+  <text x="322" y="223" class="chipLabel">Desktop UI</text>
+  <text x="322" y="241" class="chipSub">React + Tauri shell</text>
 
-  <rect x="556" y="172" width="250" height="34" rx="12" fill="#B45309"/>
-  <text x="574" y="194" class="chip">Share Viewer: read-only monitor</text>
+  <rect x="542" y="202" width="220" height="50" rx="14" fill="#B45309"/>
+  <text x="560" y="223" class="chipLabel">Share viewer</text>
+  <text x="560" y="241" class="chipSub">read-only monitor</text>
 
-  <rect x="826" y="172" width="390" height="34" rx="12" fill="#BE185D"/>
-  <text x="844" y="194" class="chip">Settings: model / sandbox / approval / verification</text>
+  <rect x="780" y="202" width="436" height="50" rx="14" fill="#BE185D"/>
+  <text x="798" y="223" class="chipLabel">Runtime settings</text>
+  <text x="798" y="241" class="chipSub">model / sandbox / approval / verification</text>
 
-  <rect x="44" y="248" width="300" height="288" rx="18" class="panel"/>
-  <text x="64" y="276" class="section">CONTROL LAYER</text>
+  <rect x="44" y="294" width="308" height="322" rx="18" class="panel"/>
+  <text x="64" y="322" class="section">CONTROL LAYER</text>
 
-  <rect x="64" y="294" width="260" height="72" rx="14" fill="#F4F8FF" stroke="#CBDCF5"/>
-  <text x="80" y="320" class="boxTitle">React + Tauri shell</text>
-  <text x="80" y="340" class="body">Project setup, plan editing, run control, and checkpoint approval.</text>
+  <rect x="64" y="340" width="268" height="82" rx="14" fill="#F4F8FF" stroke="#CBDCF5"/>
+  <text x="80" y="368" class="boxTitle">React + Tauri shell</text>
+  <text x="80" y="390" class="body">Project setup, plan editing, run control,</text>
+  <text x="80" y="408" class="body">checkpoint approval, and share actions.</text>
 
-  <rect x="64" y="382" width="260" height="72" rx="14" fill="#F4FFFD" stroke="#C9ECE4"/>
-  <text x="80" y="408" class="boxTitle">ui_bridge.py</text>
-  <text x="80" y="428" class="body">Converts UI events to JSON bridge commands and refreshes state.</text>
+  <rect x="64" y="440" width="268" height="82" rx="14" fill="#F4FFFD" stroke="#C9ECE4"/>
+  <text x="80" y="468" class="boxTitle">ui_bridge.py</text>
+  <text x="80" y="488" class="body">Translates UI events into</text>
+  <text x="80" y="504" class="body">JSON bridge commands and</text>
+  <text x="80" y="520" class="body">refreshes project state.</text>
 
-  <rect x="64" y="470" width="260" height="52" rx="14" fill="#FFF9F1" stroke="#F0DDBE"/>
-  <text x="80" y="500" class="boxTitle">share_server.py + public_tunnel.py</text>
+  <rect x="64" y="540" width="268" height="58" rx="14" fill="#FFF9F1" stroke="#F0DDBE"/>
+  <text x="80" y="566" class="boxTitle">share_server.py +</text>
+  <text x="80" y="586" class="boxTitle">public_tunnel.py</text>
 
-  <rect x="364" y="248" width="542" height="288" rx="18" class="panel"/>
-  <text x="384" y="276" class="section">ORCHESTRATION CORE</text>
+  <rect x="370" y="294" width="536" height="322" rx="18" class="panel"/>
+  <text x="390" y="322" class="section">ORCHESTRATION CORE</text>
 
-  <rect x="384" y="294" width="502" height="92" rx="14" fill="#EEF4FF" stroke="#CDDCF3"/>
-  <text x="402" y="322" class="boxTitle">orchestrator.py</text>
-  <text x="402" y="342" class="body">Plan execution, safe revisions, rollback, retries, checkpoint flow.</text>
-  <text x="402" y="360" class="body">Supports serial blocks, DAG parallel batches, and closeout runs.</text>
+  <rect x="390" y="340" width="496" height="96" rx="14" fill="#EEF4FF" stroke="#CDDCF3"/>
+  <text x="408" y="368" class="boxTitle">orchestrator.py</text>
+  <text x="408" y="388" class="body">Plan execution, safe revisions, rollback, retries,</text>
+  <text x="408" y="404" class="body">checkpoint flow, closeout runs,</text>
+  <text x="408" y="420" class="body">and report generation.</text>
 
-  <rect x="384" y="402" width="156" height="54" rx="12" class="subpanel"/>
-  <text x="398" y="425" class="boxTitle">planning.py</text>
-  <text x="398" y="442" class="body">PLAN / MID_TERM</text>
+  <rect x="390" y="454" width="150" height="64" rx="12" class="subpanel"/>
+  <text x="404" y="478" class="boxTitle">planning.py</text>
+  <text x="404" y="498" class="body">PLAN / MID_TERM</text>
 
-  <rect x="556" y="402" width="156" height="54" rx="12" class="subpanel"/>
-  <text x="570" y="425" class="boxTitle">codex_runner.py</text>
-  <text x="570" y="442" class="body">Prompt + events</text>
+  <rect x="556" y="454" width="150" height="64" rx="12" class="subpanel"/>
+  <text x="570" y="478" class="boxTitle">codex_runner.py</text>
+  <text x="570" y="498" class="body">prompts and events</text>
 
-  <rect x="728" y="402" width="158" height="54" rx="12" class="subpanel"/>
-  <text x="742" y="425" class="boxTitle">git_ops.py</text>
-  <text x="742" y="442" class="body">Commit / reset</text>
+  <rect x="722" y="454" width="164" height="64" rx="12" class="subpanel"/>
+  <text x="736" y="478" class="boxTitle">git_ops.py</text>
+  <text x="736" y="498" class="body">commit / rollback</text>
 
-  <rect x="384" y="472" width="156" height="54" rx="12" class="subpanel"/>
-  <text x="398" y="495" class="boxTitle">workspace.py</text>
-  <text x="398" y="512" class="body">Repo isolation</text>
+  <rect x="390" y="536" width="150" height="64" rx="12" class="subpanel"/>
+  <text x="404" y="560" class="boxTitle">workspace.py</text>
+  <text x="404" y="580" class="body">repo isolation</text>
 
-  <rect x="556" y="472" width="156" height="54" rx="12" class="subpanel"/>
-  <text x="570" y="495" class="boxTitle">memory.py</text>
-  <text x="570" y="512" class="body">Traceable memory</text>
+  <rect x="556" y="536" width="150" height="64" rx="12" class="subpanel"/>
+  <text x="570" y="560" class="boxTitle">memory.py</text>
+  <text x="570" y="580" class="body">traceable memory</text>
 
-  <rect x="728" y="472" width="158" height="54" rx="12" class="subpanel"/>
-  <text x="742" y="495" class="boxTitle">reporting.py</text>
-  <text x="742" y="512" class="body">Reports / failures</text>
+  <rect x="722" y="536" width="164" height="64" rx="12" class="subpanel"/>
+  <text x="736" y="560" class="boxTitle">reporting.py</text>
+  <text x="736" y="580" class="body">reports / failures</text>
 
-  <rect x="926" y="248" width="310" height="288" rx="18" class="panel"/>
-  <text x="946" y="276" class="section">EXTERNAL SYSTEMS</text>
+  <rect x="924" y="294" width="312" height="322" rx="18" class="panel"/>
+  <text x="944" y="322" class="section">EXTERNAL SYSTEMS</text>
 
-  <rect x="946" y="294" width="270" height="56" rx="12" fill="#F4F8FF" stroke="#CFDDF1"/>
-  <text x="962" y="318" class="boxTitle">Codex CLI</text>
-  <text x="962" y="336" class="body">Execution + event stream + usage</text>
+  <rect x="944" y="340" width="272" height="64" rx="12" fill="#F4F8FF" stroke="#CFDDF1"/>
+  <text x="960" y="366" class="boxTitle">Codex CLI</text>
+  <text x="960" y="384" class="body">execution, event stream,</text>
+  <text x="960" y="400" class="body">and usage data</text>
 
-  <rect x="946" y="362" width="270" height="56" rx="12" fill="#FFF8F2" stroke="#F0D7C2"/>
-  <text x="962" y="386" class="boxTitle">Managed Git repository</text>
-  <text x="962" y="404" class="body">Code edits, tests, commits, safe reset target</text>
+  <rect x="944" y="422" width="272" height="64" rx="12" fill="#FFF8F2" stroke="#F0D7C2"/>
+  <text x="960" y="448" class="boxTitle">Managed Git repository</text>
+  <text x="960" y="466" class="body">code edits, tests, commits,</text>
+  <text x="960" y="482" class="body">safe reset target</text>
 
-  <rect x="946" y="430" width="270" height="56" rx="12" fill="#F5FBF7" stroke="#CFE8D7"/>
-  <text x="962" y="454" class="boxTitle">GitHub / remote origin</text>
-  <text x="962" y="472" class="body">Push validated commits, PR updates</text>
+  <rect x="944" y="504" width="272" height="80" rx="12" fill="#F5FBF7" stroke="#CFE8D7"/>
+  <text x="960" y="530" class="boxTitle">GitHub / remote origin</text>
+  <text x="960" y="548" class="body">validated push, PR failure updates,</text>
+  <text x="960" y="564" class="body">and repository hosting</text>
 
-  <rect x="44" y="560" width="1192" height="164" rx="18" class="panel"/>
-  <text x="64" y="588" class="section">PER-PROJECT WORKSPACE</text>
-  <text x="64" y="608" class="body">Every managed repository keeps isolated artifacts under projects/&lt;repo_slug&gt;/.</text>
+  <rect x="44" y="648" width="1192" height="176" rx="18" class="panel"/>
+  <text x="64" y="676" class="section">PER-PROJECT WORKSPACE</text>
+  <text x="64" y="698" class="body">Every managed repository keeps isolated artifacts under projects/&lt;repo_slug&gt;/.</text>
 
-  <rect x="64" y="626" width="154" height="74" rx="12" class="soft"/>
-  <text x="80" y="654" class="boxTitle">repo/</text>
-  <text x="80" y="672" class="body">working tree</text>
+  <rect x="64" y="724" width="154" height="78" rx="12" class="soft"/>
+  <text x="80" y="754" class="boxTitle">repo/</text>
+  <text x="80" y="774" class="body">working tree</text>
 
-  <rect x="232" y="626" width="154" height="74" rx="12" class="soft"/>
-  <text x="248" y="654" class="boxTitle">docs/</text>
-  <text x="248" y="672" class="body">PLAN, review docs</text>
+  <rect x="232" y="724" width="154" height="78" rx="12" class="soft"/>
+  <text x="248" y="754" class="boxTitle">docs/</text>
+  <text x="248" y="772" class="body">plans and</text>
+  <text x="248" y="788" class="body">review docs</text>
 
-  <rect x="400" y="626" width="154" height="74" rx="12" class="soft"/>
-  <text x="416" y="654" class="boxTitle">memory/</text>
-  <text x="416" y="672" class="body">success/failure</text>
+  <rect x="400" y="724" width="154" height="78" rx="12" class="soft"/>
+  <text x="416" y="754" class="boxTitle">memory/</text>
+  <text x="416" y="772" class="body">success /</text>
+  <text x="416" y="788" class="body">failure notes</text>
 
-  <rect x="568" y="626" width="154" height="74" rx="12" class="soft"/>
-  <text x="584" y="654" class="boxTitle">logs/</text>
-  <text x="584" y="672" class="body">jsonl traces</text>
+  <rect x="568" y="724" width="154" height="78" rx="12" class="soft"/>
+  <text x="584" y="754" class="boxTitle">logs/</text>
+  <text x="584" y="774" class="body">JSONL traces</text>
 
-  <rect x="736" y="626" width="154" height="74" rx="12" class="soft"/>
-  <text x="752" y="654" class="boxTitle">reports/</text>
-  <text x="752" y="672" class="body">latest + failure</text>
+  <rect x="736" y="724" width="154" height="78" rx="12" class="soft"/>
+  <text x="752" y="754" class="boxTitle">reports/</text>
+  <text x="752" y="772" class="body">latest report +</text>
+  <text x="752" y="788" class="body">failure bundles</text>
 
-  <rect x="904" y="626" width="154" height="74" rx="12" class="soft"/>
-  <text x="920" y="654" class="boxTitle">state/</text>
-  <text x="920" y="672" class="body">checkpoints etc.</text>
+  <rect x="904" y="724" width="154" height="78" rx="12" class="soft"/>
+  <text x="920" y="754" class="boxTitle">state/</text>
+  <text x="920" y="772" class="body">checkpoints</text>
+  <text x="920" y="788" class="body">and control</text>
 
-  <rect x="1072" y="626" width="144" height="74" rx="12" class="soft"/>
-  <text x="1088" y="654" class="boxTitle">metadata.json</text>
-  <text x="1088" y="672" class="body">project config</text>
+  <rect x="1072" y="724" width="144" height="78" rx="12" class="soft"/>
+  <text x="1088" y="754" class="boxTitle">metadata.json</text>
+  <text x="1088" y="774" class="body">project config</text>
 
-  <path d="M170 206V238" class="line"/>
-  <path d="M416 206V238" class="line"/>
-  <path d="M680 206V238" class="line"/>
-  <path d="M1020 206V238" class="line"/>
+  <path d="M176 252V284" class="line"/>
+  <path d="M414 252V284" class="line"/>
+  <path d="M652 252V284" class="line"/>
+  <path d="M998 252V284" class="line"/>
 
-  <path d="M324 418H364" class="line"/>
-  <path d="M906 322H926" class="line"/>
-  <path d="M906 390H926" class="line"/>
-  <path d="M906 458H926" class="line"/>
+  <path d="M332 482H370" class="line"/>
+  <path d="M906 372H924" class="line"/>
+  <path d="M906 454H924" class="line"/>
+  <path d="M906 544H924" class="line"/>
 
-  <path d="M640 536V612" class="line"/>
-  <path d="M1080 486V612" class="line"/>
+  <path d="M640 616V700" class="line"/>
+  <path d="M1080 584V700" class="line"/>
 </svg>

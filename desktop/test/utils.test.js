@@ -17,6 +17,7 @@ import {
   commandLabel,
   detailApplySignature,
   computePlanStats,
+  defaultCodexPath,
   planStepsWithCloseout,
   deriveExecutionProgress,
   reasoningEffortLabel,
@@ -87,6 +88,10 @@ test("deriveGithubMode distinguishes manual and existing projects", () => {
   assert.equal(deriveGithubMode(null), "existing");
 });
 
+test("defaultCodexPath follows the current platform", () => {
+  assert.equal(defaultCodexPath(), process.platform === "win32" ? "codex.cmd" : "codex");
+});
+
 test("program settings helpers keep global runtime controls separate from project-specific values", () => {
   const settings = programSettingsFromRuntime({
     approval_mode: "untrusted",
@@ -106,7 +111,7 @@ test("program settings helpers keep global runtime controls separate from projec
     approval_mode: "untrusted",
     sandbox_mode: "workspace-write",
     checkpoint_interval_blocks: 1,
-    codex_path: "codex.cmd",
+    codex_path: defaultCodexPath(),
     allow_push: false,
     require_checkpoint_approval: false,
     workflow_mode: "standard",
@@ -156,7 +161,7 @@ test("program settings helpers keep global runtime controls separate from projec
       approval_mode: "untrusted",
       sandbox_mode: "workspace-write",
       checkpoint_interval_blocks: 1,
-      codex_path: "codex.cmd",
+      codex_path: defaultCodexPath(),
       allow_push: false,
       require_checkpoint_approval: false,
       workflow_mode: "standard",
@@ -194,7 +199,7 @@ test("program settings helpers keep global runtime controls separate from projec
         approval_mode: "untrusted",
         sandbox_mode: "workspace-write",
         checkpoint_interval_blocks: 1,
-        codex_path: "codex.cmd",
+        codex_path: defaultCodexPath(),
         allow_push: false,
         require_checkpoint_approval: false,
         workflow_mode: "standard",

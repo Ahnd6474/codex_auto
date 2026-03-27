@@ -1,6 +1,7 @@
 import { useI18n } from "../../i18n";
 import {
   applyProviderDefaults,
+  defaultCodexPath,
   defaultProviderApiKeyEnv,
   defaultProviderBaseUrl,
   normalizeDashboardVisibility,
@@ -297,7 +298,7 @@ export function AppSettingsView({
               <label className="field">
                 <span>{t("field.codexPath")}</span>
                 <input
-                  value={settings.codex_path || "codex.cmd"}
+                  value={settings.codex_path || defaultCodexPath()}
                   onChange={(event) => onChangeSettings((current) => ({ ...current, codex_path: event.target.value }))}
                   disabled={runtimeBusy}
                 />

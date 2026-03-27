@@ -12,6 +12,7 @@ from typing import Any
 
 from .model_constants import AUTO_MODEL_SLUG, VALID_REASONING_EFFORTS
 from .model_providers import discover_local_model_catalog
+from .platform_defaults import default_codex_path
 from .utils import now_utc_iso
 
 
@@ -20,6 +21,7 @@ MODEL_PAGE_LIMIT = 100
 
 
 def resolve_codex_path(codex_path: str) -> str:
+    codex_path = str(codex_path or "").strip() or default_codex_path()
     if codex_path.lower() == "codex.cmd":
         appdata = os.environ.get("APPDATA")
         if appdata:
@@ -176,7 +178,7 @@ class _CodexAppServerSession:
             sink.put(None)
 
 
-def fetch_codex_backend_snapshot(codex_path: str = "codex.cmd") -> CodexBackendSnapshot:
+def fetch_codex_backend_snapshot(codex_path: str = "") -> CodexBackendSnapshot:
     checked_at = now_utc_iso()
     try:
         with _CodexAppServerSession(codex_path) as session:

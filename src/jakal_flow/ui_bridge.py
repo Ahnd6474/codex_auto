@@ -29,6 +29,7 @@ from .model_providers import (
 from .models import ExecutionPlanState, ProjectContext, RuntimeOptions
 from .orchestrator import Orchestrator
 from .parallel_resources import normalize_parallel_worker_mode
+from .platform_defaults import default_codex_path
 from .process_supervisor import terminate_process, wait_for_condition
 from .public_tunnel import public_tunnel_status_payload, start_cloudflare_quick_tunnel, stop_public_tunnel_process
 from .runtime_services import CodexBackendSnapshotService
@@ -59,7 +60,7 @@ CODEX_SNAPSHOT_TTL_SECONDS = 15.0
 
 
 _codex_snapshot_service = CodexBackendSnapshotService(
-    fetcher=lambda codex_path="codex.cmd": fetch_codex_backend_snapshot(codex_path),
+    fetcher=lambda codex_path="": fetch_codex_backend_snapshot(codex_path),
     ttl_seconds=CODEX_SNAPSHOT_TTL_SECONDS,
 )
 
@@ -389,6 +390,7 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
         merged.get("reasoning_output_cost_per_million_usd", 0.0)
     )
     merged["per_pass_cost_usd"] = coerce_nonnegative_float(merged.get("per_pass_cost_usd", 0.0))
+    merged["codex_path"] = str(merged.get("codex_path", "")).strip() or default_codex_path()
     merged["model"] = str(merged.get("model", "")).strip().lower()
     merged["model_preset"] = normalize_model_preset_id(str(merged.get("model_preset", "")), fallback="")
     merged["effort_selection_mode"] = str(merged.get("effort_selection_mode", "")).strip().lower()
@@ -577,7 +579,7 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
             orchestrator,
             project,
             load_run_control=load_run_control,
-            fetch_codex_status=lambda codex_path="codex.cmd": _codex_snapshot_service.get_snapshot(codex_path),
+            fetch_codex_status=lambda codex_path="": _codex_snapshot_service.get_snapshot(codex_path),
             **kwargs,
         )
 

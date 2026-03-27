@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Any
 import re
 
+from .platform_defaults import default_codex_path
+
 
 def _normalize(value: Any) -> Any:
     if isinstance(value, Path):
@@ -91,7 +93,7 @@ class RuntimeOptions:
     test_cmd: str = "python -m pytest"
     max_blocks: int = 1
     allow_push: bool = False
-    codex_path: str = "codex.cmd"
+    codex_path: str = field(default_factory=default_codex_path)
     git_user_name: str = "jakal-flow-bot"
     git_user_email: str = "jakal-flow@example.invalid"
     no_progress_limit: int = 3

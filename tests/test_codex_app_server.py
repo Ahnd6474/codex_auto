@@ -7,7 +7,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from jakal_flow.codex_app_server import fetch_codex_backend_snapshot
+from jakal_flow.codex_app_server import fetch_codex_backend_snapshot, resolve_codex_path
 
 
 class _FakeSession:
@@ -69,6 +69,11 @@ class _FakeSession:
 
 
 class CodexAppServerTests(unittest.TestCase):
+    def test_resolve_codex_path_uses_platform_default_when_blank(self) -> None:
+        with mock.patch("jakal_flow.codex_app_server.default_codex_path", return_value="codex"):
+            self.assertEqual(resolve_codex_path(""), "codex")
+            self.assertEqual(resolve_codex_path("   "), "codex")
+
     def test_fetch_codex_backend_snapshot_formats_models_and_rate_limits(self) -> None:
         with mock.patch("jakal_flow.codex_app_server._CodexAppServerSession", _FakeSession), mock.patch(
             "jakal_flow.codex_app_server.discover_local_model_catalog",

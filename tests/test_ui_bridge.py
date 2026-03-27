@@ -144,6 +144,12 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(runtime.parallel_worker_mode, "auto")
         self.assertEqual(runtime.parallel_workers, 0)
 
+    def test_runtime_from_payload_uses_platform_default_codex_path_when_missing(self) -> None:
+        with mock.patch("jakal_flow.ui_bridge.default_codex_path", return_value="codex"):
+            runtime = runtime_from_payload({"execution_mode": "parallel", "codex_path": ""})
+
+        self.assertEqual(runtime.codex_path, "codex")
+
     def test_runtime_from_payload_upgrades_legacy_serial_mode_to_parallel(self) -> None:
         runtime = runtime_from_payload({"execution_mode": "serial"})
 

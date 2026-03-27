@@ -5,6 +5,8 @@ from threading import Lock
 import time
 from typing import Any, Callable
 
+from .platform_defaults import default_codex_path
+
 
 @dataclass(slots=True)
 class _SnapshotCacheEntry:
@@ -19,8 +21,8 @@ class CodexBackendSnapshotService:
     _entries: dict[str, _SnapshotCacheEntry] = field(default_factory=dict)
     _lock: Lock = field(default_factory=Lock)
 
-    def get_snapshot(self, codex_path: str = "codex.cmd", *, force_refresh: bool = False) -> Any:
-        cache_key = str(codex_path or "codex.cmd").strip() or "codex.cmd"
+    def get_snapshot(self, codex_path: str = "", *, force_refresh: bool = False) -> Any:
+        cache_key = str(codex_path or "").strip() or default_codex_path()
         now = time.monotonic()
         with self._lock:
             cached = self._entries.get(cache_key)
@@ -35,7 +37,7 @@ class CodexBackendSnapshotService:
             self._entries[cache_key] = _SnapshotCacheEntry(checked_at_monotonic=time.monotonic(), snapshot=snapshot)
         return snapshot
 
-    def invalidate(self, codex_path: str = "codex.cmd") -> None:
-        cache_key = str(codex_path or "codex.cmd").strip() or "codex.cmd"
+    def invalidate(self, codex_path: str = "") -> None:
+        cache_key = str(codex_path or "").strip() or default_codex_path()
         with self._lock:
             self._entries.pop(cache_key, None)
