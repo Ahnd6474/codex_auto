@@ -2,6 +2,8 @@
 
 `jakal-flow` is a production-oriented Python CLI for managing multiple repositories inside an isolated workspace and repeatedly running a traceable Codex-driven improvement loop against them through Codex CLI, including OpenAI/Codex cloud models, OpenAI-compatible providers such as OpenRouter or OpenCDK, and local model backends ranging from Codex OSS mode to generic OpenAI-compatible local servers.
 
+One of the main real-world uses for this project is running sustained automation against repositories such as [`Ahnd6474/lit`](https://github.com/Ahnd6474/lit), where the goal is not a one-off patch but a tracked multi-block implementation loop with plans, checkpoints, rollback safety, and reports.
+
 It is designed around a saved project plan:
 
 - `docs/PLAN.md`: stores the current project plan or reviewed execution plan snapshot
@@ -14,6 +16,13 @@ It is designed around a saved project plan:
 
 
 한국어 문서는 [README.ko.md](README.ko.md)에서 볼 수 있습니다.
+
+## Main Use Cases
+
+- continuously improving a primary repository such as [`Ahnd6474/lit`](https://github.com/Ahnd6474/lit) across multiple safe execution blocks
+- managing several repositories at once without mixing their plans, logs, memory, reports, or rollback state
+- running the same Codex-driven workflow across OpenAI/Codex cloud, OpenAI-compatible providers, and local OSS backends
+- reviewing progress through the desktop UI while preserving a Python-first automation backend and structured project history
 
 ## Project Layout
 
@@ -95,7 +104,7 @@ Initialize a managed repository:
 
 ```bash
 python -m jakal_flow init-repo \
-  --repo-url https://github.com/example/project.git \
+  --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
   --model gpt-5.4 \
@@ -110,7 +119,7 @@ Run two improvement blocks:
 
 ```bash
 python -m jakal_flow run \
-  --repo-url https://github.com/example/project.git \
+  --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
   --model gpt-5.4 \
@@ -125,7 +134,7 @@ Run against a local OSS model through Codex CLI's local-provider mode:
 
 ```bash
 python -m jakal_flow run \
-  --repo-url https://github.com/example/project.git \
+  --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
   --model-provider oss \
@@ -142,7 +151,7 @@ Run one ML workflow cycle and allow automatic replanning for up to three cycles:
 
 ```bash
 python -m jakal_flow run \
-  --repo-url https://github.com/example/project.git \
+  --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
   --model gpt-5.4 \
@@ -159,7 +168,7 @@ Run against an OpenAI-compatible provider such as OpenRouter:
 
 ```bash
 python -m jakal_flow run \
-  --repo-url https://github.com/example/project.git \
+  --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
   --model-provider openrouter \
@@ -178,7 +187,7 @@ Resume a managed repository:
 
 ```bash
 python -m jakal_flow resume \
-  --repo-url https://github.com/example/project.git \
+  --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
   --model gpt-5.4 \
@@ -198,9 +207,9 @@ python -m jakal_flow list-repos --workspace-root .jakal-flow-workspace
 Inspect status, history, and reports:
 
 ```bash
-python -m jakal_flow status --repo-url https://github.com/example/project.git --branch main
-python -m jakal_flow history --repo-url https://github.com/example/project.git --branch main --limit 20
-python -m jakal_flow report --repo-url https://github.com/example/project.git --branch main
+python -m jakal_flow status --repo-url https://github.com/Ahnd6474/lit.git --branch main
+python -m jakal_flow history --repo-url https://github.com/Ahnd6474/lit.git --branch main --limit 20
+python -m jakal_flow report --repo-url https://github.com/Ahnd6474/lit.git --branch main
 ```
 
 ## How It Works
