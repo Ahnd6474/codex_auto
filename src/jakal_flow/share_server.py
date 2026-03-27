@@ -5,6 +5,7 @@ import json
 import mimetypes
 import os
 import sys
+from threading import Lock, Thread
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -13,11 +14,13 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from .orchestrator import Orchestrator
+from .run_control import request_stop_after_current_step
 from .share import (
     DEFAULT_SHARE_HOST,
     DEFAULT_SHARE_PORT,
     DEFAULT_VIEWER_PATH,
     ShareServerState,
+    can_resume_from_remote,
     load_share_server_state,
     mask_public_text,
     public_monitor_status,
@@ -26,10 +29,116 @@ from .share import (
     share_server_status_file,
     validate_share_session,
 )
-from .utils import now_utc_iso, write_json
+from .status_views import effective_project_status
+from .ui_bridge import run_command
+from .utils import append_jsonl, now_utc_iso, parse_json_text, write_json
 
 
 WEBSITE_ROOT = Path(__file__).resolve().parents[2] / "website"
+
+
+class ShareRemoteControlManager:
+    def __init__(self, workspace_root: Path):
+        self.workspace_root = workspace_root
+        self._lock = Lock()
+        self._resume_starting_repo_ids: set[str] = set()
+
+    def is_resume_starting(self, repo_id: str) -> bool:
+        with self._lock:
+            return repo_id in self._resume_starting_repo_ids
+
+    def _set_resume_starting(self, repo_id: str, active: bool) -> None:
+        with self._lock:
+            if active:
+                self._resume_starting_repo_ids.add(repo_id)
+            else:
+                self._resume_starting_repo_ids.discard(repo_id)
+
+    def _append_project_event(
+        self,
+        project,
+        event_type: str,
+        message: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        append_jsonl(
+            project.paths.ui_event_log_file,
+            {
+                "timestamp": now_utc_iso(),
+                "event_type": event_type,
+                "message": message,
+                "details": details or {},
+            },
+        )
+
+    def request_pause(self, project) -> dict[str, Any]:
+        control = request_stop_after_current_step(project, request_source="share-remote-monitor")
+        self._append_project_event(
+            project,
+            "remote-pause-requested",
+            "Pause requested after the current step from the remote monitor.",
+            control,
+        )
+        return control
+
+    def queue_resume(self, project, orchestrator: Orchestrator) -> dict[str, Any]:
+        plan_state = orchestrator.load_execution_plan_state(project)
+        status = effective_project_status(project.metadata.current_status, plan_state, project.loop_state)
+        if status.startswith("running:"):
+            raise RuntimeError("The run is already active.")
+        if not can_resume_from_remote(project, plan_state):
+            raise RuntimeError("No remaining paused or pending work is available to resume.")
+        repo_id = project.metadata.repo_id
+        if self.is_resume_starting(repo_id):
+            raise RuntimeError("A remote resume request is already starting.")
+
+        requested_at = now_utc_iso()
+        payload = {
+            "project_dir": str(project.metadata.repo_path),
+            "display_name": project.metadata.display_name,
+            "branch": project.metadata.branch,
+            "origin_url": project.metadata.origin_url,
+            "runtime": project.runtime.to_dict(),
+            "plan": plan_state.to_dict(),
+        }
+        self._set_resume_starting(repo_id, True)
+        self._append_project_event(
+            project,
+            "remote-resume-requested",
+            "Resume requested from the remote monitor.",
+            {"requested_at": requested_at},
+        )
+        Thread(
+            target=self._run_resume_job,
+            args=(repo_id, payload),
+            daemon=True,
+        ).start()
+        return {
+            "queued": True,
+            "requested_at": requested_at,
+            "repo_id": repo_id,
+        }
+
+    def _run_resume_job(self, repo_id: str, payload: dict[str, Any]) -> None:
+        project_dir = Path(str(payload.get("project_dir", "")).strip()).expanduser()
+        try:
+            run_command("run-plan", self.workspace_root, payload)
+        except Exception as exc:
+            orchestrator = Orchestrator(self.workspace_root)
+            project = None
+            try:
+                project = orchestrator.workspace.load_project_by_id(repo_id)
+            except Exception:
+                project = orchestrator.local_project(project_dir) if str(project_dir) else None
+            if project is not None:
+                self._append_project_event(
+                    project,
+                    "remote-resume-failed",
+                    "Remote resume failed before the run loop could finish.",
+                    {"error": str(exc).strip() or str(exc)},
+                )
+        finally:
+            self._set_resume_starting(repo_id, False)
 
 
 class ShareRequestHandler(BaseHTTPRequestHandler):
@@ -65,6 +174,13 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/share/api/logs":
             self._serve_logs(parsed.query)
+            return
+        self._write_json(HTTPStatus.NOT_FOUND, {"error": "Not found."})
+
+    def do_POST(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        if parsed.path == "/share/api/control":
+            self._serve_control(parsed.query)
             return
         self._write_json(HTTPStatus.NOT_FOUND, {"error": "Not found."})
 
@@ -109,6 +225,18 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         project, session = resolve_shared_session(self.server.workspace_root, session_id)  # type: ignore[attr-defined]
         validate_share_session(session, token)
         return project, session
+
+    def _read_json_body(self) -> dict[str, Any]:
+        content_length = int(self.headers.get("Content-Length", "0") or "0")
+        if content_length <= 0:
+            return {}
+        raw = self.rfile.read(content_length)
+        if not raw.strip():
+            return {}
+        payload = parse_json_text(raw.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("Request body must be a JSON object.")
+        return payload
 
     def _serve_status(self, query: str) -> None:
         try:
@@ -194,10 +322,62 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         except PermissionError as exc:
             self._write_sse_event("error", {"error": str(exc)})
 
+    def _serve_control(self, query: str) -> None:
+        try:
+            project, session = self._validated_project(query)
+            body = self._read_json_body()
+            action = str(body.get("action", "")).strip().lower()
+            if not action:
+                raise ValueError("action is required.")
+            orchestrator = Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
+            if action == "pause":
+                control = self.server.remote_control_manager.request_pause(project)  # type: ignore[attr-defined]
+                try:
+                    latest = orchestrator.workspace.load_project_by_id(project.metadata.repo_id)
+                except Exception:
+                    latest = project
+                payload = self._status_payload(latest, session, orchestrator=orchestrator)
+                payload["control_result"] = {
+                    "action": action,
+                    "accepted": True,
+                    "run_control": control,
+                }
+                self._write_json(HTTPStatus.OK, payload)
+                return
+            if action == "resume":
+                result = self.server.remote_control_manager.queue_resume(project, orchestrator)  # type: ignore[attr-defined]
+                try:
+                    latest = orchestrator.workspace.load_project_by_id(project.metadata.repo_id)
+                except Exception:
+                    latest = project
+                payload = self._status_payload(latest, session, orchestrator=orchestrator)
+                payload["control_result"] = {
+                    "action": action,
+                    "accepted": True,
+                    **result,
+                }
+                self._write_json(HTTPStatus.ACCEPTED, payload)
+                return
+            raise ValueError(f"Unsupported control action: {action}")
+        except ValueError as exc:
+            self._write_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+        except RuntimeError as exc:
+            self._write_json(HTTPStatus.CONFLICT, {"error": str(exc)})
+        except KeyError:
+            self._write_json(HTTPStatus.NOT_FOUND, {"error": "Unknown share session."})
+        except PermissionError as exc:
+            self._write_json(HTTPStatus.FORBIDDEN, {"error": str(exc)})
+
     def _status_payload(self, project, session, *, orchestrator: Orchestrator | None = None) -> dict[str, Any]:
         orchestrator = orchestrator or Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
         plan_state = orchestrator.load_execution_plan_state(project)
         payload = public_monitor_status(project, plan_state, log_limit=8)
+        remote_control = payload.get("remote_control")
+        if isinstance(remote_control, dict):
+            resume_starting = self.server.remote_control_manager.is_resume_starting(project.metadata.repo_id)  # type: ignore[attr-defined]
+            remote_control["resume_starting"] = resume_starting
+            if resume_starting:
+                remote_control["can_resume"] = False
         payload["share_session"] = {
             "session_id": session.session_id,
             "expires_at": session.expires_at,
@@ -231,10 +411,11 @@ class ShareHTTPServer(ThreadingHTTPServer):
     def __init__(self, server_address, handler_cls, workspace_root: Path):
         super().__init__(server_address, handler_cls)
         self.workspace_root = workspace_root
+        self.remote_control_manager = ShareRemoteControlManager(workspace_root)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Read-only share server for jakal-flow project monitoring")
+    parser = argparse.ArgumentParser(description="Share server for jakal-flow project monitoring and remote pause/resume control")
     parser.add_argument("--workspace-root", required=True)
     parser.add_argument("--host", default=DEFAULT_SHARE_HOST)
     parser.add_argument("--port", type=int, default=DEFAULT_SHARE_PORT)

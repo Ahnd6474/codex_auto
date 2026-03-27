@@ -32,6 +32,15 @@ from .parallel_resources import normalize_parallel_worker_mode
 from .platform_defaults import default_codex_path
 from .process_supervisor import terminate_process, wait_for_condition
 from .public_tunnel import public_tunnel_status_payload, start_cloudflare_quick_tunnel, stop_public_tunnel_process
+from .run_control import (
+    clear_stop_request,
+    default_run_control,
+    load_run_control,
+    normalize_run_control,
+    request_stop_after_current_step,
+    save_run_control,
+    stop_requested,
+)
 from .runtime_services import CodexBackendSnapshotService
 from .share import (
     DEFAULT_SHARE_HOST,
@@ -307,15 +316,6 @@ def optional_text(value: Any) -> str | None:
     return None
 
 
-def normalize_run_control(payload: Any) -> dict[str, Any]:
-    data = payload if isinstance(payload, dict) else {}
-    return {
-        "stop_after_current_step": coerce_bool(data.get("stop_after_current_step", False), False),
-        "requested_at": optional_text(data.get("requested_at")),
-        "request_source": optional_text(data.get("request_source")),
-    }
-
-
 def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
     base = RuntimeOptions(
         approval_mode="never",
@@ -452,48 +452,6 @@ def resolve_project(
             raise KeyError(f"No managed project exists for {project_dir}.")
         return project
     raise ValueError("Either repo_id or project_dir is required.")
-
-
-def default_run_control() -> dict[str, Any]:
-    return {
-        "stop_after_current_step": False,
-        "requested_at": None,
-        "request_source": None,
-    }
-
-
-def load_run_control(context: ProjectContext) -> dict[str, Any]:
-    data = read_json(context.paths.ui_control_file, default=None)
-    return normalize_run_control(data)
-
-
-def save_run_control(context: ProjectContext, payload: dict[str, Any]) -> dict[str, Any]:
-    state = normalize_run_control(payload)
-    write_json(context.paths.ui_control_file, state)
-    return state
-
-
-def clear_stop_request(context: ProjectContext) -> dict[str, Any]:
-    state = save_run_control(context, default_run_control())
-    append_ui_event(context, "stop-cleared", "Stop-after-step request cleared.")
-    return state
-
-
-def request_stop_after_current_step(context: ProjectContext, request_source: str = "desktop-ui") -> dict[str, Any]:
-    state = save_run_control(
-        context,
-        {
-            "stop_after_current_step": True,
-            "requested_at": now_utc_iso(),
-            "request_source": request_source,
-        },
-    )
-    append_ui_event(context, "stop-requested", "Stop requested after the current step.", state)
-    return state
-
-
-def stop_requested(context: ProjectContext) -> bool:
-    return bool(load_run_control(context).get("stop_after_current_step"))
 
 
 def append_ui_event(context: ProjectContext, event_type: str, message: str, details: dict[str, Any] | None = None) -> None:

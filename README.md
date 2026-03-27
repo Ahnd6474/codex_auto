@@ -118,7 +118,7 @@ npm.cmd run tauri:dev
 | --- | --- |
 | CLI | `init-repo`, `run`, `resume`, `list-repos`, `status`, `history`, `report` |
 | Desktop UI | React + Tauri shell over `python -m jakal_flow.ui_bridge` |
-| Read-only monitor | Local share server, temporary share sessions, optional public base URL, optional automatic Cloudflare Quick Tunnel |
+| Remote monitor | Local share server, temporary share sessions, masked live status, remote pause/resume controls, optional public base URL, optional automatic Cloudflare Quick Tunnel |
 
 ### Workflow Modes
 
@@ -208,6 +208,7 @@ Reasoning effort levels:
 | Temporary session creation and revocation | Yes |
 | Masked status / task / log viewer | Yes |
 | Live updates with polling fallback | Yes |
+| Remote pause / resume from shared monitor | Yes |
 
 ## Desktop UI
 
@@ -221,7 +222,7 @@ What you can do from the desktop app:
 - inspect DAG layers, dependencies, owned paths, and per-step metadata
 - run the plan, stop after the current step, and trigger closeout
 - review estimated remaining time, estimated cost, actual recent cost, and Codex usage windows
-- configure share links and copy or revoke read-only monitor URLs
+- configure share links and copy or revoke remote monitor URLs
 - toggle dashboard cards, theme, and UI language
 
 Build the desktop app:

@@ -18,12 +18,12 @@
     <header class="hero">
       <div>
         <p class="eyebrow" id="hero-eyebrow">jakal-flow remote monitor</p>
-        <h1 id="hero-title">Read-only progress view</h1>
-        <p class="hero-copy" id="hero-copy">This page streams masked progress updates in near real time and never exposes remote controls.</p>
+        <h1 id="hero-title">Remote monitor and control</h1>
+        <p class="hero-copy" id="hero-copy">This page streams masked progress updates in near real time and can request a pause after the current step or resume the saved plan.</p>
       </div>
       <div class="hero-meta">
         <span class="pill pill--neutral" id="poll-state">Waiting</span>
-        <span class="pill" id="read-only-pill">Read only</span>
+        <span class="pill" id="read-only-pill">Signed control link</span>
       </div>
     </header>
 
@@ -66,6 +66,21 @@
         <span class="pill pill--neutral" id="refresh-note">Connecting live stream</span>
       </div>
       <pre id="log-tail">Waiting for status...</pre>
+    </section>
+
+    <section class="card card--controls">
+      <div class="section-head">
+        <div>
+          <p class="card-label" id="control-label">Remote control</p>
+          <strong id="control-title">Pause after the current step or resume the remaining work.</strong>
+        </div>
+        <span class="pill pill--neutral" id="control-state">Control idle</span>
+      </div>
+      <div class="control-actions">
+        <button class="control-button" id="pause-button" type="button">Pause after step</button>
+        <button class="control-button control-button--secondary" id="resume-button" type="button">Resume run</button>
+      </div>
+      <p class="muted" id="control-help">Controls become available when the shared project is running or can resume.</p>
     </section>
 
     <section class="card card--error" id="error-card" hidden>

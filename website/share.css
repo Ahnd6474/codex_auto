@@ -175,6 +175,7 @@ h1 {
 }
 
 .card--logs,
+.card--controls,
 .card--error {
   margin-top: 16px;
 }
@@ -197,6 +198,43 @@ pre {
   font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 0.92rem;
   line-height: 1.6;
+}
+
+.control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.control-button {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid rgba(127, 231, 196, 0.22);
+  border-radius: 999px;
+  color: #08140f;
+  background: linear-gradient(135deg, var(--accent), #baf6df);
+  box-shadow: 0 10px 28px rgba(127, 231, 196, 0.16);
+  font: 600 0.98rem "Space Grotesk", "IBM Plex Sans", sans-serif;
+  cursor: pointer;
+  transition: transform 120ms ease, opacity 120ms ease, border-color 120ms ease;
+}
+
+.control-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.control-button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.control-button--secondary {
+  color: var(--text);
+  border-color: rgba(123, 169, 255, 0.24);
+  background: rgba(123, 169, 255, 0.14);
+  box-shadow: none;
 }
 
 .card--error {

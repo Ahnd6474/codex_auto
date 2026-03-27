@@ -107,7 +107,7 @@ def build_share_command_handlers(
         append_ui_event(
             project,
             "share-session-created",
-            "Created a temporary read-only share session.",
+            "Created a temporary remote monitor share session.",
             {"session_id": session.session_id, "expires_at": session.expires_at},
         )
         detail = ctx.detail_payload(project)
@@ -132,7 +132,7 @@ def build_share_command_handlers(
         append_ui_event(
             project,
             "share-session-revoked",
-            "Revoked a temporary read-only share session.",
+            "Revoked a temporary remote monitor share session.",
             {"session_id": session.session_id},
         )
         detail = ctx.detail_payload(project)

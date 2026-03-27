@@ -204,6 +204,8 @@ class ShareMonitoringTests(unittest.TestCase):
             self.assertIn("current_task", status)
             self.assertIn("latest_test_result", status)
             self.assertIn("recent_logs", status)
+            self.assertIn("run_control", status)
+            self.assertIn("remote_control", status)
             self.assertNotIn("ghp_", json.dumps(status))
             self.assertNotIn("sk-testsecretvalue123456", json.dumps(status))
             self.assertNotIn("C:\\secret\\repo", json.dumps(status))
@@ -345,6 +347,8 @@ class ShareMonitoringTests(unittest.TestCase):
                 self.assertIn("overall_run_status", payload)
                 self.assertIn("recent_logs", payload)
                 self.assertIn("latest_test_result", payload)
+                self.assertIn("run_control", payload)
+                self.assertIn("remote_control", payload)
                 self.assertNotIn("repo_path", json.dumps(payload))
                 self.assertNotIn("project_root", json.dumps(payload))
 
@@ -399,8 +403,10 @@ class ShareMonitoringTests(unittest.TestCase):
         self.assertIn('pathname.endsWith("/share/view")', script)
         self.assertIn('shareEndpoint("api/status")', script)
         self.assertIn('shareEndpoint("api/events")', script)
+        self.assertIn('shareEndpoint("api/control")', script)
         self.assertIn('builtInEnglishShareTranslations', script)
         self.assertIn('language === "en" ? builtInEnglishShareTranslations : {}', script)
+        self.assertIn("await reconcileStatus()", script)
         self.assertNotIn('new URL("/share/api/status", window.location.origin)', script)
         self.assertNotIn('new URL("/share/api/events", window.location.origin)', script)
 
@@ -448,7 +454,117 @@ class ShareMonitoringTests(unittest.TestCase):
                 self.assertEqual(payload["project"]["display_name"], "Share Demo")
                 self.assertIn("recent_logs", payload)
                 self.assertIn("latest_test_result", payload)
+                self.assertIn("remote_control", payload)
             finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
+    def test_share_control_api_requests_pause_after_current_step(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            orchestrator, project = create_project(workspace_root, repo_dir)
+            project.metadata.current_status = "running:st1"
+            orchestrator.workspace.save_project(project)
+            session = create_share_session(project, expires_in_minutes=60, created_by="test")
+
+            server = ShareHTTPServer(("127.0.0.1", 0), ShareRequestHandler, workspace_root=workspace_root)
+            thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True)
+            thread.start()
+            try:
+                base_url = f"http://127.0.0.1:{server.server_address[1]}"
+                request = urllib.request.Request(
+                    f"{base_url}/share/api/control?session={session.session_id}&token={session.viewer_token}",
+                    data=json.dumps({"action": "pause"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                response = urllib.request.urlopen(request)
+                payload = json.loads(response.read().decode("utf-8"))
+
+                self.assertEqual(payload["control_result"]["action"], "pause")
+                self.assertTrue(payload["run_control"]["stop_after_current_step"])
+                self.assertTrue(payload["remote_control"]["pause_requested"])
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
+    def test_share_control_api_queues_resume_job(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            _orchestrator, project = create_project(workspace_root, repo_dir)
+            save_plan_payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Share Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": project.runtime.to_dict(),
+                "plan": {
+                    "execution_mode": "parallel",
+                    "workflow_mode": "standard",
+                    "steps": [
+                        {
+                            "step_id": "ST1",
+                            "title": "Resume me",
+                            "display_description": "Resume the saved run.",
+                            "codex_description": "Continue the remaining work for the saved plan.",
+                            "test_command": "python -m pytest",
+                            "success_criteria": "The saved plan can continue.",
+                            "reasoning_effort": "high",
+                            "depends_on": [],
+                            "owned_paths": ["src/jakal_flow/share_server.py"],
+                            "status": "pending",
+                        }
+                    ],
+                },
+            }
+            with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: _fake_codex_snapshot()):
+                run_command("save-plan", workspace_root, save_plan_payload)
+            project = Orchestrator(workspace_root).local_project(repo_dir)
+            assert project is not None
+            session = create_share_session(project, expires_in_minutes=60, created_by="test")
+
+            server = ShareHTTPServer(("127.0.0.1", 0), ShareRequestHandler, workspace_root=workspace_root)
+            thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True)
+            thread.start()
+            called = threading.Event()
+            release = threading.Event()
+            captured: dict[str, object] = {}
+
+            def fake_run(command: str, actual_workspace_root: Path, payload: dict[str, object]) -> dict[str, object]:
+                captured["command"] = command
+                captured["workspace_root"] = actual_workspace_root
+                captured["payload"] = payload
+                called.set()
+                release.wait(timeout=2)
+                return {}
+
+            try:
+                with mock.patch("jakal_flow.share_server.run_command", side_effect=fake_run):
+                    base_url = f"http://127.0.0.1:{server.server_address[1]}"
+                    request = urllib.request.Request(
+                        f"{base_url}/share/api/control?session={session.session_id}&token={session.viewer_token}",
+                        data=json.dumps({"action": "resume"}).encode("utf-8"),
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    response = urllib.request.urlopen(request)
+                    payload = json.loads(response.read().decode("utf-8"))
+
+                self.assertTrue(called.wait(timeout=2))
+                self.assertEqual(captured["command"], "run-plan")
+                self.assertEqual(captured["workspace_root"], workspace_root)
+                self.assertEqual(captured["payload"]["project_dir"], str(repo_dir))
+                self.assertEqual(payload["control_result"]["action"], "resume")
+                self.assertTrue(payload["control_result"]["queued"])
+                self.assertTrue(payload["remote_control"]["resume_starting"])
+            finally:
+                release.set()
                 server.shutdown()
                 server.server_close()
                 thread.join(timeout=2)

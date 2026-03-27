@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import quote
 
 from .models import ExecutionPlanState, ProjectContext
+from .run_control import load_run_control
 from .status_views import effective_project_status
 from .utils import compact_text, decode_process_output, now_utc_iso, read_json, read_jsonl_tail, read_last_jsonl, write_json
 from .workspace import WorkspaceManager
@@ -474,6 +475,43 @@ def current_phase(context: ProjectContext, plan_state: ExecutionPlanState) -> st
     return status
 
 
+def public_run_control(context: ProjectContext) -> dict[str, Any]:
+    control = load_run_control(context)
+    return {
+        "stop_after_current_step": bool(control.get("stop_after_current_step")),
+        "requested_at": str(control.get("requested_at") or "").strip() or None,
+        "request_source": str(control.get("request_source") or "").strip() or None,
+    }
+
+
+def can_pause_from_remote(context: ProjectContext, plan_state: ExecutionPlanState) -> bool:
+    control = load_run_control(context)
+    status = effective_project_status(context.metadata.current_status, plan_state, context.loop_state)
+    return status.startswith("running:") and not bool(control.get("stop_after_current_step"))
+
+
+def can_resume_from_remote(context: ProjectContext, plan_state: ExecutionPlanState) -> bool:
+    if context.loop_state.pending_checkpoint_approval:
+        return False
+    status = effective_project_status(context.metadata.current_status, plan_state, context.loop_state)
+    if status.startswith("running:") or not plan_state.steps:
+        return False
+    if any(step.status != "completed" for step in plan_state.steps):
+        return True
+    return str(plan_state.closeout_status or "").strip().lower() != "completed"
+
+
+def public_remote_control_state(context: ProjectContext, plan_state: ExecutionPlanState) -> dict[str, Any]:
+    control = public_run_control(context)
+    return {
+        "available": True,
+        "pause_mode": "after_current_step",
+        "pause_requested": bool(control["stop_after_current_step"]),
+        "can_pause": can_pause_from_remote(context, plan_state),
+        "can_resume": can_resume_from_remote(context, plan_state),
+    }
+
+
 def public_monitor_status(context: ProjectContext, plan_state: ExecutionPlanState, log_limit: int = 8) -> dict[str, Any]:
     status = effective_project_status(context.metadata.current_status, plan_state, context.loop_state)
     return {
@@ -491,6 +529,8 @@ def public_monitor_status(context: ProjectContext, plan_state: ExecutionPlanStat
         "latest_test_result": public_test_result(context),
         "recent_logs": project_monitor_lines(context, plan_state, limit=log_limit),
         "last_updated_at": last_updated_timestamp(context, plan_state),
+        "run_control": public_run_control(context),
+        "remote_control": public_remote_control_state(context, plan_state),
     }
 
 

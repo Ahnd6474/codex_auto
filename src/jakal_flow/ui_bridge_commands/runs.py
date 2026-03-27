@@ -23,6 +23,7 @@ def build_run_command_handlers(
             project,
             request_source=str(ctx.payload.get("source", "desktop-ui")).strip() or "desktop-ui",
         )
+        append_ui_event(project, "stop-requested", "Stop requested after the current step.", control)
         return {
             "repo_id": project.metadata.repo_id,
             "project_dir": str(project.metadata.repo_path),

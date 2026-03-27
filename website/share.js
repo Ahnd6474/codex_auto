@@ -1,10 +1,10 @@
 const builtInEnglishShareTranslations = {
   page_title: "jakal-flow | Remote Monitor",
   hero_eyebrow: "jakal-flow remote monitor",
-  hero_title: "Read-only progress view",
-  hero_copy: "This page streams masked progress updates in near real time and never exposes remote controls.",
+  hero_title: "Remote monitor and control",
+  hero_copy: "This page streams masked progress updates in near real time and can request a pause after the current step or resume the saved plan.",
   poll_waiting: "Waiting",
-  read_only: "Read only",
+  remote_control_pill: "Signed control link",
   project_label: "Project",
   project_loading: "Loading...",
   run_status_label: "Run status",
@@ -42,6 +42,23 @@ const builtInEnglishShareTranslations = {
   unable_keep_live_connection: "Unable to keep live connection",
   live_stream_unavailable: "Live stream unavailable",
   falling_back_to_polling: "{message} Falling back to polling.",
+  control_label: "Remote control",
+  control_title: "Pause after the current step or resume the remaining work.",
+  control_idle: "Control idle",
+  pause_after_step: "Pause after step",
+  resume_run: "Resume run",
+  control_help_idle: "Controls become available when the shared project is running or can resume.",
+  control_help_pause: "Pause is requested after the current step because in-flight work is left to finish safely.",
+  control_help_pause_requested: "Pause has already been requested. The run will stop after the current step.",
+  control_help_resume: "Resume starts the saved plan again from the next remaining step.",
+  control_help_unavailable: "No remote action is currently available for this session.",
+  control_state_running: "Run active",
+  control_state_pause_requested: "Pause requested",
+  control_state_resume_ready: "Resume ready",
+  control_state_resume_starting: "Starting resume",
+  control_state_unavailable: "No action available",
+  control_action_pausing: "Requesting pause",
+  control_action_resuming: "Starting resume",
 };
 
 const shareTranslations = Object.fromEntries(
@@ -96,7 +113,7 @@ function normalizeLanguage(value) {
 const activeLanguage = normalizeLanguage(window.navigator?.language || "en");
 
 function t(key, params = {}) {
-  const template = shareTranslations[activeLanguage]?.[key] || shareTranslations.en?.[key] || key;
+  const template = shareTranslations[activeLanguage]?.[key] || shareTranslations.en?.[key] || builtInEnglishShareTranslations[key] || key;
   return String(template).replace(/\{(\w+)\}/g, (_match, token) => String(params[token] ?? ""));
 }
 
@@ -139,6 +156,15 @@ function setRefreshNote(value) {
   }
 }
 
+function setControlState(label, tone = "neutral") {
+  const node = document.getElementById("control-state");
+  if (!node) {
+    return;
+  }
+  node.textContent = label;
+  node.className = `pill pill--${tone}`;
+}
+
 function showError(title, message) {
   const card = document.getElementById("error-card");
   if (!card) {
@@ -164,7 +190,7 @@ function applyStaticTranslations() {
   setText("hero-title", t("hero_title"));
   setText("hero-copy", t("hero_copy"));
   setText("poll-state", t("poll_waiting"));
-  setText("read-only-pill", t("read_only"));
+  setText("read-only-pill", t("remote_control_pill"));
   setText("project-label", t("project_label"));
   setText("project-name", t("project_loading"));
   setText("run-status-label", t("run_status_label"));
@@ -176,6 +202,19 @@ function applyStaticTranslations() {
   setText("log-tail", t("log_waiting"));
   setText("access-label", t("access_label"));
   setText("error-title", t("error_unable_load"));
+  setText("control-label", t("control_label"));
+  setText("control-title", t("control_title"));
+  setText("control-state", t("control_idle"));
+  setText("control-help", t("control_help_idle"));
+
+  const pauseButton = document.getElementById("pause-button");
+  if (pauseButton) {
+    pauseButton.textContent = t("pause_after_step");
+  }
+  const resumeButton = document.getElementById("resume-button");
+  if (resumeButton) {
+    resumeButton.textContent = t("resume_run");
+  }
 }
 
 function renderStatus(payload) {
@@ -197,11 +236,74 @@ function renderStatus(payload) {
   setText("log-tail", logs.length ? logs.join("\n") : t("no_recent_logs"));
 }
 
+function renderControls(payload, controlBusy = false, busyAction = "") {
+  const remote = payload.remote_control || {};
+  const pauseButton = document.getElementById("pause-button");
+  const resumeButton = document.getElementById("resume-button");
+  const canPause = Boolean(remote.can_pause) && !controlBusy;
+  const canResume = Boolean(remote.can_resume) && !controlBusy;
+  const pauseRequested = Boolean(remote.pause_requested);
+  const resumeStarting = Boolean(remote.resume_starting);
+
+  if (pauseButton) {
+    pauseButton.disabled = !canPause;
+    pauseButton.textContent = controlBusy && busyAction === "pause" ? t("control_action_pausing") : t("pause_after_step");
+  }
+  if (resumeButton) {
+    resumeButton.disabled = !canResume;
+    resumeButton.textContent = controlBusy && busyAction === "resume" ? t("control_action_resuming") : t("resume_run");
+  }
+
+  if (resumeStarting) {
+    setControlState(t("control_state_resume_starting"), "info");
+    setText("control-help", t("control_help_resume"));
+    return;
+  }
+  if (pauseRequested) {
+    setControlState(t("control_state_pause_requested"), "info");
+    setText("control-help", t("control_help_pause_requested"));
+    return;
+  }
+  if (remote.can_pause) {
+    setControlState(t("control_state_running"), "success");
+    setText("control-help", t("control_help_pause"));
+    return;
+  }
+  if (remote.can_resume) {
+    setControlState(t("control_state_resume_ready"), "success");
+    setText("control-help", t("control_help_resume"));
+    return;
+  }
+  setControlState(t("control_state_unavailable"), "neutral");
+  setText("control-help", t("control_help_unavailable"));
+}
+
 async function fetchStatus(session, token) {
   const url = shareEndpoint("api/status");
   url.searchParams.set("session", session);
   url.searchParams.set("token", token);
   const response = await fetch(url, { cache: "no-store" });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data.error || t("request_failed_with", { status: response.status }));
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
+async function sendControlAction(session, token, action) {
+  const url = shareEndpoint("api/control");
+  url.searchParams.set("session", session);
+  url.searchParams.set("token", token);
+  const response = await fetch(url, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action }),
+  });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(data.error || t("request_failed_with", { status: response.status }));
@@ -264,6 +366,29 @@ async function bootstrap() {
 
   let inFlight = false;
   let usingPolling = false;
+  let controlBusy = false;
+  let currentControlAction = "";
+  let latestPayload = null;
+
+  const applyPayload = (payload) => {
+    latestPayload = payload;
+    renderStatus(payload);
+    renderControls(payload, controlBusy, currentControlAction);
+  };
+
+  const reconcileStatus = async () => {
+    if (inFlight) {
+      return;
+    }
+    inFlight = true;
+    try {
+      const payload = await fetchStatus(session, token);
+      applyPayload(payload);
+      hideError();
+    } finally {
+      inFlight = false;
+    }
+  };
 
   const tick = async () => {
     if (inFlight) {
@@ -274,7 +399,7 @@ async function bootstrap() {
     setRefreshNote(t("polling_every_5s"));
     try {
       const payload = await fetchStatus(session, token);
-      renderStatus(payload);
+      applyPayload(payload);
       hideError();
       setPollState(t("polling"), "success");
     } catch (error) {
@@ -301,11 +426,55 @@ async function bootstrap() {
     window.setInterval(tick, 5000);
   };
 
+  const postControl = async (action) => {
+    if (controlBusy) {
+      return;
+    }
+    controlBusy = true;
+    currentControlAction = action;
+    renderControls(latestPayload || {}, true, currentControlAction);
+    setControlState(action === "pause" ? t("control_action_pausing") : t("control_action_resuming"), "info");
+    try {
+      const payload = await sendControlAction(session, token, action);
+      applyPayload(payload);
+      hideError();
+      if (usingPolling) {
+        setPollState(t("polling"), "success");
+      }
+    } catch (error) {
+      renderControls(latestPayload || {}, false, "");
+      showError(t("error_unable_load"), String(error.message || error));
+    } finally {
+      controlBusy = false;
+      currentControlAction = "";
+      renderControls(latestPayload || {}, false, "");
+    }
+  };
+
+  const pauseButton = document.getElementById("pause-button");
+  if (pauseButton) {
+    pauseButton.addEventListener("click", () => {
+      void postControl("pause");
+    });
+  }
+  const resumeButton = document.getElementById("resume-button");
+  if (resumeButton) {
+    resumeButton.addEventListener("click", () => {
+      void postControl("resume");
+    });
+  }
+
+  try {
+    await reconcileStatus();
+  } catch (error) {
+    showError(t("error_unable_load"), String(error.message || error));
+  }
+
   const stream = connectEventStream(
     session,
     token,
     (payload) => {
-      renderStatus(payload);
+      applyPayload(payload);
       hideError();
       setPollState(t("live_stream"), "success");
       setRefreshNote(t("streaming_live_updates"));
@@ -314,7 +483,17 @@ async function bootstrap() {
   );
   if (!stream) {
     await fallbackToPolling();
+    return;
   }
+
+  window.setInterval(() => {
+    if (usingPolling) {
+      return;
+    }
+    void reconcileStatus().catch(() => {
+      // Let the live stream remain primary; polling fallback handles stream failures.
+    });
+  }, 4000);
 }
 
 document.addEventListener("DOMContentLoaded", bootstrap);

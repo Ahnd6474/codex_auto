@@ -1384,29 +1384,39 @@ class UIBridgeTests(unittest.TestCase):
             ):
                 run_command("save-project-setup", workspace_root, payload)
 
+            def tunnel_payload(target_url: str) -> dict[str, object]:
+                return {
+                    "running": True,
+                    "provider": "cloudflare-quick-tunnel",
+                    "public_url": "https://demo.trycloudflare.com",
+                    "target_url": target_url,
+                    "pid": 4242,
+                    "started_at": "2026-03-26T00:00:00+00:00",
+                    "available": True,
+                }
+
+            def current_tunnel_status(_workspace_root: Path) -> dict[str, object]:
+                share_state_path = workspace_root / "share_server.json"
+                if not share_state_path.exists():
+                    return {
+                        "running": False,
+                        "provider": "cloudflare-quick-tunnel",
+                        "public_url": "",
+                        "target_url": "",
+                        "pid": None,
+                        "started_at": None,
+                        "available": True,
+                    }
+                state = json.loads(share_state_path.read_text(encoding="utf-8"))
+                return tunnel_payload(f"http://{state['host']}:{state['port']}")
+
             try:
                 with mock.patch(
                     "jakal_flow.ui_bridge.start_cloudflare_quick_tunnel",
-                    return_value={
-                        "running": True,
-                        "provider": "cloudflare-quick-tunnel",
-                        "public_url": "https://demo.trycloudflare.com",
-                        "target_url": "http://0.0.0.0:43123",
-                        "pid": 4242,
-                        "started_at": "2026-03-26T00:00:00+00:00",
-                        "available": True,
-                    },
+                    side_effect=lambda actual_workspace_root, target_url: tunnel_payload(target_url),
                 ) as start_tunnel, mock.patch(
                     "jakal_flow.public_tunnel.public_tunnel_status_payload",
-                    return_value={
-                        "running": True,
-                        "provider": "cloudflare-quick-tunnel",
-                        "public_url": "https://demo.trycloudflare.com",
-                        "target_url": "http://0.0.0.0:43123",
-                        "pid": 4242,
-                        "started_at": "2026-03-26T00:00:00+00:00",
-                        "available": True,
-                    },
+                    side_effect=current_tunnel_status,
                 ), mock.patch(
                     "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
                     side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
