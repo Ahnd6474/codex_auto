@@ -20,10 +20,10 @@
       .title { font: 700 34px 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', sans-serif; fill: #192635; }
       .subtitle { font: 500 16px 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', sans-serif; fill: #4E5F73; }
       .section { font: 700 14px 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', sans-serif; fill: #25364A; letter-spacing: 0.04em; }
-      .boxTitle { font: 700 18px 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', sans-serif; fill: #1B2A3A; }
-      .body { font: 500 13px 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', sans-serif; fill: #495B6E; }
-      .chipLabel { font: 700 12px 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', sans-serif; fill: #FFFFFF; }
-      .chipSub { font: 600 11px 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', sans-serif; fill: rgba(255,255,255,0.92); }
+      .boxTitle { font: 700 17px 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', sans-serif; fill: #1B2A3A; }
+      .body { font: 500 12px 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', sans-serif; fill: #495B6E; }
+      .chipLabel { font: 700 11px 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', sans-serif; fill: #FFFFFF; }
+      .chipSub { font: 600 10px 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', sans-serif; fill: rgba(255,255,255,0.92); }
       .panel { fill: #FFFFFF; stroke: #D8E2EC; stroke-width: 1.5; filter: url(#shadow); }
       .subpanel { fill: #FFFFFF; stroke: #D8E2EC; stroke-width: 1.3; filter: url(#shadow); }
       .soft { fill: #FFFFFF; stroke: #D8E2EC; stroke-width: 1.3; }
@@ -69,19 +69,22 @@
 
   <rect x="64" y="440" width="268" height="82" rx="14" fill="#F4FFFD" stroke="#C9ECE4"/>
   <text x="80" y="468" class="boxTitle">ui_bridge.py</text>
-  <text x="80" y="490" class="body">UI 이벤트를 JSON 브리지 명령으로 바꾸고</text>
-  <text x="80" y="508" class="body">Python 상태를 다시 읽어 화면을 갱신합니다.</text>
+  <text x="80" y="488" class="body">UI 이벤트를 JSON 브리지</text>
+  <text x="80" y="504" class="body">명령으로 바꾸고 Python 상태를</text>
+  <text x="80" y="520" class="body">다시 읽어 화면을 갱신합니다.</text>
 
   <rect x="64" y="540" width="268" height="58" rx="14" fill="#FFF9F1" stroke="#F0DDBE"/>
-  <text x="80" y="574" class="boxTitle">share_server.py + public_tunnel.py</text>
+  <text x="80" y="566" class="boxTitle">share_server.py +</text>
+  <text x="80" y="586" class="boxTitle">public_tunnel.py</text>
 
   <rect x="370" y="294" width="536" height="322" rx="18" class="panel"/>
   <text x="390" y="322" class="section">오케스트레이션 코어</text>
 
   <rect x="390" y="340" width="496" height="96" rx="14" fill="#EEF4FF" stroke="#CDDCF3"/>
   <text x="408" y="368" class="boxTitle">orchestrator.py</text>
-  <text x="408" y="390" class="body">계획 실행, safe revision, 롤백, 재시도,</text>
-  <text x="408" y="408" class="body">체크포인트 흐름, closeout, 리포트를 관리합니다.</text>
+  <text x="408" y="388" class="body">계획 실행, safe revision, 롤백, 재시도,</text>
+  <text x="408" y="404" class="body">체크포인트 흐름과 closeout,</text>
+  <text x="408" y="420" class="body">리포트를 관리합니다.</text>
 
   <rect x="390" y="454" width="150" height="64" rx="12" class="subpanel"/>
   <text x="404" y="478" class="boxTitle">planning.py</text>
@@ -112,16 +115,18 @@
 
   <rect x="944" y="340" width="272" height="64" rx="12" fill="#F4F8FF" stroke="#CFDDF1"/>
   <text x="960" y="366" class="boxTitle">Codex CLI</text>
-  <text x="960" y="386" class="body">실행, 이벤트 스트림, 사용량 데이터를 제공</text>
+  <text x="960" y="384" class="body">실행, 이벤트 스트림,</text>
+  <text x="960" y="400" class="body">사용량 데이터를 제공합니다</text>
 
   <rect x="944" y="422" width="272" height="64" rx="12" fill="#FFF8F2" stroke="#F0D7C2"/>
   <text x="960" y="448" class="boxTitle">관리 대상 Git 저장소</text>
-  <text x="960" y="468" class="body">코드 수정, 테스트, 커밋, safe reset 대상</text>
+  <text x="960" y="466" class="body">코드 수정, 테스트, 커밋,</text>
+  <text x="960" y="482" class="body">safe reset 대상</text>
 
   <rect x="944" y="504" width="272" height="80" rx="12" fill="#F5FBF7" stroke="#CFE8D7"/>
   <text x="960" y="530" class="boxTitle">GitHub / 원격 origin</text>
-  <text x="960" y="550" class="body">검증된 푸시, PR 실패 보고,</text>
-  <text x="960" y="568" class="body">저장소 호스팅과 연동</text>
+  <text x="960" y="548" class="body">검증된 푸시, PR 실패 보고,</text>
+  <text x="960" y="564" class="body">저장소 호스팅과 연동</text>
 
   <rect x="44" y="648" width="1192" height="176" rx="18" class="panel"/>
   <text x="64" y="676" class="section">프로젝트별 워크스페이스</text>
@@ -133,11 +138,13 @@
 
   <rect x="232" y="724" width="154" height="78" rx="12" class="soft"/>
   <text x="248" y="754" class="boxTitle">docs/</text>
-  <text x="248" y="774" class="body">계획과 리뷰 문서</text>
+  <text x="248" y="772" class="body">계획과</text>
+  <text x="248" y="788" class="body">리뷰 문서</text>
 
   <rect x="400" y="724" width="154" height="78" rx="12" class="soft"/>
   <text x="416" y="754" class="boxTitle">memory/</text>
-  <text x="416" y="774" class="body">성공 / 실패 메모</text>
+  <text x="416" y="772" class="body">성공 /</text>
+  <text x="416" y="788" class="body">실패 메모</text>
 
   <rect x="568" y="724" width="154" height="78" rx="12" class="soft"/>
   <text x="584" y="754" class="boxTitle">logs/</text>
@@ -145,11 +152,13 @@
 
   <rect x="736" y="724" width="154" height="78" rx="12" class="soft"/>
   <text x="752" y="754" class="boxTitle">reports/</text>
-  <text x="752" y="774" class="body">최신 리포트와 실패 번들</text>
+  <text x="752" y="772" class="body">최신 리포트와</text>
+  <text x="752" y="788" class="body">실패 번들</text>
 
   <rect x="904" y="724" width="154" height="78" rx="12" class="soft"/>
   <text x="920" y="754" class="boxTitle">state/</text>
-  <text x="920" y="774" class="body">체크포인트와 제어 상태</text>
+  <text x="920" y="772" class="body">체크포인트와</text>
+  <text x="920" y="788" class="body">제어 상태</text>
 
   <rect x="1072" y="724" width="144" height="78" rx="12" class="soft"/>
   <text x="1088" y="754" class="boxTitle">metadata.json</text>
