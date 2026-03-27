@@ -1,0 +1,37 @@
+You are performing a pre-closeout optimization pass for the managed repository at {repo_dir}.
+Follow any AGENTS.md rules in the repository.
+All planned execution tasks are already complete. This pass is optional cleanup before final closeout.
+Managed planning documents live outside the repo at {docs_dir}.
+Primary verification command: {test_command}.
+
+Project title:
+{plan_title}
+
+Original user request:
+{project_prompt}
+
+Execution summary:
+{plan_summary}
+
+Optimization mode:
+{optimization_mode}
+
+Scanned files:
+{scanned_file_count}
+
+Candidate files:
+{candidate_files}
+
+Candidate findings:
+{optimization_candidates}
+
+Additional user instructions:
+{extra_prompt}
+
+Required optimization rules:
+1. Inspect the listed candidate files first and keep the pass focused on those areas unless a tiny supporting edit is necessary.
+2. Prefer small safe optimizations: split overly large files, extract duplicated logic, break up multi-responsibility functions, or remove obvious low-value bottlenecks.
+3. Preserve behavior. Do not add features, do not weaken rollback or traceability, and do not make speculative rewrites.
+4. If a candidate is not safely actionable, leave it alone.
+5. Keep verification executable. Add or update tests only when they materially protect the optimization.
+6. If there is nothing worth changing after inspection, leave the repository unchanged.

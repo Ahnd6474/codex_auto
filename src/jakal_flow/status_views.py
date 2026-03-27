@@ -3,6 +3,22 @@ from __future__ import annotations
 from .models import ExecutionPlanState, LoopState
 
 
+_SPECIAL_RUNNING_STATUSES = {
+    "running:generate-plan",
+    "running:debugging",
+    "running:parallel-debugging",
+}
+_READY_LIKE_STATUSES = {
+    "initialized",
+    "ready",
+    "setup_ready",
+    "plan_ready",
+    "plan_completed",
+    "closed_out",
+    "closeout_failed",
+}
+
+
 def status_from_plan_state(plan_state: ExecutionPlanState) -> str:
     if not plan_state.steps:
         return "setup_ready"
@@ -22,14 +38,31 @@ def status_from_plan_state(plan_state: ExecutionPlanState) -> str:
     return "plan_completed"
 
 
+def _should_prefer_plan_status(raw_status: str, plan_status: str) -> bool:
+    normalized_raw = str(raw_status or "").strip().lower()
+    normalized_plan = str(plan_status or "").strip().lower()
+    if not normalized_plan:
+        return False
+    if not normalized_raw or normalized_raw == "awaiting_checkpoint_approval":
+        return True
+    if normalized_raw in _SPECIAL_RUNNING_STATUSES:
+        return False
+    if normalized_plan in {"running:parallel", "running:closeout"}:
+        return normalized_raw != normalized_plan
+    if normalized_plan.startswith("running:") and normalized_raw in _READY_LIKE_STATUSES:
+        return True
+    return False
+
+
 def effective_project_status(
     raw_status: str | None,
     plan_state: ExecutionPlanState,
     loop_state: LoopState,
 ) -> str:
     normalized = str(raw_status or "").strip()
+    plan_status = status_from_plan_state(plan_state)
     if loop_state.pending_checkpoint_approval:
         return "awaiting_checkpoint_approval"
-    if normalized.lower() == "awaiting_checkpoint_approval":
-        return status_from_plan_state(plan_state)
-    return normalized or status_from_plan_state(plan_state)
+    if _should_prefer_plan_status(normalized, plan_status):
+        return plan_status
+    return normalized or plan_status

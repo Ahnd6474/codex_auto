@@ -255,6 +255,26 @@ export function ConfigEditorView({
             />
             <span>{t("option.useFastMode")}</span>
           </label>
+          <label className="field">
+            <span>{t("field.optimizationMode")}</span>
+            <select
+              value={runtime.optimization_mode || "light"}
+              onChange={(event) =>
+                onChangeForm((current) => ({
+                  ...current,
+                  runtime: {
+                    ...current.runtime,
+                    optimization_mode: event.target.value,
+                  },
+                }))
+              }
+              disabled={busy}
+            >
+              <option value="off">{t("option.optimizationOff")}</option>
+              <option value="light">{t("option.optimizationLight")}</option>
+              <option value="refactor">{t("option.optimizationRefactor")}</option>
+            </select>
+          </label>
         </div>
 
         <div className="form-section">

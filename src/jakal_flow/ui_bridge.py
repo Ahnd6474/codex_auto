@@ -12,6 +12,7 @@ from typing import Any
 from .bridge_events import emit_bridge_event
 from .codex_app_server import fetch_codex_backend_snapshot
 from .model_constants import AUTO_MODEL_SLUG, DEFAULT_LOCAL_MODEL_PROVIDER, DEFAULT_MODEL_PROVIDER
+from .optimization import normalize_optimization_mode
 from .model_selection import (
     DEFAULT_MODEL_PRESET_ID,
     MODEL_PRESETS,
@@ -333,6 +334,27 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
     merged["no_progress_limit"] = coerce_positive_int(merged.get("no_progress_limit", 3), default=3)
     merged["regression_limit"] = coerce_positive_int(merged.get("regression_limit", 3), default=3)
     merged["empty_cycle_limit"] = coerce_positive_int(merged.get("empty_cycle_limit", 3), default=3)
+    merged["optimization_mode"] = normalize_optimization_mode(merged.get("optimization_mode", "light"))
+    merged["optimization_large_file_lines"] = coerce_positive_int(
+        merged.get("optimization_large_file_lines", 350),
+        default=350,
+        minimum=50,
+    )
+    merged["optimization_long_function_lines"] = coerce_positive_int(
+        merged.get("optimization_long_function_lines", 80),
+        default=80,
+        minimum=25,
+    )
+    merged["optimization_duplicate_block_lines"] = coerce_positive_int(
+        merged.get("optimization_duplicate_block_lines", 4),
+        default=4,
+        minimum=3,
+    )
+    merged["optimization_max_files"] = coerce_positive_int(
+        merged.get("optimization_max_files", 3),
+        default=3,
+        minimum=1,
+    )
     merged["checkpoint_interval_blocks"] = coerce_positive_int(
         merged.get("checkpoint_interval_blocks", 1),
         default=1,

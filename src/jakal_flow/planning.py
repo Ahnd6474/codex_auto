@@ -4,6 +4,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from .model_selection import normalize_reasoning_effort
 from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, ProjectContext
@@ -29,6 +30,7 @@ DEBUGGER_SERIAL_PROMPT_FILENAME = "DEBUGGER_SERIAL_PROMPT.txt"
 DEBUGGER_PARALLEL_PROMPT_FILENAME = "DEBUGGER_PARALLEL_PROMPT.txt"
 DEBUGGER_PROMPT_FILENAME = DEBUGGER_SERIAL_PROMPT_FILENAME
 FINALIZATION_PROMPT_FILENAME = "FINALIZATION_PROMPT.txt"
+OPTIMIZATION_PROMPT_FILENAME = "OPTIMIZATION_PROMPT.txt"
 ML_PLAN_GENERATION_PROMPT_FILENAME = "ML_PLAN_GENERATION_PROMPT.txt"
 ML_STEP_EXECUTION_PROMPT_FILENAME = "ML_STEP_EXECUTION_PROMPT.txt"
 ML_FINALIZATION_PROMPT_FILENAME = "ML_FINALIZATION_PROMPT.txt"
@@ -107,6 +109,10 @@ def finalization_prompt_filename(workflow_mode: str | None = None) -> str:
 
 def load_finalization_prompt_template(workflow_mode: str | None = None) -> str:
     return load_source_prompt_template(finalization_prompt_filename(workflow_mode))
+
+
+def load_optimization_prompt_template() -> str:
+    return load_source_prompt_template(OPTIMIZATION_PROMPT_FILENAME)
 
 
 def load_reference_guide_text() -> str:
@@ -791,6 +797,37 @@ def finalization_prompt(
         )
     except KeyError as exc:
         raise ValueError(f"Unknown placeholder in finalization prompt template: {exc.args[0]}") from exc
+
+
+def optimization_prompt(
+    context: ProjectContext,
+    plan_state: ExecutionPlanState,
+    scan_result: Any,
+    template_text: str | None = None,
+) -> str:
+    template = template_text or load_optimization_prompt_template()
+    candidate_files = "\n".join(f"- {path}" for path in getattr(scan_result, "candidate_files", []) or []) or "- No candidate files selected."
+    candidates_payload = json.dumps(
+        [item.to_dict() for item in getattr(scan_result, "candidates", []) or []],
+        indent=2,
+        sort_keys=True,
+    )
+    try:
+        return template.format(
+            repo_dir=context.paths.repo_dir,
+            docs_dir=context.paths.docs_dir,
+            plan_title=plan_state.plan_title.strip() or context.metadata.display_name or context.metadata.slug,
+            project_prompt=plan_state.project_prompt.strip() or "No prompt recorded.",
+            plan_summary=plan_state.summary.strip() or "No execution summary recorded.",
+            test_command=plan_state.default_test_command.strip() or context.runtime.test_cmd,
+            optimization_mode=getattr(scan_result, "mode", "light"),
+            scanned_file_count=int(getattr(scan_result, "scanned_file_count", 0) or 0),
+            candidate_files=candidate_files,
+            optimization_candidates=candidates_payload,
+            extra_prompt=context.runtime.extra_prompt.strip() or "None.",
+        )
+    except KeyError as exc:
+        raise ValueError(f"Unknown placeholder in optimization prompt template: {exc.args[0]}") from exc
 
 
 def reflection_markdown(task: str, test_summary: str, changed_files: list[str], commit_hashes: list[str]) -> str:

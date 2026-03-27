@@ -15,9 +15,11 @@ import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from jakal_flow.orchestrator import Orchestrator
+from jakal_flow.models import ExecutionPlanState, ExecutionStep
 from jakal_flow.share import (
     ShareSession,
     ShareServerState,
+    current_step_summary,
     create_share_session,
     load_share_sessions,
     process_is_running,
@@ -105,6 +107,25 @@ def _fake_codex_snapshot() -> mock.Mock:
 
 
 class ShareMonitoringTests(unittest.TestCase):
+    def test_current_step_summary_combines_parallel_running_steps(self) -> None:
+        summary = current_step_summary(
+            ExecutionPlanState(
+                execution_mode="parallel",
+                steps=[
+                    ExecutionStep(step_id="ST1", title="Root", status="completed"),
+                    ExecutionStep(step_id="ST2", title="Frontend", depends_on=["ST1"], owned_paths=["desktop/src"], status="running"),
+                    ExecutionStep(step_id="ST3", title="Backend", depends_on=["ST1"], owned_paths=["src/jakal_flow"], status="running"),
+                ],
+            )
+        )
+
+        self.assertIsNotNone(summary)
+        assert summary is not None
+        self.assertEqual(summary["status"], "running")
+        self.assertEqual(summary["step_id"], "ST2, ST3")
+        self.assertEqual(summary["title"], "Parallel batch: ST2, ST3")
+        self.assertEqual(summary["summary"], "Frontend, Backend")
+
     def test_normalize_tunnel_target_url_rewrites_wildcard_host(self) -> None:
         self.assertEqual(
             normalize_tunnel_target_url("http://0.0.0.0:55180"),

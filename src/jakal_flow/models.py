@@ -101,6 +101,11 @@ class RuntimeOptions:
     empty_cycle_limit: int = 3
     checkpoint_interval_blocks: int = 2
     require_checkpoint_approval: bool = True
+    optimization_mode: str = "light"
+    optimization_large_file_lines: int = 350
+    optimization_long_function_lines: int = 80
+    optimization_duplicate_block_lines: int = 4
+    optimization_max_files: int = 3
 
     def to_dict(self) -> dict[str, Any]:
         return _normalize(self)

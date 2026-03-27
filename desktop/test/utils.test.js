@@ -240,6 +240,7 @@ test("blankProjectForm falls back to repository defaults when runtime is missing
 
   assert.equal(form.runtime.generate_word_report, true);
   assert.equal(form.runtime.max_blocks, 5);
+  assert.equal(form.runtime.optimization_mode, "light");
   assert.equal(form.runtime.test_cmd, "python -m pytest");
 });
 
@@ -277,6 +278,7 @@ test("projectFormFromDetail merges persisted runtime and derives GitHub mode", (
   const defaultRuntime = {
     max_blocks: 7,
     effort: "high",
+    optimization_mode: "refactor",
   };
 
   const form = projectFormFromDetail(detail, defaultRuntime);
@@ -290,6 +292,7 @@ test("projectFormFromDetail merges persisted runtime and derives GitHub mode", (
     runtime: {
       max_blocks: 7,
       effort: "high",
+      optimization_mode: "refactor",
       execution_mode: "parallel",
       test_cmd: "npm run check",
       model: "gpt-5.4",

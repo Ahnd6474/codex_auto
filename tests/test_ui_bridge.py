@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from jakal_flow.cli import main as cli_main
 import jakal_flow.ui_bridge_payloads as ui_bridge_payloads
 from jakal_flow.models import ExecutionPlanState, ExecutionStep
+from jakal_flow.status_views import effective_project_status
 from jakal_flow.ui_bridge import progress_caption, run_command, runtime_from_payload
 
 
@@ -107,6 +108,36 @@ class UIBridgeTests(unittest.TestCase):
 
         self.assertEqual(caption, "Completed 1/4 steps, ready: ST2, ST3")
 
+    def test_progress_caption_reports_running_nodes_for_parallel_dag(self) -> None:
+        caption = progress_caption(
+            ExecutionPlanState(
+                execution_mode="parallel",
+                steps=[
+                    ExecutionStep(step_id="ST1", title="Root", status="completed"),
+                    ExecutionStep(step_id="ST2", title="Frontend", depends_on=["ST1"], owned_paths=["desktop/src"], status="running"),
+                    ExecutionStep(step_id="ST3", title="Backend", depends_on=["ST1"], owned_paths=["src/jakal_flow"], status="running"),
+                ],
+            )
+        )
+
+        self.assertEqual(caption, "Completed 1/3 steps, running: ST2, ST3")
+
+    def test_effective_project_status_prefers_parallel_plan_status_when_steps_are_running(self) -> None:
+        status = effective_project_status(
+            "running:st2",
+            ExecutionPlanState(
+                execution_mode="parallel",
+                steps=[
+                    ExecutionStep(step_id="ST1", title="Root", status="completed"),
+                    ExecutionStep(step_id="ST2", title="Frontend", depends_on=["ST1"], owned_paths=["desktop/src"], status="running"),
+                    ExecutionStep(step_id="ST3", title="Backend", depends_on=["ST1"], owned_paths=["src/jakal_flow"], status="running"),
+                ],
+            ),
+            mock.Mock(pending_checkpoint_approval=False),
+        )
+
+        self.assertEqual(status, "running:parallel")
+
     def test_runtime_from_payload_coerces_invalid_scalar_values(self) -> None:
         runtime = runtime_from_payload(
             {
@@ -121,6 +152,11 @@ class UIBridgeTests(unittest.TestCase):
                 "regression_limit": "bogus",
                 "empty_cycle_limit": 0,
                 "checkpoint_interval_blocks": "0",
+                "optimization_mode": "turbo",
+                "optimization_large_file_lines": "0",
+                "optimization_long_function_lines": "bogus",
+                "optimization_duplicate_block_lines": 1,
+                "optimization_max_files": "0",
             }
         )
 
@@ -136,6 +172,11 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(runtime.regression_limit, 3)
         self.assertEqual(runtime.empty_cycle_limit, 1)
         self.assertEqual(runtime.checkpoint_interval_blocks, 1)
+        self.assertEqual(runtime.optimization_mode, "light")
+        self.assertEqual(runtime.optimization_large_file_lines, 50)
+        self.assertEqual(runtime.optimization_long_function_lines, 80)
+        self.assertEqual(runtime.optimization_duplicate_block_lines, 3)
+        self.assertEqual(runtime.optimization_max_files, 1)
 
     def test_runtime_from_payload_defaults_parallel_workers_to_auto_mode(self) -> None:
         runtime = runtime_from_payload({"execution_mode": "parallel"})
@@ -260,6 +301,7 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(payload["default_runtime"]["model_preset"], "auto")
         self.assertTrue(payload["default_runtime"]["generate_word_report"])
         self.assertEqual(payload["default_runtime"]["sandbox_mode"], "danger-full-access")
+        self.assertEqual(payload["default_runtime"]["optimization_mode"], "light")
 
     def test_project_setup_and_load_round_trip(self) -> None:
         with TemporaryTestDir() as temp_dir:

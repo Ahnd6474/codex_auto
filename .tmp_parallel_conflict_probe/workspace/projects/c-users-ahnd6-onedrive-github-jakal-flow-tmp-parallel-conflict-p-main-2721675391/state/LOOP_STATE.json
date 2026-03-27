@@ -1,0 +1,20 @@
+{
+  "block_index": 0,
+  "counters": {
+    "empty_cycles": 0,
+    "no_progress_blocks": 0,
+    "regression_failures": 0
+  },
+  "current_checkpoint_id": null,
+  "current_safe_revision": "2704f3ff876011b3825eaf3a63697710b0cbcfd8",
+  "current_task": null,
+  "last_block_completed_at": null,
+  "last_candidates": [],
+  "last_commit_hash": null,
+  "pending_checkpoint_approval": false,
+  "plan_locked": true,
+  "repo_id": "272167539138a555a52cbcff4e3bae527540ea26",
+  "repo_slug": "c-users-ahnd6-onedrive-github-jakal-flow-tmp-parallel-conflict-p-main-2721675391",
+  "stop_reason": null,
+  "stop_requested": false
+}

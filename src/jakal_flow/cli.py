@@ -65,6 +65,36 @@ def build_parser() -> argparse.ArgumentParser:
         target.add_argument("--sandbox-mode", default="workspace-write", help="Codex sandbox mode")
         target.add_argument("--test-cmd", default="python -m pytest", help="Validation command to run after passes")
         target.add_argument("--max-blocks", type=int, default=1, help="Maximum blocks to execute in one run")
+        target.add_argument(
+            "--optimization-mode",
+            default="light",
+            choices=["off", "light", "refactor"],
+            help="Optional pre-closeout optimization pass intensity",
+        )
+        target.add_argument(
+            "--optimization-large-file-lines",
+            type=int,
+            default=350,
+            help="Flag files at or above this many lines for pre-closeout optimization",
+        )
+        target.add_argument(
+            "--optimization-long-function-lines",
+            type=int,
+            default=80,
+            help="Flag Python functions at or above this many lines for pre-closeout optimization",
+        )
+        target.add_argument(
+            "--optimization-duplicate-block-lines",
+            type=int,
+            default=4,
+            help="Minimum normalized block size used when scanning for duplicated logic",
+        )
+        target.add_argument(
+            "--optimization-max-files",
+            type=int,
+            default=3,
+            help="Maximum number of candidate files to send into the pre-closeout optimization pass",
+        )
         target.add_argument("--allow-push", action="store_true", help="Push safe commits to origin")
         target.add_argument("--plan-file", type=Path, help="Optional path to seed PLAN.md")
         target.add_argument("--resume", action="store_true", help="Resume an existing managed repository")
@@ -119,6 +149,11 @@ def runtime_from_args(args: argparse.Namespace) -> RuntimeOptions:
         sandbox_mode=args.sandbox_mode,
         test_cmd=args.test_cmd,
         max_blocks=args.max_blocks,
+        optimization_mode=args.optimization_mode,
+        optimization_large_file_lines=max(50, args.optimization_large_file_lines),
+        optimization_long_function_lines=max(25, args.optimization_long_function_lines),
+        optimization_duplicate_block_lines=max(3, args.optimization_duplicate_block_lines),
+        optimization_max_files=max(1, args.optimization_max_files),
         allow_push=args.allow_push,
     )
 

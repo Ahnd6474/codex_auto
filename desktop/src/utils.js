@@ -245,6 +245,7 @@ export function blankProjectForm(defaultRuntime) {
       ...(cloneValue(defaultRuntime) || {}),
       generate_word_report: defaultRuntime?.generate_word_report ?? true,
       max_blocks: defaultRuntime?.max_blocks || 5,
+      optimization_mode: defaultRuntime?.optimization_mode || "light",
       test_cmd: defaultRuntime?.test_cmd || "python -m pytest",
       execution_mode: "parallel",
     },

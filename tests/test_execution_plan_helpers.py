@@ -32,6 +32,7 @@ from jakal_flow.planning import (
     DEBUGGER_SERIAL_PROMPT_FILENAME,
     FINALIZATION_PROMPT_FILENAME,
     ML_PLAN_DECOMPOSITION_PROMPT_FILENAME,
+    OPTIMIZATION_PROMPT_FILENAME,
     ML_FINALIZATION_PROMPT_FILENAME,
     ML_PLAN_GENERATION_PROMPT_FILENAME,
     ML_STEP_EXECUTION_PROMPT_FILENAME,
@@ -49,6 +50,7 @@ from jakal_flow.planning import (
     execution_plan_svg,
     load_debugger_prompt_template,
     load_finalization_prompt_template,
+    load_optimization_prompt_template,
     load_plan_decomposition_prompt_template,
     load_plan_generation_prompt_template,
     load_reference_guide_text,
@@ -1348,6 +1350,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         serial_debugger_template = load_source_prompt_template(DEBUGGER_SERIAL_PROMPT_FILENAME)
         parallel_debugger_template = load_source_prompt_template(DEBUGGER_PARALLEL_PROMPT_FILENAME)
         final_template = load_source_prompt_template(FINALIZATION_PROMPT_FILENAME)
+        optimization_template = load_source_prompt_template(OPTIMIZATION_PROMPT_FILENAME)
         ml_final_template = load_source_prompt_template(ML_FINALIZATION_PROMPT_FILENAME)
         scope_template = load_source_prompt_template(SCOPE_GUARD_TEMPLATE_FILENAME)
 
@@ -1436,6 +1439,10 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("{completed_steps}", final_template)
         self.assertIn("{closeout_report_file}", final_template)
         self.assertIn("{test_command}", final_template)
+        self.assertIn("{optimization_mode}", optimization_template)
+        self.assertIn("{candidate_files}", optimization_template)
+        self.assertIn("{optimization_candidates}", optimization_template)
+        self.assertEqual(load_optimization_prompt_template(), optimization_template)
         self.assertIn("{ml_mode_state_file}", ml_final_template)
         self.assertIn("{ml_experiment_reports_dir}", ml_final_template)
         self.assertEqual(load_finalization_prompt_template("ml"), ml_final_template)

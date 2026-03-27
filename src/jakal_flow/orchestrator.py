@@ -13,6 +13,7 @@ from .git_ops import GitOps
 from .memory import MemoryStore
 from .model_selection import normalize_reasoning_effort
 from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, LoopState, MLExperimentRecord, MLModeState, ProjectContext, ProjectPaths, RepoMetadata, RuntimeOptions, TestRunResult
+from .optimization import scan_optimization_candidates
 from .parallel_resources import build_parallel_resource_plan, normalize_parallel_worker_mode
 from .planning import (
     FINALIZATION_PROMPT_FILENAME,
@@ -35,12 +36,14 @@ from .planning import (
     implementation_prompt,
     is_plan_markdown,
     load_debugger_prompt_template,
+    load_optimization_prompt_template,
     load_plan_decomposition_prompt_template,
     load_plan_generation_prompt_template,
     parse_execution_plan_response,
     prompt_to_plan_decomposition_prompt,
     parse_work_breakdown_response,
     prompt_to_execution_plan_prompt,
+    optimization_prompt,
     reflection_markdown,
     scan_repository_inputs,
     select_candidate,
@@ -1518,6 +1521,219 @@ class Orchestrator:
         if isinstance(worker_root, Path):
             shutil.rmtree(worker_root, ignore_errors=True)
 
+    def _next_logged_block_index(self, context: ProjectContext) -> int:
+        latest_logged_block = read_last_jsonl(context.paths.block_log_file)
+        latest_logged_block_index = int(latest_logged_block.get("block_index", 0)) if latest_logged_block else 0
+        return max(1, context.loop_state.block_index + 1, latest_logged_block_index + 1)
+
+    def _execute_verified_repo_pass(
+        self,
+        *,
+        context: ProjectContext,
+        runner: CodexRunner,
+        reporter: Reporter,
+        prompt: str,
+        pass_type: str,
+        block_index: int,
+        task_name: str,
+        safe_revision: str,
+    ) -> dict[str, object]:
+        run_result = runner.run_pass(
+            context=context,
+            prompt=prompt,
+            pass_type=pass_type,
+            block_index=block_index,
+            search_enabled=False,
+        )
+        run_result.changed_files = self.git.changed_files(context.paths.repo_dir)
+
+        commit_hash: str | None = None
+        rollback_status = "not_needed"
+        test_result: TestRunResult | None = None
+        changed_files = sorted(set(run_result.changed_files))
+        success = False
+        notes = ""
+
+        if run_result.returncode != 0:
+            self.git.hard_reset(context.paths.repo_dir, safe_revision)
+            rollback_status = "rolled_back_to_safe_revision"
+            notes = f"{task_name} Codex pass failed and changes were rolled back."
+        else:
+            test_result = self._run_test_command(context, block_index, pass_type)
+            reporter.save_test_result(block_index, pass_type, test_result)
+            if test_result.returncode != 0:
+                self.git.hard_reset(context.paths.repo_dir, safe_revision)
+                rollback_status = "rolled_back_to_safe_revision"
+                test_result = None
+                notes = f"{task_name} verification failed and changes were rolled back."
+            else:
+                if self.git.has_changes(context.paths.repo_dir):
+                    commit_hash = self.git.commit_all(
+                        context.paths.repo_dir,
+                        self._commit_message(block_index, pass_type, task_name),
+                    )
+                if commit_hash:
+                    context.metadata.current_safe_revision = commit_hash
+                    context.loop_state.current_safe_revision = commit_hash
+                    if context.runtime.allow_push and self.git.remote_url(context.paths.repo_dir, "origin"):
+                        self.git.push(context.paths.repo_dir, context.metadata.branch)
+                success = True
+                notes = test_result.summary
+
+        return {
+            "success": success,
+            "notes": notes,
+            "run_result": run_result,
+            "test_result": test_result,
+            "commit_hash": commit_hash,
+            "changed_files": changed_files,
+            "rollback_status": rollback_status,
+            "safe_revision": commit_hash or safe_revision,
+        }
+
+    def _record_repo_pass(
+        self,
+        *,
+        context: ProjectContext,
+        reporter: Reporter,
+        block_index: int,
+        pass_type: str,
+        selected_task: str,
+        pass_result: dict[str, object],
+        success_block_status: str,
+        failure_block_status: str,
+        extra_pass_fields: dict[str, object] | None = None,
+        extra_block_fields: dict[str, object] | None = None,
+    ) -> None:
+        run_result = pass_result.get("run_result")
+        test_result = pass_result.get("test_result")
+        commit_hash = pass_result.get("commit_hash")
+        rollback_status = str(pass_result.get("rollback_status") or "not_needed")
+        changed_files = list(pass_result.get("changed_files") or [])
+        success = bool(pass_result.get("success"))
+        reporter.log_pass(
+            {
+                "repository_id": context.metadata.repo_id,
+                "repository_slug": context.metadata.slug,
+                "block_index": block_index,
+                "pass_type": pass_type,
+                "selected_task": selected_task,
+                "changed_files": changed_files,
+                "test_results": test_result.to_dict() if isinstance(test_result, TestRunResult) else None,
+                "usage": run_result.usage if run_result else {},
+                "duration_seconds": run_result.duration_seconds if run_result else 0.0,
+                "codex_attempt_count": run_result.attempt_count if run_result else 0,
+                "codex_diagnostics": run_result.diagnostics if run_result else {},
+                "codex_return_code": run_result.returncode if run_result else None,
+                "commit_hash": commit_hash,
+                "rollback_status": rollback_status,
+                "search_enabled": False,
+                **(extra_pass_fields or {}),
+            }
+        )
+        reporter.log_block(
+            {
+                "repository_id": context.metadata.repo_id,
+                "repository_slug": context.metadata.slug,
+                "block_index": block_index,
+                "status": success_block_status if success else failure_block_status,
+                "selected_task": selected_task,
+                "changed_files": changed_files,
+                "test_summary": str(pass_result.get("notes") or "").strip(),
+                "commit_hashes": [str(commit_hash)] if commit_hash else [],
+                "rollback_status": rollback_status,
+                **(extra_block_fields or {}),
+            }
+        )
+        reporter.write_block_review(
+            reflection_markdown(
+                selected_task,
+                str(pass_result.get("notes") or "").strip() or "No summary recorded.",
+                changed_files,
+                [str(commit_hash)] if commit_hash else [],
+            )
+        )
+        reporter.append_attempt_history(
+            attempt_history_entry(
+                block_index,
+                selected_task,
+                success_block_status.replace("_", " ") if success else failure_block_status.replace("_", " "),
+                [str(commit_hash)] if commit_hash else [],
+            )
+        )
+
+    def _run_optional_closeout_optimization(
+        self,
+        *,
+        context: ProjectContext,
+        plan_state: ExecutionPlanState,
+        runner: CodexRunner,
+        reporter: Reporter,
+        safe_revision: str,
+        block_index: int,
+    ) -> tuple[str, int]:
+        scan_result = scan_optimization_candidates(context.paths.repo_dir, context.runtime)
+        if not scan_result.candidates:
+            return safe_revision, block_index
+
+        optimization_task = f"Pre-closeout optimization ({scan_result.mode})"
+        context.loop_state.current_task = optimization_task
+        self.workspace.save_project(context)
+        pass_result: dict[str, object] = {
+            "success": False,
+            "notes": "",
+            "run_result": None,
+            "test_result": None,
+            "commit_hash": None,
+            "changed_files": [],
+            "rollback_status": "not_needed",
+            "safe_revision": safe_revision,
+        }
+        try:
+            pass_result = self._execute_verified_repo_pass(
+                context=context,
+                runner=runner,
+                reporter=reporter,
+                prompt=optimization_prompt(context, plan_state, scan_result),
+                pass_type="project-optimization-pass",
+                block_index=block_index,
+                task_name=optimization_task,
+                safe_revision=safe_revision,
+            )
+        except Exception as exc:
+            self.git.hard_reset(context.paths.repo_dir, safe_revision)
+            pass_result = {
+                "success": False,
+                "notes": str(exc).strip() or "Pre-closeout optimization failed.",
+                "run_result": pass_result.get("run_result"),
+                "test_result": None,
+                "commit_hash": None,
+                "changed_files": self.git.changed_files(context.paths.repo_dir),
+                "rollback_status": "rolled_back_to_safe_revision",
+                "safe_revision": safe_revision,
+            }
+
+        self._record_repo_pass(
+            context=context,
+            reporter=reporter,
+            block_index=block_index,
+            pass_type="project-optimization-pass",
+            selected_task=optimization_task,
+            pass_result=pass_result,
+            success_block_status="optimization_completed",
+            failure_block_status="optimization_failed",
+            extra_pass_fields={
+                "optimization_mode": scan_result.mode,
+                "optimization_candidates": [item.to_dict() for item in scan_result.candidates],
+                "scanned_file_count": scan_result.scanned_file_count,
+            },
+            extra_block_fields={
+                "optimization_mode": scan_result.mode,
+                "candidate_files": list(scan_result.candidate_files),
+            },
+        )
+        return str(pass_result.get("safe_revision") or safe_revision), block_index + 1
+
     def run_execution_closeout(
         self,
         project_dir: Path,
@@ -1561,107 +1777,70 @@ class Orchestrator:
         runner = CodexRunner(context.runtime.codex_path)
         reporter = Reporter(context)
         repo_inputs = scan_repository_inputs(context.paths.repo_dir)
+        safe_revision = context.metadata.current_safe_revision or self.git.current_revision(context.paths.repo_dir)
+        next_block_index = self._next_logged_block_index(context)
+        safe_revision, next_block_index = self._run_optional_closeout_optimization(
+            context=context,
+            plan_state=plan_state,
+            runner=runner,
+            reporter=reporter,
+            safe_revision=safe_revision,
+            block_index=next_block_index,
+        )
         prompt = finalization_prompt(
             context=context,
             plan_state=plan_state,
             repo_inputs=repo_inputs,
         )
-        safe_revision = context.metadata.current_safe_revision or self.git.current_revision(context.paths.repo_dir)
-        latest_logged_block = read_last_jsonl(context.paths.block_log_file)
-        latest_logged_block_index = int(latest_logged_block.get("block_index", 0)) if latest_logged_block else 0
-        closeout_block_index = max(1, context.loop_state.block_index + 1, latest_logged_block_index + 1)
+        closeout_block_index = next_block_index
         closeout_task = "Project closeout"
-        run_result = runner.run_pass(
-            context=context,
-            prompt=prompt,
-            pass_type="project-closeout-pass",
-            block_index=closeout_block_index,
-            search_enabled=False,
-        )
-        run_result.changed_files = self.git.changed_files(context.paths.repo_dir)
-
-        commit_hash: str | None = None
-        rollback_status = "not_needed"
-        test_result: TestRunResult | None = None
-        changed_files = sorted(set(run_result.changed_files))
+        context.loop_state.current_task = closeout_task
+        self.workspace.save_project(context)
+        closeout_result: dict[str, object] = {
+            "success": False,
+            "notes": "",
+            "run_result": None,
+            "test_result": None,
+            "commit_hash": None,
+            "changed_files": [],
+            "rollback_status": "not_needed",
+            "safe_revision": safe_revision,
+        }
 
         try:
-            if run_result.returncode != 0:
-                self.git.hard_reset(context.paths.repo_dir, safe_revision)
-                rollback_status = "rolled_back_to_safe_revision"
-                plan_state.closeout_status = "failed"
-                plan_state.closeout_notes = "Closeout Codex pass failed and changes were rolled back."
+            closeout_result = self._execute_verified_repo_pass(
+                context=context,
+                runner=runner,
+                reporter=reporter,
+                prompt=prompt,
+                pass_type="project-closeout-pass",
+                block_index=closeout_block_index,
+                task_name=closeout_task,
+                safe_revision=safe_revision,
+            )
+            if bool(closeout_result.get("success")):
+                plan_state.closeout_status = "completed"
+                plan_state.closeout_completed_at = now_utc_iso()
+                plan_state.closeout_commit_hash = str(closeout_result.get("commit_hash") or "") or None
+                plan_state.closeout_notes = str(closeout_result.get("notes") or "").strip()
             else:
-                test_result = self._run_test_command(context, closeout_block_index, "project-closeout-pass")
-                reporter.save_test_result(closeout_block_index, "project-closeout-pass", test_result)
-                if test_result.returncode != 0:
-                    self.git.hard_reset(context.paths.repo_dir, safe_revision)
-                    rollback_status = "rolled_back_to_safe_revision"
-                    test_result = None
-                    plan_state.closeout_status = "failed"
-                    plan_state.closeout_notes = "Closeout verification failed and changes were rolled back."
-                else:
-                    if self.git.has_changes(context.paths.repo_dir):
-                        commit_hash = self.git.commit_all(
-                            context.paths.repo_dir,
-                            self._commit_message(closeout_block_index, "project-closeout-pass", closeout_task),
-                        )
-                    if commit_hash:
-                        context.metadata.current_safe_revision = commit_hash
-                        context.loop_state.current_safe_revision = commit_hash
-                        if context.runtime.allow_push and self.git.remote_url(context.paths.repo_dir, "origin"):
-                            self.git.push(context.paths.repo_dir, context.metadata.branch)
-                    plan_state.closeout_status = "completed"
-                    plan_state.closeout_completed_at = now_utc_iso()
-                    plan_state.closeout_commit_hash = commit_hash
-                    plan_state.closeout_notes = test_result.summary
+                plan_state.closeout_status = "failed"
+                plan_state.closeout_notes = str(closeout_result.get("notes") or "").strip()
         except Exception as exc:
             plan_state.closeout_status = "failed"
             plan_state.closeout_notes = str(exc).strip() or "Closeout failed."
             raise
         finally:
-            reporter.log_pass(
-                {
-                    "repository_id": context.metadata.repo_id,
-                    "repository_slug": context.metadata.slug,
-                    "block_index": closeout_block_index,
-                    "pass_type": "project-closeout-pass",
-                    "selected_task": closeout_task,
-                    "changed_files": changed_files,
-                    "test_results": test_result.to_dict() if test_result else None,
-                    "usage": run_result.usage,
-                    "duration_seconds": run_result.duration_seconds,
-                    "codex_attempt_count": run_result.attempt_count,
-                    "codex_diagnostics": run_result.diagnostics,
-                    "codex_return_code": run_result.returncode,
-                    "commit_hash": commit_hash,
-                    "rollback_status": rollback_status,
-                    "search_enabled": False,
-                }
-            )
-            reporter.log_block(
-                {
-                    "repository_id": context.metadata.repo_id,
-                    "repository_slug": context.metadata.slug,
-                    "block_index": closeout_block_index,
-                    "status": "closeout_completed" if plan_state.closeout_status == "completed" else "closeout_failed",
-                    "selected_task": closeout_task,
-                    "changed_files": changed_files,
-                    "test_summary": plan_state.closeout_notes,
-                    "commit_hashes": [commit_hash] if commit_hash else [],
-                    "rollback_status": rollback_status,
-                }
-            )
-            reporter.write_block_review(
-                reflection_markdown(closeout_task, plan_state.closeout_notes or "No closeout summary recorded.", changed_files, [commit_hash] if commit_hash else [])
-            )
-            reporter.append_attempt_history(
-                attempt_history_entry(
-                    closeout_block_index,
-                    closeout_task,
-                    "closeout completed" if plan_state.closeout_status == "completed" else "closeout failed",
-                    [commit_hash] if commit_hash else [],
-                )
+            closeout_result["notes"] = plan_state.closeout_notes
+            self._record_repo_pass(
+                context=context,
+                reporter=reporter,
+                block_index=closeout_block_index,
+                pass_type="project-closeout-pass",
+                selected_task=closeout_task,
+                pass_result=closeout_result,
+                success_block_status="closeout_completed",
+                failure_block_status="closeout_failed",
             )
             context.runtime = previous_runtime
             if normalize_workflow_mode(context.runtime.workflow_mode) == "ml":

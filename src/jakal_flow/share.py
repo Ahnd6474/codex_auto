@@ -425,7 +425,18 @@ def project_monitor_lines(context: ProjectContext, plan_state: ExecutionPlanStat
 
 
 def current_step_summary(plan_state: ExecutionPlanState) -> dict[str, Any] | None:
-    current = next((step for step in plan_state.steps if step.status == "running"), None)
+    running_steps = [step for step in plan_state.steps if step.status == "running"]
+    if len(running_steps) > 1:
+        step_ids = ", ".join(step.step_id for step in running_steps)
+        step_titles = ", ".join(step.title for step in running_steps if step.title)
+        summary = step_titles or f"Parallel batch running: {step_ids}"
+        return {
+            "step_id": step_ids,
+            "title": mask_public_text(f"Parallel batch: {step_ids}", max_chars=120),
+            "summary": mask_public_text(summary, max_chars=180),
+            "status": "running",
+        }
+    current = running_steps[0] if running_steps else None
     if current is None:
         current = next((step for step in plan_state.steps if step.status != "completed"), None)
     if current is None:

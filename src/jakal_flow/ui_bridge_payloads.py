@@ -169,6 +169,9 @@ def progress_caption(plan_state: ExecutionPlanState) -> str:
         and any(step.depends_on or step.owned_paths for step in plan_state.steps)
     )
     if uses_dag:
+        running = [step.step_id for step in plan_state.steps if step.status == "running"]
+        if running:
+            return f"Completed {completed}/{total} steps, running: {', '.join(running)}"
         completed_ids = {step.step_id for step in plan_state.steps if step.status == "completed"}
         ready = [
             step.step_id
