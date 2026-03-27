@@ -27,6 +27,7 @@ import {
   shouldReplaceVisibleProject,
 } from "../utils";
 import {
+  fetchHistoryDetail,
   fetchProjectDetail,
   fetchProjectDetailBySelector,
   loadInitialDesktopState,
@@ -50,12 +51,15 @@ export function useDesktopController() {
   const [modelPresets, setModelPresets] = useState([]);
   const [modelCatalog, setModelCatalog] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [historyProjects, setHistoryProjects] = useState([]);
   const [workspaceStats, setWorkspaceStats] = useState(null);
   const [selectedProjectId, setSelectedProjectId] = usePersistentState("jakal-flow:selected-project", "");
+  const [selectedHistoryId, setSelectedHistoryId] = usePersistentState("jakal-flow:selected-history", "");
   const [storedProgramSettings, setStoredProgramSettings] = usePersistentState("jakal-flow:program-settings", null);
   const [projectForm, setProjectForm] = useState(blankProjectForm(null));
   const [programSettings, setProgramSettings] = useState(programSettingsFromRuntime(null));
   const [projectDetail, setProjectDetail] = useState(null);
+  const [historyDetail, setHistoryDetail] = useState(null);
   const [planDraft, setPlanDraft] = useState(() => emptyPlanDraft());
   const [selectedStepId, setSelectedStepId] = usePersistentState("jakal-flow:selected-step", "");
   const [planDirty, setPlanDirty] = useState(false);
@@ -105,6 +109,19 @@ export function useDesktopController() {
     );
   }, [deferredProjectFilter, projects]);
 
+  const filteredHistoryProjects = useMemo(() => {
+    const query = deferredProjectFilter.trim().toLowerCase();
+    if (!query) {
+      return historyProjects;
+    }
+    return historyProjects.filter((project) =>
+      [project.display_name, project.slug, project.status, project.detail, project.repo_path]
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [deferredProjectFilter, historyProjects]);
+
   useEffect(() => {
     if (centerTab === "overview") {
       setCenterTab("run");
@@ -135,6 +152,13 @@ export function useDesktopController() {
   useEffect(() => {
     projectsRef.current = projects;
   }, [projects]);
+
+  useEffect(() => {
+    if (selectedHistoryId && !historyProjects.some((item) => item.archive_id === selectedHistoryId)) {
+      setSelectedHistoryId("");
+      setHistoryDetail(null);
+    }
+  }, [historyProjects, selectedHistoryId, setSelectedHistoryId]);
 
   function applyCurrentJobSnapshot(jobSnapshot) {
     return applyActiveJobState({
@@ -214,9 +238,13 @@ export function useDesktopController() {
           setProjects,
           setWorkspaceStats,
         });
+        setHistoryProjects(listing?.history || []);
         projectsRef.current = nextProjects;
         if (!nextProjects.some((item) => item.repo_id === selectedProjectId)) {
           setSelectedProjectId(nextProjects[0]?.repo_id || "");
+        }
+        if (!selectedHistoryId && (listing?.history || []).length) {
+          setSelectedHistoryId(listing.history[0].archive_id || "");
         }
       } catch (error) {
         if (!cancelled) {
@@ -230,6 +258,48 @@ export function useDesktopController() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSelectedHistory() {
+      try {
+        const detail = await fetchHistoryDetail(bridgeRequest, selectedHistoryId, workspaceRoot, {
+          detailLevel: centerTab === "history" ? "full" : "core",
+        });
+        if (cancelled) {
+          return;
+        }
+        setHistoryDetail(detail);
+      } catch (error) {
+        if (!cancelled) {
+          setMessage(messagePayload("error", String(error)));
+        }
+      }
+    }
+
+    if (!selectedHistoryId || !workspaceRoot || pendingAction) {
+      return undefined;
+    }
+    if (
+      historyDetail?.project?.archive_id === selectedHistoryId
+      && (centerTab !== "history" || historyDetail?.detail_level === "full")
+    ) {
+      return undefined;
+    }
+
+    loadSelectedHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    centerTab,
+    historyDetail?.detail_level,
+    historyDetail?.project?.archive_id,
+    pendingAction,
+    selectedHistoryId,
+    workspaceRoot,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -316,6 +386,7 @@ export function useDesktopController() {
             setProjects,
             setWorkspaceStats,
           });
+          setHistoryProjects(listing?.history || []);
           projectsRef.current = nextProjects;
         }
         if (detail && !cancelled) {
@@ -446,6 +517,7 @@ export function useDesktopController() {
       setProjects,
       setWorkspaceStats,
     });
+    setHistoryProjects(listing?.history || []);
     projectsRef.current = nextProjects;
     if (!selectedProjectId && nextProjects.length) {
       setSelectedProjectId(nextProjects[0].repo_id);
@@ -463,6 +535,7 @@ export function useDesktopController() {
         setProjects,
         setWorkspaceStats,
       });
+      setHistoryProjects(listing?.history || []);
       projectsRef.current = nextProjects;
 
       if (selectedProjectId) {
@@ -471,6 +544,11 @@ export function useDesktopController() {
           detailLevel: wantsExpandedDetail ? "full" : "core",
         });
         applyProjectDetail(detail, { preserveSelectedStep: true, runningJob });
+      } else if (selectedHistoryId) {
+        const detail = await fetchHistoryDetail(bridgeRequest, selectedHistoryId, workspaceRoot, {
+          detailLevel: centerTab === "history" ? "full" : "core",
+        });
+        setHistoryDetail(detail);
       } else if (nextProjects.length) {
         setSelectedProjectId(nextProjects[0].repo_id);
       }
@@ -665,9 +743,10 @@ export function useDesktopController() {
       setMessage(messagePayload("error", translate(language, "message.openProjectFirst")));
       return;
     }
-    if (!window.confirm(translate(language, "prompt.confirmDeleteProject"))) {
+    if (!window.confirm(translate(language, "prompt.confirmArchiveProject"))) {
       return;
     }
+    const nextForm = applyProgramSettingsToForm(projectForm, storedProgramSettings);
     await withPending("delete-project", async () => {
       const result = await bridgeRequest(
         BRIDGE_COMMANDS.DELETE_PROJECT,
@@ -677,12 +756,20 @@ export function useDesktopController() {
         workspaceRoot || null,
       );
       setProjects(result.projects || []);
+      setHistoryProjects(result.history || []);
       setWorkspaceStats(result.workspace || null);
       clearSelectedProjectState(defaultRuntime);
-      if ((result.projects || []).length) {
-        setSelectedProjectId(result.projects[0].repo_id);
-      }
-      setMessage(messagePayload("success", translate(language, "message.projectDeleted")));
+      setProjectForm({
+        ...blankProjectForm(defaultRuntime),
+        project_dir: nextForm.project_dir,
+        display_name: nextForm.display_name,
+        branch: nextForm.branch,
+        origin_url: nextForm.origin_url,
+        github_mode: nextForm.github_mode,
+        runtime: nextForm.runtime,
+      });
+      setSelectedHistoryId(result.archived?.archive_id || "");
+      setMessage(messagePayload("success", translate(language, "message.projectArchived")));
     });
   }
 
@@ -690,9 +777,10 @@ export function useDesktopController() {
     if (!repoId) {
       return;
     }
-    if (!window.confirm(translate(language, "prompt.confirmDeleteProject"))) {
+    if (!window.confirm(translate(language, "prompt.confirmArchiveProject"))) {
       return;
     }
+    const nextForm = repoId === selectedProjectId ? applyProgramSettingsToForm(projectForm, storedProgramSettings) : null;
     await withPending("delete-project", async () => {
       const result = await bridgeRequest(
         BRIDGE_COMMANDS.DELETE_PROJECT,
@@ -702,14 +790,24 @@ export function useDesktopController() {
         workspaceRoot || null,
       );
       setProjects(result.projects || []);
+      setHistoryProjects(result.history || []);
       setWorkspaceStats(result.workspace || null);
       if (repoId === selectedProjectId) {
         clearSelectedProjectState(defaultRuntime);
+        if (nextForm) {
+          setProjectForm({
+            ...blankProjectForm(defaultRuntime),
+            project_dir: nextForm.project_dir,
+            display_name: nextForm.display_name,
+            branch: nextForm.branch,
+            origin_url: nextForm.origin_url,
+            github_mode: nextForm.github_mode,
+            runtime: nextForm.runtime,
+          });
+        }
       }
-      if ((result.projects || []).length && (!selectedProjectId || repoId === selectedProjectId)) {
-        setSelectedProjectId(result.projects[0].repo_id);
-      }
-      setMessage(messagePayload("success", translate(language, "message.projectDeleted")));
+      setSelectedHistoryId(result.archived?.archive_id || selectedHistoryId);
+      setMessage(messagePayload("success", translate(language, "message.projectArchived")));
     });
   }
 
@@ -717,15 +815,17 @@ export function useDesktopController() {
     if (!projects.length) {
       return;
     }
-    if (!window.confirm(translate(language, "prompt.confirmDeleteAllProjects"))) {
+    if (!window.confirm(translate(language, "prompt.confirmArchiveAllProjects"))) {
       return;
     }
     await withPending("delete-all-projects", async () => {
       const result = await bridgeRequest(BRIDGE_COMMANDS.DELETE_ALL_PROJECTS, {}, workspaceRoot || null);
       setProjects(result.projects || []);
+      setHistoryProjects(result.history || []);
       setWorkspaceStats(result.workspace || null);
       clearSelectedProjectState(defaultRuntime);
-      setMessage(messagePayload("success", translate(language, "message.allProjectsDeleted")));
+      setSelectedHistoryId((result.history || [])[0]?.archive_id || "");
+      setMessage(messagePayload("success", translate(language, "message.allProjectsArchived")));
     });
   }
 
@@ -1068,10 +1168,14 @@ export function useDesktopController() {
     modelCatalog,
     projects,
     filteredProjects,
+    historyProjects,
+    filteredHistoryProjects,
     workspaceStats,
     selectedProjectId,
+    selectedHistoryId,
     projectForm,
     projectDetail,
+    historyDetail,
     planDraft,
     selectedStepId,
     pendingAction,
@@ -1092,6 +1196,7 @@ export function useDesktopController() {
     setProjectForm: updateProjectForm,
     setPlanDraft,
     setSelectedStepId,
+    setSelectedHistoryId,
     setProgramSettings: updateProgramSettings,
     setCenterTab,
     setBottomTab,

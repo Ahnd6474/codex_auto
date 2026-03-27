@@ -42,6 +42,15 @@ function SidebarCheckpointsIcon() {
   );
 }
 
+function SidebarHistoryIcon() {
+  return (
+    <svg aria-hidden="true" className="sidebar-icon__svg" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="7.25" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M12 8v4.5l3 1.75" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function SidebarSectionTabs({ activeTab, onChange, tabs }) {
   return (
     <div className="sidebar-rail">
@@ -138,13 +147,16 @@ export function SidebarPane({
   activeTab,
   onChangeTab,
   projects,
+  historyProjects,
   selectedProjectId,
+  selectedHistoryId,
   loadingProjectId,
   projectFilter,
   workspaceFilter,
   onProjectFilterChange,
   onWorkspaceFilterChange,
   onSelectProject,
+  onSelectHistory,
   onNewProject,
   onDeleteProject,
   onDeleteAllProjects,
@@ -210,6 +222,7 @@ export function SidebarPane({
   }, []);
   const tabs = [
     ["projects", <SidebarProjectsIcon key="projects-icon" />, t("common.project")],
+    ["history", <SidebarHistoryIcon key="history-icon" />, t("tab.history")],
     ["workspace", <SidebarExplorerIcon key="workspace-icon" />, t("sidebar.explorer")],
     ["plans", <SidebarCheckpointsIcon key="plans-icon" />, t("sidebar.checkpoints")],
   ];
@@ -225,7 +238,7 @@ export function SidebarPane({
               <strong>{t("common.project")}</strong>
               <div className="action-row">
                 <button className="toolbar-button toolbar-button--ghost" onClick={onDeleteAllProjects} type="button" disabled={!projects.length}>
-                  {t("action.deleteAll")}
+                  {t("action.archiveAllProjects")}
                 </button>
                 <button className="toolbar-button toolbar-button--ghost" onClick={onNewProject} type="button">
                   {t("action.new")}
@@ -298,10 +311,43 @@ export function SidebarPane({
                   }}
                   type="button"
                 >
-                  {t("action.delete")}
+                  {t("action.archiveProject")}
                 </button>
               </div>
             ) : null}
+          </>
+        ) : null}
+
+        {activeTab === "history" ? (
+          <>
+            <div className="sidebar-panel__header">
+              <strong>{t("tab.history")}</strong>
+            </div>
+            <label className="sidebar-search">
+              <span>{t("common.filter")}</span>
+              <input value={projectFilter} onChange={(event) => onProjectFilterChange(event.target.value)} placeholder={t("sidebar.searchProjects")} />
+            </label>
+            <div className="sidebar-list">
+              {historyProjects.length ? (
+                historyProjects.map((project) => (
+                  <button
+                    key={project.archive_id || project.repo_id}
+                    className={`sidebar-project ${project.archive_id === selectedHistoryId ? "selected" : ""}`}
+                    onClick={() => onSelectHistory(project.archive_id)}
+                    type="button"
+                  >
+                    <div className="sidebar-project__title">
+                      <strong>{project.display_name}</strong>
+                      <span className={`status-dot status-dot--${statusTone(project.status)}`} />
+                    </div>
+                    <span>{displayStatus(project.status, language)}</span>
+                    <span>{project.detail}</span>
+                  </button>
+                ))
+              ) : (
+                <div className="empty-block">{t("history.noSavedRuns")}</div>
+              )}
+            </div>
           </>
         ) : null}
 

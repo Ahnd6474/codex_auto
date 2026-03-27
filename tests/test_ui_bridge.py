@@ -4,6 +4,7 @@ from collections import Counter
 from contextlib import redirect_stderr, redirect_stdout
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import sys
@@ -17,7 +18,7 @@ from jakal_flow.cli import main as cli_main
 import jakal_flow.ui_bridge_payloads as ui_bridge_payloads
 from jakal_flow.models import ExecutionPlanState, ExecutionStep
 from jakal_flow.status_views import effective_project_status
-from jakal_flow.ui_bridge import progress_caption, run_command, runtime_from_payload
+from jakal_flow.ui_bridge import default_workspace_root, progress_caption, run_command, runtime_from_payload
 
 
 def local_temp_root() -> Path:
@@ -93,6 +94,37 @@ def fake_codex_snapshot() -> mock.Mock:
 
 
 class UIBridgeTests(unittest.TestCase):
+    def test_default_workspace_root_prefers_explicit_jakal_flow_env(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            explicit = temp_dir / "custom-workspace"
+            with mock.patch.dict(os.environ, {"JAKAL_FLOW_GUI_WORKSPACE": str(explicit)}, clear=True), mock.patch(
+                "jakal_flow.ui_bridge.Path.cwd",
+                return_value=temp_dir,
+            ), mock.patch(
+                "jakal_flow.ui_bridge.Path.home",
+                return_value=temp_dir / "home",
+            ):
+                resolved = default_workspace_root()
+
+        self.assertEqual(resolved, explicit.resolve())
+
+    def test_default_workspace_root_ignores_legacy_codex_auto_locations(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            legacy = temp_dir / ".codex-auto-workspace"
+            legacy.mkdir(parents=True, exist_ok=True)
+            home_dir = temp_dir / "home"
+            home_dir.mkdir(parents=True, exist_ok=True)
+            with mock.patch.dict(os.environ, {"CODEX_AUTO_GUI_WORKSPACE": str(legacy)}, clear=True), mock.patch(
+                "jakal_flow.ui_bridge.Path.cwd",
+                return_value=temp_dir,
+            ), mock.patch(
+                "jakal_flow.ui_bridge.Path.home",
+                return_value=home_dir,
+            ):
+                resolved = default_workspace_root()
+
+        self.assertEqual(resolved, (home_dir / ".jakal-flow-workspace").resolve())
+
     def test_progress_caption_reports_ready_nodes_for_parallel_dag(self) -> None:
         caption = progress_caption(
             ExecutionPlanState(
@@ -358,7 +390,7 @@ class UIBridgeTests(unittest.TestCase):
             self.assertIn("Demo Project", loaded["summary"])
             self.assertEqual(loaded["stats"]["total_steps"], 0)
 
-    def test_delete_project_removes_managed_workspace_but_keeps_local_repo(self) -> None:
+    def test_delete_project_archives_managed_workspace_and_allows_same_repo_restart(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"
             repo_dir = temp_dir / "repo"
@@ -387,7 +419,7 @@ class UIBridgeTests(unittest.TestCase):
             managed_root = Path(detail["project"]["project_root"])
             self.assertTrue(managed_root.exists())
 
-            deleted = run_command(
+            archived = run_command(
                 "delete-project",
                 workspace_root,
                 {
@@ -395,13 +427,46 @@ class UIBridgeTests(unittest.TestCase):
                 },
             )
 
-            self.assertEqual(deleted["deleted"]["display_name"], "Delete Demo")
-            self.assertEqual(deleted["projects"], [])
+            self.assertEqual(archived["archived"]["display_name"], "Delete Demo")
+            self.assertTrue(archived["archived"]["archive_id"])
+            self.assertEqual(archived["projects"], [])
+            self.assertEqual(len(archived["history"]), 1)
             self.assertFalse(managed_root.exists())
             self.assertTrue(repo_dir.exists())
             self.assertTrue((repo_dir / "README.md").exists())
 
-    def test_delete_all_projects_clears_registry_but_keeps_local_repos(self) -> None:
+            archived_detail = run_command(
+                "load-history-entry",
+                workspace_root,
+                {
+                    "archive_id": archived["archived"]["archive_id"],
+                    "detail_level": "full",
+                },
+            )
+
+            self.assertTrue(archived_detail["project"]["archived"])
+            self.assertTrue(Path(archived_detail["project"]["project_root"]).exists())
+            self.assertIn("<svg", archived_detail["history"]["flow_svg_text"])
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                restarted = run_command(
+                    "save-project-setup",
+                    workspace_root,
+                    {
+                        **payload,
+                        "display_name": "Delete Demo Restarted",
+                    },
+                )
+
+            self.assertEqual(restarted["project"]["display_name"], "Delete Demo Restarted")
+            listing = run_command("list-projects", workspace_root)
+            self.assertEqual(len(listing["projects"]), 1)
+            self.assertEqual(len(listing["history"]), 1)
+
+    def test_delete_all_projects_archives_registry_but_keeps_local_repos(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"
             repo_a = temp_dir / "repo-a"
@@ -424,19 +489,98 @@ class UIBridgeTests(unittest.TestCase):
                         "max_blocks": 5,
                     },
                 }
-                with mock.patch("codex_auto.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
-                    "codex_auto.ui_bridge.fetch_codex_backend_snapshot",
+                with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                    "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
                     side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
                 ):
                     run_command("save-project-setup", workspace_root, payload)
 
             deleted = run_command("delete-all-projects", workspace_root, {})
-            self.assertTrue(deleted["deleted_all"])
+            self.assertTrue(deleted["archived_all"])
+            self.assertEqual(deleted["archived_count"], 2)
             self.assertEqual(deleted["projects"], [])
+            self.assertEqual(len(deleted["history"]), 2)
             self.assertTrue(repo_a.exists())
             self.assertTrue(repo_b.exists())
             self.assertTrue((repo_a / "README.md").exists())
             self.assertTrue((repo_b / "README.md").exists())
+
+    def test_load_history_entry_returns_saved_plan_and_flow_chart(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "History Flow Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "effort": "high",
+                    "test_cmd": "python -m pytest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            plan_payload = {
+                "project_dir": str(repo_dir),
+                "branch": "main",
+                "origin_url": "",
+                "runtime": detail["runtime"],
+                "plan": {
+                    "plan_title": "History Flow Demo",
+                    "project_prompt": "Rebuild this directory from a fresh prompt.",
+                    "summary": "Preserve the flow chart for archived runs.",
+                    "execution_mode": "parallel",
+                    "default_test_command": "python -m pytest",
+                    "steps": [
+                        {
+                            "step_id": "seed",
+                            "title": "Capture the archived flow",
+                            "display_description": "Keep the old execution graph available from history.",
+                            "codex_description": "Preserve the execution graph.",
+                            "test_command": "python -m pytest",
+                            "success_criteria": "The archived detail still renders the flow chart.",
+                            "reasoning_effort": "high",
+                            "depends_on": [],
+                            "owned_paths": ["src/jakal_flow/ui_bridge.py"],
+                        }
+                    ],
+                },
+            }
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                saved = run_command("save-plan", workspace_root, plan_payload)
+            archived = run_command(
+                "delete-project",
+                workspace_root,
+                {
+                    "repo_id": saved["project"]["repo_id"],
+                },
+            )
+
+            loaded = run_command(
+                "load-history-entry",
+                workspace_root,
+                {
+                    "archive_id": archived["archived"]["archive_id"],
+                    "detail_level": "full",
+                },
+            )
+
+            self.assertEqual(loaded["plan"]["project_prompt"], "Rebuild this directory from a fresh prompt.")
+            self.assertEqual(loaded["plan"]["steps"][0]["title"], "Capture the archived flow")
+            self.assertIn("<svg", loaded["history"]["flow_svg_text"])
 
     def test_save_plan_and_request_stop_persist_bridge_state(self) -> None:
         with TemporaryTestDir() as temp_dir:

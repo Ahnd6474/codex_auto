@@ -17,7 +17,7 @@ from .status_views import effective_project_status
 from .utils import compact_text, normalize_workflow_mode, read_json, read_jsonl_tail, read_last_jsonl, read_text, write_json
 
 
-DETAIL_CACHE_VERSION = 3
+DETAIL_CACHE_VERSION = 4
 
 
 @dataclass(slots=True)
@@ -217,6 +217,8 @@ def project_summary(
     ]
     if plan.plan_title.strip():
         lines.append(f"Plan Title: {plan.plan_title.strip()}")
+    if project.metadata.archived_at:
+        lines.append(f"Archived At: {project.metadata.archived_at}")
     if project.metadata.last_run_at:
         lines.append(f"Last Run: {project.metadata.last_run_at}")
     if recent_statuses:
@@ -345,21 +347,30 @@ def report_payload(context: ProjectContext) -> dict[str, Any]:
     }
 
 
+def _flow_svg_payload(context: ProjectContext) -> dict[str, Any]:
+    return {
+        "flow_svg_path": str(context.paths.execution_flow_svg_file) if context.paths.execution_flow_svg_file.exists() else "",
+        "flow_svg_text": safe_text(context.paths.execution_flow_svg_file, default=""),
+    }
+
+
 def history_payload(context: ProjectContext) -> dict[str, Any]:
     return {
         "ui_events": read_jsonl_tail(context.paths.ui_event_log_file, 40),
         "blocks": read_jsonl_tail(context.paths.block_log_file, 20),
         "passes": read_jsonl_tail(context.paths.pass_log_file, 30),
         "test_runs": read_jsonl_tail(context.paths.logs_dir / "test_runs.jsonl", 20),
+        **_flow_svg_payload(context),
     }
 
 
-def history_payload_from_snapshot(snapshot: DetailLogSnapshot) -> dict[str, Any]:
+def history_payload_from_snapshot(context: ProjectContext, snapshot: DetailLogSnapshot) -> dict[str, Any]:
     return {
         "ui_events": list(snapshot.ui_events),
         "blocks": list(snapshot.blocks),
         "passes": list(snapshot.passes),
         "test_runs": list(snapshot.test_runs),
+        **_flow_svg_payload(context),
     }
 
 
@@ -578,7 +589,28 @@ def project_list_item_payload(orchestrator: Orchestrator, project: ProjectContex
         "progress": progress_caption(plan_state),
         "stats": project_stats(plan_state),
         "closeout_status": plan_state.closeout_status,
+        "archived": bool(project.metadata.archived),
+        "archive_id": project.metadata.archive_id or "",
+        "archived_at": project.metadata.archived_at,
     }
+
+
+def history_list_item_payload(orchestrator: Orchestrator, project: ProjectContext) -> dict[str, Any]:
+    payload = project_list_item_payload(orchestrator, project)
+    archived_at = project.metadata.archived_at or project.metadata.last_run_at or project.metadata.created_at
+    detail = archived_at
+    if project.metadata.repo_path:
+        detail = f"{project.metadata.repo_path} | {archived_at}"
+    payload.update(
+        {
+            "repo_id": project.metadata.archive_id or project.metadata.repo_id,
+            "detail": detail,
+            "archived": True,
+            "archive_id": project.metadata.archive_id or "",
+            "archived_at": archived_at,
+        }
+    )
+    return payload
 
 
 def _build_project_detail_base_payload(
@@ -598,7 +630,7 @@ def _build_project_detail_base_payload(
         recent_blocks = _tail_slice(log_snapshot.blocks, 8)
         recent_passes = _tail_slice(log_snapshot.passes, 12)
         reports = report_payload(project)
-        history = history_payload_from_snapshot(log_snapshot)
+        history = history_payload_from_snapshot(project, log_snapshot)
         checkpoints = checkpoint_payload(project)
         config = config_payload_from_snapshot(project, log_snapshot)
         workspace_tree = managed_workspace_tree(project)
@@ -623,6 +655,7 @@ def _build_project_detail_base_payload(
             "blocks": [],
             "passes": [],
             "test_runs": [],
+            **_flow_svg_payload(project),
         }
         checkpoints = {
             "items": [],
@@ -798,7 +831,10 @@ def project_detail_payload(
 def list_projects_payload(orchestrator: Orchestrator) -> dict[str, Any]:
     projects = sorted(orchestrator.list_projects(), key=lambda item: item.metadata.created_at, reverse=True)
     project_payloads = [project_list_item_payload(orchestrator, project) for project in projects]
+    history_projects = orchestrator.workspace.list_history_projects()
+    history_payloads = [history_list_item_payload(orchestrator, project) for project in history_projects]
     return {
         "projects": project_payloads,
+        "history": history_payloads,
         "workspace": workspace_snapshot([str(item.get("status", "")).strip() for item in project_payloads]),
     }

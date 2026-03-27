@@ -69,7 +69,7 @@ python -m jakal_flow init-repo \
   --workspace-root .jakal-flow-workspace \
   --model gpt-5.4 \
   --effort high \
-  --plan-prompt "Build a safe project plan focused on a narrow MVP and strong tests." \
+  --plan-prompt "Build a safe project plan aimed at a finished, well-integrated result with strong verification and closeout." \
   --approval-mode never \
   --sandbox-mode workspace-write \
   --test-cmd "python -m pytest"

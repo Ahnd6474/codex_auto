@@ -62,6 +62,7 @@ ML closeout requirements:
 6. When another cycle is justified, set `replan_required=true`, `stop_requested=false`, and write a concrete `next_cycle_prompt` that tells the planner exactly what to try next based on the collected evidence.
 7. Be explicit about data leakage risk assessments. If the current evidence is compromised by leakage risk, say so directly and recommend corrective action.
 8. Reference {ml_experiment_results_svg_file} in the report as the visualization target. You do not need to draw the SVG yourself; the orchestrator will regenerate it from the structured reports.
+9. If this cycle changed practical setup, commands, outputs, recommended workflow, or other user-facing behavior, audit README.md and related repository docs during closeout and update them only when they match verified implementation. Note the README/doc status explicitly in {closeout_report_file}.
 
 Execution rules:
 - Do not invent metrics that are not supported by the recorded experiment outputs.

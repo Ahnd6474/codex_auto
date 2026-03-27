@@ -449,18 +449,40 @@ export function effectiveStepStatus(step = null, projectStatus = "") {
   return String(step?.status || "").trim();
 }
 
+function normalizedCloseoutStatus(plan = null) {
+  return String(plan?.closeout_status || "not_started").trim().toLowerCase();
+}
+
+function planProgressCounts(plan = null) {
+  const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+  const completedStepCount = steps.filter((step) => String(step?.status || "").trim().toLowerCase() === "completed").length;
+  const totalStepCount = steps.length;
+  const closeoutStatus = normalizedCloseoutStatus(plan);
+  const includesCloseout = totalStepCount > 0 || closeoutStatus !== "not_started";
+  const totalCount = includesCloseout ? totalStepCount + 1 : 0;
+  const completedCount = Math.min(totalCount, completedStepCount + (closeoutStatus === "completed" ? 1 : 0));
+  return {
+    steps,
+    completedStepCount,
+    totalStepCount,
+    completedCount,
+    totalCount,
+    closeoutStatus,
+  };
+}
+
 export function deriveExecutionProgress(detail = null, planDraft = null, activeJob = null) {
   const detailPlan = detail?.plan && typeof detail.plan === "object" ? detail.plan : null;
   const fallbackPlan = planDraft && typeof planDraft === "object" ? planDraft : {};
   const plan = cloneValue(detailPlan || fallbackPlan) || {};
-  const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+  const { steps, completedCount, totalCount, closeoutStatus } = planProgressCounts(plan);
   const stats = detail?.stats || computePlanStats(plan);
   const command = activeJob?.status === "running" ? String(activeJob?.command || "").trim() : "";
   const runningStepList = runningExecutionSteps(plan);
   const runningStep = runningStepList[0] || null;
   const nextStep = steps.find((step) => step.status !== "completed") || null;
   const readyIds = readyExecutionNodeIds(plan);
-  const closeoutRunning = String(plan?.closeout_status || "").trim().toLowerCase() === "running";
+  const closeoutRunning = closeoutStatus === "running";
   const currentStatus = String(detail?.project?.current_status || "").trim();
   const status = currentStatus.toLowerCase();
   const debugging = isDebuggingStatus(currentStatus);
@@ -491,13 +513,10 @@ export function deriveExecutionProgress(detail = null, planDraft = null, activeJ
   if (isActive) {
     if (phase === "planning" && !steps.length) {
       indeterminate = true;
-    } else if (phase === "closeout") {
-      percent = 100;
-      visualPercent = steps.length ? 96 : 92;
-    } else if (steps.length) {
-      percent = Math.round((Math.max(0, Number(stats?.completed_steps || 0)) / steps.length) * 100);
+    } else if (totalCount) {
+      percent = Math.round((completedCount / totalCount) * 100);
       visualPercent = percent > 0 ? percent : 6;
-      if ((runningStepList.length > 0 || command === "run-plan") && percent < 95) {
+      if ((phase === "closeout" || runningStepList.length > 0 || command === "run-plan") && percent < 95) {
         visualPercent = Math.max(visualPercent, 10);
         visualPercent = Math.min(95, visualPercent);
       }
@@ -515,6 +534,8 @@ export function deriveExecutionProgress(detail = null, planDraft = null, activeJ
     plan,
     totalSteps: steps.length,
     completedSteps: Math.max(0, Number(stats?.completed_steps || 0)),
+    totalProgressUnits: totalCount,
+    completedProgressUnits: completedCount,
     failedSteps: Math.max(0, Number(stats?.failed_steps || 0)),
     runningSteps: Math.max(0, Number(stats?.running_steps || 0)),
     remainingSteps: Math.max(0, Number(stats?.remaining_steps || 0)),
@@ -689,7 +710,7 @@ export function sanitizeProjectDetailForJobState(detail, activeJob = null, optio
       : detail.project,
     plan: nextPlan,
     stats: nextStats,
-    progress: toolbarProgressCaption(nextPlan),
+    progress: toolbarProgressCaptionDisplay(nextPlan),
     snapshot: nextSnapshot,
     bottom_panels: nextBottomPanels,
   };
@@ -1272,6 +1293,63 @@ export function toolbarProgressCaption(plan) {
   }
   const nextStep = steps.find((step) => step.status !== "completed");
   return `Completed ${completed}/${total} steps, next: ${nextStep?.step_id || "done"}`;
+}
+
+function progressDisplayCaption(plan, language = "en", dagAware = false) {
+  const { steps, completedStepCount, totalStepCount, completedCount, totalCount, closeoutStatus } = planProgressCounts(plan);
+  const locale = normalizeLanguage(language);
+  if (!totalCount) {
+    return translate(locale, "progress.noPlanYet");
+  }
+  if (completedStepCount === totalStepCount) {
+    if (closeoutStatus === "completed") {
+      return translate(locale, "progress.closeoutCompleted", { completed: completedCount, total: totalCount });
+    }
+    if (closeoutStatus === "running") {
+      return translate(locale, "progress.closeoutRunning", { completed: completedCount, total: totalCount });
+    }
+    if (closeoutStatus === "failed") {
+      return translate(locale, "progress.closeoutFailed", { completed: completedCount, total: totalCount });
+    }
+    return translate(locale, "progress.closeoutPending", { completed: completedCount, total: totalCount });
+  }
+  if (dagAware) {
+    const runningIds = summarizeStepIds(runningExecutionSteps(plan));
+    if (runningIds) {
+      return translate(locale, "progress.runningIds", { completed: completedCount, total: totalCount, ids: runningIds });
+    }
+    const completedIds = new Set(steps.filter((step) => step.status === "completed").map((step) => step.step_id));
+    const readyIds = steps
+      .filter(
+        (step) =>
+          step.status !== "completed" &&
+          (step.depends_on || []).every((dependency) => completedIds.has(dependency)),
+      )
+      .map((step) => step.step_id);
+    return translate(locale, "progress.readyIds", {
+      completed: completedCount,
+      total: totalCount,
+      ids: readyIds.join(", ") || "blocked",
+    });
+  }
+  const nextStep = steps.find((step) => step.status !== "completed");
+  return translate(locale, "progress.doneNext", {
+    completed: completedCount,
+    total: totalCount,
+    next: nextStep?.step_id || "done",
+  });
+}
+
+export function progressCaptionDisplay(plan, language = "en") {
+  return progressDisplayCaption(plan, language, false);
+}
+
+export function executionProgressCaptionDisplay(plan, language = "en") {
+  return progressDisplayCaption(plan, language, true);
+}
+
+export function toolbarProgressCaptionDisplay(plan, language = "en") {
+  return progressDisplayCaption(plan, language, true);
 }
 
 export function commandLabel(command, language = "en") {

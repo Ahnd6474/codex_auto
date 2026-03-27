@@ -141,7 +141,7 @@ python -m jakal_flow init-repo \
   --workspace-root .jakal-flow-workspace \
   --model gpt-5.4 \
   --effort high \
-  --plan-prompt "좁은 MVP와 강한 테스트를 중심으로 안전한 프로젝트 계획을 만들어라." \
+  --plan-prompt "완성도 높은 결과물과 강한 검증, 마감 정리를 목표로 안전한 프로젝트 계획을 만들어라." \
   --approval-mode never \
   --sandbox-mode workspace-write \
   --test-cmd "python -m pytest"

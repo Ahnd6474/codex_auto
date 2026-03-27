@@ -19,24 +19,29 @@ def build_project_command_handlers(
         repo_id = project.metadata.repo_id
         project_dir = str(project.metadata.repo_path)
         display_name = project.metadata.display_name or project.metadata.slug
-        ctx.orchestrator.workspace.delete_project(repo_id)
+        archived = ctx.orchestrator.workspace.delete_project(repo_id)
         listing = list_projects_payload(ctx.orchestrator)
         return {
-            "deleted": {
+            "archived": {
                 "repo_id": repo_id,
+                "archive_id": archived.metadata.archive_id or "",
                 "project_dir": project_dir,
                 "display_name": display_name,
+                "archived_at": archived.metadata.archived_at,
             },
             "projects": listing["projects"],
+            "history": listing["history"],
             "workspace": listing["workspace"],
         }
 
     def delete_all_projects(ctx: BridgeCommandContext) -> dict:
-        ctx.orchestrator.workspace.delete_all_projects()
+        archived = ctx.orchestrator.workspace.delete_all_projects()
         listing = list_projects_payload(ctx.orchestrator)
         return {
-            "deleted_all": True,
+            "archived_all": True,
+            "archived_count": len(archived),
             "projects": listing["projects"],
+            "history": listing["history"],
             "workspace": listing["workspace"],
         }
 
@@ -116,4 +121,3 @@ def build_project_command_handlers(
         "save-plan": save_plan,
         "reset-plan": reset_plan,
     }
-

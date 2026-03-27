@@ -117,7 +117,7 @@ def load_optimization_prompt_template() -> str:
 
 def load_reference_guide_text() -> str:
     text = read_text(source_prompt_template_path(REFERENCE_GUIDE_FILENAME))
-    return compact_text(text, 1500) or f"{REFERENCE_GUIDE_DISPLAY_PATH} not found."
+    return compact_text(text, 2200) or f"{REFERENCE_GUIDE_DISPLAY_PATH} not found."
 
 
 def scan_repository_inputs(repo_dir: Path) -> dict[str, str]:
@@ -222,9 +222,9 @@ def bootstrap_plan_prompt(context: ProjectContext, repo_inputs: dict[str, str], 
             "4. Use README.md and other repository docs to align with existing structure and terminology.",
             "5. Fall back to generic defaults only when the repository sources above do not decide the issue.",
             "Keep the plan concrete, scoped, and testable.",
-            "Prefer a fully runnable prototype over competitive polish.",
-            "Add directly necessary setup, integration, validation, cleanup, and supporting implementation work even if the user did not spell out each item.",
-            "Do not invent speculative roadmap items or optional expansion beyond the requested prototype scope.",
+            "Prefer a finished, handoff-quality implementation over a narrow MVP slice.",
+            "Add directly necessary setup, integration, validation, cleanup, documentation, polish, and supporting implementation work even if the user did not spell out each item.",
+            "Do not invent speculative roadmap items or optional expansion beyond the requested product scope.",
             "",
             "Repository context:",
             f"- Repo URL: {context.metadata.repo_url}",

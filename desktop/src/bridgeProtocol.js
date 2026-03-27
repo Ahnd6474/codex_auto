@@ -6,6 +6,7 @@ export const BRIDGE_COMMANDS = Object.freeze({
   LOAD_PROJECT: "load-project",
   LOAD_PROJECT_CORE: "load-project-core",
   LOAD_PROJECT_HISTORY: "load-project-history",
+  LOAD_HISTORY_ENTRY: "load-history-entry",
   LOAD_PROJECT_REPORTS: "load-project-reports",
   LOAD_PROJECT_CONFIG: "load-project-config",
   LOAD_PROJECT_WORKSPACE: "load-project-workspace",

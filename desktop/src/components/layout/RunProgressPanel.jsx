@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { commandLabel, deriveExecutionProgress, executionProgressCaption, formatDurationCompact, formatUsd, shouldShowEstimatedCost } from "../../utils";
+import { commandLabel, deriveExecutionProgress, executionProgressCaptionDisplay, formatDurationCompact, formatUsd, shouldShowEstimatedCost } from "../../utils";
 
 function stepLabel(step) {
   return [step?.step_id, step?.title].filter(Boolean).join(" - ");
@@ -56,7 +56,7 @@ export function RunProgressPanel({ detail, planDraft, activeJob }) {
     currentWork = t("run.preparingStep", { step: stepLabel(progress.nextStep) });
   }
 
-  const progressSummary = executionProgressCaption(progress.plan, language);
+  const progressSummary = executionProgressCaptionDisplay(progress.plan, language);
   const percentLabel = progress.indeterminate ? t("status.running") : t("run.progressPercent", { percent: progress.percent ?? 0 });
   const runningStartTimes = (progress.runningStepList || [])
     .map((step) => Date.parse(String(step?.started_at || "")))
@@ -95,8 +95,8 @@ export function RunProgressPanel({ detail, planDraft, activeJob }) {
 
       <div className="run-progress-banner__meta">
         <span>{progressSummary}</span>
-        {progress.totalSteps ? (
-          <span>{t("run.completedStepsSummary", { completed: progress.completedSteps, total: progress.totalSteps })}</span>
+        {progress.totalProgressUnits ? (
+          <span>{t("run.completedStepsSummary", { completed: progress.completedProgressUnits, total: progress.totalProgressUnits })}</span>
         ) : null}
         {progress.runningStepList?.length > 1 ? <span>{t("run.runningNodeSummary", { count: progress.runningStepList.length })}</span> : null}
         {(!progress.runningStepList || progress.runningStepList.length <= 1) && progress.readyIds.length > 1 ? (

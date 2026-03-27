@@ -126,6 +126,10 @@ class RepoMetadata:
     repo_kind: str = "remote"
     display_name: str | None = None
     origin_url: str | None = None
+    archived: bool = False
+    archive_id: str | None = None
+    archived_at: str | None = None
+    source_repo_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return _normalize(self)

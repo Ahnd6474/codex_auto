@@ -24,6 +24,7 @@ import {
   deriveIdleProjectStatus,
   deriveGithubMode,
   effectiveStepStatus,
+  executionProgressCaptionDisplay,
   firstSelectableStepId,
   mergeProjectDetailCodexStatus,
   normalizeInterruptedPlan,
@@ -38,6 +39,7 @@ import {
   shouldShowEstimatedCost,
   shouldReplaceVisibleProject,
   statusTone,
+  toolbarProgressCaptionDisplay,
   workspaceStatsFromProjects,
 } from "../src/utils.js";
 
@@ -525,7 +527,9 @@ test("deriveExecutionProgress summarizes active step progress and recent activit
   assert.equal(progress.phase, "step");
   assert.equal(progress.runningStep.step_id, "ST2");
   assert.deepEqual(progress.readyIds, ["ST2", "ST3"]);
-  assert.equal(progress.percent, 33);
+  assert.equal(progress.completedProgressUnits, 1);
+  assert.equal(progress.totalProgressUnits, 4);
+  assert.equal(progress.percent, 25);
   assert.equal(progress.headlineActivity, "Running ST2: Build the screen");
 });
 
@@ -875,5 +879,29 @@ test("shouldShowEstimatedCost only enables paid cost displays when configured", 
       { recent: { billing_mode: "per_pass", configured: false }, remaining: { billing_mode: "per_pass", configured: false } },
     ),
     false,
+  );
+});
+
+test("display progress captions include closeout in the visible total", () => {
+  assert.equal(
+    executionProgressCaptionDisplay({
+      steps: [
+        { step_id: "ST1", status: "completed" },
+        { step_id: "ST2", status: "pending", depends_on: ["ST1"], owned_paths: ["desktop/src"] },
+        { step_id: "ST3", status: "pending", depends_on: ["ST1"], owned_paths: ["src/jakal_flow"] },
+      ],
+      closeout_status: "not_started",
+    }),
+    "Completed 1/4 steps, ready: ST2, ST3",
+  );
+  assert.equal(
+    toolbarProgressCaptionDisplay({
+      steps: [
+        { step_id: "ST1", status: "completed" },
+        { step_id: "ST2", status: "completed" },
+      ],
+      closeout_status: "running",
+    }),
+    "Completed 2/3 steps, closeout running",
   );
 });

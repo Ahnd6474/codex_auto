@@ -1,6 +1,6 @@
 import { listBridgeJobs } from "../api.js";
 import { BRIDGE_COMMANDS } from "../bridgeProtocol.js";
-import { loadProjectDetail } from "./projectDetails.js";
+import { loadHistoryDetail, loadProjectDetail } from "./projectDetails.js";
 
 function listBridgeJobsRequest() {
   if (typeof globalThis.__JAKAL_FLOW_TEST_LIST_BRIDGE_JOBS__ === "function") {
@@ -26,6 +26,12 @@ export async function fetchProjectDetailBySelector(bridgeRequest, selector, work
 
 export async function fetchProjectDetail(bridgeRequest, repoId, workspaceRoot, options = {}) {
   return fetchProjectDetailBySelector(bridgeRequest, { repoId }, workspaceRoot, options);
+}
+
+export async function fetchHistoryDetail(bridgeRequest, archiveId, workspaceRoot, options = {}) {
+  return loadHistoryDetail(bridgeRequest, archiveId, workspaceRoot || null, {
+    includeFull: (options.detailLevel ?? "full") === "full",
+  });
 }
 
 export async function refreshVisibleProjectState(bridgeRequest, workspaceRoot, repoId, options = {}) {

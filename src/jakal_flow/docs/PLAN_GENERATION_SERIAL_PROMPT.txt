@@ -13,10 +13,10 @@ Prefer narrow, sequential blocks that Codex can realistically complete in one fo
 Do not combine unrelated work into the same block.
 Do not require concrete test commands at planning time.
 At this stage, define blocks by clear success conditions rather than by existing test commands.
-Optimize the plan for a fully runnable and maintainable prototype.
-Prefer implementation choices that are simple but not obviously disposable if the project continues.
-If the requested outcome cannot be completed reliably without setup, integration, validation, cleanup, or supporting implementation work that the user did not explicitly mention, include that work in the plan.
-Treat only directly necessary supporting work as in scope; do not add speculative roadmap items or optional expansion beyond the requested prototype outcome.
+Optimize the plan for a finished, handoff-quality result rather than a narrow MVP slice.
+Prefer implementation choices that are simple, durable, and polished enough to keep if the project continues.
+If the requested outcome cannot be completed reliably without setup, integration, validation, cleanup, documentation, polish, or supporting implementation work that the user did not explicitly mention, include that work in the plan.
+Treat all directly necessary supporting work as in scope so the result feels complete; do not add speculative roadmap items or optional expansion beyond the requested product outcome.
 Use the following priority order while planning:
 1. Follow AGENTS.md and explicit repository constraints first.
 2. Use the user request as the primary product goal within those constraints.

@@ -13,10 +13,10 @@ This guide defines baseline implementation principles. It is not an expansion-id
 - Do not follow this guide when it conflicts with the prompt.
 - Use this guide as a default implementation standard, not as a source of speculative feature ideas.
 
-## 2. Prototype Standards
+## 2. Delivery Standards
 
-- A prototype is not just a script that happens to run.
-- Even a minimal prototype should be runnable, maintainable, and extensible.
+- Aim for a finished, handoff-quality result within the requested scope, not the narrowest possible MVP slice.
+- Even a small delivery should be runnable, maintainable, and extensible.
 - Prefer the smallest sustainable implementation over the fastest possible shortcut.
 - Do not make obviously disposable structure the default choice.
 
@@ -26,6 +26,8 @@ This guide defines baseline implementation principles. It is not an expansion-id
 - Respect the existing stack, but do not use stack consistency alone to justify a poor-quality decision.
 - Add new tools or dependencies only when they provide a clear practical benefit.
 - Do not choose an approach only because it is the easiest thing to implement immediately.
+- If a well-known algorithm, data structure, or engineering technique already fits the problem, use it proactively instead of inventing an ad hoc approach.
+- Prefer established named approaches when they improve correctness, explainability, or maintainability.
 - For this repository, prefer the existing `React + Tauri + JavaScript` desktop path and keep the Python UI bridge unless there is a strong reason to change it.
 
 ## 4. UI and User Experience
@@ -54,7 +56,7 @@ This guide defines baseline implementation principles. It is not an expansion-id
 
 - Write core logic so it can be verified when practical, even if the user did not explicitly request tests.
 - Prioritize checks for behavior that is easy to break and easy to validate locally.
-- Do not build an excessive test framework for a trivial prototype.
+- Do not build an excessive test framework for a trivial change.
 - Do not leave important logic completely unverified without a clear reason.
 
 ## 8. Configuration, Environment Variables, and Secrets

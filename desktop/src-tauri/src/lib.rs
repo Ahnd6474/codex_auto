@@ -52,11 +52,7 @@ fn parse_bridge_timeout(env_override: Option<String>) -> Duration {
 }
 
 fn bridge_timeout() -> Duration {
-    parse_bridge_timeout(
-        env::var("JAKAL_FLOW_BRIDGE_TIMEOUT_SECS")
-            .ok()
-            .or_else(|| env::var("CODEX_AUTO_BRIDGE_TIMEOUT_SECS").ok()),
-    )
+    parse_bridge_timeout(env::var("JAKAL_FLOW_BRIDGE_TIMEOUT_SECS").ok())
 }
 
 fn normalize_bridge_command(command: &str) -> Result<String, String> {
@@ -128,12 +124,7 @@ fn resolve_python_executable(root: &Path, env_override: Option<String>) -> Strin
 }
 
 fn python_executable(root: &Path) -> String {
-    resolve_python_executable(
-        root,
-        env::var("JAKAL_FLOW_PYTHON")
-            .ok()
-            .or_else(|| env::var("CODEX_AUTO_PYTHON").ok()),
-    )
+    resolve_python_executable(root, env::var("JAKAL_FLOW_PYTHON").ok())
 }
 
 fn build_pythonpath(root: &Path, existing: Option<OsString>) -> Result<String, String> {

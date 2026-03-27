@@ -64,7 +64,6 @@ from .utils import append_jsonl, normalize_workflow_mode, now_utc_iso, parse_jso
 
 
 DEFAULT_GUI_WORKSPACE_DIRNAME = ".jakal-flow-workspace"
-LEGACY_GUI_WORKSPACE_DIRNAME = ".codex-auto-workspace"
 SHARE_SERVER_START_TIMEOUT_SECS = 3.0
 CODEX_SNAPSHOT_TTL_SECONDS = 15.0
 
@@ -76,15 +75,12 @@ _codex_snapshot_service = CodexBackendSnapshotService(
 
 
 def default_workspace_root() -> Path:
-    explicit = os.environ.get("JAKAL_FLOW_GUI_WORKSPACE") or os.environ.get("CODEX_AUTO_GUI_WORKSPACE")
+    explicit = os.environ.get("JAKAL_FLOW_GUI_WORKSPACE")
     if explicit:
         return Path(explicit).expanduser().resolve()
     preferred = (Path.cwd() / DEFAULT_GUI_WORKSPACE_DIRNAME).resolve()
     if preferred.exists():
         return preferred
-    legacy = (Path.cwd() / LEGACY_GUI_WORKSPACE_DIRNAME).resolve()
-    if legacy.exists():
-        return legacy
     return (Path.home() / DEFAULT_GUI_WORKSPACE_DIRNAME).resolve()
 
 
@@ -476,6 +472,16 @@ def resolve_project(
     raise ValueError("Either repo_id or project_dir is required.")
 
 
+def resolve_history_project(
+    orchestrator: Orchestrator,
+    payload: dict[str, Any],
+) -> ProjectContext:
+    archive_id = str(payload.get("archive_id", "")).strip()
+    if archive_id:
+        return orchestrator.workspace.load_history_by_id(archive_id)
+    raise ValueError("archive_id is required.")
+
+
 def append_ui_event(context: ProjectContext, event_type: str, message: str, details: dict[str, Any] | None = None) -> None:
     payload = {
         "timestamp": now_utc_iso(),
@@ -515,6 +521,7 @@ def bridge_command_handlers() -> dict[str, Any]:
         **build_read_model_handlers(
             bootstrap_payload=bootstrap_payload,
             resolve_project=resolve_project,
+            resolve_history_project=resolve_history_project,
             coerce_bool=coerce_bool,
             codex_snapshot_service=_codex_snapshot_service,
         ),

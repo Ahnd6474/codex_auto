@@ -564,6 +564,15 @@ pre {
   grid-template-columns: 1fr;
 }
 
+.history-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .metric-card,
 .content-card,
 .details-card,
@@ -578,6 +587,24 @@ pre {
 
 .content-card--flow {
   padding-bottom: 14px;
+}
+
+.history-flow {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel-alt);
+  padding: 10px;
+}
+
+.history-flow__canvas {
+  min-width: 720px;
+}
+
+.history-flow__canvas svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
 }
 
 .metric-card strong {

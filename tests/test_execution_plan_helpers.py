@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 import json
 from types import SimpleNamespace
 from pathlib import Path
@@ -67,11 +66,9 @@ from jakal_flow.utils import append_jsonl, read_json, read_jsonl_tail, read_last
 
 
 class ExecutionPlanHelperTests(unittest.TestCase):
-    def test_legacy_codex_auto_namespace_aliases_new_package(self) -> None:
-        legacy_planning = importlib.import_module("codex_auto.planning")
-        renamed_planning = importlib.import_module("jakal_flow.planning")
-
-        self.assertEqual(legacy_planning.REFERENCE_GUIDE_DISPLAY_PATH, renamed_planning.REFERENCE_GUIDE_DISPLAY_PATH)
+    def test_legacy_codex_auto_namespace_is_removed(self) -> None:
+        with self.assertRaises(ModuleNotFoundError):
+            __import__("codex_auto.planning")
 
     def test_parse_execution_plan_response_reads_json_tasks(self) -> None:
         response = """
@@ -1275,8 +1272,12 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("description that should s...", svg)
 
     def test_ml_results_svg_wraps_long_labels(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            svg = Orchestrator(Path(tmpdir))._ml_results_svg(
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_ml_results_svg_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        temp_root.mkdir(parents=True, exist_ok=True)
+
+        try:
+            svg = Orchestrator(temp_root)._ml_results_svg(
                 [
                     MLExperimentRecord(
                         experiment_id="EXP-1",
@@ -1286,6 +1287,8 @@ class ExecutionPlanHelperTests(unittest.TestCase):
                     )
                 ]
             )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
 
         self.assertIn("<tspan", svg)
         self.assertIn("STEP-WITH-A-LONG-ID", svg)
@@ -1409,6 +1412,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("DAG execution tree", parallel_plan_template)
         self.assertIn("Maximize safe frontier width", parallel_plan_template)
         self.assertIn("contract-freezing or coordination step", parallel_plan_template)
+        self.assertIn("finished, handoff-quality result", parallel_plan_template)
         self.assertIn("{reference_notes}", parallel_plan_template)
         self.assertIn("src/jakal_flow/docs/REFERENCE_GUIDE.md", parallel_plan_template)
         self.assertIn('"metadata": {', ml_plan_template)
@@ -1455,12 +1459,14 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("{completed_steps}", final_template)
         self.assertIn("{closeout_report_file}", final_template)
         self.assertIn("{test_command}", final_template)
+        self.assertIn("README.md as a first-class closeout deliverable", final_template)
         self.assertIn("{optimization_mode}", optimization_template)
         self.assertIn("{candidate_files}", optimization_template)
         self.assertIn("{optimization_candidates}", optimization_template)
         self.assertEqual(load_optimization_prompt_template(), optimization_template)
         self.assertIn("{ml_mode_state_file}", ml_final_template)
         self.assertIn("{ml_experiment_reports_dir}", ml_final_template)
+        self.assertIn("audit README.md and related repository docs", ml_final_template)
         self.assertEqual(load_finalization_prompt_template("ml"), ml_final_template)
         self.assertIn("{repo_url}", scope_template)
         self.assertIn("reserve README.md edits for planning-time alignment or the final closeout pass", scope_template)
@@ -1515,9 +1521,13 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("owned_paths", plan_prompt)
         self.assertIn("src/jakal_flow/docs/REFERENCE_GUIDE.md", plan_prompt)
         self.assertIn("React + Tauri", plan_prompt)
+        self.assertIn("well-known algorithm", plan_prompt)
         self.assertIn("1. Follow AGENTS.md and explicit repository constraints first.", bootstrap_prompt)
         self.assertIn("src/jakal_flow/docs/REFERENCE_GUIDE.md", bootstrap_prompt)
         self.assertIn("React + Tauri", bootstrap_prompt)
+        self.assertIn("well-known algorithm", bootstrap_prompt)
+        self.assertIn("finished, handoff-quality result", plan_prompt)
+        self.assertIn("finished, handoff-quality implementation", bootstrap_prompt)
 
     def test_generate_execution_plan_runs_planner_agent_a_then_agent_b(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_dual_planner_test"

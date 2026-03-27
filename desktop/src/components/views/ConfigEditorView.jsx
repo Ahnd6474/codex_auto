@@ -120,7 +120,7 @@ export function ConfigEditorView({
         </div>
         <div className="field-row">
           <button className="toolbar-button" onClick={onDeleteProject} type="button" disabled={busy || !form.project_dir?.trim()}>
-            {t("action.delete")}
+            {t("action.archiveProject")}
           </button>
         </div>
       </div>

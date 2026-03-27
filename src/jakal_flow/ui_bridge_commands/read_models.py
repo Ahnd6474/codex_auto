@@ -19,6 +19,7 @@ def build_read_model_handlers(
     *,
     bootstrap_payload,
     resolve_project,
+    resolve_history_project,
     coerce_bool,
     codex_snapshot_service,
 ) -> dict[str, BridgeCommandHandler]:
@@ -47,6 +48,14 @@ def build_read_model_handlers(
     def load_project_history(ctx: BridgeCommandContext) -> dict[str, Any]:
         return history_payload(resolve_project(ctx.orchestrator, ctx.payload))
 
+    def load_history_entry(ctx: BridgeCommandContext) -> dict[str, Any]:
+        project = resolve_history_project(ctx.orchestrator, ctx.payload)
+        return ctx.detail_payload(
+            project,
+            refresh_codex_status=False,
+            detail_level=str(ctx.payload.get("detail_level", "full")).strip().lower() or "full",
+        )
+
     def load_project_reports(ctx: BridgeCommandContext) -> dict[str, Any]:
         return report_payload(resolve_project(ctx.orchestrator, ctx.payload))
 
@@ -70,6 +79,7 @@ def build_read_model_handlers(
         "load-project": load_project_detail,
         "load-project-core": load_project_core,
         "load-project-history": load_project_history,
+        "load-history-entry": load_history_entry,
         "load-project-reports": load_project_reports,
         "load-project-config": load_project_config,
         "load-project-workspace": load_project_workspace,
@@ -78,4 +88,3 @@ def build_read_model_handlers(
         "get_share_server_status": lambda ctx: share_server_status_payload(ctx.workspace_root),
         "get_public_tunnel_status": lambda ctx: public_tunnel_status_payload(ctx.workspace_root),
     }
-

@@ -79,6 +79,7 @@ def build_share_command_handlers(
             port=preferred_port,
             public_base_url=public_base_url,
         )
+        share_server_for_response = dict(share_status)
         effective_bind_host = str(share_status.get("config", {}).get("bind_host", bind_host or "")).strip() or bind_host or ""
         should_start_quick_tunnel = (
             effective_bind_host == "0.0.0.0"
@@ -88,7 +89,12 @@ def build_share_command_handlers(
         quick_tunnel_warning = ""
         if should_start_quick_tunnel:
             try:
-                start_public_tunnel(ctx.workspace_root, str(share_status["base_url"]))
+                tunnel_status = start_public_tunnel(ctx.workspace_root, str(share_status["base_url"]))
+                share_server_for_response["public_tunnel"] = tunnel_status
+                public_url = str(tunnel_status.get("public_url") or "").strip()
+                if public_url:
+                    share_server_for_response["share_base_url"] = public_url
+                    share_server_for_response["share_base_url_source"] = "quick_tunnel"
             except Exception as exc:
                 quick_tunnel_warning = str(exc).strip()
                 append_ui_event(
@@ -98,7 +104,7 @@ def build_share_command_handlers(
                     {"error": quick_tunnel_warning},
                 )
         elif public_base_url or effective_bind_host != "0.0.0.0":
-            stop_public_tunnel(ctx.workspace_root)
+            share_server_for_response["public_tunnel"] = stop_public_tunnel(ctx.workspace_root)
         session = create_share_session(
             project,
             expires_in_minutes=expires_in_minutes,
@@ -112,6 +118,10 @@ def build_share_command_handlers(
         )
         detail = ctx.detail_payload(project)
         detail["share"] = project_share_payload(ctx.workspace_root, project)
+        detail["share"]["server"] = {
+            **detail["share"].get("server", {}),
+            **share_server_for_response,
+        }
         detail["created_share_session"] = public_session_summary(
             ctx.workspace_root,
             project,

@@ -36,7 +36,8 @@ Required closeout work:
 4. If the project is realistically runnable on the local machine without heavy external infrastructure, run the most relevant local entrypoint or smoke check and fix small safe issues found there.
 5. Remove obviously unnecessary generated or temporary directories left behind by implementation work when they are safe to delete and are not part of the product or test fixtures.
 6. Write a concise future-maintainer guide and closeout summary to {closeout_report_file}. Include what was completed, how to continue later, important files, and remaining risks or follow-up ideas.
-7. Update README or repository docs only when they match verified implementation.
+7. Treat README.md as a first-class closeout deliverable. Audit installation, setup, commands, workflow, configuration, architecture notes, limitations, and operator guidance against the verified implementation, and tighten README.md when it is stale, thin, or missing important verified context.
+8. Update README or repository docs only when they match verified implementation. If README.md is already accurate enough, say that explicitly in {closeout_report_file}.
 
 Execution rules:
 - Use one focused closeout pass.

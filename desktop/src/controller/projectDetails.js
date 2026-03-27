@@ -33,3 +33,14 @@ export async function loadProjectDetail(bridgeRequest, selector, workspaceRoot, 
     workspaceRoot || null,
   );
 }
+
+export async function loadHistoryDetail(bridgeRequest, archiveId, workspaceRoot, options = {}) {
+  return bridgeRequest(
+    BRIDGE_COMMANDS.LOAD_HISTORY_ENTRY,
+    {
+      archive_id: archiveId,
+      detail_level: options.includeFull ? "full" : "core",
+    },
+    workspaceRoot || null,
+  );
+}

@@ -19,6 +19,7 @@ Required planning workflow:
 6. Leave final task ids, final DAG edges, final owned_paths, and final reasoning effort choices to Planner Agent B.
 
 Parallel decomposition rules:
+- Plan toward a finished, handoff-quality result instead of a narrow MVP slice.
 - Prefer candidate blocks with narrow ownership boundaries.
 - Prefer exact files or leaf directories over broad package roots.
 - If a small contract-freezing or skeleton step can unlock a wide safe fan-out, recommend it explicitly.

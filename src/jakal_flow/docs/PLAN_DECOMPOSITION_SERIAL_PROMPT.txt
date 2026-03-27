@@ -21,6 +21,7 @@ Required planning workflow:
 Rules:
 - Do not output the final task list.
 - Prefer narrow, testable boundaries over broad milestones.
+- Plan toward a finished, handoff-quality result instead of a narrow MVP slice.
 - Do not create a skeleton/bootstrap recommendation unless it is small, contract-focused, and likely to improve later parallelism.
 - Keep scope tight to the requested outcome and directly necessary supporting work.
 - Use src/jakal_flow/docs/REFERENCE_GUIDE.md, README.md, and AGENTS.md as the primary repository guidance sources.

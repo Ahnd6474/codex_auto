@@ -84,13 +84,16 @@ export default function App() {
             activeTab={controller.sidebarTab}
             onChangeTab={controller.setSidebarTab}
             projects={controller.filteredProjects}
+            historyProjects={controller.filteredHistoryProjects}
             selectedProjectId={controller.selectedProjectId}
+            selectedHistoryId={controller.selectedHistoryId}
             loadingProjectId={controller.loadingProjectId}
             projectFilter={controller.projectFilter}
             workspaceFilter={controller.workspaceFilter}
             onProjectFilterChange={controller.setProjectFilter}
             onWorkspaceFilterChange={controller.setWorkspaceFilter}
             onSelectProject={controller.loadProject}
+            onSelectHistory={controller.setSelectedHistoryId}
             onNewProject={controller.startNewProject}
             onDeleteProject={controller.deleteProjectById}
             onDeleteAllProjects={controller.deleteAllProjects}
@@ -108,6 +111,8 @@ export default function App() {
             form={controller.projectForm}
             programSettings={controller.programSettings}
             planDraft={controller.planDraft}
+            historyDetail={controller.historyDetail}
+            selectedHistoryId={controller.selectedHistoryId}
             shareSettings={controller.shareSettings}
             selectedStepId={controller.selectedStepId}
             modelPresets={controller.modelPresets}

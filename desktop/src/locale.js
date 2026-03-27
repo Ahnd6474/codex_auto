@@ -168,6 +168,8 @@ const LANGUAGE_ALIASES = {
 const STRINGS = {
   en: {
     "action.add": "Add",
+    "action.archiveAllProjects": "Archive All",
+    "action.archiveProject": "Archive Project",
     "action.approveCheckpoint": "Approve Checkpoint",
     "action.browse": "Browse",
     "action.closeout": "Closeout",
@@ -272,10 +274,14 @@ const STRINGS = {
     "field.workflowMode": "Workflow Mode",
     "history.history": "History",
     "history.noEntries": "No entries.",
+    "history.noFlowChart": "No flow chart captured for this run.",
+    "history.noPrompt": "No prompt recorded.",
+    "history.noSavedRuns": "No archived runs yet.",
     "history.noTaskTitle": "No task title",
     "history.noTestSummary": "No test summary",
     "history.recentActivity": "Recent Activity",
     "history.recentBlocks": "Recent Blocks",
+    "history.archivedAt": "Archived: {timestamp}",
     "message.checkpointApproved": "Checkpoint approved.",
     "message.closeoutAfterAllSteps": "Closeout can run only after all steps are completed.",
     "message.commandCompleted": "{command} completed.",
@@ -296,8 +302,10 @@ const STRINGS = {
     "message.planSaved": "Plan saved.",
     "message.prepareProjectFirst": "Prepare or open a project first.",
     "message.projectConfigurationSaved": "Project configuration saved.",
+    "message.projectArchived": "Project moved to history.",
     "message.projectDeleted": "Project removed from jakal-flow.",
     "message.allProjectsDeleted": "All projects removed from jakal-flow.",
+    "message.allProjectsArchived": "All active projects moved to history.",
     "message.programSettingsSaved": "Program settings saved.",
     "message.projectReloaded": "Project reloaded.",
     "message.projectStateRefreshed": "Project state refreshed.",
@@ -335,6 +343,8 @@ const STRINGS = {
     "option.workflowStandard": "Standard Mode",
     "project.none": "No Project",
     "prompt.confirmCloseout": "Run final closeout now? This will do final cleanup, verification, smoke checks when possible, and handoff work.",
+    "prompt.confirmArchiveProject": "Move this project to history? The managed docs, logs, and state will be preserved under history, and you can start a fresh run for the same directory.",
+    "prompt.confirmArchiveAllProjects": "Move all active projects to history? The managed docs, logs, and state will be preserved under history.",
     "prompt.confirmRegeneratePlan": "Replace the current unstarted plan with a new Codex-generated plan?",
     "prompt.confirmResetPlan": "Reset the saved prompt and remove all execution steps for this project?",
     "prompt.confirmDeleteProject": "Remove this project from jakal-flow? The managed docs, logs, and state will be deleted, but the original repository folder will stay in place.",
@@ -746,6 +756,8 @@ STRINGS.en["progress.closeoutCompleted"] = "Completed {completed}/{total} steps,
 STRINGS.en["progress.closeoutRunning"] = "Completed {completed}/{total} steps, closeout running";
 STRINGS.en["progress.closeoutFailed"] = "Completed {completed}/{total} steps, closeout failed";
 STRINGS.en["progress.closeoutPending"] = "Completed {completed}/{total} steps, closeout pending";
+STRINGS.en["progress.runningIds"] = "Completed {completed}/{total} steps, running: {ids}";
+STRINGS.en["progress.readyIds"] = "Completed {completed}/{total} steps, ready: {ids}";
 STRINGS.en["action.backgroundJob"] = "Background Job";
 STRINGS.en["run.closeoutRunning"] = "Running closeout";
 STRINGS.en["run.completedStepsSummary"] = "{completed}/{total} steps completed";
@@ -982,6 +994,21 @@ KO_HIGH_QUALITY_OVERRIDES["run.stepProgress"] = "단계 진행도";
 KO_HIGH_QUALITY_OVERRIDES["run.debugging"] = "디버깅";
 KO_HIGH_QUALITY_OVERRIDES["run.workingOnStep"] = "{step} 작업 중";
 KO_HIGH_QUALITY_OVERRIDES["run.workingOnSteps"] = "{steps} 작업 중";
+
+KO_HIGH_QUALITY_OVERRIDES["progress.runningIds"] = "{completed}/{total}\ub2e8\uacc4 \uc644\ub8cc, \uc2e4\ud589 \uc911: {ids}";
+KO_HIGH_QUALITY_OVERRIDES["progress.readyIds"] = "{completed}/{total}\ub2e8\uacc4 \uc644\ub8cc, \uc2e4\ud589 \uac00\ub2a5: {ids}";
+KO_HIGH_QUALITY_OVERRIDES["action.archiveAllProjects"] = "모두 보관";
+KO_HIGH_QUALITY_OVERRIDES["action.archiveProject"] = "프로젝트 보관";
+KO_HIGH_QUALITY_OVERRIDES["history.noFlowChart"] = "저장된 플로우 차트가 없습니다.";
+KO_HIGH_QUALITY_OVERRIDES["history.noPrompt"] = "저장된 프롬프트가 없습니다.";
+KO_HIGH_QUALITY_OVERRIDES["history.noSavedRuns"] = "아직 보관된 실행 기록이 없습니다.";
+KO_HIGH_QUALITY_OVERRIDES["history.archivedAt"] = "보관 시각: {timestamp}";
+KO_HIGH_QUALITY_OVERRIDES["message.projectArchived"] = "프로젝트를 history로 옮겼습니다.";
+KO_HIGH_QUALITY_OVERRIDES["message.allProjectsArchived"] = "모든 프로젝트를 history로 옮겼습니다.";
+KO_HIGH_QUALITY_OVERRIDES["prompt.confirmArchiveProject"] =
+  "이 프로젝트를 history로 옮길까요? 관리 중인 문서, 로그, 상태는 history 아래에 보관되고 같은 디렉토리로 새 작업을 다시 시작할 수 있습니다.";
+KO_HIGH_QUALITY_OVERRIDES["prompt.confirmArchiveAllProjects"] =
+  "모든 프로젝트를 history로 옮길까요? 각 프로젝트의 문서, 로그, 상태는 보관되고 원본 작업 디렉토리는 그대로 유지됩니다.";
 
 const STATIC_LANGUAGE_PACKS = new Map(
   ["en", "ko"].map((language) => [

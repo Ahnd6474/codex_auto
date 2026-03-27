@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 import shutil
+from uuid import uuid4
 
 from .models import LoopCounters, LoopState, ProjectContext, ProjectPaths, RepoMetadata, RuntimeOptions
 from .parallel_resources import normalize_parallel_worker_mode
@@ -13,35 +14,67 @@ class WorkspaceManager:
     def __init__(self, workspace_root: Path) -> None:
         self.workspace_root = workspace_root.resolve()
         self.projects_root = self.workspace_root / "projects"
+        self.history_root = self.workspace_root / "history"
 
     @property
     def registry_file(self) -> Path:
         return self.workspace_root / "registry.json"
 
+    def _empty_registry(self) -> dict[str, dict[str, dict[str, str]]]:
+        return {"projects": {}, "history": {}}
+
+    def _read_registry(self) -> dict[str, dict[str, dict[str, str]]]:
+        raw = read_json(self.registry_file, default=self._empty_registry())
+        if not isinstance(raw, dict):
+            return self._empty_registry()
+        projects = raw.get("projects", {})
+        history = raw.get("history", {})
+        return {
+            "projects": projects if isinstance(projects, dict) else {},
+            "history": history if isinstance(history, dict) else {},
+        }
+
+    def _write_registry(self, registry: dict[str, dict[str, dict[str, str]]]) -> None:
+        write_json(
+            self.registry_file,
+            {
+                "projects": registry.get("projects", {}),
+                "history": registry.get("history", {}),
+            },
+        )
+
     def ensure_workspace(self) -> None:
         ensure_dir(self.projects_root)
+        ensure_dir(self.history_root)
         if not self.registry_file.exists():
-            write_json(self.registry_file, {"projects": {}})
+            self._write_registry(self._empty_registry())
+            return
+        registry = self._read_registry()
+        if read_json(self.registry_file, default=None) != registry:
+            self._write_registry(registry)
 
     def build_paths(self, slug: str) -> ProjectPaths:
-        project_root = self.projects_root / slug
-        docs_dir = project_root / "docs"
-        memory_dir = project_root / "memory"
-        logs_dir = project_root / "logs"
-        reports_dir = project_root / "reports"
-        state_dir = project_root / "state"
+        return self.build_paths_from_root(self.projects_root / slug)
+
+    def build_paths_from_root(self, project_root: Path) -> ProjectPaths:
+        resolved_root = project_root.resolve()
+        docs_dir = resolved_root / "docs"
+        memory_dir = resolved_root / "memory"
+        logs_dir = resolved_root / "logs"
+        reports_dir = resolved_root / "reports"
+        state_dir = resolved_root / "state"
         return ProjectPaths(
             workspace_root=self.workspace_root,
             projects_root=self.projects_root,
-            project_root=project_root,
-            repo_dir=project_root / "repo",
+            project_root=resolved_root,
+            repo_dir=resolved_root / "repo",
             docs_dir=docs_dir,
             memory_dir=memory_dir,
             logs_dir=logs_dir,
             reports_dir=reports_dir,
             state_dir=state_dir,
-            metadata_file=project_root / "metadata.json",
-            project_config_file=project_root / "project_config.json",
+            metadata_file=resolved_root / "metadata.json",
+            project_config_file=resolved_root / "project_config.json",
             loop_state_file=state_dir / "LOOP_STATE.json",
             plan_file=docs_dir / "PLAN.md",
             mid_term_plan_file=docs_dir / "MID_TERM_PLAN.md",
@@ -91,7 +124,7 @@ class WorkspaceManager:
         ]:
             ensure_dir(directory)
 
-        registry = read_json(self.registry_file, default={"projects": {}})
+        registry = self._read_registry()
         if repo_id in registry["projects"]:
             context = self.load_project_by_id(repo_id)
             context.runtime = runtime
@@ -119,7 +152,7 @@ class WorkspaceManager:
             "repo_kind": "remote",
             "repo_path": str(paths.repo_dir),
         }
-        write_json(self.registry_file, registry)
+        self._write_registry(registry)
         self.save_project(ProjectContext(metadata=metadata, runtime=runtime, paths=paths, loop_state=loop_state))
         return self.load_project_by_id(repo_id)
 
@@ -148,7 +181,7 @@ class WorkspaceManager:
             ensure_dir(directory)
         ensure_dir(resolved_dir)
 
-        registry = read_json(self.registry_file, default={"projects": {}})
+        registry = self._read_registry()
         if repo_id in registry["projects"]:
             context = self.load_project_by_id(repo_id)
             context.runtime = runtime
@@ -184,48 +217,88 @@ class WorkspaceManager:
             "repo_kind": "local",
             "repo_path": str(resolved_dir),
         }
-        write_json(self.registry_file, registry)
+        self._write_registry(registry)
         self.save_project(ProjectContext(metadata=metadata, runtime=runtime, paths=paths, loop_state=loop_state))
         return self.load_project_by_id(repo_id)
 
-    def save_project(self, context: ProjectContext) -> None:
+    def _write_project_files(self, context: ProjectContext) -> None:
         write_json(context.paths.metadata_file, context.metadata.to_dict())
         write_json(context.paths.project_config_file, context.runtime.to_dict())
         write_json(context.paths.loop_state_file, context.loop_state.to_dict())
-        registry = read_json(self.registry_file, default={"projects": {}})
+
+    def _active_registry_item(self, context: ProjectContext) -> dict[str, str]:
+        return {
+            "repo_id": context.metadata.repo_id,
+            "slug": context.metadata.slug,
+            "repo_url": context.metadata.repo_url,
+            "branch": context.metadata.branch,
+            "project_root": str(context.metadata.project_root),
+            "repo_kind": context.metadata.repo_kind,
+            "repo_path": str(context.metadata.repo_path),
+        }
+
+    def _history_registry_item(self, context: ProjectContext) -> dict[str, str]:
+        return {
+            "archive_id": str(context.metadata.archive_id or ""),
+            "repo_id": context.metadata.repo_id,
+            "source_repo_id": str(context.metadata.source_repo_id or context.metadata.repo_id),
+            "slug": context.metadata.slug,
+            "repo_url": context.metadata.repo_url,
+            "branch": context.metadata.branch,
+            "project_root": str(context.metadata.project_root),
+            "repo_kind": context.metadata.repo_kind,
+            "repo_path": str(context.metadata.repo_path),
+            "archived_at": str(context.metadata.archived_at or ""),
+            "display_name": str(context.metadata.display_name or context.metadata.slug),
+        }
+
+    def save_project(self, context: ProjectContext) -> None:
+        self._write_project_files(context)
+        registry = self._read_registry()
+        if context.metadata.archived and context.metadata.archive_id:
+            registry["history"][context.metadata.archive_id] = self._history_registry_item(context)
+            self._write_registry(registry)
+            return
         if context.metadata.repo_id in registry["projects"]:
-            registry["projects"][context.metadata.repo_id] = {
-                "repo_id": context.metadata.repo_id,
-                "slug": context.metadata.slug,
-                "repo_url": context.metadata.repo_url,
-                "branch": context.metadata.branch,
-                "project_root": str(context.metadata.project_root),
-                "repo_kind": context.metadata.repo_kind,
-                "repo_path": str(context.metadata.repo_path),
-            }
-            write_json(self.registry_file, registry)
+            registry["projects"][context.metadata.repo_id] = self._active_registry_item(context)
+            self._write_registry(registry)
 
     def load_project_by_id(self, repo_id: str) -> ProjectContext:
-        registry = read_json(self.registry_file, default={"projects": {}})
+        registry = self._read_registry()
         item = registry["projects"].get(repo_id)
         if not item:
             raise KeyError(f"Unknown repository id: {repo_id}")
-        return self.load_project_by_slug(item["slug"])
+        return self.load_project_from_root(Path(item["project_root"]))
+
+    def load_history_by_id(self, archive_id: str) -> ProjectContext:
+        registry = self._read_registry()
+        item = registry["history"].get(archive_id)
+        if not item:
+            raise KeyError(f"Unknown archive id: {archive_id}")
+        context = self.load_project_from_root(Path(item["project_root"]))
+        context.metadata.archived = True
+        context.metadata.archive_id = archive_id
+        context.metadata.archived_at = str(item.get("archived_at", "")).strip() or context.metadata.archived_at
+        context.metadata.source_repo_id = str(item.get("source_repo_id", "")).strip() or context.metadata.source_repo_id
+        return context
 
     def load_project_by_slug(self, slug: str) -> ProjectContext:
-        paths = self.build_paths(slug)
+        return self.load_project_from_root(self.projects_root / slug)
+
+    def load_project_from_root(self, project_root: Path) -> ProjectContext:
+        paths = self.build_paths_from_root(project_root)
         metadata_data = read_json(paths.metadata_file)
         runtime_data = read_json(paths.project_config_file)
         loop_state_data = read_json(paths.loop_state_file)
         if not metadata_data or not runtime_data or not loop_state_data:
-            raise FileNotFoundError(f"Project data is incomplete for slug {slug}")
+            raise FileNotFoundError(f"Project data is incomplete for root {project_root}")
 
         metadata = RepoMetadata(
             repo_id=metadata_data["repo_id"],
             slug=metadata_data["slug"],
             repo_url=metadata_data["repo_url"],
             branch=metadata_data["branch"],
-            project_root=Path(metadata_data["project_root"]),
+            project_root=paths.project_root,
             repo_path=Path(metadata_data["repo_path"]),
             created_at=metadata_data["created_at"],
             last_run_at=metadata_data.get("last_run_at"),
@@ -234,9 +307,15 @@ class WorkspaceManager:
             repo_kind=metadata_data.get("repo_kind", "remote"),
             display_name=metadata_data.get("display_name"),
             origin_url=metadata_data.get("origin_url"),
+            archived=bool(metadata_data.get("archived", False)),
+            archive_id=metadata_data.get("archive_id"),
+            archived_at=metadata_data.get("archived_at"),
+            source_repo_id=metadata_data.get("source_repo_id"),
         )
         if metadata.repo_kind == "local":
             paths.repo_dir = metadata.repo_path
+        else:
+            metadata.repo_path = paths.repo_dir
         if "parallel_worker_mode" not in runtime_data and "parallel_workers" in runtime_data:
             runtime_data["parallel_worker_mode"] = "manual"
         runtime_data["parallel_worker_mode"] = normalize_parallel_worker_mode(runtime_data.get("parallel_worker_mode", "auto"))
@@ -263,21 +342,41 @@ class WorkspaceManager:
     def find_project(self, repo_url: str, branch: str) -> ProjectContext | None:
         self.ensure_workspace()
         repo_id, _ = stable_repo_identity(repo_url, branch)
-        registry = read_json(self.registry_file, default={"projects": {}})
+        registry = self._read_registry()
         if repo_id not in registry["projects"]:
             return None
         return self.load_project_by_id(repo_id)
 
     def list_projects(self) -> list[ProjectContext]:
         self.ensure_workspace()
-        registry = read_json(self.registry_file, default={"projects": {}})
+        registry = self._read_registry()
         projects: list[ProjectContext] = []
         for item in registry["projects"].values():
             try:
-                projects.append(self.load_project_by_slug(item["slug"]))
+                projects.append(self.load_project_from_root(Path(str(item.get("project_root", "")).strip())))
             except FileNotFoundError:
                 continue
         return sorted(projects, key=lambda ctx: ctx.metadata.created_at)
+
+    def list_history_projects(self) -> list[ProjectContext]:
+        self.ensure_workspace()
+        registry = self._read_registry()
+        history_projects: list[ProjectContext] = []
+        for archive_id, item in registry["history"].items():
+            try:
+                context = self.load_project_from_root(Path(str(item.get("project_root", "")).strip()))
+            except FileNotFoundError:
+                continue
+            context.metadata.archived = True
+            context.metadata.archive_id = archive_id
+            context.metadata.archived_at = str(item.get("archived_at", "")).strip() or context.metadata.archived_at
+            context.metadata.source_repo_id = str(item.get("source_repo_id", "")).strip() or context.metadata.source_repo_id
+            history_projects.append(context)
+        return sorted(
+            history_projects,
+            key=lambda ctx: ctx.metadata.archived_at or ctx.metadata.created_at,
+            reverse=True,
+        )
 
     def find_project_by_repo_path(self, repo_path: Path) -> ProjectContext | None:
         resolved_target = repo_path.resolve()
@@ -286,22 +385,60 @@ class WorkspaceManager:
                 return project
         return None
 
-    def delete_project(self, repo_id: str) -> None:
+    def _archive_slug(self, slug: str, archived_at: str, repo_id: str) -> str:
+        compact_timestamp = (
+            archived_at.replace("-", "")
+            .replace(":", "")
+            .replace("+00:00", "Z")
+            .replace("T", "T")
+        )
+        slug_prefix = slug.strip("-")[:20].strip("-") or "project"
+        return f"{slug_prefix}-hist-{repo_id[:8]}-{compact_timestamp}-{uuid4().hex[:4]}"
+
+    def archive_project(self, repo_id: str) -> ProjectContext:
         self.ensure_workspace()
-        registry = read_json(self.registry_file, default={"projects": {}})
+        registry = self._read_registry()
         item = registry["projects"].pop(repo_id, None)
         if not item:
             raise KeyError(f"Unknown repository id: {repo_id}")
-        write_json(self.registry_file, registry)
-        project_root = (self.projects_root / str(item.get("slug", "")).strip()).resolve()
-        if project_root != self.projects_root and self.projects_root in project_root.parents and project_root.exists():
-            shutil.rmtree(project_root, ignore_errors=True)
 
-    def delete_all_projects(self) -> None:
+        source_root = Path(str(item.get("project_root", "")).strip()).resolve()
+        if not source_root.exists():
+            self._write_registry(registry)
+            raise FileNotFoundError(f"Managed project root does not exist: {source_root}")
+
+        context = self.load_project_from_root(source_root)
+        archived_at = now_utc_iso()
+        archive_id = f"hist-{uuid4().hex}"
+        archive_slug = self._archive_slug(context.metadata.slug, archived_at, context.metadata.repo_id)
+        archive_root = (self.history_root / archive_slug).resolve()
+
+        if source_root != self.projects_root and self.projects_root in source_root.parents:
+            ensure_dir(self.history_root)
+            shutil.move(str(source_root), str(archive_root))
+        else:
+            self._write_registry(registry)
+            raise RuntimeError(f"Refusing to archive unexpected project root: {source_root}")
+
+        archived_context = self.load_project_from_root(archive_root)
+        archived_context.metadata.project_root = archive_root
+        if archived_context.metadata.repo_kind != "local":
+            archived_context.metadata.repo_path = archive_root / "repo"
+        archived_context.metadata.archived = True
+        archived_context.metadata.archive_id = archive_id
+        archived_context.metadata.archived_at = archived_at
+        archived_context.metadata.source_repo_id = context.metadata.repo_id
+        self._write_project_files(archived_context)
+        registry["history"][archive_id] = self._history_registry_item(archived_context)
+        self._write_registry(registry)
+        return archived_context
+
+    def delete_project(self, repo_id: str) -> ProjectContext:
+        return self.archive_project(repo_id)
+
+    def delete_all_projects(self) -> list[ProjectContext]:
         self.ensure_workspace()
-        registry = read_json(self.registry_file, default={"projects": {}})
-        for item in list(registry.get("projects", {}).values()):
-            project_root = (self.projects_root / str(item.get("slug", "")).strip()).resolve()
-            if project_root != self.projects_root and self.projects_root in project_root.parents and project_root.exists():
-                shutil.rmtree(project_root, ignore_errors=True)
-        write_json(self.registry_file, {"projects": {}})
+        archived: list[ProjectContext] = []
+        for repo_id in list(self._read_registry().get("projects", {}).keys()):
+            archived.append(self.archive_project(repo_id))
+        return archived

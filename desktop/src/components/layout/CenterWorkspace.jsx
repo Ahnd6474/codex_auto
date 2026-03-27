@@ -76,6 +76,8 @@ export function CenterWorkspace({
   activeTab,
   onChangeTab,
   detail,
+  historyDetail,
+  selectedHistoryId,
   form,
   shareSettings,
   programSettings,
@@ -109,6 +111,7 @@ export function CenterWorkspace({
 }) {
   const { t } = useI18n();
   const developerMode = Boolean(programSettings?.developer_mode);
+  const visibleHistoryDetail = selectedHistoryId ? historyDetail : detail;
 
   function resolveTabView(tab) {
     switch (tab) {
@@ -119,7 +122,7 @@ export function CenterWorkspace({
       case "reports":
         return developerMode ? ReportsView : null;
       case "history":
-        return developerMode ? HistoryView : null;
+        return HistoryView;
       case "config":
         return ConfigEditorView;
       case "app-settings":
@@ -154,7 +157,7 @@ export function CenterWorkspace({
   }, [activeTab, developerMode]);
 
   useEffect(() => {
-    if (!developerMode && (activeTab === "reports" || activeTab === "history")) {
+    if (!developerMode && activeTab === "reports") {
       onChangeTab("run");
     }
   }, [activeTab, developerMode, onChangeTab]);
@@ -163,10 +166,10 @@ export function CenterWorkspace({
     ["run", t("tab.flow")],
     ["config", t("tab.config")],
     ["dashboard", t("tab.dashboard")],
+    ["history", t("tab.history")],
     ...(developerMode
       ? [
           ["reports", t("tab.reports")],
-          ["history", t("tab.history")],
         ]
       : []),
   ];
@@ -219,7 +222,7 @@ export function CenterWorkspace({
           />
         ) : null}
         {developerMode && activeTab === "reports" ? <ReportsView reports={detail?.reports} /> : null}
-        {developerMode && activeTab === "history" ? <HistoryView history={detail?.history} /> : null}
+        {activeTab === "history" ? <HistoryView detail={visibleHistoryDetail} /> : null}
         {activeTab === "config" ? (
           <ConfigEditorView
             form={form}

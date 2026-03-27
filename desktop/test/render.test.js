@@ -492,7 +492,7 @@ test("IdeToolbar renders the active command and DAG-ready progress text", async 
   });
 
   assert.match(html, /Run Remaining Steps/);
-  assert.match(html, /Completed 1\/3 steps, ready: ST2, ST3/);
+  assert.match(html, /Completed 1\/4 steps, ready: ST2, ST3/);
   assert.match(html, /Program Settings/);
   assert.doesNotMatch(html, />Closeout<\/button>/);
 });
@@ -542,7 +542,7 @@ test("IdeToolbar prefers the live plan progress while a run is active", async ()
     },
   );
 
-  assert.match(html, /Completed 1\/3 steps, running: ST2, ST3/);
+  assert.match(html, /Completed 1\/4 steps, running: ST2, ST3/);
 });
 
 test("IdeToolbar exposes checkpoint approval when a checkpoint is waiting for review", async () => {
@@ -704,7 +704,8 @@ test("RunProgressPanel renders current work, progress, and recent activity", asy
 
   assert.match(html, /Live Run/);
   assert.match(html, /Working on ST2 - Build, ST3 - Backend/);
-  assert.match(html, /Completed 1\/3 steps, running: ST2, ST3/);
+  assert.match(html, /Completed 1\/4 steps, running: ST2, ST3/);
+  assert.match(html, /25% complete/);
   assert.match(html, /2 node\(s\) running/);
   assert.match(html, /Running ST3: Build the backend/);
 });
