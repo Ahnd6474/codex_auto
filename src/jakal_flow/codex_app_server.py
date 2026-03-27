@@ -6,7 +6,7 @@ import queue
 import subprocess
 import threading
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +14,8 @@ from .model_constants import AUTO_MODEL_SLUG, VALID_REASONING_EFFORTS
 from .model_providers import discover_local_model_catalog
 from .platform_defaults import default_codex_path
 from .utils import now_utc_iso
+
+UTC = getattr(datetime, "UTC", timezone.utc)
 
 
 APP_SERVER_TIMEOUT_SECS = 8.0

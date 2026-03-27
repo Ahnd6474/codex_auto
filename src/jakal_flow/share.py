@@ -6,7 +6,7 @@ import re
 import secrets
 import subprocess
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -17,6 +17,8 @@ from .run_control import load_run_control
 from .status_views import effective_project_status
 from .utils import compact_text, decode_process_output, now_utc_iso, read_json, read_jsonl_tail, read_last_jsonl, write_json
 from .workspace import WorkspaceManager
+
+UTC = getattr(datetime, "UTC", timezone.utc)
 
 
 DEFAULT_SHARE_HOST = "0.0.0.0"
@@ -208,6 +210,14 @@ def process_is_running(pid: int) -> bool:
         return True
     except OSError:
         return False
+    stat_path = Path("/proc") / str(pid) / "stat"
+    if stat_path.exists():
+        try:
+            fields = stat_path.read_text(encoding="utf-8").split()
+            if len(fields) >= 3 and fields[2] == "Z":
+                return False
+        except OSError:
+            pass
     return True
 
 

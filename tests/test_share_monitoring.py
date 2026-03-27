@@ -4,8 +4,10 @@ import json
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import threading
+import time
 import unittest
 from unittest import mock
 import urllib.error
@@ -32,7 +34,12 @@ from jakal_flow.share import (
     normalize_share_bind_host,
     validate_share_session,
 )
-from jakal_flow.public_tunnel import ensure_cloudflared_path, install_cloudflared_with_winget, normalize_tunnel_target_url
+from jakal_flow.public_tunnel import (
+    ensure_cloudflared_path,
+    install_cloudflared_with_winget,
+    normalize_tunnel_target_url,
+    process_is_running as tunnel_process_is_running,
+)
 from jakal_flow.share_server import ShareHTTPServer, ShareRequestHandler
 from jakal_flow.ui_bridge import run_command
 from jakal_flow.utils import append_jsonl
@@ -109,6 +116,18 @@ def _fake_codex_snapshot() -> mock.Mock:
 
 
 class ShareMonitoringTests(unittest.TestCase):
+    def test_process_is_running_treats_posix_zombie_as_not_running(self) -> None:
+        if not Path("/proc").exists():
+            self.skipTest("Requires /proc to verify zombie process state.")
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(3600)"])
+        try:
+            child.terminate()
+            time.sleep(0.1)
+            self.assertFalse(process_is_running(child.pid))
+            self.assertFalse(tunnel_process_is_running(child.pid))
+        finally:
+            child.wait(timeout=2)
+
     def test_current_step_summary_combines_parallel_running_steps(self) -> None:
         summary = current_step_summary(
             ExecutionPlanState(

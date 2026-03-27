@@ -5,6 +5,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import time
@@ -255,11 +256,21 @@ def stop_share_server_process(workspace_root: Path) -> dict[str, Any]:
     if pid <= 0:
         return share_server_status_payload(workspace_root)
     terminate_process(pid)
-    wait_for_condition(
+    stopped = wait_for_condition(
         lambda: not bool(share_server_status_payload(workspace_root).get("running")),
         timeout_seconds=2.0,
         interval_seconds=0.1,
     )
+    if not stopped and os.name != "nt":
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+        wait_for_condition(
+            lambda: not bool(share_server_status_payload(workspace_root).get("running")),
+            timeout_seconds=1.0,
+            interval_seconds=0.1,
+        )
     return share_server_status_payload(workspace_root)
 
 

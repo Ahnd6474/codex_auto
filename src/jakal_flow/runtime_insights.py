@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from statistics import mean
 from typing import Any
 
@@ -9,6 +9,8 @@ from .model_providers import normalize_billing_mode
 from .models import ExecutionPlanState, ProjectContext, RuntimeOptions
 from .parallel_resources import build_parallel_resource_plan
 from .utils import read_jsonl_tail
+
+UTC = getattr(datetime, "UTC", timezone.utc)
 
 
 EFFORT_DURATION_BASELINES_SECONDS: dict[str, float] = {

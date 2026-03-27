@@ -8,9 +8,11 @@ import os
 import re
 import shutil
 import stat
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+UTC = getattr(datetime, "UTC", timezone.utc)
 
 
 def now_utc_iso() -> str:

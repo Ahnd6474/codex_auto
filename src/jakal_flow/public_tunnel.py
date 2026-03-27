@@ -72,6 +72,14 @@ def process_is_running(pid: int) -> bool:
         return True
     except OSError:
         return False
+    stat_path = Path("/proc") / str(pid) / "stat"
+    if stat_path.exists():
+        try:
+            fields = stat_path.read_text(encoding="utf-8").split()
+            if len(fields) >= 3 and fields[2] == "Z":
+                return False
+        except OSError:
+            pass
     return True
 
 
