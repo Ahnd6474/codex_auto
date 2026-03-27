@@ -42,6 +42,7 @@ export function ParallelRunControlView({
   detail,
   planDraft,
   activeJob,
+  autoRunAfterPlan,
   selectedStepId,
   busy,
   onPromptChange,
@@ -50,6 +51,7 @@ export function ParallelRunControlView({
   onResetPlan,
   onRunPlan,
   onRequestStop,
+  onAutoRunAfterPlanChange,
   onSelectStep,
   onUpdateStepField,
   onSaveStepLocal,
@@ -131,6 +133,18 @@ export function ParallelRunControlView({
         <div className="content-card__header">
           <strong>{t("run.flowChart")}</strong>
           <div className="action-row">
+            <label className="choice-radio run-action-toggle">
+              <input
+                type="checkbox"
+                checked={Boolean(autoRunAfterPlan)}
+                onChange={(event) => onAutoRunAfterPlanChange?.(event.target.checked)}
+                disabled={busy}
+              />
+              <span>{t("run.autoRunAfterPlan")}</span>
+              <strong className={`status-badge status-badge--${autoRunAfterPlan ? "info" : "neutral"}`}>
+                {autoRunAfterPlan ? t("common.on") : t("common.off")}
+              </strong>
+            </label>
             <button className="toolbar-button" onClick={onGeneratePlan} type="button" disabled={busy}>
               {t("action.generate")}
             </button>

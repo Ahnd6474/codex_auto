@@ -80,6 +80,7 @@ export function CenterWorkspace({
   selectedHistoryId,
   form,
   shareSettings,
+  autoRunAfterPlan,
   programSettings,
   planDraft,
   selectedStepId,
@@ -97,6 +98,7 @@ export function CenterWorkspace({
   onCopyShareLink,
   onRevokeShareLink,
   onChangeShareSettings,
+  onChangeAutoRunAfterPlan,
   onPromptChange,
   onGeneratePlan,
   onSavePlan,
@@ -191,6 +193,7 @@ export function CenterWorkspace({
             planDraft={planDraft}
             activeJob={activeJob}
             shareSettings={shareSettings}
+            autoRunAfterPlan={autoRunAfterPlan}
             selectedStepId={selectedStepId}
             busy={busy}
             onPromptChange={onPromptChange}
@@ -203,6 +206,7 @@ export function CenterWorkspace({
             onCopyShareLink={onCopyShareLink}
             onRevokeShareLink={onRevokeShareLink}
             onChangeShareSettings={onChangeShareSettings}
+            onAutoRunAfterPlanChange={onChangeAutoRunAfterPlan}
             onSelectStep={onSelectStep}
             onUpdateStepField={onUpdateStepField}
             onSaveStepLocal={onSaveStepLocal}

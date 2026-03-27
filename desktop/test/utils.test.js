@@ -11,6 +11,7 @@ import {
   basename,
   blankProjectForm,
   buildProjectPayload,
+  buildRunPlanPayloadFromDetail,
   canEditStep,
   codexUsageBuckets,
   cloneValue,
@@ -754,6 +755,52 @@ test("buildProjectPayload keeps a manually entered origin URL", () => {
   });
 
   assert.equal(payload.origin_url, "https://github.com/openai/demo-app.git");
+});
+
+test("buildRunPlanPayloadFromDetail reuses the generated plan and persisted runtime", () => {
+  const detail = {
+    project: {
+      repo_path: "C:/work/demo",
+      display_name: "Demo App",
+      slug: "demo-app",
+      branch: "release",
+      origin_url: "https://github.com/openai/demo-app",
+    },
+    runtime: {
+      model: "gpt-5.4",
+      test_cmd: "npm run check",
+    },
+    plan: {
+      workflow_mode: "standard",
+      steps: [{ step_id: "ST1", status: "pending" }],
+    },
+  };
+
+  const payload = buildRunPlanPayloadFromDetail(detail, {
+    max_blocks: 7,
+    effort: "high",
+  });
+
+  assert.deepEqual(payload, {
+    project_dir: "C:/work/demo",
+    display_name: "Demo App",
+    branch: "release",
+    origin_url: "https://github.com/openai/demo-app",
+    runtime: {
+      max_blocks: 7,
+      effort: "high",
+      execution_mode: "parallel",
+      model: "gpt-5.4",
+      test_cmd: "npm run check",
+    },
+    plan: {
+      workflow_mode: "standard",
+      execution_mode: "parallel",
+      default_test_command: "npm run check",
+      steps: [{ step_id: "ST1", status: "pending" }],
+    },
+  });
+  assert.equal(buildRunPlanPayloadFromDetail({ project: { repo_path: "C:/work/demo" }, plan: { steps: [] } }, null), null);
 });
 
 test("firstSelectableStepId prefers the first incomplete step", () => {

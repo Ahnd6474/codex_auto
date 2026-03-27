@@ -21,6 +21,7 @@ import {
   basename,
   blankProjectForm,
   buildProjectPayload,
+  buildRunPlanPayloadFromDetail,
   cloneValue,
   commandLabel,
   firstSelectableStepId,
@@ -72,6 +73,7 @@ export function useDesktopController() {
   const [activeJob, setActiveJob] = useState(null);
   const [message, setMessage] = useState(null);
   const [shareSettings, setShareSettings] = useState(() => defaultShareSettings());
+  const [autoRunAfterPlan, setAutoRunAfterPlan] = usePersistentState("jakal-flow:auto-run-after-plan", false);
   const projectAutosaveTimerRef = useRef(null);
   const lastAppliedDetailSignatureRef = useRef("");
   const bridgeRefreshInFlightRef = useRef(false);
@@ -79,6 +81,8 @@ export function useDesktopController() {
   const pendingBridgeRefreshRepoIdRef = useRef("");
   const pendingBridgeRefreshListingRef = useRef(false);
   const activeJobRef = useRef(null);
+  const autoRunAfterPlanRef = useRef(false);
+  const defaultRuntimeRef = useRef(null);
   const projectsRef = useRef([]);
 
   const [centerTab, setCenterTab] = usePersistentState("jakal-flow:center-tab", "run");
@@ -151,6 +155,14 @@ export function useDesktopController() {
   useEffect(() => {
     activeJobRef.current = activeJob;
   }, [activeJob]);
+
+  useEffect(() => {
+    autoRunAfterPlanRef.current = Boolean(autoRunAfterPlan);
+  }, [autoRunAfterPlan]);
+
+  useEffect(() => {
+    defaultRuntimeRef.current = defaultRuntime;
+  }, [defaultRuntime]);
 
   useEffect(() => {
     projectsRef.current = projects;
@@ -437,6 +449,19 @@ export function useDesktopController() {
           setActiveJobId("");
           if (job.result?.project && shouldReplaceVisibleProject(selectedProjectId, job.result.project.repo_id)) {
             applyProjectDetail(job.result, { preserveDirtyPlan: false, runningJob: null, force: true });
+          }
+          if (
+            job.status === "completed"
+            && job.command === BRIDGE_COMMANDS.GENERATE_PLAN
+            && autoRunAfterPlanRef.current
+          ) {
+            const chainedRun = await startAutoRunFromGeneratedPlan(job.result);
+            if (cancelled) {
+              return;
+            }
+            if (chainedRun.attempted) {
+              return;
+            }
           }
           const listing = await loadProjectListing(bridgeRequest, workspaceRoot);
           if (cancelled) {
@@ -1010,6 +1035,21 @@ export function useDesktopController() {
     }
   }
 
+  async function startAutoRunFromGeneratedPlan(detail) {
+    const payload = buildRunPlanPayloadFromDetail(detail, defaultRuntimeRef.current);
+    if (!payload) {
+      return { attempted: false, job: null };
+    }
+    const job = await startJob(BRIDGE_COMMANDS.RUN_PLAN, payload);
+    if (job) {
+      setPlanDirty(false);
+    }
+    return {
+      attempted: true,
+      job,
+    };
+  }
+
   async function generatePlan() {
     const prompt = planDraft?.project_prompt?.trim() || "";
     if (!projectForm.project_dir.trim()) {
@@ -1293,6 +1333,7 @@ export function useDesktopController() {
     activeJobId,
     message,
     shareSettings,
+    autoRunAfterPlan,
     centerTab,
     bottomTab,
     sidebarTab,
@@ -1315,6 +1356,7 @@ export function useDesktopController() {
     setProjectFilter,
     setWorkspaceFilter,
     setShareSettings,
+    setAutoRunAfterPlan,
     syncPlan,
     updateSelectedStep,
     chooseDirectory,

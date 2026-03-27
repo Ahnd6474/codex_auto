@@ -816,6 +816,15 @@ export function buildProjectPayload(form, plan = null) {
   return payload;
 }
 
+export function buildRunPlanPayloadFromDetail(detail, defaultRuntime = null) {
+  const projectDir = String(detail?.project?.repo_path || "").trim();
+  const steps = Array.isArray(detail?.plan?.steps) ? detail.plan.steps : [];
+  if (!projectDir || !steps.length) {
+    return null;
+  }
+  return buildProjectPayload(projectFormFromDetail(detail, defaultRuntime), detail.plan);
+}
+
 export function findModelCatalogEntry(modelCatalog = [], model = "") {
   const target = String(model || "").trim().toLowerCase();
   return modelCatalog.find((item) => String(item?.model || "").trim().toLowerCase() === target) || null;

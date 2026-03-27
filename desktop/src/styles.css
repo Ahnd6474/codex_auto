@@ -936,6 +936,14 @@ pre {
   width: auto;
 }
 
+.run-action-toggle {
+  padding: 6px 10px;
+}
+
+.run-action-toggle strong {
+  font-size: 12px;
+}
+
 .field {
   display: flex;
   flex-direction: column;

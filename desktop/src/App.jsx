@@ -115,6 +115,7 @@ export default function App() {
             historyDetail={controller.historyDetail}
             selectedHistoryId={controller.selectedHistoryId}
             shareSettings={controller.shareSettings}
+            autoRunAfterPlan={controller.autoRunAfterPlan}
             selectedStepId={controller.selectedStepId}
             modelPresets={controller.modelPresets}
             modelCatalog={controller.modelCatalog}
@@ -130,6 +131,7 @@ export default function App() {
             onCopyShareLink={controller.copyShareLink}
             onRevokeShareLink={controller.revokeShareLink}
             onChangeShareSettings={controller.setShareSettings}
+            onChangeAutoRunAfterPlan={controller.setAutoRunAfterPlan}
             onPromptChange={(value) =>
               controller.syncPlan({
                 ...(controller.planDraft || {}),

@@ -374,6 +374,7 @@ const STRINGS = {
     "reports.noCloseoutReport": "No closeout report yet.",
     "reports.reports": "Reports",
     "run.closeout": "Closeout",
+    "run.autoRunAfterPlan": "Auto-run After Plan",
     "run.done": "Done",
     "run.dagLayer": "Layer {index}",
     "run.executionMode": "Execution Mode",
@@ -991,6 +992,7 @@ const KO_HIGH_QUALITY_OVERRIDES = {
 };
 
 KO_HIGH_QUALITY_OVERRIDES["run.closeoutRunning"] = "마감 실행 중";
+KO_HIGH_QUALITY_OVERRIDES["run.autoRunAfterPlan"] = "계획 생성 후 바로 실행";
 KO_HIGH_QUALITY_OVERRIDES["run.completedStepsSummary"] = "{completed}/{total}단계 완료";
 KO_HIGH_QUALITY_OVERRIDES["run.liveRun"] = "실행 중인 작업";
 KO_HIGH_QUALITY_OVERRIDES["run.planGeneration"] = "계획 생성 중";
