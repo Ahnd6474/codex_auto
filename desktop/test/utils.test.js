@@ -26,6 +26,7 @@ import {
   effectiveStepStatus,
   executionProgressCaptionDisplay,
   firstSelectableStepId,
+  inheritProjectIdentityForm,
   mergeProjectDetailCodexStatus,
   normalizeInterruptedPlan,
   progressCaption,
@@ -303,6 +304,49 @@ test("projectFormFromDetail merges persisted runtime and derives GitHub mode", (
       execution_mode: "parallel",
       test_cmd: "npm run check",
       model: "gpt-5.4",
+    },
+  });
+});
+
+test("inheritProjectIdentityForm keeps project links but resets runtime to app defaults", () => {
+  const form = inheritProjectIdentityForm(
+    {
+      project_dir: "C:/work/demo",
+      display_name: "Demo App",
+      branch: "release",
+      origin_url: "https://github.com/openai/demo-app",
+      github_mode: "manual",
+      runtime: {
+        model: "gpt-5.4-mini",
+        effort: "high",
+        parallel_memory_per_worker_gib: 7,
+        test_cmd: "npm test",
+      },
+    },
+    {
+      model: "auto",
+      effort: "medium",
+      parallel_memory_per_worker_gib: 3,
+      test_cmd: "python -m pytest",
+      optimization_mode: "light",
+    },
+  );
+
+  assert.deepEqual(form, {
+    project_dir: "C:/work/demo",
+    display_name: "Demo App",
+    branch: "release",
+    origin_url: "https://github.com/openai/demo-app",
+    github_mode: "manual",
+    runtime: {
+      model: "auto",
+      effort: "medium",
+      parallel_memory_per_worker_gib: 3,
+      test_cmd: "python -m pytest",
+      optimization_mode: "light",
+      generate_word_report: true,
+      max_blocks: 5,
+      execution_mode: "parallel",
     },
   });
 });

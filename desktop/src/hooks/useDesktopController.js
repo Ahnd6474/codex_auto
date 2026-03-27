@@ -22,6 +22,7 @@ import {
   cloneValue,
   commandLabel,
   firstSelectableStepId,
+  inheritProjectIdentityForm,
   programSettingsFromRuntime,
   projectFormFromDetail,
   shouldReplaceVisibleProject,
@@ -181,7 +182,6 @@ export function useDesktopController() {
         modelCatalog,
         activeJob: activeJobRef.current,
         defaultRuntime,
-        storedProgramSettings,
         planDirty,
       },
       setters: {
@@ -693,7 +693,7 @@ export function useDesktopController() {
 
   async function saveProject(options = {}) {
     const { formOverride = null, silent = false } = options;
-    const formToSave = applyProgramSettingsToForm(formOverride || projectForm, storedProgramSettings);
+    const formToSave = cloneValue(formOverride || projectForm);
     await withPending("save-project-setup", async () => {
       const detail = await bridgeRequest(
         BRIDGE_COMMANDS.SAVE_PROJECT_SETUP,
@@ -705,7 +705,7 @@ export function useDesktopController() {
       setModelCatalog(detail?.codex_status?.model_catalog || []);
       setShareSettings(shareSettingsFromDetail(detail));
       setSelectedProjectId(detail.project.repo_id);
-      setProjectForm(applyProgramSettingsToForm(projectFormFromDetail(detail, defaultRuntime), storedProgramSettings));
+      setProjectForm(projectFormFromDetail(detail, defaultRuntime));
       setPlanDraft(cloneValue(detail.plan));
       setSelectedStepId(firstSelectableStepId(detail.plan));
       setPlanDirty(false);
@@ -739,15 +739,7 @@ export function useDesktopController() {
   }
 
   function restoreProjectForm(nextForm) {
-    setProjectForm({
-      ...blankProjectForm(defaultRuntime),
-      project_dir: nextForm.project_dir,
-      display_name: nextForm.display_name,
-      branch: nextForm.branch,
-      origin_url: nextForm.origin_url,
-      github_mode: nextForm.github_mode,
-      runtime: nextForm.runtime,
-    });
+    setProjectForm(inheritProjectIdentityForm(nextForm, defaultRuntime));
   }
 
   async function archiveProject() {
@@ -758,7 +750,7 @@ export function useDesktopController() {
     if (!window.confirm(translate(language, "prompt.confirmArchiveProject"))) {
       return;
     }
-    const nextForm = applyProgramSettingsToForm(projectForm, storedProgramSettings);
+    const nextForm = cloneValue(projectForm);
     await withPending("archive-project", async () => {
       const result = await bridgeRequest(
         BRIDGE_COMMANDS.ARCHIVE_PROJECT,
@@ -784,7 +776,7 @@ export function useDesktopController() {
     if (!window.confirm(translate(language, "prompt.confirmArchiveProject"))) {
       return;
     }
-    const nextForm = repoId === selectedProjectId ? applyProgramSettingsToForm(projectForm, storedProgramSettings) : null;
+    const nextForm = repoId === selectedProjectId ? cloneValue(projectForm) : null;
     await withPending("archive-project", async () => {
       const result = await bridgeRequest(
         BRIDGE_COMMANDS.ARCHIVE_PROJECT,
@@ -815,7 +807,7 @@ export function useDesktopController() {
     if (!window.confirm(translate(language, "prompt.confirmDeleteProject"))) {
       return;
     }
-    const nextForm = applyProgramSettingsToForm(projectForm, storedProgramSettings);
+    const nextForm = cloneValue(projectForm);
     await withPending("delete-project", async () => {
       const result = await bridgeRequest(
         BRIDGE_COMMANDS.DELETE_PROJECT,
@@ -840,7 +832,7 @@ export function useDesktopController() {
     if (!window.confirm(translate(language, "prompt.confirmDeleteProject"))) {
       return;
     }
-    const nextForm = repoId === selectedProjectId ? applyProgramSettingsToForm(projectForm, storedProgramSettings) : null;
+    const nextForm = repoId === selectedProjectId ? cloneValue(projectForm) : null;
     await withPending("delete-project", async () => {
       const result = await bridgeRequest(
         BRIDGE_COMMANDS.DELETE_PROJECT,
@@ -934,7 +926,7 @@ export function useDesktopController() {
     await withPending("save-plan", async () => {
       const detail = await bridgeRequest(
         BRIDGE_COMMANDS.SAVE_PLAN,
-        buildProjectPayload(applyProgramSettingsToForm(projectForm, storedProgramSettings), planDraft),
+        buildProjectPayload(projectForm, planDraft),
         workspaceRoot || null,
       );
       lastAppliedDetailSignatureRef.current = "";
@@ -960,7 +952,7 @@ export function useDesktopController() {
     await withPending("reset-plan", async () => {
       const detail = await bridgeRequest(
         BRIDGE_COMMANDS.RESET_PLAN,
-        buildProjectPayload(applyProgramSettingsToForm(projectForm, storedProgramSettings)),
+        buildProjectPayload(projectForm),
         workspaceRoot || null,
       );
       lastAppliedDetailSignatureRef.current = "";
@@ -1016,7 +1008,7 @@ export function useDesktopController() {
       return;
     }
     await startJob(BRIDGE_COMMANDS.GENERATE_PLAN, {
-      ...buildProjectPayload(applyProgramSettingsToForm(projectForm, storedProgramSettings)),
+      ...buildProjectPayload(projectForm),
       prompt,
       max_steps: Math.max(1, Number.parseInt(String(projectForm.runtime?.max_blocks || 5), 10) || 1),
     });
@@ -1027,7 +1019,7 @@ export function useDesktopController() {
       setMessage(messagePayload("error", translate(language, "message.createStepBeforeRun")));
       return;
     }
-    const job = await startJob(BRIDGE_COMMANDS.RUN_PLAN, buildProjectPayload(applyProgramSettingsToForm(projectForm, storedProgramSettings), planDraft));
+    const job = await startJob(BRIDGE_COMMANDS.RUN_PLAN, buildProjectPayload(projectForm, planDraft));
     if (job) {
       setPlanDirty(false);
     }

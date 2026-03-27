@@ -156,6 +156,35 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(steps[0].metadata["experiment_id"], "EXP-1")
         self.assertEqual(steps[0].metadata["model_spec"], "lightgbm")
 
+    def test_parse_execution_plan_response_preserves_join_metadata(self) -> None:
+        response = """
+        {
+          "tasks": [
+            {
+              "step_id": "ST3",
+              "task_title": "Join frontend and backend",
+              "display_description": "Integrate both branches.",
+              "codex_description": "Reconcile the completed frontend and backend work on the current branch.",
+              "depends_on": ["ST1", "ST2"],
+              "success_criteria": "The integrated branch passes verification.",
+              "metadata": {
+                "step_kind": "join",
+                "merge_from": ["ST1", "ST2"],
+                "join_policy": "all",
+                "join_reason": "The API and UI must be validated together before closeout."
+              }
+            }
+          ]
+        }
+        """
+
+        _title, _summary, steps = parse_execution_plan_response(response, "python -m unittest", "high", limit=3)
+
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0].metadata["step_kind"], "join")
+        self.assertEqual(steps[0].metadata["merge_from"], ["ST1", "ST2"])
+        self.assertEqual(steps[0].metadata["join_policy"], "all")
+
     def test_parse_execution_plan_response_recovers_json_from_noisy_text(self) -> None:
         response = """
         Here is the execution plan JSON.
@@ -328,6 +357,27 @@ class ExecutionPlanHelperTests(unittest.TestCase):
 
         self.assertEqual([[step.step_id for step in batch] for batch in batches], [["ST2"], ["ST3", "ST4"]])
 
+    def test_pending_execution_batches_runs_join_nodes_as_singletons(self) -> None:
+        orchestrator = Orchestrator(Path.cwd() / ".tmp_pending_batches_workspace")
+        plan_state = ExecutionPlanState(
+            execution_mode="parallel",
+            steps=[
+                ExecutionStep(step_id="ST1", title="Frontend slice", status="completed", owned_paths=["desktop/src"]),
+                ExecutionStep(step_id="ST2", title="Backend slice", status="completed", owned_paths=["src/jakal_flow"]),
+                ExecutionStep(
+                    step_id="ST3",
+                    title="Join frontend and backend",
+                    depends_on=["ST1", "ST2"],
+                    metadata={"step_kind": "join", "merge_from": ["ST1", "ST2"], "join_policy": "all"},
+                ),
+                ExecutionStep(step_id="ST4", title="Docs cleanup", depends_on=["ST2"], owned_paths=["docs"]),
+            ],
+        )
+
+        batches = orchestrator.pending_execution_batches(plan_state)
+
+        self.assertEqual([[step.step_id for step in batch] for batch in batches], [["ST3"], ["ST4"]])
+
     def test_save_execution_plan_state_upgrades_legacy_serial_mode_to_parallel(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_serial_parallel_group_test"
         shutil.rmtree(temp_root, ignore_errors=True)
@@ -398,6 +448,76 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual([step.step_id for step in plan_state.steps], ["ST1", "ST2"])
         self.assertEqual(plan_state.steps[0].depends_on, ["ST2"])
         self.assertEqual(plan_state.steps[1].depends_on, [])
+
+    def test_save_execution_plan_state_normalizes_join_metadata(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_join_plan_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", execution_mode="parallel")
+
+        try:
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"):
+                _context, plan_state = orchestrator.update_execution_plan(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    plan_state=ExecutionPlanState(
+                        execution_mode="parallel",
+                        default_test_command="python -m pytest",
+                        steps=[
+                            ExecutionStep(step_id="NODE-A", title="Frontend", owned_paths=["desktop/src"]),
+                            ExecutionStep(step_id="NODE-B", title="Backend", owned_paths=["src/jakal_flow"]),
+                            ExecutionStep(
+                                step_id="NODE-C",
+                                title="Join both branches",
+                                depends_on=["NODE-A", "NODE-B"],
+                                metadata={"step_kind": "join", "join_reason": "Validate the integrated application before closeout."},
+                            ),
+                        ],
+                    ),
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        join_step = plan_state.steps[2]
+        self.assertEqual(join_step.step_id, "ST3")
+        self.assertEqual(join_step.metadata["step_kind"], "join")
+        self.assertEqual(join_step.metadata["merge_from"], ["ST1", "ST2"])
+        self.assertEqual(join_step.metadata["join_policy"], "all")
+        self.assertEqual(join_step.metadata["join_reason"], "Validate the integrated application before closeout.")
+
+    def test_save_execution_plan_state_rejects_invalid_join_nodes(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_invalid_join_plan_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", execution_mode="parallel")
+
+        try:
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), self.assertRaises(ValueError):
+                orchestrator.update_execution_plan(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    plan_state=ExecutionPlanState(
+                        execution_mode="parallel",
+                        default_test_command="python -m pytest",
+                        steps=[
+                            ExecutionStep(step_id="NODE-A", title="Frontend", owned_paths=["desktop/src"]),
+                            ExecutionStep(
+                                step_id="NODE-B",
+                                title="Invalid join",
+                                depends_on=["NODE-A"],
+                                metadata={"step_kind": "join"},
+                            ),
+                        ],
+                    ),
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
 
     def test_save_execution_plan_state_keeps_running_checkpoint_status_in_sync(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_running_checkpoint_sync_test"
@@ -1405,6 +1525,9 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("DAG execution tree", parallel_plan_template)
         self.assertIn("Maximize safe frontier width", parallel_plan_template)
         self.assertIn("contract-freezing or coordination step", parallel_plan_template)
+        self.assertIn("explicit join node", parallel_plan_template)
+        self.assertIn('"step_kind": "task unless this is an explicit join or barrier node"', parallel_plan_template)
+        self.assertIn('"join_policy": "use `all` for join nodes and leave empty for normal task nodes"', parallel_plan_template)
         self.assertIn("finished, handoff-quality result", parallel_plan_template)
         self.assertIn("{reference_notes}", parallel_plan_template)
         self.assertIn("src/jakal_flow/docs/REFERENCE_GUIDE.md", parallel_plan_template)
@@ -1417,6 +1540,8 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("{planner_outline}", ml_plan_template)
         self.assertIn("{workflow_mode}", ml_plan_template)
         self.assertEqual(STEP_EXECUTION_PROMPT_FILENAME, STEP_EXECUTION_PARALLEL_PROMPT_FILENAME)
+        self.assertIn("{step_metadata}", parallel_step_template)
+        self.assertIn("step_metadata.step_kind", parallel_step_template)
         self.assertIn("saved DAG execution tree", parallel_step_template)
         self.assertIn("primary write scope", parallel_step_template)
         self.assertIn("Do not edit README.md during normal execution steps.", parallel_step_template)
@@ -1424,6 +1549,8 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("Step metadata", ml_step_template)
         self.assertIn("Do not edit README.md during normal execution steps.", ml_step_template)
         self.assertEqual(DEBUGGER_PROMPT_FILENAME, DEBUGGER_PARALLEL_PROMPT_FILENAME)
+        self.assertIn("{step_metadata}", parallel_debugger_template)
+        self.assertIn("step_metadata.step_kind", parallel_debugger_template)
         self.assertIn("{owned_paths}", parallel_debugger_template)
         self.assertIn("merged parallel batch", parallel_debugger_template)
         self.assertIn("cherry-pick conflict", parallel_debugger_template)

@@ -628,6 +628,8 @@ def parse_execution_plan_response(
         metadata = item.get("metadata", {})
         if not isinstance(metadata, dict):
             metadata = {}
+        else:
+            metadata = dict(metadata)
         steps.append(
             ExecutionStep(
                 step_id=str(item.get("step_id", item.get("node_id", ""))).strip() or f"ST{len(steps) + 1}",
@@ -1030,11 +1032,13 @@ def execution_plan_markdown(
     if not steps:
         lines.append("- ST1: Establish a minimal, testable first step and verify it locally.")
     for step in steps:
+        step_kind = str((step.metadata or {}).get("step_kind", "")).strip().lower() or "task"
         lines.extend(
             [
                 f"- {step.step_id}: {step.title}",
                 f"  - UI description: {step.display_description or step.title}",
                 f"  - Codex instruction: {step.codex_description or step.display_description or step.title}",
+                f"  - Step kind: {step_kind}",
                 f"  - GPT reasoning: {step.reasoning_effort or context.runtime.effort or 'high'}",
                 f"  - Parallel group: {step.parallel_group or 'none'}",
                 f"  - Depends on: {', '.join(step.depends_on) if step.depends_on else 'none'}",
@@ -1043,6 +1047,12 @@ def execution_plan_markdown(
                 f"  - Success criteria: {step.success_criteria or 'Verification command completes successfully.'}",
             ]
         )
+        merge_from = (step.metadata or {}).get("merge_from", [])
+        if isinstance(merge_from, list) and merge_from:
+            lines.append(f"  - Merge from: {', '.join(str(item).strip() for item in merge_from if str(item).strip())}")
+        join_policy = str((step.metadata or {}).get("join_policy", "")).strip()
+        if join_policy:
+            lines.append(f"  - Join policy: {join_policy}")
         if step.metadata:
             lines.append(f"  - Metadata: {json.dumps(step.metadata, ensure_ascii=False, sort_keys=True)}")
     lines.extend(

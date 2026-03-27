@@ -13,6 +13,8 @@ Current task:
 - Depends on: {depends_on}
 - Owned paths:
 {owned_paths}
+- Step metadata:
+{step_metadata}
 
 Codex execution instruction:
 {codex_description}
@@ -50,6 +52,8 @@ Execution rules:
 - Avoid editing files that are primarily owned by other pending nodes unless a tiny compatibility adjustment is strictly required.
 - Do not assume sibling nodes have already landed.
 - If the task would require a broad cross-node refactor, stop and document the blocker instead of making merge-sensitive edits.
+- If `step_metadata.step_kind` is `join` or `barrier`, treat this node as an explicit integration checkpoint on the current branch rather than a normal isolated feature pass.
+- For join or barrier nodes, focus on reconciling already-completed upstream work, validating the combined behavior, and making only the smallest integration-safe edits needed to satisfy the success criteria.
 - Keep the change set merge-friendly, traceable, and limited.
 - Leave repository-wide handoff docs like README.md alone during step execution.
 - Use web search only when directly necessary for official documentation or narrowly scoped factual verification.

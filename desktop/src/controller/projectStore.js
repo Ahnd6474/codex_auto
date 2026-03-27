@@ -1,6 +1,5 @@
 import { defaultShareSettings, emptyPlanDraft, shareSettingsFromDetail } from "../controllerHelpers.js";
 import {
-  applyProgramSettingsToForm,
   blankProjectForm,
   cloneValue,
   detailApplySignature,
@@ -116,7 +115,7 @@ export function applyProjectDetailState({
       if (current.project_dir && preserveDirtyPlan) {
         return current;
       }
-      return applyProgramSettingsToForm(projectFormFromDetail(normalizedDetail, state.defaultRuntime), state.storedProgramSettings);
+      return projectFormFromDetail(normalizedDetail, state.defaultRuntime);
     });
     if (!preserveDirtyPlan) {
       setters.setPlanDraft(cloneValue(normalizedDetail.plan));

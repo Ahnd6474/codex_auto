@@ -12,6 +12,8 @@ Current task:
 - Depends on: {depends_on}
 - Owned paths:
 {owned_paths}
+- Step metadata:
+{step_metadata}
 
 Original task instruction:
 {codex_description}
@@ -60,6 +62,7 @@ Debugger rules:
 - Treat the owned paths above as the primary write scope for this repair.
 - Prefer fixing compatibility or integration issues in product code before touching tests.
 - If the failure is a cherry-pick conflict, resolve the final merged code intentionally instead of blindly taking one side.
+- If `step_metadata.step_kind` is `join` or `barrier`, prefer narrow integration repairs that preserve the intent of all completed upstream nodes instead of effectively reverting one branch to make the tests pass.
 - Do not modify tests unless they are objectively incorrect, stale relative to the verified intended behavior, or missing a minimal required fixture.
 - If a test change is truly necessary, keep it minimal, executable, and explain why in {research_notes_file}.
 - Avoid broad cross-node refactors or ownership-breaking changes unless a tiny compatibility patch is strictly required to make the verified batch coherent.

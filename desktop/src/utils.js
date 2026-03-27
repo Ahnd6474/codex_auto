@@ -269,6 +269,18 @@ export function projectFormFromDetail(detail, defaultRuntime) {
   };
 }
 
+export function inheritProjectIdentityForm(form, defaultRuntime) {
+  const nextForm = cloneValue(form) || {};
+  return {
+    ...blankProjectForm(defaultRuntime),
+    project_dir: nextForm.project_dir || "",
+    display_name: nextForm.display_name || "",
+    branch: nextForm.branch || "main",
+    origin_url: nextForm.origin_url || "",
+    github_mode: nextForm.github_mode || deriveGithubMode(nextForm.origin_url),
+  };
+}
+
 function normalizeModelCatalog(value, fallback = []) {
   return Array.isArray(value) ? value : fallback;
 }

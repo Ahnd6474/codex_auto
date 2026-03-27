@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { applyProjectDetailListingState } from "../src/controller/projectStore.js";
+import { applyProjectDetailListingState, applyProjectDetailState } from "../src/controller/projectStore.js";
 
 test("applyProjectDetailListingState merges refreshed detail into the existing project row", () => {
   let nextProjects = null;
@@ -99,4 +99,115 @@ test("applyProjectDetailListingState merges refreshed detail into the existing p
     running: 1,
     failed: 0,
   });
+});
+
+test("applyProjectDetailState keeps persisted project runtime instead of reapplying app defaults", () => {
+  let nextProjectDetail = null;
+  let nextModelCatalog = null;
+  let nextShareSettings = null;
+  let nextLoadingProjectId = "demo";
+  let nextProjectForm = {
+    project_dir: "/repo",
+    display_name: "Demo",
+    branch: "main",
+    origin_url: "",
+    github_mode: "existing",
+    runtime: {
+      model: "auto",
+      effort: "medium",
+      parallel_memory_per_worker_gib: 3,
+      test_cmd: "python -m pytest",
+    },
+  };
+  let nextPlanDraft = null;
+  let nextSelectedStepId = "";
+  let nextPlanDirty = true;
+
+  const applied = applyProjectDetailState({
+    detail: {
+      project: {
+        repo_id: "demo",
+        repo_path: "/repo",
+        display_name: "Demo",
+        slug: "demo",
+        branch: "main",
+        origin_url: "",
+      },
+      runtime: {
+        model: "gpt-5.4-mini",
+        effort: "high",
+        parallel_memory_per_worker_gib: 7,
+        test_cmd: "npm test",
+      },
+      plan: {
+        steps: [],
+        closeout_status: "not_started",
+      },
+      codex_status: {
+        model_catalog: [],
+      },
+    },
+    refs: {
+      lastAppliedDetailSignatureRef: {
+        current: "",
+      },
+    },
+    state: {
+      projectDetail: null,
+      modelCatalog: [],
+      activeJob: null,
+      defaultRuntime: {
+        model: "auto",
+        effort: "medium",
+        parallel_memory_per_worker_gib: 3,
+        test_cmd: "python -m pytest",
+      },
+      planDirty: false,
+    },
+    setters: {
+      transition: (callback) => callback(),
+      setProjectDetail: (value) => {
+        nextProjectDetail = value;
+      },
+      setModelCatalog: (value) => {
+        nextModelCatalog = value;
+      },
+      setShareSettings: (value) => {
+        nextShareSettings = value;
+      },
+      setLoadingProjectId: (value) => {
+        nextLoadingProjectId = value;
+      },
+      setProjectForm: (value) => {
+        nextProjectForm = typeof value === "function" ? value(nextProjectForm) : value;
+      },
+      setPlanDraft: (value) => {
+        nextPlanDraft = value;
+      },
+      setSelectedStepId: (value) => {
+        nextSelectedStepId = typeof value === "function" ? value(nextSelectedStepId) : value;
+      },
+      setPlanDirty: (value) => {
+        nextPlanDirty = value;
+      },
+    },
+  });
+
+  assert.equal(applied, true);
+  assert.equal(nextProjectDetail.project.repo_id, "demo");
+  assert.deepEqual(nextModelCatalog, []);
+  assert.deepEqual(nextShareSettings, {
+    bind_host: "0.0.0.0",
+  });
+  assert.equal(nextLoadingProjectId, "");
+  assert.equal(nextProjectForm.runtime.model, "gpt-5.4-mini");
+  assert.equal(nextProjectForm.runtime.effort, "high");
+  assert.equal(nextProjectForm.runtime.parallel_memory_per_worker_gib, 7);
+  assert.equal(nextProjectForm.runtime.test_cmd, "npm test");
+  assert.deepEqual(nextPlanDraft, {
+    steps: [],
+    closeout_status: "not_started",
+  });
+  assert.equal(nextSelectedStepId, "");
+  assert.equal(nextPlanDirty, false);
 });

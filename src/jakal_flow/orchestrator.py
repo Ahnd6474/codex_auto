@@ -505,6 +505,34 @@ class Orchestrator:
             ordered.append(normalized)
         return ordered
 
+    def _normalize_hybrid_step_kind(self, value: object) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized in {"join", "barrier"}:
+            return normalized
+        return "task"
+
+    def _step_kind(self, step: ExecutionStep) -> str:
+        metadata = step.metadata if isinstance(step.metadata, dict) else {}
+        return self._normalize_hybrid_step_kind(metadata.get("step_kind", ""))
+
+    def _normalize_join_policy(self, value: object) -> str:
+        normalized = str(value or "").strip().lower()
+        return normalized or "all"
+
+    def _normalize_hybrid_step_metadata(self, steps: list[ExecutionStep]) -> None:
+        for step in steps:
+            metadata = deepcopy(step.metadata) if isinstance(step.metadata, dict) else {}
+            step_kind = self._normalize_hybrid_step_kind(metadata.get("step_kind", ""))
+            if step_kind != "task":
+                metadata["step_kind"] = step_kind
+            else:
+                metadata.pop("step_kind", None)
+            if step_kind == "join":
+                merge_from = self._coerce_string_list(metadata.get("merge_from", [])) or list(step.depends_on)
+                metadata["merge_from"] = merge_from
+                metadata["join_policy"] = self._normalize_join_policy(metadata.get("join_policy", ""))
+            step.metadata = metadata
+
     def load_execution_plan_state(self, context: ProjectContext) -> ExecutionPlanState:
         payload = read_json(context.paths.execution_plan_file, default=None)
         if not isinstance(payload, dict):
@@ -682,6 +710,9 @@ class Orchestrator:
                     metadata=deepcopy(step.metadata) if isinstance(step.metadata, dict) else {},
                 )
             )
+        self._normalize_hybrid_step_metadata(normalized_steps)
+        if execution_mode == "parallel":
+            self._validate_hybrid_execution_steps(normalized_steps)
         if execution_mode == "parallel" and self._plan_uses_dag_parallelism(normalized_steps):
             self._validate_parallel_execution_steps(normalized_steps)
         return normalized_steps
@@ -694,6 +725,36 @@ class Orchestrator:
 
     def _plan_uses_dag_parallelism(self, steps: list[ExecutionStep]) -> bool:
         return any(step.depends_on or step.owned_paths for step in steps)
+
+    def _validate_hybrid_execution_steps(self, steps: list[ExecutionStep]) -> None:
+        step_ids = {step.step_id for step in steps}
+        for step in steps:
+            step_kind = self._step_kind(step)
+            metadata = step.metadata if isinstance(step.metadata, dict) else {}
+            if step_kind in {"join", "barrier"} and step.parallel_group.strip():
+                raise ValueError(f"{step.step_id} cannot use parallel_group because {step_kind} steps run alone.")
+            if step_kind == "join":
+                if len(step.depends_on) < 2:
+                    raise ValueError(f"{step.step_id} must depend on at least two prior steps to act as a join node.")
+                merge_from = self._coerce_string_list(metadata.get("merge_from", []))
+                if len(merge_from) < 2:
+                    raise ValueError(f"{step.step_id} must declare at least two merge_from step ids.")
+                unknown_merge_targets = [item for item in merge_from if item not in step_ids]
+                if unknown_merge_targets:
+                    raise ValueError(f"{step.step_id} references unknown join targets: {', '.join(unknown_merge_targets)}")
+                invalid_merge_targets = [item for item in merge_from if item not in step.depends_on]
+                if invalid_merge_targets:
+                    raise ValueError(
+                        f"{step.step_id} can only merge direct dependencies, but merge_from included: {', '.join(invalid_merge_targets)}"
+                    )
+                join_policy = self._normalize_join_policy(metadata.get("join_policy", ""))
+                if join_policy != "all":
+                    raise ValueError(f"{step.step_id} uses unsupported join_policy '{join_policy}'. Only 'all' is supported.")
+                metadata["join_policy"] = join_policy
+                metadata["merge_from"] = merge_from
+                step.metadata = metadata
+            elif step_kind == "barrier" and not step.depends_on:
+                raise ValueError(f"{step.step_id} must depend on at least one prior step to act as a barrier node.")
 
     def _validate_parallel_execution_steps(self, steps: list[ExecutionStep]) -> None:
         step_ids = {step.step_id for step in steps}
@@ -724,6 +785,13 @@ class Orchestrator:
         current_batch: list[ExecutionStep] = []
         current_paths: list[str] = []
         for step in ready_steps:
+            if self._step_kind(step) in {"join", "barrier"}:
+                if current_batch:
+                    batches.append(current_batch)
+                    current_batch = []
+                    current_paths = []
+                batches.append([step])
+                continue
             if not step.owned_paths:
                 if current_batch:
                     batches.append(current_batch)
@@ -2488,12 +2556,16 @@ class Orchestrator:
         ui_hint = step.display_description.strip()
         dependency_hint = f" Dependencies: {', '.join(step.depends_on)}." if step.depends_on else ""
         ownership_hint = f" Owned paths: {', '.join(step.owned_paths)}." if step.owned_paths else ""
+        step_kind = self._step_kind(step)
+        kind_hint = ""
+        if step_kind != "task":
+            kind_hint = f" Step kind: {step_kind}."
         metadata_hint = ""
         if step.metadata:
             metadata_hint = f" Metadata: {json.dumps(step.metadata, ensure_ascii=False, sort_keys=True)}."
         if ui_hint and ui_hint != details:
-            return f"UI description: {ui_hint}. Execution instruction: {details}.{dependency_hint}{ownership_hint}{metadata_hint} Verification command: {test_command}. Success criteria: {success}"
-        return f"{details}.{dependency_hint}{ownership_hint}{metadata_hint} Verification command: {test_command}. Success criteria: {success}"
+            return f"UI description: {ui_hint}. Execution instruction: {details}.{kind_hint}{dependency_hint}{ownership_hint}{metadata_hint} Verification command: {test_command}. Success criteria: {success}"
+        return f"{details}.{kind_hint}{dependency_hint}{ownership_hint}{metadata_hint} Verification command: {test_command}. Success criteria: {success}"
 
     def _all_steps_completed(self, steps: list[ExecutionStep]) -> bool:
         return bool(steps) and all(step.status == "completed" for step in steps)
