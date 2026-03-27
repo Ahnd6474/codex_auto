@@ -1,6 +1,13 @@
-import { listBridgeJobs } from "../api";
-import { BRIDGE_COMMANDS } from "../bridgeProtocol";
-import { loadProjectDetail } from "./projectDetails";
+import { listBridgeJobs } from "../api.js";
+import { BRIDGE_COMMANDS } from "../bridgeProtocol.js";
+import { loadProjectDetail } from "./projectDetails.js";
+
+function listBridgeJobsRequest() {
+  if (typeof globalThis.__JAKAL_FLOW_TEST_LIST_BRIDGE_JOBS__ === "function") {
+    return globalThis.__JAKAL_FLOW_TEST_LIST_BRIDGE_JOBS__();
+  }
+  return listBridgeJobs();
+}
 
 export async function loadBootstrap(bridgeRequest) {
   return bridgeRequest(BRIDGE_COMMANDS.BOOTSTRAP);
@@ -21,8 +28,25 @@ export async function fetchProjectDetail(bridgeRequest, repoId, workspaceRoot, o
   return fetchProjectDetailBySelector(bridgeRequest, { repoId }, workspaceRoot, options);
 }
 
+export async function refreshVisibleProjectState(bridgeRequest, workspaceRoot, repoId, options = {}) {
+  const listingPromise = loadProjectListing(bridgeRequest, workspaceRoot);
+  if (!repoId) {
+    return {
+      listing: await listingPromise,
+      detail: null,
+    };
+  }
+
+  const detailPromise = fetchProjectDetail(bridgeRequest, repoId, workspaceRoot, options);
+  const [listing, detail] = await Promise.all([listingPromise, detailPromise]);
+  return {
+    listing,
+    detail,
+  };
+}
+
 export async function syncRunningJobSnapshot(preferredJobId = "") {
-  const jobs = await listBridgeJobs();
+  const jobs = await listBridgeJobsRequest();
   const preferredJob = preferredJobId ? jobs.find((job) => job.id === preferredJobId) || null : null;
   const runningJob = preferredJob?.status === "running" ? preferredJob : jobs.find((job) => job.status === "running") || null;
   return {
@@ -34,13 +58,14 @@ export async function syncRunningJobSnapshot(preferredJobId = "") {
 }
 
 export async function loadInitialDesktopState(bridgeRequest, preferredJobId = "") {
-  const bootstrap = await loadBootstrap(bridgeRequest);
+  const [bootstrap, jobSnapshot] = await Promise.all([
+    loadBootstrap(bridgeRequest),
+    syncRunningJobSnapshot(preferredJobId),
+  ]);
   const listing = await loadProjectListing(bridgeRequest, bootstrap.workspace_root);
-  const jobSnapshot = await syncRunningJobSnapshot(preferredJobId);
   return {
     bootstrap,
     listing,
     jobSnapshot,
   };
 }
-

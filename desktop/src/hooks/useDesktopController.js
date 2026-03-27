@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { bridgeRequest, startBridgeJob, subscribeBridgeEvents } from "../api";
 import { BRIDGE_COMMANDS } from "../bridgeProtocol";
 import { bridgeEventJob, bridgeEventProject, isJobUpdatedEvent, isProjectChangedEvent } from "../controller/bridgeEvents";
+import { mergeRefreshRepoId, projectRefreshDebounceMs, shouldRefreshSelectedProject } from "../controller/projectRefresh";
 import {
   defaultShareSettings,
   emptyPlanDraft,
@@ -30,6 +31,7 @@ import {
   fetchProjectDetailBySelector,
   loadInitialDesktopState,
   loadProjectListing,
+  refreshVisibleProjectState,
   syncRunningJobSnapshot,
 } from "../controller/projectQueries";
 import {
@@ -65,6 +67,8 @@ export function useDesktopController() {
   const projectAutosaveTimerRef = useRef(null);
   const lastAppliedDetailSignatureRef = useRef("");
   const bridgeRefreshInFlightRef = useRef(false);
+  const bridgeRefreshTimerRef = useRef(null);
+  const pendingBridgeRefreshRepoIdRef = useRef("");
   const activeJobRef = useRef(null);
 
   const [centerTab, setCenterTab] = usePersistentState("jakal-flow:center-tab", "run");
@@ -114,6 +118,9 @@ export function useDesktopController() {
     return () => {
       if (projectAutosaveTimerRef.current) {
         window.clearTimeout(projectAutosaveTimerRef.current);
+      }
+      if (bridgeRefreshTimerRef.current) {
+        window.clearTimeout(bridgeRefreshTimerRef.current);
       }
     };
   }, []);
@@ -256,6 +263,61 @@ export function useDesktopController() {
   useEffect(() => {
     let cancelled = false;
 
+    async function flushBridgeRefresh() {
+      if (bridgeRefreshInFlightRef.current || !workspaceRoot) {
+        return;
+      }
+      bridgeRefreshInFlightRef.current = true;
+      const pendingRepoId = pendingBridgeRefreshRepoIdRef.current;
+      pendingBridgeRefreshRepoIdRef.current = "";
+      try {
+        const runningJob = activeJobRef.current?.status === "running" ? activeJobRef.current : null;
+        const shouldLoadDetail = shouldRefreshSelectedProject(selectedProjectId, pendingRepoId);
+        const { listing, detail } = await refreshVisibleProjectState(
+          bridgeRequest,
+          workspaceRoot,
+          shouldLoadDetail ? selectedProjectId : "",
+          {
+            refreshCodexStatus: false,
+            detailLevel: wantsExpandedDetail ? "full" : "core",
+          },
+        );
+        if (cancelled) {
+          return;
+        }
+        applyListingState({
+          listing,
+          runningJob,
+          setProjects,
+          setWorkspaceStats,
+        });
+        if (detail && !cancelled) {
+          applyProjectDetail(detail, {
+            preserveSelectedStep: true,
+            runningJob,
+          });
+        }
+      } catch {
+        // Keep event-driven refresh failures quiet; manual refresh still surfaces errors.
+      } finally {
+        bridgeRefreshInFlightRef.current = false;
+        if (!cancelled && pendingBridgeRefreshRepoIdRef.current) {
+          scheduleBridgeRefresh(pendingBridgeRefreshRepoIdRef.current);
+        }
+      }
+    }
+
+    function scheduleBridgeRefresh(eventRepoId = "") {
+      pendingBridgeRefreshRepoIdRef.current = mergeRefreshRepoId(pendingBridgeRefreshRepoIdRef.current, eventRepoId);
+      if (bridgeRefreshTimerRef.current) {
+        window.clearTimeout(bridgeRefreshTimerRef.current);
+      }
+      bridgeRefreshTimerRef.current = window.setTimeout(() => {
+        bridgeRefreshTimerRef.current = null;
+        void flushBridgeRefresh();
+      }, projectRefreshDebounceMs(activeJobRef.current));
+    }
+
     async function handleBridgeEvent(eventPayload) {
       if (!workspaceRoot) {
         return;
@@ -305,42 +367,13 @@ export function useDesktopController() {
         return;
       }
 
-      if (!isProjectChangedEvent(eventPayload) || bridgeRefreshInFlightRef.current) {
+      if (!isProjectChangedEvent(eventPayload)) {
         return;
       }
 
       const project = bridgeEventProject(eventPayload);
       const eventRepoId = String(project?.repo_id || "").trim();
-      bridgeRefreshInFlightRef.current = true;
-      try {
-        const listing = await loadProjectListing(bridgeRequest, workspaceRoot);
-        if (cancelled) {
-          return;
-        }
-        const runningJob = activeJobRef.current?.status === "running" ? activeJobRef.current : null;
-        applyListingState({
-          listing,
-          runningJob,
-          setProjects,
-          setWorkspaceStats,
-        });
-        if (selectedProjectId && (!eventRepoId || eventRepoId === selectedProjectId)) {
-          const detail = await fetchProjectDetail(bridgeRequest, selectedProjectId, workspaceRoot, {
-            refreshCodexStatus: false,
-            detailLevel: wantsExpandedDetail ? "full" : "core",
-          });
-          if (!cancelled) {
-            applyProjectDetail(detail, {
-              preserveSelectedStep: true,
-              runningJob,
-            });
-          }
-        }
-      } catch {
-        // Keep event-driven refresh failures quiet; manual refresh still surfaces errors.
-      } finally {
-        bridgeRefreshInFlightRef.current = false;
-      }
+      scheduleBridgeRefresh(eventRepoId);
     }
 
     let unlisten = null;
@@ -352,6 +385,10 @@ export function useDesktopController() {
 
     return () => {
       cancelled = true;
+      if (bridgeRefreshTimerRef.current) {
+        window.clearTimeout(bridgeRefreshTimerRef.current);
+        bridgeRefreshTimerRef.current = null;
+      }
       void subscription.then(() => {
         if (typeof unlisten === "function") {
           return unlisten();

@@ -1,5 +1,5 @@
-import { BRIDGE_COMMANDS } from "../bridgeProtocol";
-import { cloneValue } from "../utils";
+import { BRIDGE_COMMANDS } from "../bridgeProtocol.js";
+import { cloneValue } from "../utils.js";
 
 function selectorPayload(selector = {}) {
   const payload = {};
