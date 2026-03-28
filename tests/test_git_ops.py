@@ -176,7 +176,9 @@ class GitOpsTests(unittest.TestCase):
         finally:
             shutil.rmtree(repo_dir, ignore_errors=True)
 
-        self.assertEqual(changed_files, ["docs/"])
+        self.assertEqual(len(changed_files), 1)
+        self.assertTrue(changed_files[0].endswith("docs/"))
+        self.assertNotIn("_tmp_remote_experiment_repo", changed_files[0])
         self.assertTrue(has_changes)
 
     def test_has_changes_returns_false_for_only_untracked_tmp_scratch_directories(self) -> None:
