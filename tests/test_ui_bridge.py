@@ -34,6 +34,7 @@ from jakal_flow.step_models import (
     QWEN_CODE_DEFAULT_MODEL,
     provider_statuses_payload,
 )
+from jakal_flow.utils import read_jsonl
 from jakal_flow.workspace import WorkspaceManager
 
 
@@ -2615,6 +2616,127 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(second["detail_signature"], first["detail_signature"])
             self.assertIn("content_signature", second)
             self.assertIn("detail_signature", second)
+
+    def test_load_project_writes_bridge_and_detail_performance_logs(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Perf Log Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+                run_command(
+                    "load-project",
+                    workspace_root,
+                    {
+                        "repo_id": detail["project"]["repo_id"],
+                        "refresh_codex_status": False,
+                        "detail_level": "core",
+                    },
+                )
+
+            bridge_perf_entries = read_jsonl(workspace_root / "bridge_perf.jsonl")
+            self.assertTrue(bridge_perf_entries)
+            latest_bridge = bridge_perf_entries[-1]
+            self.assertEqual(latest_bridge["command"], "load-project")
+            self.assertEqual(latest_bridge["detail_level"], "core")
+            self.assertIn("duration_ms", latest_bridge)
+            self.assertIn("result_size_bytes", latest_bridge)
+
+            project_root = Path(detail["project"]["project_root"])
+            detail_perf_entries = read_jsonl(project_root / "logs" / "ui_bridge_perf.jsonl")
+            self.assertTrue(detail_perf_entries)
+            latest_detail = detail_perf_entries[-1]
+            self.assertEqual(latest_detail["event_type"], "project-detail-built")
+            self.assertEqual(latest_detail["details"]["detail_level"], "core")
+            self.assertIn("total_ms", latest_detail["details"])
+            self.assertIn("content_signature_ms", latest_detail["details"])
+            self.assertIn("cache_hit", latest_detail["details"])
+
+    def test_load_project_core_detail_reads_each_log_tail_once_on_cache_miss(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Core Detail Tail Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            project_root = Path(detail["project"]["project_root"])
+            core_cache = project_root / "state" / "PROJECT_DETAIL_CACHE_CORE.json"
+            if core_cache.exists():
+                core_cache.unlink()
+
+            tail_calls: list[str] = []
+            last_calls: list[str] = []
+            original_tail = ui_bridge_payloads.read_jsonl_tail
+            original_last = ui_bridge_payloads.read_last_jsonl
+
+            def counting_tail(path, *args, **kwargs):
+                tail_calls.append(Path(path).name)
+                return original_tail(path, *args, **kwargs)
+
+            def counting_last(path, *args, **kwargs):
+                last_calls.append(Path(path).name)
+                return original_last(path, *args, **kwargs)
+
+            with mock.patch("jakal_flow.ui_bridge_payloads.read_jsonl_tail", side_effect=counting_tail), mock.patch(
+                "jakal_flow.ui_bridge_payloads.read_last_jsonl",
+                side_effect=counting_last,
+            ), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                loaded = run_command(
+                    "load-project",
+                    workspace_root,
+                    {
+                        "repo_id": detail["project"]["repo_id"],
+                        "refresh_codex_status": False,
+                        "detail_level": "core",
+                    },
+                )
+
+            counts = Counter(tail_calls)
+            self.assertFalse(loaded["payload_cache_hit"])
+            self.assertEqual(counts["ui_events.jsonl"], 1)
+            self.assertEqual(counts["passes.jsonl"], 1)
+            self.assertEqual(counts["test_runs.jsonl"], 1)
+            self.assertNotIn("passes.jsonl", last_calls)
 
     def test_load_project_full_detail_reads_each_log_tail_once_on_cache_miss(self) -> None:
         with TemporaryTestDir() as temp_dir:

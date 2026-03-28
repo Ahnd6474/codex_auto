@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Callable
 
 from .codex_app_server import fetch_codex_backend_snapshot
@@ -15,11 +16,11 @@ from .runtime_insights import build_runtime_insights
 from .share import project_share_payload
 from .status_views import effective_project_status
 from .step_models import provider_statuses_payload
-from .utils import compact_text, normalize_workflow_mode, read_json, read_jsonl_tail, read_last_jsonl, read_text, write_json
+from .utils import append_jsonl, compact_text, normalize_workflow_mode, now_utc_iso, read_json, read_jsonl_tail, read_last_jsonl, read_text, write_json
 from .workspace import WorkspaceManager
 
 
-DETAIL_CACHE_VERSION = 7
+DETAIL_CACHE_VERSION = 8
 
 PLANNING_STAGE_DEFINITIONS = (
     {"key": "context_scan", "label": "Scan repository context"},
@@ -90,8 +91,9 @@ def _workspace_share_signature(workspace_root: Path) -> str:
 
 
 def project_detail_content_signature(project: ProjectContext, detail_level: str) -> str:
+    normalized_detail_level = "core" if str(detail_level).strip().lower() == "core" else "full"
     digest = hashlib.sha1()
-    digest.update(f"detail-cache-v{DETAIL_CACHE_VERSION}:{detail_level}".encode("utf-8"))
+    digest.update(f"detail-cache-v{DETAIL_CACHE_VERSION}:{normalized_detail_level}".encode("utf-8"))
     digest.update(str(project.metadata.current_status).encode("utf-8"))
     digest.update(str(project.metadata.last_run_at or "").encode("utf-8"))
     digest.update(str(project.metadata.current_safe_revision or "").encode("utf-8"))
@@ -107,34 +109,33 @@ def project_detail_content_signature(project: ProjectContext, detail_level: str)
         project.paths.logs_dir / "test_runs.jsonl",
         project.paths.ui_event_log_file,
         project.paths.checkpoint_state_file,
-        project.paths.checkpoint_timeline_file,
-        project.paths.attempt_history_file,
-        project.paths.closeout_report_file,
         project.paths.ml_mode_state_file,
-        project.paths.ml_experiment_report_file,
-        project.paths.ml_experiment_results_svg_file,
-        project.paths.block_review_file,
         project.paths.execution_flow_svg_file,
-        project.paths.state_dir / "share_sessions.json",
-        project.paths.workspace_root / "share_server.json",
-        project.paths.workspace_root / "public_tunnel.json",
-        project.paths.workspace_root / "share_server_config.json",
-        project.paths.closeout_report_docx_file,
     ]
-    if str(detail_level).strip().lower() == "full":
+    if normalized_detail_level == "full":
         tracked_files.extend(
             [
+                project.paths.checkpoint_timeline_file,
+                project.paths.attempt_history_file,
+                project.paths.closeout_report_file,
+                project.paths.ml_experiment_report_file,
+                project.paths.ml_experiment_results_svg_file,
+                project.paths.block_review_file,
+                project.paths.state_dir / "share_sessions.json",
+                project.paths.workspace_root / "share_server.json",
+                project.paths.workspace_root / "public_tunnel.json",
+                project.paths.workspace_root / "share_server_config.json",
+                project.paths.closeout_report_docx_file,
                 project.paths.active_task_file,
                 project.paths.mid_term_plan_file,
                 project.paths.scope_guard_file,
                 project.paths.research_notes_file,
-                project.paths.closeout_report_docx_file,
             ]
         )
     for path in tracked_files:
         digest.update(_path_signature(path).encode("utf-8"))
-    digest.update(_workspace_share_signature(project.paths.workspace_root).encode("utf-8"))
-    if str(detail_level).strip().lower() == "full":
+    if normalized_detail_level == "full":
+        digest.update(_workspace_share_signature(project.paths.workspace_root).encode("utf-8"))
         for path in [
             project.paths.repo_dir,
             project.paths.docs_dir,
@@ -157,6 +158,19 @@ def _detail_signature(content_signature: str, codex_status: dict[str, Any]) -> s
     digest.update(content_signature.encode("utf-8"))
     digest.update(json.dumps(codex_status, sort_keys=True).encode("utf-8"))
     return digest.hexdigest()
+
+
+def _detail_perf_log(project: ProjectContext, event_type: str, details: dict[str, Any]) -> None:
+    append_jsonl(
+        project.paths.logs_dir / "ui_bridge_perf.jsonl",
+        {
+            "timestamp": now_utc_iso(),
+            "event_type": event_type,
+            "repo_id": project.metadata.repo_id,
+            "project_dir": str(project.metadata.repo_path),
+            "details": details,
+        },
+    )
 
 
 def _tail_slice(items: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
@@ -518,6 +532,45 @@ def report_payload(context: ProjectContext) -> dict[str, Any]:
     }
 
 
+def latest_failure_payload(context: ProjectContext) -> dict[str, Any]:
+    latest_failure_status = safe_json(context.paths.reports_dir / "latest_pr_failure_status.json", default={})
+    if not isinstance(latest_failure_status, dict) or not latest_failure_status:
+        return {}
+    report_json_file = str(latest_failure_status.get("report_json_file", "")).strip()
+    report_markdown_file = str(latest_failure_status.get("report_markdown_file", "")).strip()
+    bundle_json = safe_json(Path(report_json_file), default={}) if report_json_file else {}
+    block_index = bundle_json.get("block_index") if isinstance(bundle_json, dict) else None
+    block_dir = (
+        context.paths.logs_dir / f"block_{int(block_index):04d}"
+        if isinstance(block_index, int) and block_index >= 0
+        else None
+    )
+    artifact_files = []
+    if block_dir is not None and block_dir.exists():
+        try:
+            artifact_files = [
+                str(path)
+                for path in sorted(block_dir.iterdir(), key=lambda item: item.name.lower())
+                if path.is_file()
+            ]
+        except OSError:
+            artifact_files = []
+    return {
+        "generated_at": str(latest_failure_status.get("generated_at", "")).strip(),
+        "failure_type": str(latest_failure_status.get("failure_type", "")).strip(),
+        "posted": bool(latest_failure_status.get("posted")),
+        "result": latest_failure_status.get("result", {}) if isinstance(latest_failure_status.get("result"), dict) else {},
+        "summary": str(bundle_json.get("summary", "")).strip() if isinstance(bundle_json, dict) else "",
+        "selected_task": str(bundle_json.get("selected_task", "")).strip() if isinstance(bundle_json, dict) else "",
+        "report_json_file": report_json_file,
+        "report_markdown_file": report_markdown_file,
+        "report_markdown_text": preview_text(Path(report_markdown_file), default="", max_chars=4000) if report_markdown_file else "",
+        "block_index": block_index if isinstance(block_index, int) else None,
+        "block_dir": str(block_dir) if block_dir is not None else "",
+        "artifact_files": artifact_files,
+    }
+
+
 def _flow_svg_payload(context: ProjectContext) -> dict[str, Any]:
     return {
         "flow_svg_path": str(context.paths.execution_flow_svg_file) if context.paths.execution_flow_svg_file.exists() else "",
@@ -574,6 +627,28 @@ def checkpoint_payload(context: ProjectContext) -> dict[str, Any]:
     }
 
 
+def pending_checkpoint_payload(context: ProjectContext) -> dict[str, Any] | None:
+    raw = safe_json(context.paths.checkpoint_state_file, default={"checkpoints": []})
+    raw_items = raw.get("checkpoints", []) if isinstance(raw, dict) else []
+    waiting_for_approval = bool(context.loop_state.pending_checkpoint_approval)
+    active_checkpoint_id = str(context.loop_state.current_checkpoint_id or "").strip()
+    if not waiting_for_approval:
+        return None
+    checkpoints: list[dict[str, Any]] = []
+    for item in raw_items:
+        if isinstance(item, dict):
+            checkpoints.append(deepcopy(item))
+    pending = None
+    if active_checkpoint_id:
+        pending = next(
+            (item for item in checkpoints if str(item.get("checkpoint_id", "")).strip() == active_checkpoint_id),
+            None,
+        )
+    if pending is None:
+        pending = next((item for item in checkpoints if item.get("status") == "awaiting_review"), None)
+    return pending
+
+
 def config_payload(context: ProjectContext) -> dict[str, Any]:
     return {
         "metadata_json": safe_json(context.paths.metadata_file, default={}) or {},
@@ -619,6 +694,7 @@ def bottom_panel_payload(
     latest_block: dict[str, Any] | None = None,
     latest_pass: dict[str, Any] | None = None,
     usage: dict[str, int] | None = None,
+    runtime_insights: dict[str, Any] | None = None,
     run_control_json: Any = None,
     loop_state_json: Any = None,
     test_runs: list[dict[str, Any]] | None = None,
@@ -634,6 +710,7 @@ def bottom_panel_payload(
         else (build_activity_lines(context, plan_state) if detail_level == "full" else [])
     )
     test_runs = test_runs if test_runs is not None else read_jsonl_tail(context.paths.logs_dir / "test_runs.jsonl", 12 if detail_level == "full" else 5)
+    runtime_insights = runtime_insights if runtime_insights is not None else build_runtime_insights(context, plan_state, usage)
     return {
         "execution_log_lines": execution_log_lines,
         "event_json": {
@@ -643,7 +720,7 @@ def bottom_panel_payload(
             "loop_state": loop_state_json,
         },
         "token_usage": usage,
-        "runtime_insights": build_runtime_insights(context, plan_state, usage),
+        "runtime_insights": runtime_insights,
         "codex_status": codex_status,
         "test_runs": test_runs,
         "git_status": {
@@ -797,7 +874,12 @@ def _build_project_detail_base_payload(
     if normalized_detail_level == "full":
         log_snapshot = _load_detail_log_snapshot(project)
         recent_usage_payload = recent_usage(project, pass_items=log_snapshot.passes)
-        runtime_insights = build_runtime_insights(project, plan_state, recent_usage_payload)
+        runtime_insights = build_runtime_insights(
+            project,
+            plan_state,
+            recent_usage_payload,
+            recent_passes=log_snapshot.passes,
+        )
         recent_blocks = _tail_slice(log_snapshot.blocks, 8)
         recent_passes = _tail_slice(log_snapshot.passes, 12)
         reports = report_payload(project)
@@ -816,13 +898,19 @@ def _build_project_detail_base_payload(
         latest_block = log_snapshot.latest_block
         latest_pass = log_snapshot.latest_pass
     else:
-        ui_events = read_jsonl_tail(project.paths.ui_event_log_file, 30)
-        recent_usage_payload = recent_usage(project)
-        runtime_insights = build_runtime_insights(project, plan_state, recent_usage_payload)
+        ui_events = read_jsonl_tail(project.paths.ui_event_log_file, 20)
+        recent_pass_items = read_jsonl_tail(project.paths.pass_log_file, 25)
+        recent_usage_payload = recent_usage(project, pass_items=recent_pass_items)
+        runtime_insights = build_runtime_insights(
+            project,
+            plan_state,
+            recent_usage_payload,
+            recent_passes=recent_pass_items,
+        )
         recent_blocks = []
         recent_passes = []
-        pending_checkpoint = checkpoint_payload(project).get("pending")
-        reports = {"latest_failure": report_payload(project).get("latest_failure", {})}
+        pending_checkpoint = pending_checkpoint_payload(project)
+        reports = {"latest_failure": latest_failure_payload(project)}
         history = {
             "ui_events": [],
             "blocks": [],
@@ -839,8 +927,8 @@ def _build_project_detail_base_payload(
         workspace_tree = []
         activity = build_activity_lines(project, plan_state, ui_events=ui_events)[:8]
         planning_progress = build_planning_progress(ui_events)
-        latest_block = None
-        latest_pass = None
+        latest_block = {}
+        latest_pass = {}
     bottom_panels = bottom_panel_payload(
         project,
         plan_state,
@@ -850,6 +938,7 @@ def _build_project_detail_base_payload(
         latest_block=latest_block,
         latest_pass=latest_pass,
         usage=recent_usage_payload,
+        runtime_insights=runtime_insights,
         run_control_json=log_snapshot.run_control_json if normalized_detail_level == "full" else None,
         loop_state_json=log_snapshot.loop_state_json if normalized_detail_level == "full" else None,
         test_runs=_tail_slice(log_snapshot.test_runs, 12) if normalized_detail_level == "full" else None,
@@ -923,9 +1012,15 @@ def _cached_project_detail_base_payload(
     project: ProjectContext,
     normalized_detail_level: str,
     load_run_control: Callable[[ProjectContext], dict[str, Any]],
-) -> tuple[dict[str, Any], str, bool]:
+) -> tuple[dict[str, Any], str, bool, dict[str, Any]]:
+    timings: dict[str, Any] = {
+        "detail_level": normalized_detail_level,
+    }
+    started_at = perf_counter()
     content_signature = project_detail_content_signature(project, normalized_detail_level)
+    timings["content_signature_ms"] = round((perf_counter() - started_at) * 1000.0, 3)
     cache_file = _detail_cache_file(project, normalized_detail_level)
+    cache_lookup_started_at = perf_counter()
     cached = read_json(cache_file, default=None)
     if isinstance(cached, dict):
         cached_signature = str(cached.get("content_signature", "")).strip()
@@ -938,10 +1033,18 @@ def _cached_project_detail_base_payload(
             payload = deepcopy(cached_payload)
             payload["content_signature"] = content_signature
             payload["payload_cache_hit"] = True
-            return payload, content_signature, True
+            timings["cache_lookup_ms"] = round((perf_counter() - cache_lookup_started_at) * 1000.0, 3)
+            timings["cache_hit"] = True
+            timings["base_build_ms"] = 0.0
+            timings["cache_write_ms"] = 0.0
+            return payload, content_signature, True, timings
+    timings["cache_lookup_ms"] = round((perf_counter() - cache_lookup_started_at) * 1000.0, 3)
+    base_build_started_at = perf_counter()
     payload = _build_project_detail_base_payload(orchestrator, project, normalized_detail_level, load_run_control)
+    timings["base_build_ms"] = round((perf_counter() - base_build_started_at) * 1000.0, 3)
     payload["content_signature"] = content_signature
     payload["payload_cache_hit"] = False
+    cache_write_started_at = perf_counter()
     write_json(
         cache_file,
         {
@@ -950,7 +1053,9 @@ def _cached_project_detail_base_payload(
             "payload": payload,
         },
     )
-    return deepcopy(payload), content_signature, False
+    timings["cache_write_ms"] = round((perf_counter() - cache_write_started_at) * 1000.0, 3)
+    timings["cache_hit"] = False
+    return deepcopy(payload), content_signature, False, timings
 
 
 def _finalize_project_detail_payload(
@@ -984,25 +1089,38 @@ def project_detail_payload(
     detail_level: str = "full",
 ) -> dict[str, Any]:
     normalized_detail_level = "core" if str(detail_level).strip().lower() == "core" else "full"
-    base_payload, content_signature, payload_cache_hit = _cached_project_detail_base_payload(
+    detail_started_at = perf_counter()
+    base_payload, content_signature, payload_cache_hit, perf_details = _cached_project_detail_base_payload(
         orchestrator,
         project,
         normalized_detail_level,
         load_run_control,
     )
+    codex_started_at = perf_counter()
     codex_status = (
         fetch_codex_status(project.runtime.codex_path).to_dict()
         if refresh_codex_status
         else {}
     )
+    perf_details["codex_status_ms"] = round((perf_counter() - codex_started_at) * 1000.0, 3)
     if isinstance(codex_status, dict):
-        codex_status["provider_statuses"] = provider_statuses_payload(fetch_snapshot=fetch_codex_status)
-    return _finalize_project_detail_payload(
+        provider_statuses_started_at = perf_counter()
+        if refresh_codex_status:
+            codex_status["provider_statuses"] = provider_statuses_payload(fetch_snapshot=fetch_codex_status)
+        perf_details["provider_statuses_ms"] = round((perf_counter() - provider_statuses_started_at) * 1000.0, 3)
+    finalize_started_at = perf_counter()
+    payload = _finalize_project_detail_payload(
         base_payload,
         content_signature=content_signature,
         codex_status=codex_status,
         payload_cache_hit=payload_cache_hit,
     )
+    perf_details["finalize_ms"] = round((perf_counter() - finalize_started_at) * 1000.0, 3)
+    perf_details["total_ms"] = round((perf_counter() - detail_started_at) * 1000.0, 3)
+    perf_details["refresh_codex_status"] = bool(refresh_codex_status)
+    perf_details["payload_cache_hit"] = bool(payload_cache_hit)
+    _detail_perf_log(project, "project-detail-built", perf_details)
+    return payload
 
 
 def list_projects_payload(orchestrator: Orchestrator) -> dict[str, Any]:

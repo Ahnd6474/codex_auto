@@ -160,6 +160,8 @@ def build_runtime_insights(
     context: ProjectContext,
     plan_state: ExecutionPlanState,
     recent_usage: dict[str, int] | None,
+    *,
+    recent_passes: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     per_effort_history: dict[str, list[float]] = {key: [] for key in EFFORT_DURATION_BASELINES_SECONDS}
     overall_history: list[float] = []
@@ -236,7 +238,7 @@ def build_runtime_insights(
         "reasoning_output_tokens": 0,
         "total_tokens": 0,
     }
-    recent_passes = read_jsonl_tail(context.paths.pass_log_file, 25)
+    recent_passes = recent_passes if recent_passes is not None else read_jsonl_tail(context.paths.pass_log_file, 25)
     recent_cost = estimate_usage_cost(recent_usage_payload, context.runtime, pass_count=len(recent_passes))
     remaining_cost = estimate_usage_cost(remaining_usage, context.runtime, pass_count=len(running_steps) + len(pending_steps))
     parallel_plan = build_parallel_resource_plan(

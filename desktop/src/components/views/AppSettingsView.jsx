@@ -122,21 +122,22 @@ export function AppSettingsView({
   const dashboardVisibility = normalizeDashboardVisibility(settings?.dashboard_visibility);
   const runtimeBusy = busy;
   const autoParallelWorkers = String(settings?.parallel_worker_mode || "auto").trim().toLowerCase() !== "manual";
+  const comingSoonLabel = language === "ko" ? "추가 예정" : "Coming soon";
 
   const providerOptions = [
-    ["ensemble", t("option.providerEnsemble")],
-    ["openai", t("option.providerOpenAI")],
-    ["claude", "Claude Code"],
-    ["gemini", "Gemini CLI"],
-    ["qwen_code", "Qwen Code"],
-    ["deepseek", "DeepSeek via Claude Code"],
-    ["kimi", "Kimi"],
-    ["minimax", "MiniMax via Claude Code"],
-    ["glm", "GLM via Claude Code"],
-    ["openrouter", t("option.providerOpenRouter")],
-    ["opencdk", t("option.providerOpenCDK")],
-    ["local_openai", t("option.providerLocalCompatible")],
-    ["oss", t("option.providerOSS")],
+    { value: "openai", label: "GPT Codex only", enabled: true },
+    { value: "ensemble", label: t("option.providerEnsemble"), enabled: false },
+    { value: "claude", label: "Claude Code", enabled: false },
+    { value: "gemini", label: "Gemini CLI", enabled: false },
+    { value: "qwen_code", label: "Qwen Code", enabled: false },
+    { value: "deepseek", label: "DeepSeek via Claude Code", enabled: false },
+    { value: "kimi", label: "Kimi", enabled: false },
+    { value: "minimax", label: "MiniMax via Claude Code", enabled: false },
+    { value: "glm", label: "GLM via Claude Code", enabled: false },
+    { value: "openrouter", label: t("option.providerOpenRouter"), enabled: false },
+    { value: "opencdk", label: t("option.providerOpenCDK"), enabled: false },
+    { value: "local_openai", label: t("option.providerLocalCompatible"), enabled: false },
+    { value: "oss", label: t("option.providerOSS"), enabled: false },
   ];
 
   const dashboardOptions = [
@@ -268,6 +269,11 @@ export function AppSettingsView({
               description={language === "ko" ? "AI 모델, 병렬 실행, 체크포인트 설정" : "AI model provider, parallel execution and checkpoint settings"}
             />
 
+            <div className="info-callout" style={{ marginTop: "10px" }}>
+              <InfoIcon />
+              <span>{language === "ko" ? "프로그램 설정에서는 현재 GPT Codex only만 사용할 수 있습니다. 다른 제공자는 추가 예정입니다." : "Program Settings currently supports GPT Codex only. Other providers are listed as coming soon."}</span>
+            </div>
+
             {/* Provider select */}
             <div style={{ marginTop: "4px" }}>
               <label className="field">
@@ -281,16 +287,22 @@ export function AppSettingsView({
                   }
                   disabled={runtimeBusy}
                 >
-                  {providerOptions.map(([value, label]) => (
+                  {providerOptions.map(({ value, label, enabled }) => {
+                    const isInstalled = providerAvailable(value, codexStatus);
+                    const disabled = !enabled || !isInstalled;
+                    const reason = !enabled ? comingSoonLabel : providerStatusReason(value, codexStatus);
+                    const suffix = !enabled ? ` (${comingSoonLabel})` : !isInstalled ? " (unavailable)" : "";
+                    return (
                     <option
                       key={value}
                       value={value}
-                      disabled={!providerAvailable(value, codexStatus)}
-                      title={providerStatusReason(value, codexStatus)}
+                      disabled={disabled}
+                      title={reason}
                     >
-                      {label}{!providerAvailable(value, codexStatus) ? " (unavailable)" : ""}
+                      {label}{suffix}
                     </option>
-                  ))}
+                    );
+                  })}
                 </select>
               </label>
 

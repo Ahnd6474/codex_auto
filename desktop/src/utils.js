@@ -241,6 +241,24 @@ const DEFAULT_PROGRAM_UI = {
   background_concurrency_limit: 2,
 };
 
+function normalizeProgramSettingsProviderSelection(settings = {}) {
+  const normalized = applyProviderDefaults(settings, "openai");
+  return {
+    ...normalized,
+    model_provider: "openai",
+    local_model_provider: "ollama",
+    provider_base_url: defaultProviderBaseUrl("openai"),
+    provider_api_key_env: defaultProviderApiKeyEnv("openai"),
+    ensemble_openai_model: "gpt-5.4",
+    ensemble_gemini_model: GEMINI_DEFAULT_MODEL,
+    ensemble_claude_model: CLAUDE_DEFAULT_MODEL,
+    model: "gpt-5.4",
+    model_preset: "",
+    model_selection_mode: "slug",
+    model_slug_input: "gpt-5.4",
+  };
+}
+
 export function normalizeDashboardVisibility(value) {
   const source = value && typeof value === "object" ? value : {};
   return Object.entries(DEFAULT_DASHBOARD_VISIBILITY).reduce((visibility, [key, fallback]) => {
@@ -306,6 +324,8 @@ export function programSettingsFromRuntime(runtime) {
       settings[key] = source[key];
     }
   });
+  const normalizedSettings = normalizeProgramSettingsProviderSelection(settings);
+  Object.assign(settings, normalizedSettings);
   settings.execution_mode = "parallel";
   settings.dashboard_visibility = normalizeDashboardVisibility(settings.dashboard_visibility);
   settings.background_concurrency_limit = Math.max(1, Number.parseInt(String(settings.background_concurrency_limit || 2), 10) || 2);

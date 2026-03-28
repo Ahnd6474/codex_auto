@@ -9,6 +9,7 @@ import signal
 import subprocess
 import sys
 import time
+from time import perf_counter
 from typing import Any
 
 from .bridge_events import emit_bridge_event
@@ -102,9 +103,7 @@ def default_workspace_root() -> Path:
 def bootstrap_payload(workspace_root: Path) -> dict[str, Any]:
     codex_status = _codex_snapshot_service.get_snapshot(force_refresh=True)
     codex_status_payload = codex_status.to_dict()
-    codex_status_payload["provider_statuses"] = provider_statuses_payload(
-        fetch_snapshot=lambda codex_path: _codex_snapshot_service.get_snapshot(codex_path)
-    )
+    codex_status_payload["provider_statuses"] = provider_statuses_payload()
     return {
         "workspace_root": str(workspace_root),
         "model_presets": [
@@ -679,8 +678,39 @@ def bridge_command_handlers() -> dict[str, Any]:
     }
 
 
+def _payload_size_bytes(value: Any) -> int:
+    try:
+        return len(json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+    except Exception:
+        return 0
+
+
+def _bridge_perf_log(workspace_root: Path, command: str, payload: dict[str, Any], result: Any, duration_ms: float) -> None:
+    append_jsonl(
+        workspace_root / "bridge_perf.jsonl",
+        {
+            "timestamp": now_utc_iso(),
+            "command": command,
+            "workspace_root": str(workspace_root),
+            "repo_id": str(payload.get("repo_id", "")).strip(),
+            "project_dir": str(payload.get("project_dir", "")).strip(),
+            "archive_id": str(payload.get("archive_id", "")).strip(),
+            "detail_level": str(payload.get("detail_level", "")).strip().lower(),
+            "refresh_codex_status": coerce_bool(payload.get("refresh_codex_status", False), False),
+            "duration_ms": round(duration_ms, 3),
+            "payload_size_bytes": _payload_size_bytes(payload),
+            "result_size_bytes": _payload_size_bytes(result),
+            "result_keys": sorted(result.keys()) if isinstance(result, dict) else [],
+            "payload_cache_hit": bool(result.get("payload_cache_hit")) if isinstance(result, dict) else False,
+            "content_signature": str(result.get("content_signature", "")).strip() if isinstance(result, dict) else "",
+            "detail_signature": str(result.get("detail_signature", "")).strip() if isinstance(result, dict) else "",
+        },
+    )
+
+
 def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     payload = payload or {}
+    command_started_at = perf_counter()
     orchestrator = orchestrator_for(workspace_root)
 
     def detail_payload(project: ProjectContext, **kwargs: Any) -> dict[str, Any]:
@@ -695,7 +725,7 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
     handler = bridge_command_handlers().get(command)
     if handler is None:
         raise ValueError(f"Unsupported bridge command: {command}")
-    return handler(
+    result = handler(
         BridgeCommandContext(
             workspace_root=workspace_root,
             payload=payload,
@@ -703,6 +733,8 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
             detail_payload=detail_payload,
         )
     )
+    _bridge_perf_log(workspace_root, command, payload, result, (perf_counter() - command_started_at) * 1000.0)
+    return result
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

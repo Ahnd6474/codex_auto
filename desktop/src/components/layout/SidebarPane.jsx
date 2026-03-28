@@ -329,6 +329,10 @@ export function SidebarPane({
                 {projects.length ? (
                   projects.map((project) => {
                     const tone = statusTone(project.status);
+                    const stats = project.stats || {};
+                    const total = stats.total_steps || 0;
+                    const completed = stats.completed_steps || 0;
+                    const fillPct = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
                     return (
                       <button
                         key={project.repo_id}
@@ -343,6 +347,13 @@ export function SidebarPane({
                         title={t("sidebar.projectContextDelete")}
                         type="button"
                       >
+                        {fillPct > 0 ? (
+                          <span
+                            className="sidebar-project__fill"
+                            aria-hidden="true"
+                            style={{ width: `${fillPct}%` }}
+                          />
+                        ) : null}
                         <div className="sidebar-project__title">
                           <strong>{project.display_name}</strong>
                           <span className={`status-badge status-badge--${tone}`}>
@@ -350,6 +361,14 @@ export function SidebarPane({
                           </span>
                         </div>
                         {project.detail ? <span style={{ fontSize: "11.5px", color: "var(--text-dim)" }}>{project.detail}</span> : null}
+                        {total > 0 ? (
+                          <div className="sidebar-project__steps">
+                            <div className="sidebar-project__steps-bar">
+                              <div className="sidebar-project__steps-fill" style={{ width: `${fillPct}%` }} />
+                            </div>
+                            <span>{completed}/{total}</span>
+                          </div>
+                        ) : null}
                       </button>
                     );
                   })
@@ -434,6 +453,10 @@ export function SidebarPane({
                 {historyProjects.length ? (
                   historyProjects.map((project) => {
                     const tone = statusTone(project.status);
+                    const stats = project.stats || {};
+                    const total = stats.total_steps || 0;
+                    const completed = stats.completed_steps || 0;
+                    const fillPct = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
                     return (
                       <button
                         key={project.archive_id || project.repo_id}
@@ -446,6 +469,13 @@ export function SidebarPane({
                         title={t("sidebar.projectContextDelete")}
                         type="button"
                       >
+                        {fillPct > 0 ? (
+                          <span
+                            className="sidebar-project__fill"
+                            aria-hidden="true"
+                            style={{ width: `${fillPct}%` }}
+                          />
+                        ) : null}
                         <div className="sidebar-project__title">
                           <strong>{project.display_name}</strong>
                           <span className={`status-badge status-badge--${tone}`}>
@@ -453,6 +483,14 @@ export function SidebarPane({
                           </span>
                         </div>
                         {project.detail ? <span style={{ fontSize: "11.5px", color: "var(--text-dim)" }}>{project.detail}</span> : null}
+                        {total > 0 ? (
+                          <div className="sidebar-project__steps">
+                            <div className="sidebar-project__steps-bar">
+                              <div className="sidebar-project__steps-fill" style={{ width: `${fillPct}%` }} />
+                            </div>
+                            <span>{completed}/{total}</span>
+                          </div>
+                        ) : null}
                       </button>
                     );
                   })

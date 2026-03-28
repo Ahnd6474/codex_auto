@@ -236,6 +236,7 @@ test("program settings helpers keep global runtime controls separate from projec
     local_model_provider: "ollama",
     provider_base_url: "",
     provider_api_key_env: "OPENAI_API_KEY",
+    billing_mode: "included",
     ensemble_openai_model: "gpt-5.4",
     ensemble_gemini_model: GEMINI_DEFAULT_MODEL,
     ensemble_claude_model: CLAUDE_DEFAULT_MODEL,
@@ -360,6 +361,38 @@ test("program settings helpers keep global runtime controls separate from projec
       },
     },
   );
+});
+
+test("program settings normalize provider selection to GPT Codex only defaults", () => {
+  const settings = programSettingsFromRuntime({
+    model_provider: "gemini",
+    model: "gemini-3-flash-preview",
+    model_slug_input: "gemini-3-flash-preview",
+    provider_base_url: "https://generativelanguage.googleapis.com",
+    provider_api_key_env: "GEMINI_API_KEY",
+    codex_path: defaultCodexPath("gemini"),
+  });
+
+  assert.equal(settings.model_provider, "openai");
+  assert.equal(settings.model, "gpt-5.4");
+  assert.equal(settings.model_slug_input, "gpt-5.4");
+  assert.equal(settings.provider_base_url, "");
+  assert.equal(settings.provider_api_key_env, "OPENAI_API_KEY");
+  assert.equal(settings.codex_path, defaultCodexPath());
+});
+
+test("program settings reset custom OpenAI model selections back to GPT Codex only", () => {
+  const settings = programSettingsFromRuntime({
+    model_provider: "openai",
+    model: "gpt-4.1-mini",
+    model_slug_input: "gpt-4.1-mini",
+    codex_path: "C:\\tools\\codex.cmd",
+  });
+
+  assert.equal(settings.model_provider, "openai");
+  assert.equal(settings.model, "gpt-5.4");
+  assert.equal(settings.model_slug_input, "gpt-5.4");
+  assert.equal(settings.codex_path, "C:\\tools\\codex.cmd");
 });
 
 test("blankProjectForm seeds runtime defaults without mutating the source runtime", () => {
