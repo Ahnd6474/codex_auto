@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from jakal_flow.environment import ensure_gitignore
 from jakal_flow.execution_control import ImmediateStopRequested
+from jakal_flow.memory import MemoryStore
 from jakal_flow.model_selection import (
     DEFAULT_MODEL_PRESET_ID,
     MODEL_MODE_CODEX,
@@ -1759,6 +1760,81 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIsNotNone(logged_test)
         self.assertEqual(logged_test["failure_reason"], "AssertionError: experiment2 failed")
         mocked_reset.assert_called_once_with(repo_dir, "safe-revision")
+
+    def test_run_single_block_records_search_execution_failures_without_regression_label(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_search_execution_failure_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", test_cmd="python -m pytest", regression_limit=3)
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            context.metadata.current_safe_revision = "safe-revision"
+            context.loop_state.current_safe_revision = "safe-revision"
+            orchestrator.workspace.save_project(context)
+            reporter = Reporter(context)
+            memory = MemoryStore(context.paths)
+            runner = mock.Mock()
+            candidate = CandidateTask(
+                candidate_id="ST1",
+                title="Canonicalize root layout",
+                rationale="Normalize the root layout safely.",
+                plan_refs=["ST1"],
+                score=1.0,
+            )
+            search_run_result = CodexRunResult(
+                pass_type="block-search-pass",
+                prompt_file=context.paths.logs_dir / "search.prompt.md",
+                output_file=context.paths.logs_dir / "search.last_message.txt",
+                event_file=context.paths.logs_dir / "search.events.jsonl",
+                returncode=41,
+                search_enabled=True,
+                changed_files=[],
+                usage={},
+                last_message="",
+                diagnostics={
+                    "attempts": [
+                        {
+                            "attempt": 1,
+                            "returncode": 41,
+                            "stderr_excerpt": "Please set an Auth method in C:/Users/alber/.gemini/settings.json before running.",
+                        }
+                    ]
+                },
+            )
+
+            with mock.patch.object(
+                orchestrator,
+                "_execute_pass",
+                return_value=(search_run_result, None, None),
+            ), mock.patch.object(orchestrator, "_report_failure") as mocked_report_failure:
+                orchestrator._run_single_block(
+                    context=context,
+                    runner=runner,
+                    memory=memory,
+                    reporter=reporter,
+                    candidate_override=candidate,
+                    suppress_failure_reporting=False,
+                )
+
+            block_entry = read_last_jsonl(context.paths.block_log_file)
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertIsNotNone(block_entry)
+        self.assertEqual(context.loop_state.counters.regression_failures, 0)
+        self.assertEqual(block_entry["status"], "rolled_back")
+        self.assertIn("Codex pass failed and changes were rolled back", block_entry["test_summary"])
+        self.assertIn("Please set an Auth method", block_entry["test_summary"])
+        mocked_report_failure.assert_called_once()
+        self.assertIn("Please set an Auth method", mocked_report_failure.call_args.kwargs["summary"])
 
     def test_execute_pass_invokes_debugger_with_failure_logs_and_recovers(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_step_debugger_test"

@@ -3346,6 +3346,11 @@ class Orchestrator:
             return f"{detail} (changes were rolled back)"
         return f"{fallback_task_name} verification failed and changes were rolled back."
 
+    def _search_pass_failure_summary(self, task_name: str, run_result: CodexRunResult) -> tuple[bool, str]:
+        if run_result.returncode != 0:
+            return False, self._codex_failure_note(task_name, run_result)
+        return True, "Search-enabled Codex pass regressed tests and was rolled back."
+
     def _execute_verified_repo_pass(
         self,
         *,
@@ -4498,20 +4503,27 @@ class Orchestrator:
         )
         block_changed_files.extend(search_pass.changed_files)
         if search_tests is None:
-            context.loop_state.counters.regression_failures += 1
+            counted_as_regression, failure_summary = self._search_pass_failure_summary(selected_task, search_pass)
+            if counted_as_regression:
+                context.loop_state.counters.regression_failures += 1
             context.loop_state.stop_reason = self._stop_reason(context)
             memory.record_failure(
                 task=selected_task,
-                summary="Search-enabled Codex pass regressed tests and was rolled back.",
-                tags=["search", "regression"],
+                summary=failure_summary,
+                tags=["search", "regression" if counted_as_regression else "execution_failure"],
                 block_index=block_index,
                 commit_hash=None,
             )
             reporter.write_block_review(
-                reflection_markdown(selected_task, "Search-enabled pass failed; rolled back.", [], [])
+                reflection_markdown(selected_task, failure_summary, [], [])
             )
             reporter.append_attempt_history(
-                attempt_history_entry(block_index, selected_task, "search pass rolled back", [])
+                attempt_history_entry(
+                    block_index,
+                    selected_task,
+                    "search pass rolled back" if counted_as_regression else "search pass execution failed",
+                    [],
+                )
             )
             reporter.log_block(
                 {
@@ -4521,7 +4533,7 @@ class Orchestrator:
                     "status": "rolled_back",
                     "selected_task": selected_task,
                     "changed_files": [],
-                    "test_summary": "search regression failure",
+                    "test_summary": failure_summary,
                     "commit_hashes": [],
                     "rollback_status": "rolled_back_to_safe_revision",
                 }
@@ -4531,7 +4543,7 @@ class Orchestrator:
                     context,
                     reporter,
                     failure_type="block_failed",
-                    summary="Search-enabled Codex pass regressed tests and was rolled back.",
+                    summary=failure_summary,
                     block_index=block_index,
                     selected_task=selected_task,
                 )
