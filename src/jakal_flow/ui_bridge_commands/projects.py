@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..execution_control import ImmediateStopRequested
 from .context import BridgeCommandContext, BridgeCommandHandler
 from ..models import ExecutionPlanState
 from ..ui_bridge_payloads import list_projects_payload
@@ -14,6 +15,9 @@ def build_project_command_handlers(
     append_ui_event,
     save_run_control,
     default_run_control,
+    clear_stop_request,
+    execution_scope_id,
+    execution_stop_registry,
 ) -> dict[str, BridgeCommandHandler]:
     def archive_project(ctx: BridgeCommandContext) -> dict:
         project = resolve_project(ctx.orchestrator, ctx.payload)
@@ -108,19 +112,36 @@ def build_project_command_handlers(
             raise ValueError("prompt is required.")
         max_steps = max(1, int(str(ctx.payload.get("max_steps", runtime.max_blocks) or runtime.max_blocks)))
         existing = ctx.orchestrator.local_project(project_dir)
+        if existing is not None:
+            execution_stop_registry.clear(execution_scope_id(existing))
+            save_run_control(existing, default_run_control())
 
         def planning_progress_event(project, event_type: str, message: str, details: dict | None = None) -> None:
             append_ui_event(project, event_type, message, details or {})
 
-        project, plan_state = ctx.orchestrator.generate_execution_plan(
-            project_dir=project_dir,
-            runtime=runtime,
-            project_prompt=prompt,
-            branch=branch,
-            max_steps=max_steps,
-            origin_url=origin_url,
-            progress_callback=planning_progress_event,
-        )
+        try:
+            project, plan_state = ctx.orchestrator.generate_execution_plan(
+                project_dir=project_dir,
+                runtime=runtime,
+                project_prompt=prompt,
+                branch=branch,
+                max_steps=max_steps,
+                origin_url=origin_url,
+                progress_callback=planning_progress_event,
+            )
+        except ImmediateStopRequested as exc:
+            latest = ctx.orchestrator.local_project(project_dir)
+            if latest is None:
+                raise
+            execution_stop_registry.clear(execution_scope_id(latest))
+            clear_stop_request(latest)
+            append_ui_event(
+                latest,
+                "plan-stopped",
+                str(exc).strip() or "Stopped plan generation during planning.",
+                {"flow": "planning", "status": "stopped"},
+            )
+            return ctx.detail_payload(latest)
         append_ui_event(
             project,
             "plan-generated",
@@ -158,6 +179,9 @@ def build_project_command_handlers(
 
     def reset_plan(ctx: BridgeCommandContext) -> dict:
         project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload)
+        existing = ctx.orchestrator.local_project(project_dir)
+        if existing is not None:
+            execution_stop_registry.request_stop(execution_scope_id(existing))
         plan_state = ExecutionPlanState(default_test_command=runtime.test_cmd)
         project, _saved = ctx.orchestrator.update_execution_plan(
             project_dir=project_dir,
@@ -166,6 +190,7 @@ def build_project_command_handlers(
             branch=branch,
             origin_url=origin_url,
         )
+        save_run_control(project, default_run_control())
         append_ui_event(project, "plan-reset", "Reset the execution plan and cleared the prompt.")
         return ctx.detail_payload(project)
 

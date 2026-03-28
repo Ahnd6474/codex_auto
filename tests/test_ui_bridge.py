@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from jakal_flow.cli import main as cli_main
 from jakal_flow.bridge_events import bridge_event_context
+from jakal_flow.execution_control import ImmediateStopRequested
 import jakal_flow.ui_bridge as ui_bridge
 import jakal_flow.ui_bridge_payloads as ui_bridge_payloads
 from jakal_flow.models import ExecutionPlanState, ExecutionStep
@@ -446,6 +447,48 @@ class UIBridgeTests(unittest.TestCase):
         self.assertIn("missing claude", statuses["ensemble"]["reason"].lower())
         self.assertFalse(statuses["deepseek"]["available"])
         self.assertTrue(statuses["openrouter"]["available"])
+
+    def test_provider_statuses_payload_accepts_windows_claude_executable_without_cmd_shim(self) -> None:
+        fake_snapshot = mock.Mock(
+            to_dict=mock.Mock(
+                return_value={
+                    "available": True,
+                    "account": {"authenticated": True},
+                    "error": "",
+                }
+            )
+        )
+        with mock.patch("jakal_flow.step_models.resolve_codex_path",
+            side_effect=lambda command: r"C:\Users\alber\.local\bin\claude.exe" if str(command).strip().lower() == "claude.cmd" else command,
+        ), mock.patch(
+            "jakal_flow.step_models._openai_auth_env_configured",
+            return_value=True,
+        ), mock.patch(
+            "jakal_flow.step_models._claude_auth_env_configured",
+            return_value=False,
+        ), mock.patch(
+            "jakal_flow.step_models._gemini_auth_env_configured",
+            return_value=True,
+        ), mock.patch(
+            "jakal_flow.step_models._gemini_settings_file_configured",
+            return_value=False,
+        ), mock.patch(
+            "jakal_flow.step_models.discover_local_model_catalog",
+            return_value=[],
+        ), mock.patch(
+            "jakal_flow.step_models.Path.exists",
+            autospec=True,
+            side_effect=lambda path: str(path).lower() == r"c:\users\alber\.local\bin\claude.exe",
+        ), mock.patch(
+            "jakal_flow.step_models.shutil.which",
+            side_effect=lambda command: {"codex.cmd": r"C:\tools\codex.cmd", "gemini.cmd": r"C:\tools\gemini.cmd"}.get(str(command).strip().lower()),
+        ):
+            statuses = provider_statuses_payload(fetch_snapshot=lambda _command: fake_snapshot)
+
+        self.assertTrue(statuses["claude"]["available"])
+        self.assertTrue(statuses["claude"]["usable"])
+        self.assertTrue(statuses["deepseek"]["available"])
+        self.assertTrue(statuses["ensemble"]["available"])
 
     def test_bootstrap_payload_includes_provider_statuses(self) -> None:
         with TemporaryTestDir() as temp_dir, mock.patch(
@@ -1337,6 +1380,149 @@ class UIBridgeTests(unittest.TestCase):
             self.assertTrue(control_path.exists())
             control_payload = json.loads(control_path.read_text(encoding="utf-8"))
             self.assertEqual(control_payload["request_source"], "unit-test")
+
+    def test_generate_plan_handles_immediate_stop_during_planning(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Planning Stop Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            with mock.patch.object(
+                ui_bridge.EXECUTION_STOP_REGISTRY,
+                "clear",
+                wraps=ui_bridge.EXECUTION_STOP_REGISTRY.clear,
+            ) as clear_mock, mock.patch(
+                "jakal_flow.orchestrator.Orchestrator.generate_execution_plan",
+                side_effect=ImmediateStopRequested("Planning stopped by user."),
+            ), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                stopped = run_command(
+                    "generate-plan",
+                    workspace_root,
+                    {
+                        "project_dir": str(repo_dir),
+                        "branch": "main",
+                        "origin_url": "",
+                        "runtime": detail["runtime"],
+                        "prompt": "Create a plan and then stop.",
+                        "max_steps": 5,
+                    },
+                )
+
+            self.assertEqual(stopped["project"]["current_status"], "setup_ready")
+            self.assertEqual(stopped["run_control"]["stop_immediately"], False)
+            self.assertEqual(stopped["run_control"]["stop_after_current_step"], False)
+            self.assertEqual(clear_mock.call_count, 2)
+            self.assertTrue(any("plan-stopped" in item for item in stopped["activity"]))
+
+    def test_reset_plan_requests_stop_and_clears_planning_state(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            setup_payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Planning Reset Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m pytest",
+                    "max_blocks": 4,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, setup_payload)
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                saved = run_command(
+                    "save-plan",
+                    workspace_root,
+                    {
+                        "project_dir": str(repo_dir),
+                        "branch": "main",
+                        "origin_url": "",
+                        "runtime": detail["runtime"],
+                        "plan": {
+                            "plan_title": "Temporary plan",
+                            "project_prompt": "This should be reset.",
+                            "summary": "Temporary summary.",
+                            "default_test_command": "python -m pytest",
+                            "steps": [
+                                {
+                                    "step_id": "ST1",
+                                    "title": "Temporary step",
+                                    "display_description": "Will be removed.",
+                                    "codex_description": "Will be removed.",
+                                    "test_command": "python -m pytest",
+                                    "success_criteria": "N/A",
+                                }
+                            ],
+                        },
+                    },
+                )
+
+            orchestrator = ui_bridge.orchestrator_for(workspace_root)
+            project = orchestrator.workspace.load_project_by_id(saved["project"]["repo_id"])
+            project.metadata.current_status = "running:generate-plan"
+            orchestrator.workspace.save_project(project)
+
+            with mock.patch.object(
+                ui_bridge.EXECUTION_STOP_REGISTRY,
+                "request_stop",
+                wraps=ui_bridge.EXECUTION_STOP_REGISTRY.request_stop,
+            ) as request_stop_mock, mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                reset = run_command(
+                    "reset-plan",
+                    workspace_root,
+                    {
+                        "project_dir": str(repo_dir),
+                        "branch": "main",
+                        "origin_url": "",
+                        "runtime": detail["runtime"],
+                    },
+                )
+
+            self.assertEqual(reset["plan"]["project_prompt"], "")
+            self.assertEqual(reset["plan"]["steps"], [])
+            self.assertEqual(reset["run_control"]["stop_immediately"], False)
+            self.assertEqual(request_stop_mock.call_count, 1)
+            self.assertTrue(any("plan-reset" in item for item in reset["activity"]))
 
     def test_load_project_tolerates_malformed_ui_state_files(self) -> None:
         with TemporaryTestDir() as temp_dir:

@@ -11,6 +11,24 @@ import {
   shouldShowEstimatedCost,
 } from "../../utils";
 
+/* ── Icons ── */
+function ClockIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  );
+}
+
+function ActivityIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+    </svg>
+  );
+}
+
 function stepLabel(step) {
   return [step?.step_id, step?.title].filter(Boolean).join(" – ");
 }
@@ -20,24 +38,6 @@ function runningStepLabels(steps = [], maxVisible = 3) {
   if (!labels.length) return "";
   if (labels.length <= maxVisible) return labels.join(", ");
   return `${labels.slice(0, maxVisible).join(", ")} +${labels.length - maxVisible}`;
-}
-
-function LiveDot() {
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        display: "inline-block",
-        width: "8px",
-        height: "8px",
-        borderRadius: "50%",
-        background: "var(--info)",
-        boxShadow: "0 0 0 0 rgba(95,151,214,0.6)",
-        animation: "live-dot-pulse 1.4s ease-in-out infinite",
-        flexShrink: 0,
-      }}
-    />
-  );
 }
 
 export function RunProgressPanel({ detail, planDraft, activeJob }) {
@@ -112,19 +112,19 @@ export function RunProgressPanel({ detail, planDraft, activeJob }) {
       <section className="run-progress-banner">
         {/* Header row */}
         <div className="run-progress-banner__header">
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
-            <LiveDot />
-            <div style={{ minWidth: 0 }}>
+          <div className="run-progress-banner__identity">
+            <span className="chip-dot chip-dot--info status-badge--pulse" style={{ animation: "live-dot-pulse 1.4s ease-in-out infinite" }} />
+            <div className="run-progress-banner__title-stack">
               <span className="eyebrow">{t("run.liveRun")}</span>
-              <strong style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <strong className="run-progress-banner__main-work">
                 {currentWork || t("action.backgroundJob")}
               </strong>
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+          <div className="run-progress-banner__status-group">
             {!progress.indeterminate && progress.percent != null ? (
-              <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--info)", fontVariantNumeric: "tabular-nums" }}>
+              <span className="run-progress-banner__percent">
                 {progress.percent}%
               </span>
             ) : null}
@@ -139,7 +139,6 @@ export function RunProgressPanel({ detail, planDraft, activeJob }) {
           aria-label={t("run.stepProgress")}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-valuenow={progress.indeterminate ? undefined : progress.percent ?? 0}
         >
           <div
             className={`run-progress-banner__fill ${progress.indeterminate ? "run-progress-banner__fill--indeterminate" : ""}`}
@@ -153,35 +152,34 @@ export function RunProgressPanel({ detail, planDraft, activeJob }) {
           {progress.phase === "planning" && progress.planningCurrentAgentLabel ? (
             <span>{progress.planningCurrentAgentLabel}</span>
           ) : null}
-          {progress.totalProgressUnits ? (
-            <span>
-              {t("run.completedStepsSummary", {
-                completed: progress.completedProgressUnits,
-                total: progress.totalProgressUnits,
-              })}
-            </span>
-          ) : null}
-          {progress.runningStepList?.length > 1 ? (
-            <span>{t("run.runningNodeSummary", { count: progress.runningStepList.length })}</span>
-          ) : null}
-          {(!progress.runningStepList || progress.runningStepList.length <= 1) && progress.readyIds.length > 1 ? (
-            <span>{t("run.readyNodeSummary", { count: progress.readyIds.length })}</span>
-          ) : null}
-          {progress.phase !== "planning" ? (
-            <span>
-              {t("run.currentElapsed")}: {formatDurationCompact(runningStepElapsedSeconds, language)}
-            </span>
-          ) : null}
-          {progress.phase !== "planning" ? (
-            <span>
-              {t("run.currentRemaining")}: {formatDurationCompact(executionEstimate.remaining_seconds ?? 0, language)}
-            </span>
-          ) : null}
-          {progress.phase !== "planning" && showEstimatedCost ? (
-            <span>
-              {t("run.estimatedCost")}: {formatUsd(costEstimate.estimated_total_cost_usd ?? 0, language)}
-            </span>
-          ) : null}
+          <div className="run-progress-banner__metrics">
+            {progress.totalProgressUnits ? (
+              <div className="metric-chip">
+                <span>{t("run.completedStepsSummary", { completed: progress.completedProgressUnits, total: progress.totalProgressUnits })}</span>
+              </div>
+            ) : null}
+            {progress.runningStepList?.length > 1 ? (
+              <div className="metric-chip">
+                <span>{t("run.runningNodeSummary", { count: progress.runningStepList.length })}</span>
+              </div>
+            ) : null}
+            {progress.phase !== "planning" ? (
+              <div className="metric-chip">
+                <ClockIcon />
+                <span>{formatDurationCompact(runningStepElapsedSeconds, language)}</span>
+              </div>
+            ) : null}
+            {progress.phase !== "planning" && executionEstimate.remaining_seconds ? (
+              <div className="metric-chip metric-chip--dim">
+                <span>{t("run.currentRemaining")}: {formatDurationCompact(executionEstimate.remaining_seconds, language)}</span>
+              </div>
+            ) : null}
+            {progress.phase !== "planning" && showEstimatedCost ? (
+              <div className="metric-chip metric-chip--accent">
+                <span>{formatUsd(costEstimate.estimated_total_cost_usd ?? 0, language)}</span>
+              </div>
+            ) : null}
+          </div>
         </div>
 
         {/* Planning stages */}
@@ -202,7 +200,10 @@ export function RunProgressPanel({ detail, planDraft, activeJob }) {
         {/* Headline activity */}
         {progress.headlineActivity ? (
           <div className="run-progress-banner__activity">
-            <span>{t("history.recentActivity")}</span>
+            <div className="activity-label">
+              <ActivityIcon />
+              <span>{t("history.recentActivity")}</span>
+            </div>
             <strong>{progress.headlineActivity}</strong>
           </div>
         ) : null}

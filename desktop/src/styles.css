@@ -1784,3 +1784,408 @@ select:focus {
 .banner {
   transition: border-color 220ms ease;
 }
+
+/* ═══════════════════════════════════════════════════
+   SETTINGS & FLOW — toggle, callout, section icons
+   ═══════════════════════════════════════════════════ */
+
+/* ── Toggle row (replaces plain checkbox) ── */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  transition: background 130ms ease, border-color 130ms ease;
+}
+
+.toggle-row:hover:not(:has(input:disabled)) {
+  background: var(--bg-panel-hover);
+  border-color: var(--border-strong);
+}
+
+.toggle-row:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggle-row__label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.toggle-row__label span {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.toggle-row__label small {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.toggle-track {
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  position: relative;
+  flex-shrink: 0;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.toggle-track input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.toggle-thumb {
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: left 160ms ease, background 160ms ease;
+  pointer-events: none;
+}
+
+.toggle-track--on {
+  background: var(--bg-accent);
+  border-color: var(--bg-accent-strong);
+}
+
+.toggle-track--on .toggle-thumb {
+  left: calc(100% - 15px);
+  background: #fff;
+}
+
+/* ── Info callout box ── */
+.info-callout {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(95, 151, 214, 0.08);
+  border: 1px solid rgba(95, 151, 214, 0.22);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.info-callout--warning {
+  background: rgba(211, 169, 84, 0.08);
+  border-color: rgba(211, 169, 84, 0.22);
+}
+
+.info-callout--danger {
+  background: rgba(200, 93, 97, 0.08);
+  border-color: rgba(200, 93, 97, 0.22);
+}
+
+.info-callout svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--info);
+}
+
+.info-callout--warning svg {
+  color: var(--warning);
+}
+
+.info-callout--danger svg {
+  color: var(--danger);
+}
+
+/* ── Settings section header with icon ── */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 0 2px;
+}
+
+.section-header__icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--bg-active);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.section-header__icon svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text-muted);
+}
+
+.section-header__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.section-header__text strong {
+  font-size: 13px;
+}
+
+.section-header__text small {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* ── Toggle grid (2-3 col checkbox toggles) ── */
+.toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.toggle-grid--3col {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* ── Project info summary card ── */
+.project-summary-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+  padding: 14px 16px;
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  border-left: 4px solid var(--bg-accent-strong);
+}
+
+.project-summary-card .field {
+  gap: 4px;
+}
+
+.project-summary-card .field span {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.project-summary-card .field strong,
+.project-summary-card .field p {
+  font-size: 13px;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Field hint text ── */
+.field-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+/* ── Metric card with icon ── */
+.metric-card__icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.metric-card__icon svg {
+  width: 13px;
+  height: 13px;
+  color: var(--text-muted);
+}
+
+.metric-card__icon--info svg {
+  color: var(--info);
+}
+
+.metric-card__icon--success svg {
+  color: var(--success);
+}
+
+.metric-card__icon--warning svg {
+  color: var(--warning);
+}
+
+.metric-card__icon--danger svg {
+  color: var(--danger);
+}
+
+/* ── Action button group ── */
+.btn-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.btn-group .toolbar-divider {
+  height: 20px;
+}
+
+/* ── Step editor improved ── */
+.step-fields-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.step-fields-2col .field--wide {
+  grid-column: 1 / -1;
+}
+
+/* ── Model badge ── */
+.model-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-active);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.model-badge strong {
+  color: var(--text);
+}
+
+/* ── Collapsible subsection ── */
+.subsection__toggle {
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.subsection__toggle:hover .section-header__icon {
+  background: var(--bg-panel-hover);
+}
+
+.subsection__chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--text-dim);
+  transition: transform 160ms ease;
+  flex-shrink: 0;
+}
+
+.subsection__chevron--open {
+  transform: rotate(180deg);
+}
+
+/* ── Share URL display ── */
+.share-url-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.share-url-row input {
+  flex: 1;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 12px;
+}
+
+/* ── Effort cards improved ── */
+.choice-card {
+  transition:
+    background 130ms ease,
+    border-color 130ms ease,
+    box-shadow 130ms ease,
+    transform 130ms ease;
+}
+
+.choice-card.selected {
+  box-shadow: 0 0 0 1px var(--bg-accent-strong);
+}
+
+.choice-card:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.choice-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Subsection improved header ── */
+.subsection__header {
+  align-items: flex-start;
+}
+
+/* ── Run flow action bar ── */
+.flow-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.flow-action-bar .toolbar-divider {
+  height: 20px;
+}
+
+.auto-run-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  transition: background 130ms ease;
+}
+
+.auto-run-badge:hover {
+  background: var(--bg-panel-hover);
+}
+
+.auto-run-badge input {
+  width: auto;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}

@@ -345,6 +345,58 @@ test("ParallelRunControlView renders queued reservations with cancellation contr
   assert.match(html, /Cancel Reservation/);
 });
 
+test("ParallelRunControlView keeps reset available while generate-plan is running", async () => {
+  const html = await renderBundledComponent(
+    "parallel-run-control-reset-during-planning-render",
+    "./src/components/views/ParallelRunControlView.jsx",
+    "ParallelRunControlView",
+    {
+      detail: {
+        project: {
+          current_status: "setup_ready",
+        },
+        runtime: {
+          execution_mode: "parallel",
+          effort: "high",
+        },
+      },
+      planDraft: {
+        project_prompt: "Generate a new plan",
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [],
+      },
+      activeJob: {
+        id: "job-generate",
+        status: "running",
+        command: "generate-plan",
+      },
+      queuedJobs: [],
+      autoRunAfterPlan: false,
+      selectedStepId: "",
+      busy: true,
+      canCancelReservation: false,
+      canRequestStop: true,
+      onPromptChange: noop,
+      onGeneratePlan: noop,
+      onSavePlan: noop,
+      onResetPlan: noop,
+      onRunPlan: noop,
+      onRequestStop: noop,
+      onCancelQueuedJob: noop,
+      onAutoRunAfterPlanChange: noop,
+      onSelectStep: noop,
+      onUpdateStepField: noop,
+      onSaveStepLocal: noop,
+      onAddStep: noop,
+      onDeleteStep: noop,
+    },
+  );
+
+  assert.match(html, />Reset<\/button>/);
+  assert.doesNotMatch(html, /<button[^>]*disabled=""[^>]*>Reset<\/button>/);
+});
+
 test("CenterWorkspace upgrades legacy serial plans into the parallel execution tree view", async () => {
   const html = await renderBundledComponent(
     "center-workspace-render",

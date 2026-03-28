@@ -8,7 +8,7 @@ import re
 import shutil
 from typing import Any, Callable
 
-from .codex_app_server import fetch_codex_backend_snapshot
+from .codex_app_server import fetch_codex_backend_snapshot, resolve_codex_path
 from .model_constants import VALID_MODEL_PROVIDERS
 from .model_providers import discover_local_model_catalog, provider_preset
 from .models import ExecutionStep, RuntimeOptions
@@ -453,7 +453,14 @@ def _command_available(command: str) -> bool:
         return False
     if "\\" in candidate or "/" in candidate:
         return Path(candidate).expanduser().exists()
-    return shutil.which(candidate) is not None
+    if shutil.which(candidate) is not None:
+        return True
+    resolved = str(resolve_codex_path(candidate)).strip()
+    if not resolved or resolved == candidate:
+        return False
+    if "\\" in resolved or "/" in resolved:
+        return Path(resolved).expanduser().exists()
+    return shutil.which(resolved) is not None
 
 
 def _openai_auth_env_configured() -> bool:

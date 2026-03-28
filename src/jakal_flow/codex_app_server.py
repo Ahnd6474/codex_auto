@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import shutil
 import subprocess
 import threading
 from dataclasses import dataclass, field
@@ -30,6 +31,16 @@ def resolve_codex_path(codex_path: str) -> str:
             candidate = Path(appdata) / "npm" / codex_path
             if candidate.exists():
                 return str(candidate)
+    direct_match = shutil.which(codex_path)
+    if direct_match:
+        return direct_match
+    if os.name == "nt":
+        candidate_path = Path(codex_path)
+        suffix = candidate_path.suffix.lower()
+        if suffix in {".cmd", ".bat"}:
+            fallback_match = shutil.which(candidate_path.stem)
+            if fallback_match:
+                return fallback_match
     return codex_path
 
 

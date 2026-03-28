@@ -176,6 +176,10 @@ export function RunControlView({
   const closeoutStatus = String(planDraft?.closeout_status || "not_started").trim().toLowerCase();
   const showCloseoutStatus = closeoutStatus && closeoutStatus !== "not_started";
   const showEstimatedCost = shouldShowEstimatedCost(detail?.runtime || {}, costEstimate);
+  const isPlanningJobRunning =
+    String(activeJob?.status || "").trim().toLowerCase() === "running"
+    && String(activeJob?.command || "").trim().toLowerCase() === "generate-plan";
+  const canResetPlan = !busy || isPlanningJobRunning;
   const latestFailure = detail?.reports?.latest_failure || {};
   const failureArtifacts = Array.isArray(latestFailure?.artifact_files) ? latestFailure.artifact_files.slice(0, 8) : [];
   const showFailureCard = Boolean(
@@ -274,7 +278,7 @@ export function RunControlView({
             <button className="toolbar-button" onClick={onSavePlan} type="button" disabled={busy}>
               {t("action.save")}
             </button>
-            <button className="toolbar-button toolbar-button--ghost" onClick={onResetPlan} type="button" disabled={busy}>
+            <button className="toolbar-button toolbar-button--ghost" onClick={onResetPlan} type="button" disabled={!canResetPlan}>
               {t("action.reset")}
             </button>
             <button className="toolbar-button toolbar-button--accent" onClick={onRunPlan} type="button" disabled={busy}>

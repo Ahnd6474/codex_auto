@@ -71,9 +71,19 @@ class _FakeSession:
 
 class CodexAppServerTests(unittest.TestCase):
     def test_resolve_codex_path_uses_platform_default_when_blank(self) -> None:
-        with mock.patch("jakal_flow.codex_app_server.default_codex_path", return_value="codex"):
+        with mock.patch("jakal_flow.codex_app_server.default_codex_path", return_value="codex"), mock.patch(
+            "jakal_flow.codex_app_server.shutil.which",
+            return_value=None,
+        ):
             self.assertEqual(resolve_codex_path(""), "codex")
             self.assertEqual(resolve_codex_path("   "), "codex")
+
+    def test_resolve_codex_path_falls_back_to_windows_executable_when_cmd_shim_is_missing(self) -> None:
+        with mock.patch("jakal_flow.codex_app_server.os.name", "nt"), mock.patch(
+            "jakal_flow.codex_app_server.shutil.which",
+            side_effect=lambda command: r"C:\Users\alber\.local\bin\claude.exe" if command == "claude" else None,
+        ):
+            self.assertEqual(resolve_codex_path("claude.cmd"), r"C:\Users\alber\.local\bin\claude.exe")
 
     def test_fetch_codex_backend_snapshot_formats_models_and_rate_limits(self) -> None:
         with mock.patch("jakal_flow.codex_app_server._CodexAppServerSession", _FakeSession), mock.patch(

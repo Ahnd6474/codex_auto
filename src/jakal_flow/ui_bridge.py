@@ -648,6 +648,9 @@ def bridge_command_handlers() -> dict[str, Any]:
             append_ui_event=append_ui_event,
             save_run_control=save_run_control,
             default_run_control=default_run_control,
+            clear_stop_request=clear_stop_request,
+            execution_scope_id=execution_scope_id,
+            execution_stop_registry=EXECUTION_STOP_REGISTRY,
         ),
         **build_share_command_handlers(
             resolve_project=resolve_project,
