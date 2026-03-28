@@ -28,11 +28,13 @@ import {
   effectiveStepStatus,
   executionProgressCaptionDisplay,
   firstSelectableStepId,
+  GEMINI_DEFAULT_MODEL,
   inheritProjectIdentityForm,
   isDuplicateProjectJobError,
   mergeProjectDetailCodexStatus,
   normalizeMemoryBudgetGiB,
   normalizeInterruptedPlan,
+  planDependencyValidationMessage,
   progressCaption,
   programSettingsFromRuntime,
   projectJobFromJobs,
@@ -143,6 +145,27 @@ test("isDuplicateProjectJobError detects bridge rejections for already-active jo
   assert.equal(isDuplicateProjectJobError("Another background task is already active for this project."), true);
   assert.equal(isDuplicateProjectJobError(new Error("another background task is already active for this project.")), true);
   assert.equal(isDuplicateProjectJobError("The requested background job was not found."), false);
+});
+
+test("planDependencyValidationMessage reports dependency cycles with step ids", () => {
+  assert.equal(
+    planDependencyValidationMessage({
+      steps: [
+        { step_id: "ST1", depends_on: ["ST2"] },
+        { step_id: "ST2", depends_on: ["ST1"] },
+      ],
+    }),
+    "Parallel execution plan contains a dependency cycle: ST1 -> ST2 -> ST1.",
+  );
+});
+
+test("planDependencyValidationMessage reports unknown dependency references", () => {
+  assert.equal(
+    planDependencyValidationMessage({
+      steps: [{ step_id: "ST1", depends_on: ["ST9"] }],
+    }),
+    "Unknown dependency reference: ST9",
+  );
 });
 
 test("project job helpers ignore stale running jobs when the project has a newer saved state", () => {
@@ -381,9 +404,21 @@ test("applyProviderDefaults switches the runtime path for Gemini CLI and clears 
 
   assert.equal(runtime.model_provider, "gemini");
   assert.equal(runtime.codex_path, defaultCodexPath("gemini"));
-  assert.equal(runtime.model, "");
-  assert.equal(runtime.model_slug_input, "");
+  assert.equal(runtime.model, GEMINI_DEFAULT_MODEL);
+  assert.equal(runtime.model_slug_input, GEMINI_DEFAULT_MODEL);
   assert.equal(runtime.provider_api_key_env, "GEMINI_API_KEY");
+});
+
+test("blankProjectForm keeps Gemini CLI projects on the Gemini default model", () => {
+  const form = blankProjectForm({
+    model_provider: "gemini",
+    provider_api_key_env: "GEMINI_API_KEY",
+    codex_path: defaultCodexPath("gemini"),
+  });
+
+  assert.equal(form.runtime.model_provider, "gemini");
+  assert.equal(form.runtime.model, GEMINI_DEFAULT_MODEL);
+  assert.equal(form.runtime.model_slug_input, GEMINI_DEFAULT_MODEL);
 });
 
 test("normalizeMemoryBudgetGiB keeps one decimal place for UI memory budgets", () => {

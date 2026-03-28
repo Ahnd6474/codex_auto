@@ -1205,6 +1205,23 @@ class Orchestrator:
                     worker_result["lineage_push"] = push_result
                     if push_result["pushed"]:
                         lineage.notes = (lineage.notes + " | Pushed lineage branch to origin.").strip(" |")
+                        pr_result = self._maybe_open_pull_request(
+                            context,
+                            head_branch=lineage.branch_name,
+                            base_branch=context.metadata.branch,
+                            title=f"[{step.step_id}] {step.title}",
+                            body=(
+                                f"Automatically opened by jakal-flow for lineage `{lineage.lineage_id}`.\n\n"
+                                f"- Step: `{step.step_id}`\n"
+                                f"- Base branch: `{context.metadata.branch}`\n"
+                                f"- Head branch: `{lineage.branch_name}`\n"
+                            ),
+                            status_filename=f"latest_pull_request_status_{lineage.lineage_id.lower()}.json",
+                        )
+                        worker_result["lineage_pull_request"] = pr_result
+                        pr_url = str(pr_result.get("html_url") or "").strip()
+                        if pr_url:
+                            lineage.notes = (lineage.notes + f" | Pull request: {pr_url}").strip(" |")
 
                     step.status = "completed"
                     step.completed_at = completion_time
@@ -1600,7 +1617,39 @@ class Orchestrator:
         fallback_effort = normalize_reasoning_effort(context.runtime.effort, fallback="high")
         for step in state.steps:
             step.reasoning_effort = normalize_reasoning_effort(step.reasoning_effort, fallback=fallback_effort)
+        self._recover_stale_closeout_state(context, state)
         return state
+
+    def _stale_closeout_note(self, context: ProjectContext, plan_state: ExecutionPlanState) -> str:
+        note_parts = [
+            "Closeout appears to have stopped before it finished; the saved running state was recovered as failed."
+        ]
+        started_at = str(plan_state.closeout_started_at or "").strip()
+        if started_at:
+            note_parts.append(f"Started at {started_at}.")
+        latest_failure_status = read_json(context.paths.reports_dir / "latest_pr_failure_status.json", default={})
+        if isinstance(latest_failure_status, dict):
+            report_path = str(latest_failure_status.get("report_markdown_file", "")).strip()
+            if report_path:
+                note_parts.append(f"Latest failure report: {report_path}")
+        existing_notes = str(plan_state.closeout_notes or "").strip()
+        if existing_notes and existing_notes not in note_parts:
+            note_parts.append(existing_notes)
+        return " ".join(note_parts).strip()
+
+    def _recover_stale_closeout_state(self, context: ProjectContext, plan_state: ExecutionPlanState) -> bool:
+        if not self._closeout_run_is_stale(context, plan_state):
+            return False
+        plan_state.closeout_status = "failed"
+        plan_state.closeout_completed_at = None
+        plan_state.closeout_commit_hash = None
+        plan_state.closeout_notes = self._stale_closeout_note(context, plan_state)
+        plan_state.last_updated_at = now_utc_iso()
+        write_json(context.paths.execution_plan_file, plan_state.to_dict())
+        context.metadata.current_status = self._status_from_plan_state(plan_state)
+        context.metadata.last_run_at = plan_state.last_updated_at
+        self.workspace.save_project(context)
+        return True
 
     def update_execution_plan(
         self,
@@ -1828,7 +1877,44 @@ class Orchestrator:
                 if indegree[neighbor] == 0:
                     ready.append(neighbor)
         if visited != len(steps):
+            cycle = self._find_parallel_dependency_cycle(steps)
+            if cycle:
+                raise ValueError(f"Parallel execution plan contains a dependency cycle: {' -> '.join(cycle)}.")
             raise ValueError("Parallel execution plan contains a dependency cycle.")
+
+    def _find_parallel_dependency_cycle(self, steps: list[ExecutionStep]) -> list[str]:
+        step_ids = {step.step_id for step in steps}
+        dependencies = {
+            step.step_id: [dependency for dependency in step.depends_on if dependency in step_ids]
+            for step in steps
+        }
+        visit_state: dict[str, int] = {}
+        path: list[str] = []
+
+        def visit(step_id: str) -> list[str]:
+            state = visit_state.get(step_id, 0)
+            if state == 1:
+                if step_id in path:
+                    cycle_start = path.index(step_id)
+                    return path[cycle_start:] + [step_id]
+                return [step_id, step_id]
+            if state == 2:
+                return []
+            visit_state[step_id] = 1
+            path.append(step_id)
+            for dependency in dependencies.get(step_id, []):
+                cycle = visit(dependency)
+                if cycle:
+                    return cycle
+            path.pop()
+            visit_state[step_id] = 2
+            return []
+
+        for step in steps:
+            cycle = visit(step.step_id)
+            if cycle:
+                return cycle
+        return []
 
     def _dag_ready_batches(self, ready_steps: list[ExecutionStep]) -> list[list[ExecutionStep]]:
         batches: list[list[ExecutionStep]] = []
@@ -3555,6 +3641,17 @@ class Orchestrator:
                     block_index=closeout_block_index,
                     selected_task=closeout_task,
                 )
+            elif plan_state.closeout_status == "completed":
+                self._maybe_open_pull_request(
+                    context,
+                    head_branch=context.metadata.branch,
+                    title=plan_state.plan_title.strip() or "jakal-flow closeout",
+                    body=(
+                        "Automatically opened by jakal-flow after a successful closeout push.\n\n"
+                        f"- Branch: `{context.metadata.branch}`\n"
+                        f"- Closeout commit: `{plan_state.closeout_commit_hash or 'unknown'}`\n"
+                    ),
+                )
 
         return context, plan_state
 
@@ -4972,6 +5069,37 @@ class Orchestrator:
                 "report_json_file": bundle.get("report_json_file", ""),
             },
         )
+
+    def _maybe_open_pull_request(
+        self,
+        context: ProjectContext,
+        *,
+        head_branch: str,
+        base_branch: str = "",
+        title: str,
+        body: str = "",
+        draft: bool = False,
+        status_filename: str = "latest_pull_request_status.json",
+    ) -> dict:
+        reporter = Reporter(context)
+        result = reporter.ensure_pull_request(
+            head_branch=head_branch,
+            base_branch=base_branch,
+            title=title,
+            body=body,
+            draft=draft,
+        )
+        write_json(
+            context.paths.reports_dir / status_filename,
+            {
+                "generated_at": now_utc_iso(),
+                "head_branch": head_branch,
+                "base_branch": base_branch,
+                "title": title,
+                "result": result,
+            },
+        )
+        return result
 
     def _read_supplied_plan_text(self, plan_path: Path | None, plan_input: str) -> str:
         if plan_input.strip():

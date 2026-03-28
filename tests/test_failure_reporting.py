@@ -133,6 +133,56 @@ class FailureReportingTests(unittest.TestCase):
             self.assertFalse(result["posted"])
             self.assertEqual(result["reason"], "missing_github_token")
 
+    def test_reporter_ensure_pull_request_creates_missing_pull_request(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            _detail, _orchestrator, project = create_project(workspace_root, repo_dir)
+            reporter = Reporter(project)
+
+            with mock.patch.dict(os.environ, {"GITHUB_TOKEN": "demo-token"}, clear=True), mock.patch(
+                "jakal_flow.reporting.GitHubClient.get_repository",
+                return_value=mock.Mock(default_branch="main"),
+            ), mock.patch(
+                "jakal_flow.reporting.GitHubClient.find_open_pull_request_for_branch",
+                return_value=None,
+            ) as mocked_find, mock.patch(
+                "jakal_flow.reporting.GitHubClient.create_pull_request",
+                return_value={"number": 12, "html_url": "https://github.com/example/failure-demo/pull/12"},
+            ) as mocked_create:
+                result = reporter.ensure_pull_request(
+                    head_branch="jakal-flow-lineage-ln2",
+                    base_branch="main",
+                    title="[ST2] Backend slice",
+                    body="demo",
+                )
+
+        self.assertTrue(result["created"])
+        self.assertEqual(result["pull_request"], 12)
+        mocked_find.assert_called_once_with("example", "failure-demo", "jakal-flow-lineage-ln2", base="main")
+        mocked_create.assert_called_once()
+
+    def test_reporter_ensure_pull_request_skips_when_head_matches_base(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            _detail, _orchestrator, project = create_project(workspace_root, repo_dir)
+            reporter = Reporter(project)
+
+            with mock.patch.dict(os.environ, {"GITHUB_TOKEN": "demo-token"}, clear=True), mock.patch(
+                "jakal_flow.reporting.GitHubClient.get_repository",
+                return_value=mock.Mock(default_branch="main"),
+            ):
+                result = reporter.ensure_pull_request(
+                    head_branch="main",
+                    title="Closeout",
+                )
+
+        self.assertFalse(result["created"])
+        self.assertEqual(result["reason"], "head_matches_base")
+
 
 if __name__ == "__main__":
     unittest.main()

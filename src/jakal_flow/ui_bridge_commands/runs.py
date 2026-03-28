@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..parallel_resources import build_parallel_resource_plan
-from ..utils import normalize_workflow_mode
+from ..utils import normalize_workflow_mode, read_json
 from .context import BridgeCommandContext, BridgeCommandHandler
 
 
@@ -24,16 +24,40 @@ def build_run_command_handlers(
         details = {
             "status": saved.closeout_status,
             "commit_hash": saved.closeout_commit_hash,
+            "notes": str(saved.closeout_notes or "").strip(),
         }
         word_report_path = ""
         report_path = getattr(project.paths, "closeout_report_docx_file", None)
         if report_path is not None and report_path.exists():
             word_report_path = str(report_path)
             details["word_report_path"] = word_report_path
+        latest_failure_status = read_json(project.paths.reports_dir / "latest_pr_failure_status.json", default={})
+        if isinstance(latest_failure_status, dict):
+            latest_failure_report = str(latest_failure_status.get("report_markdown_file", "")).strip()
+            latest_failure_json = str(latest_failure_status.get("report_json_file", "")).strip()
+            if latest_failure_report:
+                details["failure_report_markdown_file"] = latest_failure_report
+            if latest_failure_json:
+                details["failure_report_json_file"] = latest_failure_json
         message = f"Closeout finished with status {saved.closeout_status}."
         if saved.closeout_status == "completed" and word_report_path:
             message = f"{message} Word report: {word_report_path}"
+        elif saved.closeout_status == "failed" and details.get("failure_report_markdown_file"):
+            message = f"{message} Failure report: {details['failure_report_markdown_file']}"
         return message, details
+
+    def raise_closeout_failure(ctx: BridgeCommandContext, project_dir, exc: Exception) -> None:
+        latest_project = ctx.orchestrator.local_project(project_dir)
+        if latest_project is None:
+            raise RuntimeError(str(exc).strip() or "Closeout failed.") from exc
+        latest_saved = ctx.orchestrator.load_execution_plan_state(latest_project)
+        event_message, event_details = closeout_finished_event_payload(latest_project, latest_saved)
+        append_ui_event(latest_project, "closeout-finished", event_message, event_details)
+        note = str(latest_saved.closeout_notes or "").strip() or str(exc).strip() or "Closeout failed."
+        failure_report = str(event_details.get("failure_report_markdown_file", "")).strip()
+        if failure_report:
+            raise RuntimeError(f"{note} Failure report: {failure_report}") from exc
+        raise RuntimeError(note) from exc
 
     def request_stop(ctx: BridgeCommandContext) -> dict:
         project = resolve_project(ctx.orchestrator, ctx.payload)
@@ -83,12 +107,15 @@ def build_run_command_handlers(
         try:
             def run_closeout_pass(latest_project, closeout_message: str):
                 append_ui_event(latest_project, "closeout-started", closeout_message)
-                next_project, next_saved = ctx.orchestrator.run_execution_closeout(
-                    project_dir=project_dir,
-                    runtime=runtime,
-                    branch=branch,
-                    origin_url=origin_url,
-                )
+                try:
+                    next_project, next_saved = ctx.orchestrator.run_execution_closeout(
+                        project_dir=project_dir,
+                        runtime=runtime,
+                        branch=branch,
+                        origin_url=origin_url,
+                    )
+                except Exception as exc:
+                    raise_closeout_failure(ctx, project_dir, exc)
                 event_message, event_details = closeout_finished_event_payload(next_project, next_saved)
                 append_ui_event(
                     next_project,
@@ -347,12 +374,15 @@ def build_run_command_handlers(
         execution_stop_registry.clear(execution_scope_id(project))
         try:
             append_ui_event(project, "closeout-started", "Started project closeout.")
-            project, saved = ctx.orchestrator.run_execution_closeout(
-                project_dir=project_dir,
-                runtime=runtime,
-                branch=branch,
-                origin_url=origin_url,
-            )
+            try:
+                project, saved = ctx.orchestrator.run_execution_closeout(
+                    project_dir=project_dir,
+                    runtime=runtime,
+                    branch=branch,
+                    origin_url=origin_url,
+                )
+            except Exception as exc:
+                raise_closeout_failure(ctx, project_dir, exc)
             event_message, event_details = closeout_finished_event_payload(project, saved)
             append_ui_event(
                 project,

@@ -167,6 +167,7 @@ export const DEFAULT_DASHBOARD_VISIBILITY = Object.freeze({
   word_report_card: true,
 });
 export const PROGRAM_UI_KEYS = ["ui_theme", "developer_mode", "dashboard_visibility", "background_concurrency_limit"];
+export const GEMINI_DEFAULT_MODEL = "gemini-3-flash";
 
 const LEGACY_DASHBOARD_VISIBILITY_ALIASES = Object.freeze({
   rate_limit_window_5h: "rate_limits",
@@ -272,6 +273,13 @@ export function programSettingsFromRuntime(runtime) {
   settings.execution_mode = "parallel";
   settings.dashboard_visibility = normalizeDashboardVisibility(settings.dashboard_visibility);
   settings.background_concurrency_limit = Math.max(1, Number.parseInt(String(settings.background_concurrency_limit || 2), 10) || 2);
+  const fallbackModel = defaultModelForProvider(settings.model_provider, settings);
+  if (!String(settings.model || "").trim() && fallbackModel) {
+    settings.model = fallbackModel;
+  }
+  if (!String(settings.model_slug_input || "").trim() && fallbackModel) {
+    settings.model_slug_input = fallbackModel;
+  }
   return settings;
 }
 
@@ -307,6 +315,21 @@ export function normalizeMemoryBudgetGiB(value, fallback = 3) {
   return Math.max(0.1, Math.round(parsed * 10) / 10);
 }
 
+export function defaultModelForProvider(provider = "openai", runtime = {}) {
+  const normalizedProvider = String(provider || "").trim().toLowerCase();
+  const currentModel = String(runtime?.model || runtime?.model_slug_input || "").trim().toLowerCase();
+  if (normalizedProvider === "gemini") {
+    return currentModel.startsWith("gemini") ? currentModel : GEMINI_DEFAULT_MODEL;
+  }
+  if (normalizedProvider === "openai") {
+    return currentModel || "gpt-5.4";
+  }
+  if (normalizedProvider === "oss") {
+    return currentModel;
+  }
+  return currentModel;
+}
+
 export function applyProviderDefaults(runtime = {}, nextProvider = "openai", nextLocalProvider = null) {
   const provider = MODEL_PROVIDER_OPTIONS.includes(String(nextProvider || "").trim().toLowerCase())
     ? String(nextProvider || "").trim().toLowerCase()
@@ -317,11 +340,11 @@ export function applyProviderDefaults(runtime = {}, nextProvider = "openai", nex
   const currentModel = String(runtime?.model_slug_input || runtime?.model || "").trim().toLowerCase();
   const nextModel = supportsAuto
     ? (currentModel || "auto")
-    : provider === "gemini" && previousProvider !== "gemini" && !currentModel.startsWith("gemini")
-      ? ""
+    : provider === "gemini" && !currentModel.startsWith("gemini")
+      ? GEMINI_DEFAULT_MODEL
       : currentModel === "auto"
         ? ""
-        : currentModel;
+        : currentModel || defaultModelForProvider(provider, runtime);
   return {
     ...(cloneValue(runtime) || {}),
     model_provider: provider,
@@ -355,7 +378,7 @@ export function blankProjectForm(defaultRuntime) {
     ...DEFAULT_PROGRAM_RUNTIME,
     ...runtimeSource,
   };
-  const defaultModel = String(runtimeSource.model ?? runtimeDefaults.model ?? "gpt-5.4").trim().toLowerCase() || "gpt-5.4";
+  const defaultModel = defaultModelForProvider(runtimeDefaults.model_provider, runtimeDefaults) || "gpt-5.4";
   const defaultModelSlugInput = String(runtimeSource.model_slug_input ?? defaultModel).trim().toLowerCase() || defaultModel;
   const defaultModelPreset =
     runtimeSource.model_preset !== undefined
@@ -573,6 +596,75 @@ function readyExecutionNodeIds(plan = {}) {
 function runningExecutionSteps(plan = {}) {
   const steps = Array.isArray(plan?.steps) ? plan.steps : [];
   return steps.filter((step) => step?.status === "running");
+}
+
+export function planDependencyValidationMessage(plan = {}) {
+  const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+  const stepById = new Map();
+  steps.forEach((step) => {
+    const stepId = String(step?.step_id || "").trim();
+    if (stepId) {
+      stepById.set(stepId, step);
+    }
+  });
+
+  for (const step of steps) {
+    const stepId = String(step?.step_id || "").trim();
+    if (!stepId) {
+      continue;
+    }
+    for (const dependency of step?.depends_on || []) {
+      const dependencyId = String(dependency || "").trim();
+      if (!dependencyId) {
+        continue;
+      }
+      if (!stepById.has(dependencyId)) {
+        return `Unknown dependency reference: ${dependencyId}`;
+      }
+      if (dependencyId === stepId) {
+        return `${stepId} cannot depend on itself.`;
+      }
+    }
+  }
+
+  const visitState = new Map();
+  const path = [];
+
+  function visit(stepId) {
+    const state = visitState.get(stepId) || 0;
+    if (state === 1) {
+      const cycleStart = path.indexOf(stepId);
+      const cycle = cycleStart >= 0 ? path.slice(cycleStart).concat(stepId) : [stepId, stepId];
+      return `Parallel execution plan contains a dependency cycle: ${cycle.join(" -> ")}.`;
+    }
+    if (state === 2) {
+      return "";
+    }
+    visitState.set(stepId, 1);
+    path.push(stepId);
+    const step = stepById.get(stepId);
+    for (const dependency of step?.depends_on || []) {
+      const dependencyId = String(dependency || "").trim();
+      if (!dependencyId || !stepById.has(dependencyId)) {
+        continue;
+      }
+      const message = visit(dependencyId);
+      if (message) {
+        return message;
+      }
+    }
+    path.pop();
+    visitState.set(stepId, 2);
+    return "";
+  }
+
+  for (const stepId of stepById.keys()) {
+    const message = visit(stepId);
+    if (message) {
+      return message;
+    }
+  }
+  return "";
 }
 
 function summarizeStepIds(steps = [], maxVisible = 4) {
@@ -1115,7 +1207,7 @@ export function filterModelCatalogByProvider(modelCatalog = [], runtime = {}) {
 export function defaultModelForRuntime(modelCatalog = [], runtime = {}) {
   const provider = normalizedModelProvider(runtime);
   if (!providerSupportsCatalog(provider)) {
-    return String(runtime?.model_slug_input || runtime?.model || "").trim().toLowerCase();
+    return defaultModelForProvider(provider, runtime);
   }
   const scopedCatalog = filterModelCatalogByProvider(modelCatalog, runtime);
   const visible = scopedCatalog.filter((item) => !item?.hidden);
