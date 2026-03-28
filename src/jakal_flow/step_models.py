@@ -13,6 +13,7 @@ from .model_constants import VALID_MODEL_PROVIDERS
 from .model_providers import discover_local_model_catalog, provider_preset
 from .models import ExecutionStep, RuntimeOptions
 from .platform_defaults import default_codex_path
+from .utils import get_env_or_dotenv
 
 CLAUDE_DEFAULT_MODEL = "claude-sonnet-4-6"
 GEMINI_DEFAULT_MODEL = "gemini-3-flash-preview"
@@ -188,6 +189,24 @@ def gemini_available_for_auto_selection() -> bool:
     return _command_available(default_codex_path("gemini")) and (
         _gemini_auth_env_configured() or _gemini_settings_file_configured()
     )
+
+
+def provider_execution_preflight_error(
+    provider: str,
+    *,
+    codex_path: str = "",
+    repo_dir: Path | None = None,
+    provider_api_key_env: str = "",
+) -> str:
+    normalized_provider = normalize_step_model_provider(provider)
+    if normalized_provider != "gemini":
+        return ""
+    resolved_codex_path = str(codex_path or default_codex_path("gemini")).strip() or default_codex_path("gemini")
+    if not _command_available(resolved_codex_path):
+        return f"Gemini CLI is not installed or not reachable: {resolved_codex_path}"
+    if _gemini_runtime_auth_configured(repo_dir=repo_dir, provider_api_key_env=provider_api_key_env):
+        return ""
+    return _gemini_auth_error_message()
 
 
 def _general_provider_choice(runtime: RuntimeOptions) -> tuple[str, str]:
@@ -480,6 +499,31 @@ def _claude_cli_authenticated() -> bool:
 
 def _gemini_auth_env_configured() -> bool:
     return any(str(os.environ.get(name, "")).strip() for name in _GEMINI_AUTH_ENV_VARS)
+
+
+def _gemini_runtime_auth_configured(
+    *,
+    repo_dir: Path | None = None,
+    provider_api_key_env: str = "",
+) -> bool:
+    if _gemini_auth_env_configured() or _gemini_settings_file_configured():
+        return True
+    if repo_dir is None:
+        return False
+    dotenv_path = Path(repo_dir) / ".env"
+    dotenv_keys = [str(provider_api_key_env or "").strip() or "GEMINI_API_KEY", "GEMINI_API_KEY"]
+    for key in dotenv_keys:
+        if key and get_env_or_dotenv(key, dotenv_path).strip():
+            return True
+    return False
+
+
+def _gemini_auth_error_message(settings_path: Path | None = None) -> str:
+    candidate = settings_path or (Path.home() / ".gemini" / "settings.json")
+    return (
+        f"Please set an Auth method in your {candidate} or specify "
+        "GEMINI_API_KEY, GOOGLE_GENAI_USE_VERTEXAI, or GOOGLE_GENAI_USE_GCA."
+    )
 
 
 def _gemini_settings_file_configured(settings_path: Path | None = None) -> bool:

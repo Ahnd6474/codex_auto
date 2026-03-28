@@ -10,6 +10,8 @@ from .models import LoopCounters, LoopState, ProjectContext, ProjectPaths, RepoM
 from .parallel_resources import normalize_parallel_worker_mode
 from .utils import ensure_dir, now_utc_iso, read_json, remove_tree, stable_repo_identity, write_json
 
+LOCAL_PROJECT_LOG_DIRNAME = "jakal-flow-logs"
+
 
 class WorkspaceManager:
     def __init__(self, workspace_root: Path) -> None:
@@ -56,6 +58,14 @@ class WorkspaceManager:
 
     def build_paths(self, slug: str) -> ProjectPaths:
         return self.build_paths_from_root(self.projects_root / slug)
+
+    def _apply_local_repo_log_paths(self, paths: ProjectPaths, repo_dir: Path) -> ProjectPaths:
+        repo_logs_dir = repo_dir.resolve() / LOCAL_PROJECT_LOG_DIRNAME
+        paths.logs_dir = repo_logs_dir
+        paths.pass_log_file = repo_logs_dir / "passes.jsonl"
+        paths.block_log_file = repo_logs_dir / "blocks.jsonl"
+        paths.ui_event_log_file = repo_logs_dir / "ui_events.jsonl"
+        return paths
 
     def build_paths_from_root(self, project_root: Path) -> ProjectPaths:
         resolved_root = project_root.resolve()
@@ -171,6 +181,7 @@ class WorkspaceManager:
         repo_id, slug = stable_repo_identity(str(resolved_dir), branch)
         paths = self.build_paths(slug)
         paths.repo_dir = resolved_dir
+        paths = self._apply_local_repo_log_paths(paths, resolved_dir)
         for directory in [
             paths.project_root,
             paths.docs_dir,
@@ -193,6 +204,9 @@ class WorkspaceManager:
             context.metadata.display_name = display_name.strip() or context.metadata.display_name or resolved_dir.name
             context.metadata.origin_url = origin_url or context.metadata.origin_url
             context.metadata.repo_url = origin_url or str(resolved_dir)
+            context.paths.repo_dir = resolved_dir
+            context.paths = self._apply_local_repo_log_paths(context.paths, resolved_dir)
+            ensure_dir(context.paths.logs_dir)
             self.save_project(context)
             return context
 
@@ -237,7 +251,10 @@ class WorkspaceManager:
         resolved_root = project_root.resolve()
         context.metadata.project_root = resolved_root
         context.paths = self.build_paths_from_root(resolved_root)
-        if context.metadata.repo_kind != "local":
+        if context.metadata.repo_kind == "local":
+            context.paths.repo_dir = context.metadata.repo_path
+            context.paths = self._apply_local_repo_log_paths(context.paths, context.metadata.repo_path)
+        else:
             context.metadata.repo_path = context.paths.repo_dir
         return context
 
@@ -368,6 +385,7 @@ class WorkspaceManager:
         )
         if metadata.repo_kind == "local":
             paths.repo_dir = metadata.repo_path
+            paths = self._apply_local_repo_log_paths(paths, metadata.repo_path)
         else:
             metadata.repo_path = paths.repo_dir
         if "parallel_worker_mode" not in runtime_data and "parallel_workers" in runtime_data:

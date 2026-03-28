@@ -2133,6 +2133,105 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(step.status, "completed")
         self.assertEqual(context.metadata.current_status, "plan_completed")
 
+    def test_run_saved_execution_step_fails_fast_when_gemini_auth_is_missing(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_step_gemini_preflight_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", test_cmd="python -m pytest")
+
+        try:
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.step_models._command_available",
+                return_value=True,
+            ), mock.patch(
+                "jakal_flow.step_models._gemini_auth_env_configured",
+                return_value=False,
+            ), mock.patch(
+                "jakal_flow.step_models._gemini_settings_file_configured",
+                return_value=False,
+            ), mock.patch.object(
+                orchestrator,
+                "_run_single_block",
+                side_effect=AssertionError("step execution should stop before launching Codex"),
+            ):
+                orchestrator.update_execution_plan(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    plan_state=ExecutionPlanState(
+                        plan_title="Gemini Preflight Demo",
+                        default_test_command="python -m pytest",
+                        steps=[
+                            ExecutionStep(
+                                step_id="custom-1",
+                                title="Explicit Gemini task",
+                                model_provider="gemini",
+                                model=GEMINI_DEFAULT_MODEL,
+                                test_command="python -m pytest",
+                            )
+                        ],
+                    ),
+                )
+                context, _plan_state, step = orchestrator.run_saved_execution_step(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    step_id="ST1",
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(step.status, "failed")
+        self.assertIn("Please set an Auth method", step.notes)
+        self.assertEqual(context.metadata.current_status, "failed")
+
+    def test_parallel_step_worker_fails_fast_when_gemini_auth_is_missing(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_worker_gemini_preflight_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", test_cmd="python -m pytest", execution_mode="parallel")
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(project_dir=repo_dir, branch="main", runtime=runtime)
+            result = None
+            with mock.patch(
+                "jakal_flow.step_models._command_available",
+                return_value=True,
+            ), mock.patch(
+                "jakal_flow.step_models._gemini_auth_env_configured",
+                return_value=False,
+            ), mock.patch(
+                "jakal_flow.step_models._gemini_settings_file_configured",
+                return_value=False,
+            ), mock.patch.object(
+                orchestrator,
+                "_build_parallel_worker_context",
+                side_effect=AssertionError("worker context should not be created before auth preflight passes"),
+            ):
+                result = orchestrator._run_parallel_step_worker(
+                    context,
+                    runtime,
+                    ExecutionStep(
+                        step_id="ST2",
+                        title="Explicit Gemini slice",
+                        model_provider="gemini",
+                        model=GEMINI_DEFAULT_MODEL,
+                        test_command="python -m pytest",
+                    ),
+                    "safe-revision",
+                    "batch-token",
+                    1,
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("Please set an Auth method", result["notes"])
+
     def test_run_saved_execution_step_pauses_when_immediate_stop_is_requested(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_step_immediate_stop_test"
         shutil.rmtree(temp_root, ignore_errors=True)
@@ -2700,7 +2799,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("parallel batch traceback", debug_prompt_text)
         self.assertIn("Do not modify tests unless", debug_prompt_text)
 
-    def test_parallel_batch_keeps_successful_steps_when_one_worker_fails(self) -> None:
+    def test_parallel_batch_recovers_failed_worker_serially(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_batch_partial_success_test"
         shutil.rmtree(temp_root, ignore_errors=True)
         workspace_root = temp_root / "workspace"
@@ -2788,6 +2887,22 @@ class ExecutionPlanHelperTests(unittest.TestCase):
                 },
             ]
 
+            def fake_serial_recovery(*args, **kwargs):
+                recovery_context = kwargs["context"]
+                self.assertFalse(kwargs["allow_push"])
+                self.assertFalse(kwargs["final_failure_reports"])
+                current = orchestrator.load_execution_plan_state(recovery_context)
+                target = next(step for step in current.steps if step.step_id == "ST2")
+                target.status = "completed"
+                target.completed_at = "2026-03-29T00:00:00+00:00"
+                target.commit_hash = "serial-recovery-commit"
+                target.notes = "worker 2 recovered serially"
+                recovery_context.metadata.current_safe_revision = "serial-recovery-commit"
+                recovery_context.loop_state.current_safe_revision = "serial-recovery-commit"
+                recovery_context.loop_state.last_commit_hash = "serial-recovery-commit"
+                saved = orchestrator.save_execution_plan_state(recovery_context, current)
+                return recovery_context, saved, next(step for step in saved.steps if step.step_id == "ST2")
+
             with mock.patch.object(orchestrator, "_run_parallel_step_worker", side_effect=worker_results), mock.patch.object(
                 orchestrator,
                 "_run_test_command",
@@ -2806,6 +2921,10 @@ class ExecutionPlanHelperTests(unittest.TestCase):
                 return_value=(False, "already_up_to_date"),
             ) as mocked_push, mock.patch.object(
                 orchestrator,
+                "_run_saved_execution_step_with_context",
+                side_effect=fake_serial_recovery,
+            ) as mocked_serial_recovery, mock.patch.object(
+                orchestrator,
                 "_report_failure",
             ) as mocked_report, mock.patch.object(
                 orchestrator,
@@ -2820,24 +2939,148 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_root, ignore_errors=True)
 
-        self.assertEqual([step.status for step in steps], ["completed", "failed"])
-        self.assertEqual([step.status for step in plan_state.steps], ["completed", "failed"])
+        self.assertEqual([step.status for step in steps], ["completed", "completed"])
+        self.assertEqual([step.status for step in plan_state.steps], ["completed", "completed"])
+        self.assertEqual(steps[0].commit_hash, "merge-commit-1")
+        self.assertEqual(steps[1].commit_hash, "serial-recovery-commit")
+        self.assertEqual(context.metadata.current_safe_revision, "serial-recovery-commit")
+        self.assertEqual(context.metadata.current_status, "plan_completed")
+        mocked_test.assert_called_once()
+        self.assertEqual(mocked_push.call_count, 2)
+        self.assertEqual(mocked_pick.call_count, 1)
+        self.assertEqual(mocked_pick.call_args.args[1], "worker-1-commit")
+        mocked_serial_recovery.assert_called_once()
+        mocked_report.assert_not_called()
+        self.assertEqual(steps[0].notes, "worker 1 ok")
+        self.assertEqual(steps[1].notes, "worker 2 recovered serially")
+
+    def test_parallel_batch_defers_step_when_serial_recovery_still_fails(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_batch_deferred_recovery_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model="gpt-5.4",
+            effort="medium",
+            test_cmd="python -m pytest",
+            execution_mode="parallel",
+            parallel_workers=2,
+        )
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            context.metadata.current_safe_revision = "safe-revision"
+            context.loop_state.current_safe_revision = "safe-revision"
+            orchestrator.workspace.save_project(context)
+            orchestrator.save_execution_plan_state(
+                context,
+                ExecutionPlanState(
+                    plan_title="Parallel Deferred Recovery Demo",
+                    execution_mode="parallel",
+                    default_test_command="python -m pytest",
+                    steps=[
+                        ExecutionStep(step_id="ST1", title="Desktop slice", test_command="python -m pytest", owned_paths=["desktop/src"]),
+                        ExecutionStep(step_id="ST2", title="Backend slice", test_command="python -m pytest", owned_paths=["src/jakal_flow"]),
+                    ],
+                ),
+            )
+
+            passing_stdout = workspace_root / "parallel-batch-pass.stdout.log"
+            passing_stderr = workspace_root / "parallel-batch-pass.stderr.log"
+            passing_stdout.parent.mkdir(parents=True, exist_ok=True)
+            passing_stdout.write_text("batch green\n", encoding="utf-8")
+            passing_stderr.write_text("", encoding="utf-8")
+            passing_test = TestRunResult(
+                command="python -m pytest",
+                returncode=0,
+                stdout_file=passing_stdout,
+                stderr_file=passing_stderr,
+                summary="python -m pytest exited with 0",
+            )
+            worker_results = [
+                {
+                    "step_id": "ST1",
+                    "status": "completed",
+                    "notes": "worker 1 ok",
+                    "commit_hash": "worker-1-commit",
+                    "changed_files": ["desktop/src/app.jsx"],
+                    "pass_log": {"pass_type": "block-search-pass"},
+                    "block_log": {"status": "completed"},
+                    "test_summary": "worker 1 ok",
+                },
+                {
+                    "step_id": "ST2",
+                    "status": "failed",
+                    "notes": "worker 2 failed badly",
+                    "commit_hash": None,
+                    "changed_files": ["src/jakal_flow/orchestrator.py"],
+                    "pass_log": {"pass_type": "block-search-pass"},
+                    "block_log": {"status": "failed"},
+                    "test_summary": "",
+                },
+            ]
+
+            def fake_failed_serial_recovery(*args, **kwargs):
+                recovery_context = kwargs["context"]
+                current = orchestrator.load_execution_plan_state(recovery_context)
+                target = next(step for step in current.steps if step.step_id == "ST2")
+                target.status = "failed"
+                target.notes = "serial recovery still failed"
+                saved = orchestrator.save_execution_plan_state(recovery_context, current)
+                return recovery_context, saved, next(step for step in saved.steps if step.step_id == "ST2")
+
+            with mock.patch.object(orchestrator, "_run_parallel_step_worker", side_effect=worker_results), mock.patch.object(
+                orchestrator,
+                "_run_test_command",
+                return_value=passing_test,
+            ), mock.patch.object(
+                orchestrator.git,
+                "try_cherry_pick",
+                return_value=CommandResult(command=["git", "cherry-pick"], returncode=0, stdout="", stderr=""),
+            ), mock.patch.object(
+                orchestrator.git,
+                "current_revision",
+                return_value="merge-commit-1",
+            ), mock.patch.object(
+                orchestrator,
+                "_push_if_ready",
+                return_value=(False, "already_up_to_date"),
+            ) as mocked_push, mock.patch.object(
+                orchestrator,
+                "_run_saved_execution_step_with_context",
+                side_effect=fake_failed_serial_recovery,
+            ) as mocked_serial_recovery, mock.patch.object(
+                orchestrator,
+                "_report_failure",
+            ) as mocked_report, mock.patch.object(
+                orchestrator,
+                "setup_local_project",
+                return_value=context,
+            ):
+                context, plan_state, steps = orchestrator.run_parallel_execution_batch(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    step_ids=["ST1", "ST2"],
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual([step.status for step in steps], ["completed", "pending"])
+        self.assertEqual([step.status for step in plan_state.steps], ["completed", "pending"])
         self.assertEqual(steps[0].commit_hash, "merge-commit-1")
         self.assertIsNone(steps[1].commit_hash)
         self.assertEqual(context.metadata.current_safe_revision, "merge-commit-1")
         self.assertEqual(context.metadata.current_status, "plan_ready")
-        mocked_test.assert_called_once()
-        mocked_push.assert_called_once()
-        self.assertEqual(mocked_pick.call_count, 1)
-        self.assertEqual(mocked_pick.call_args.args[1], "worker-1-commit")
-        mocked_report.assert_called_once()
-        self.assertIn("Completed and kept: ST1", mocked_report.call_args.kwargs["summary"])
-        self.assertEqual(mocked_report.call_args.kwargs["extra"]["completed_steps"], ["ST1"])
-        self.assertEqual(
-            [item["step_id"] for item in mocked_report.call_args.kwargs["extra"]["failed_steps"]],
-            ["ST2"],
-        )
-        self.assertIn("worker 2 failed badly", steps[1].notes)
+        self.assertEqual(mocked_push.call_count, 1)
+        mocked_serial_recovery.assert_called_once()
+        mocked_report.assert_not_called()
+        self.assertIn("Automatic recovery deferred", steps[1].notes)
 
     def test_parallel_batch_persists_worker_sync_before_last_worker_finishes(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_batch_sync_test"

@@ -501,6 +501,8 @@ Common project artifacts can include:
 - `metadata.json`
 - `project_config.json`
 
+For local projects, runtime log files are also written directly under `<repo>/jakal-flow-logs/`.
+
 Workspace-level sidecar files can additionally include:
 
 - `registry.json`
