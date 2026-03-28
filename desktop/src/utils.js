@@ -516,7 +516,7 @@ export function computePlanStats(plan = {}) {
   };
 }
 
-const RUN_STATE_STALE_AFTER_MS = 60 * 60 * 1000;
+const RUN_STATE_STALE_AFTER_MS = 30 * 1000;
 
 function parseTimestampMs(value) {
   if (!value) {
@@ -543,19 +543,44 @@ function jobIsSupersededByProject(job = null, project = null) {
   return false;
 }
 
+const ACTIVE_ACTIVITY_EVENT_TYPES = new Set([
+  "batch-started",
+  "closeout-started",
+  "plan-finalizing",
+  "plan-started",
+  "planner-agent-started",
+  "run-started",
+  "step-started",
+]);
+
+function activeActivityTimestampMs(line) {
+  const text = String(line || "").trim();
+  if (!text.includes("|")) {
+    return null;
+  }
+  const parts = text.split("|").map((item) => item.trim());
+  if (parts.length < 2) {
+    return null;
+  }
+  const timestampMs = parseTimestampMs(parts[0]);
+  if (timestampMs === null) {
+    return null;
+  }
+  const eventType = String(parts[1] || "").split(" ")[0].trim().toLowerCase();
+  return ACTIVE_ACTIVITY_EVENT_TYPES.has(eventType) ? timestampMs : null;
+}
+
 function latestRunningSignalMs({
-  project = null,
   plan = null,
   activity = [],
 }) {
   const candidates = [
-    parseTimestampMs(project?.last_run_at),
     parseTimestampMs(plan?.closeout_started_at),
     ...((Array.isArray(plan?.steps) ? plan.steps : [])
-      .filter((step) => step?.status === "running")
+      .filter((step) => ["running", "integrating"].includes(String(step?.status || "").trim().toLowerCase()))
       .map((step) => parseTimestampMs(step?.started_at))),
     ...((Array.isArray(activity) ? activity : [])
-      .map((line) => parseTimestampMs(String(line || "").split("|")[0]))),
+      .map((line) => activeActivityTimestampMs(line))),
   ].filter((value) => Number.isFinite(value));
   if (!candidates.length) {
     return null;
@@ -564,7 +589,6 @@ function latestRunningSignalMs({
 }
 
 function shouldPreserveRecentRunningState({
-  project = null,
   plan = null,
   activity = [],
   pendingCheckpoint = false,
@@ -574,7 +598,7 @@ function shouldPreserveRecentRunningState({
   if (pendingCheckpoint) {
     return true;
   }
-  const latestSignal = latestRunningSignalMs({ project, plan, activity });
+  const latestSignal = latestRunningSignalMs({ plan, activity });
   if (latestSignal === null) {
     return false;
   }
@@ -958,9 +982,6 @@ export function sanitizeProjectListForJobState(projects = [], activeJob = null, 
     }
     if (
       shouldPreserveRecentRunningState({
-        project: {
-          last_run_at: project?.last_run_at,
-        },
         plan: {
           closeout_started_at: null,
         },
@@ -995,7 +1016,6 @@ export function sanitizeProjectDetailForJobState(detail, activeJob = null, optio
   const nowMs = Number.isFinite(options?.nowMs) ? options.nowMs : Date.now();
   if (
     shouldPreserveRecentRunningState({
-      project: detail?.project,
       plan: detail?.plan,
       activity: detail?.activity,
       pendingCheckpoint:

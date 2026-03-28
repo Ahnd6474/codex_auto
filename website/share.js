@@ -42,7 +42,7 @@ const builtInEnglishShareTranslations = {
   streaming_live_updates: "Streaming live updates",
   live_connection_lost: "Live connection lost.",
   missing_link: "Missing link",
-  missing_share_link_data: "This URL does not include the required session and token.",
+  missing_share_link_data: "This URL does not include the required access data.",
   missing_share_link_title: "Missing share link data",
   refreshing: "Refreshing",
   polling_every_5s: "Polling every 5s",
@@ -59,7 +59,7 @@ const builtInEnglishShareTranslations = {
   share_link_revoked_title: "Share link revoked",
   share_link_revoked: "This share link was revoked, usually because a newer share link replaced it.",
   share_link_invalid_title: "Share link looks incomplete",
-  share_link_invalid: "The token in this link is invalid. Recopy the full URL and make sure no extra characters were added.",
+  share_link_invalid: "The access data in this link is invalid. Recopy the full URL and make sure no extra characters were added.",
   unable_keep_live_connection: "Unable to keep live connection",
   live_stream_unavailable: "Live stream unavailable",
   falling_back_to_polling: "{message} Falling back to polling.",
@@ -246,13 +246,21 @@ function projectControlDescriptor(remote = {}) {
   };
 }
 
-function flowImageUrl(session, token, projectPayload) {
+function applyShareCredentials(url, credentials) {
+  if (credentials.access) {
+    url.searchParams.set("access", credentials.access);
+    return;
+  }
+  url.searchParams.set("session", credentials.session || "");
+  url.searchParams.set("token", credentials.token || "");
+}
+
+function flowImageUrl(credentials, projectPayload) {
   const url = shareEndpoint("api/flow.svg");
   const project = projectPayload.project || {};
   const flow = projectPayload.flow || {};
   const revision = `${projectPayload.last_updated_at || ""}:${projectPayload.current_phase || ""}:${flow.step_count || 0}`;
-  url.searchParams.set("session", session);
-  url.searchParams.set("token", token);
+  applyShareCredentials(url, credentials);
   url.searchParams.set("repo_id", project.repo_id || "");
   url.searchParams.set("rev", revision || "0");
   return url.toString();
@@ -274,7 +282,7 @@ function renderWorkspaceSummary(payload) {
   setText("pause-queued-count", String(workspace.pause_requested_count || 0));
 }
 
-function projectCardHtml(session, token, projectPayload, controlBusyByRepoId) {
+function projectCardHtml(credentials, projectPayload, controlBusyByRepoId) {
   const project = projectPayload.project || {};
   const task = projectPayload.current_task || {};
   const step = task.step || {};
@@ -368,7 +376,7 @@ function projectCardHtml(session, token, projectPayload, controlBusyByRepoId) {
             <img
               class="project-flow__image"
               alt="${escapeHtml(t("flow_alt"))}"
-              src="${flowAvailable ? escapeHtml(flowImageUrl(session, token, projectPayload)) : ""}"
+              src="${flowAvailable ? escapeHtml(flowImageUrl(credentials, projectPayload)) : ""}"
               ${flowAvailable ? "" : "hidden"}
             >
             <p class="muted project-flow__empty"${flowAvailable ? " hidden" : ""}>${escapeHtml(t("flow_empty"))}</p>
@@ -379,7 +387,7 @@ function projectCardHtml(session, token, projectPayload, controlBusyByRepoId) {
   `;
 }
 
-function renderProjects(session, token, payload, controlBusyByRepoId) {
+function renderProjects(credentials, payload, controlBusyByRepoId) {
   const container = document.getElementById("projects-list");
   const emptyNode = document.getElementById("projects-empty");
   if (!container || !emptyNode) {
@@ -394,7 +402,7 @@ function renderProjects(session, token, payload, controlBusyByRepoId) {
     return;
   }
   emptyNode.hidden = true;
-  container.innerHTML = projects.map((item) => projectCardHtml(session, token, item, controlBusyByRepoId)).join("");
+  container.innerHTML = projects.map((item) => projectCardHtml(credentials, item, controlBusyByRepoId)).join("");
   container.querySelectorAll(".project-flow__image").forEach((image) => {
     image.addEventListener(
       "error",
@@ -412,10 +420,9 @@ function renderProjects(session, token, payload, controlBusyByRepoId) {
   });
 }
 
-async function fetchStatus(session, token) {
+async function fetchStatus(credentials) {
   const url = shareEndpoint("api/status");
-  url.searchParams.set("session", session);
-  url.searchParams.set("token", token);
+  applyShareCredentials(url, credentials);
   const response = await fetch(url, { cache: "no-store" });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -426,10 +433,9 @@ async function fetchStatus(session, token) {
   return data;
 }
 
-async function sendControlAction(session, token, repoId, action) {
+async function sendControlAction(credentials, repoId, action) {
   const url = shareEndpoint("api/control");
-  url.searchParams.set("session", session);
-  url.searchParams.set("token", token);
+  applyShareCredentials(url, credentials);
   const response = await fetch(url, {
     method: "POST",
     cache: "no-store",
@@ -473,7 +479,7 @@ function shareErrorDescriptor(error) {
       message: t("share_link_revoked"),
     };
   }
-  if (normalized.includes("invalid share token")) {
+  if (normalized.includes("invalid share token") || normalized.includes("invalid share access token")) {
     return {
       pill: t("invalid_link"),
       title: t("share_link_invalid_title"),
@@ -493,13 +499,12 @@ function showShareError(error) {
   showError(descriptor.title, descriptor.message);
 }
 
-function connectEventStream(session, token, onStatus, onFailure) {
+function connectEventStream(credentials, onStatus, onFailure) {
   if (typeof window.EventSource !== "function") {
     return null;
   }
   const url = shareEndpoint("api/events");
-  url.searchParams.set("session", session);
-  url.searchParams.set("token", token);
+  applyShareCredentials(url, credentials);
   const source = new window.EventSource(url);
 
   source.addEventListener("open", () => {
@@ -560,9 +565,11 @@ function applyStaticTranslations() {
 
 async function bootstrap() {
   applyStaticTranslations();
+  const access = queryValue("access");
   const session = queryValue("session");
   const token = queryValue("token");
-  if (!session || !token) {
+  const credentials = access ? { access } : { session, token };
+  if (!access && (!session || !token)) {
     setPollState(t("missing_link"), "danger");
     showError(t("missing_share_link_title"), t("missing_share_link_data"));
     return;
@@ -576,7 +583,7 @@ async function bootstrap() {
   const applyPayload = (payload) => {
     latestPayload = payload;
     renderWorkspaceSummary(payload);
-    renderProjects(session, token, payload, controlBusyByRepoId);
+    renderProjects(credentials, payload, controlBusyByRepoId);
   };
 
   const reconcileStatus = async () => {
@@ -585,7 +592,7 @@ async function bootstrap() {
     }
     inFlight = true;
     try {
-      const payload = await fetchStatus(session, token);
+      const payload = await fetchStatus(credentials);
       applyPayload(payload);
       hideError();
     } finally {
@@ -601,7 +608,7 @@ async function bootstrap() {
     setPollState(t("refreshing"), "info");
     setRefreshNote(t("polling_every_5s"));
     try {
-      const payload = await fetchStatus(session, token);
+      const payload = await fetchStatus(credentials);
       applyPayload(payload);
       hideError();
       setPollState(t("polling"), "success");
@@ -633,10 +640,10 @@ async function bootstrap() {
       return;
     }
     controlBusyByRepoId[repoId] = action;
-    renderProjects(session, token, latestPayload || { projects: [] }, controlBusyByRepoId);
+    renderProjects(credentials, latestPayload || { projects: [] }, controlBusyByRepoId);
     setPollState(action === "pause" ? t("control_action_pausing") : t("control_action_resuming"), "info");
     try {
-      const payload = await sendControlAction(session, token, repoId, action);
+      const payload = await sendControlAction(credentials, repoId, action);
       applyPayload(payload);
       hideError();
       if (usingPolling) {
@@ -646,7 +653,7 @@ async function bootstrap() {
       showError(t("error_unable_load"), String(error.message || error));
     } finally {
       delete controlBusyByRepoId[repoId];
-      renderProjects(session, token, latestPayload || { projects: [] }, controlBusyByRepoId);
+      renderProjects(credentials, latestPayload || { projects: [] }, controlBusyByRepoId);
     }
   };
 
@@ -672,8 +679,7 @@ async function bootstrap() {
   }
 
   const stream = connectEventStream(
-    session,
-    token,
+    credentials,
     (payload) => {
       applyPayload(payload);
       hideError();

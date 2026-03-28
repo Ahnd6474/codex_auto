@@ -705,7 +705,7 @@ test("job-aware detail sanitizer ignores a stale running bridge job when saved p
   assert.equal(sanitizedDetail.plan.closeout_status, "completed");
 });
 
-test("job-aware sanitizers preserve recent running state while bridge tracking catches up", () => {
+test("job-aware detail sanitizer preserves a very recent active run signal while the job snapshot catches up", () => {
   const nowMs = Date.parse("2026-03-26T10:00:00Z");
   const runningDetail = {
     project: {
@@ -739,11 +739,11 @@ test("job-aware sanitizers preserve recent running state while bridge tracking c
   ];
 
   const preservedDetail = sanitizeProjectDetailForJobState(runningDetail, null, { nowMs });
-  const preservedList = sanitizeProjectListForJobState(runningList, null, { nowMs });
+  const sanitizedList = sanitizeProjectListForJobState(runningList, null, { nowMs });
 
   assert.equal(preservedDetail.project.current_status, "running:block:2");
   assert.equal(preservedDetail.plan.steps[1].status, "running");
-  assert.equal(preservedList[0].status, "running:block:2");
+  assert.equal(sanitizedList[0].status, "plan_ready");
 });
 
 test("job-aware sanitizers overlay queued and running status from multiple active jobs", () => {

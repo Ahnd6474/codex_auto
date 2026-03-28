@@ -183,6 +183,7 @@ class ShareServerConfig:
     bind_host: str = DEFAULT_SHARE_HOST
     preferred_port: int = DEFAULT_SHARE_PORT
     public_base_url: str = DEFAULT_SHARE_PUBLIC_BASE_URL
+    access_token: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return _normalize(asdict(self))
@@ -198,6 +199,7 @@ class ShareServerConfig:
             bind_host=normalize_share_bind_host(str(data.get("bind_host", DEFAULT_SHARE_HOST)).strip()),
             preferred_port=preferred_port,
             public_base_url=normalize_public_base_url(str(data.get("public_base_url", DEFAULT_SHARE_PUBLIC_BASE_URL)).strip()),
+            access_token=str(data.get("access_token", "")).strip(),
         )
 
 
@@ -269,6 +271,16 @@ def save_share_server_config(workspace_root: Path, config: ShareServerConfig) ->
     normalized = ShareServerConfig.from_dict(config.to_dict())
     write_json(share_server_config_file(workspace_root), normalized.to_dict())
     return normalized
+
+
+def ensure_share_access_token(workspace_root: Path, config: ShareServerConfig | None = None) -> str:
+    current = config or load_share_server_config(workspace_root)
+    access_token = str(getattr(current, "access_token", "") or "").strip()
+    if access_token:
+        return access_token
+    current.access_token = secrets.token_urlsafe(24)
+    save_share_server_config(workspace_root, current)
+    return current.access_token
 
 
 def share_server_status_payload(workspace_root: Path) -> dict[str, Any]:
@@ -463,6 +475,26 @@ def create_workspace_share_session(
     return session
 
 
+def _session_sort_key(session: ShareSession) -> tuple[datetime, str]:
+    created_at = parse_iso_datetime(session.created_at) or datetime.min.replace(tzinfo=UTC)
+    return created_at, session.session_id
+
+
+def resolve_workspace_active_share_session(workspace_root: Path) -> tuple[ProjectContext | None, ShareSession] | None:
+    active_sessions = [session for session in load_workspace_share_sessions(workspace_root) if session.is_active()]
+    if active_sessions:
+        return None, max(active_sessions, key=_session_sort_key)
+
+    legacy_active_sessions = [
+        (project, session)
+        for project, session in iter_workspace_share_sessions(workspace_root)
+        if session.is_active()
+    ]
+    if not legacy_active_sessions:
+        return None
+    return max(legacy_active_sessions, key=lambda item: _session_sort_key(item[1]))
+
+
 def revoke_workspace_share_session(workspace_root: Path, session_id: str) -> ShareSession:
     target = session_id.strip()
     if not target:
@@ -541,6 +573,23 @@ def validate_share_session(session: ShareSession, viewer_token: str) -> None:
         raise PermissionError("This share session has expired.")
 
 
+def resolve_shared_access(workspace_root: Path, access_token: str) -> tuple[ProjectContext | None, ShareSession]:
+    supplied = str(access_token or "").strip()
+    config = load_share_server_config(workspace_root)
+    expected = str(getattr(config, "access_token", "") or "").strip()
+    if not supplied or not expected or not hmac.compare_digest(expected, supplied):
+        raise PermissionError("Invalid share access token.")
+    resolved = resolve_workspace_active_share_session(workspace_root)
+    if resolved is None:
+        raise KeyError("Unknown share session.")
+    _project, session = resolved
+    if session.is_revoked():
+        raise PermissionError("This share session has been revoked.")
+    if session.is_expired():
+        raise PermissionError("This share session has expired.")
+    return resolved
+
+
 def resolve_shared_session(workspace_root: Path, session_id: str) -> tuple[ProjectContext | None, ShareSession]:
     workspace_session = find_workspace_share_session(workspace_root, session_id)
     if workspace_session is not None:
@@ -571,12 +620,7 @@ def _legacy_workspace_active_share_session(
     if not active_sessions:
         return None
 
-    def sort_key(item: tuple[ProjectContext, ShareSession]) -> tuple[datetime, str]:
-        _project, session = item
-        created_at = parse_iso_datetime(session.created_at) or datetime.min.replace(tzinfo=UTC)
-        return created_at, session.session_id
-
-    project, session = max(active_sessions, key=sort_key)
+    project, session = max(active_sessions, key=lambda item: _session_sort_key(item[1]))
     payload = public_session_summary(
         workspace_root,
         project,
@@ -605,13 +649,7 @@ def workspace_active_share_session(
         server = share_server_status_payload(workspace_root)
     active_sessions = [session for session in load_workspace_share_sessions(workspace_root) if session.is_active()]
     if active_sessions:
-        session = max(
-            active_sessions,
-            key=lambda item: (
-                parse_iso_datetime(item.created_at) or datetime.min.replace(tzinfo=UTC),
-                item.session_id,
-            ),
-        )
+        session = max(active_sessions, key=_session_sort_key)
         return public_session_summary(
             workspace_root,
             None,
@@ -821,7 +859,10 @@ def public_execution_flow_svg(context: ProjectContext, plan_state: ExecutionPlan
 
 
 def public_monitor_status(context: ProjectContext, plan_state: ExecutionPlanState, log_limit: int = 8) -> dict[str, Any]:
+    raw_status = str(context.metadata.current_status or "").strip()
     status = effective_project_status(context.metadata.current_status, plan_state, context.loop_state)
+    if raw_status.lower().startswith("running:") and not status.startswith("running:"):
+        status = raw_status
     return {
         "project": {
             "repo_id": context.metadata.repo_id,
@@ -854,6 +895,9 @@ def _workspace_monitor_visibility(
     include_repo_ids: set[str] | None = None,
 ) -> bool:
     if include_repo_ids and context.metadata.repo_id in include_repo_ids:
+        return True
+    raw_status = str(context.metadata.current_status or "").strip().lower()
+    if raw_status.startswith("running:"):
         return True
     remote = public_remote_control_state(context, plan_state)
     status = effective_project_status(context.metadata.current_status, plan_state, context.loop_state)
@@ -935,6 +979,12 @@ def viewer_link(base_url: str, session: ShareSession, viewer_path: str = DEFAULT
     )
 
 
+def viewer_access_link(base_url: str, access_token: str, viewer_path: str = DEFAULT_VIEWER_PATH) -> str:
+    normalized_base = base_url.rstrip("/")
+    normalized_path = viewer_path if viewer_path.startswith("/") else f"/{viewer_path}"
+    return f"{normalized_base}{normalized_path}?access={quote(access_token)}"
+
+
 def public_session_summary(
     workspace_root: Path,
     context: ProjectContext | None,
@@ -949,6 +999,7 @@ def public_session_summary(
     if server is None:
         server = share_server_status_payload(workspace_root)
     viewer_path = str(server.get("viewer_path") or (state.viewer_path if state is not None else DEFAULT_VIEWER_PATH))
+    access_token = ensure_share_access_token(workspace_root)
     local_url = None
     local_base = str(server.get("base_url") or "").strip()
     if not local_base and bool(server.get("running")) and state is not None:
@@ -959,10 +1010,10 @@ def public_session_summary(
     if local_base:
         if local_host == "0.0.0.0":
             local_base = local_base.replace("http://0.0.0.0:", "http://127.0.0.1:", 1)
-        local_url = viewer_link(local_base, session, viewer_path)
+        local_url = viewer_access_link(local_base, access_token, viewer_path)
     public_url = None
     if server.get("share_base_url"):
-        public_url = viewer_link(str(server["share_base_url"]), session, viewer_path)
+        public_url = viewer_access_link(str(server["share_base_url"]), access_token, viewer_path)
     payload = {
         "session_id": session.session_id,
         "created_at": session.created_at,
@@ -974,6 +1025,7 @@ def public_session_summary(
     }
     if include_token:
         payload["viewer_token"] = session.viewer_token
+        payload["access_token"] = access_token
     payload["share_url"] = public_url or local_url
     return payload
 

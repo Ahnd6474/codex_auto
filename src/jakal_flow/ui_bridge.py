@@ -144,6 +144,7 @@ def start_share_server_process(
                 if public_base_url is None
                 else str(public_base_url).strip()
             ),
+            access_token=current_config.access_token,
         ),
     )
     current_state = load_share_server_state(workspace_root)
