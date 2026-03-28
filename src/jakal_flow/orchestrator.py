@@ -168,6 +168,7 @@ class Orchestrator:
             getattr(runtime, "planning_effort", ""),
             fallback=normalize_reasoning_effort(runtime.effort, fallback="high"),
         )
+        planning_effort = self._planning_effort_for_runtime(runtime, planning_effort)
         planning_stage_count = 4
 
         def report_progress(event_type: str, message: str, details: dict[str, object] | None = None) -> None:
@@ -388,6 +389,19 @@ class Orchestrator:
         if planning_effort == "xhigh":
             return False
         return bool(getattr(context.runtime, "use_fast_mode", False))
+
+    def _planning_effort_for_runtime(self, runtime: RuntimeOptions, planning_effort: str) -> str:
+        selected_provider = str(getattr(runtime, "model_provider", "") or "").strip().lower()
+        if selected_provider == "ensemble":
+            planning_model = str(getattr(runtime, "ensemble_openai_model", "") or getattr(runtime, "model", "")).strip().lower()
+        else:
+            planning_model = str(getattr(runtime, "model", "") or getattr(runtime, "model_slug_input", "")).strip().lower()
+        normalized_effort = normalize_reasoning_effort(planning_effort, fallback="high")
+        if planning_model != "gpt-5.4":
+            return normalized_effort
+        effort_ladder = ["low", "medium", "high", "xhigh"]
+        current_index = effort_ladder.index(normalized_effort) if normalized_effort in effort_ladder else 1
+        return effort_ladder[max(0, current_index - 1)]
 
     def _postprocess_generated_plan_steps(
         self,

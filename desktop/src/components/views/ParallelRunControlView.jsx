@@ -19,6 +19,8 @@ import {
   parallelLimitTone,
   parallelWorkerLabel,
   planStepsWithCloseout,
+  providerAvailable,
+  providerStatusReason,
   projectStatusWithJob,
   QWEN_CODE_DEFAULT_MODEL,
   REASONING_OPTIONS,
@@ -123,6 +125,7 @@ function reservationProjectLabel(job, fallbackLabel) {
 
 export function ParallelRunControlView({
   detail,
+  codexStatus,
   planDraft,
   activeJob,
   autoRunAfterPlan,
@@ -146,6 +149,21 @@ export function ParallelRunControlView({
   onDeleteStep,
 }) {
   const { language, t } = useI18n();
+  const providerOptions = [
+    ["ensemble", t("option.providerEnsemble")],
+    ["openai", "Codex CLI"],
+    ["claude", "Claude Code"],
+    ["gemini", "Gemini CLI"],
+    ["qwen_code", "Qwen Code"],
+    ["deepseek", "DeepSeek via Claude Code"],
+    ["kimi", "Kimi"],
+    ["minimax", "MiniMax via Claude Code"],
+    ["glm", "GLM via Claude Code"],
+    ["openrouter", "OpenRouter"],
+    ["opencdk", "OpenCDK"],
+    ["local_openai", "Local OpenAI-Compatible"],
+    ["oss", "Local OSS"],
+  ];
   const livePlan = activeJob?.status === "running" && detail?.plan ? detail.plan : planDraft;
   const steps = planStepsWithCloseout(livePlan, {
     title: t("run.closeout"),
@@ -427,20 +445,20 @@ export function ParallelRunControlView({
                   <span>{t("field.modelProvider")}</span>
                   <select value={selectedStep.model_provider || ""} onChange={(event) => onUpdateStepField("model_provider", event.target.value)} disabled={!editableStep}>
                     <option value="">{autoProviderLabel(language)}</option>
-                    <option value="ensemble">{t("option.providerEnsemble")}</option>
-                    <option value="openai">Codex CLI</option>
-                    <option value="claude">Claude Code</option>
-                    <option value="gemini">Gemini CLI</option>
-                    <option value="qwen_code">Qwen Code</option>
-                    <option value="deepseek">DeepSeek via Claude Code</option>
-                    <option value="kimi">Kimi</option>
-                    <option value="minimax">MiniMax via Claude Code</option>
-                    <option value="glm">GLM via Claude Code</option>
-                    <option value="openrouter">OpenRouter</option>
-                    <option value="opencdk">OpenCDK</option>
-                    <option value="local_openai">Local OpenAI-Compatible</option>
-                    <option value="oss">Local OSS</option>
+                    {providerOptions.map(([value, label]) => (
+                      <option
+                        key={value}
+                        value={value}
+                        disabled={!providerAvailable(value, codexStatus)}
+                        title={providerStatusReason(value, codexStatus)}
+                      >
+                        {label}
+                      </option>
+                    ))}
                   </select>
+                  {selectedStep.model_provider && !providerAvailable(selectedStep.model_provider, codexStatus) && providerStatusReason(selectedStep.model_provider, codexStatus) ? (
+                    <small className="muted">{providerStatusReason(selectedStep.model_provider, codexStatus)}</small>
+                  ) : null}
                 </label>
                 <label className="field field--wide">
                   <span>{t("field.model")}</span>

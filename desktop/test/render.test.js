@@ -1619,7 +1619,7 @@ test("AppSettingsView exposes dashboard visibility controls", async () => {
   assert.match(html, /7d Usage/);
   assert.match(html, /Closeout Report/);
   assert.match(html, /Codex Spark/);
-  assert.match(html, /Custom Model Slug/);
+  assert.doesNotMatch(html, /Custom Model Slug/);
   assert.match(html, /Planning Reasoning/);
   assert.match(html, /Concurrent Background Jobs/);
   assert.match(html, /Memory \/ Worker \(GiB\)/);
@@ -1836,21 +1836,85 @@ test("ConfigEditorView keeps a selected model visible even when the catalog omit
   assert.match(html, /GPT-5\.3-Codex-Spark/);
 });
 
-test("AppSettingsView shows per-provider model fields for ensemble mode", async () => {
+test("ConfigEditorView renders provider-scoped catalog models for Gemini CLI projects", async () => {
   const html = await renderBundledComponent(
-    "app-settings-ensemble-model-render",
+    "config-editor-gemini-model-render",
+    "./src/components/views/ConfigEditorView.jsx",
+    "ConfigEditorView",
+    {
+      form: {
+        project_dir: "C:/demo",
+        display_name: "Demo",
+        branch: "main",
+        github_mode: "existing",
+        origin_url: "",
+        runtime: {
+          model_provider: "gemini",
+          model: "gemini-2.5-pro",
+          model_preset: "",
+          model_slug_input: "gemini-2.5-pro",
+          effort: "medium",
+          workflow_mode: "standard",
+          execution_mode: "parallel",
+          parallel_worker_mode: "auto",
+          parallel_workers: 0,
+          parallel_memory_per_worker_gib: 3,
+          ml_max_cycles: 3,
+          max_blocks: 5,
+        },
+      },
+      modelPresets: [],
+      modelCatalog: [
+        {
+          model: "gpt-5.4",
+          display_name: "GPT-5.4",
+          hidden: false,
+          provider: "openai",
+          default_reasoning_effort: "medium",
+          supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
+        },
+        {
+          model: "gemini-3-flash-preview",
+          display_name: "Gemini 3 Flash Preview",
+          hidden: false,
+          provider: "gemini",
+          default_reasoning_effort: "medium",
+          supported_reasoning_efforts: ["medium"],
+        },
+        {
+          model: "gemini-2.5-pro",
+          display_name: "Gemini 2.5 Pro",
+          hidden: false,
+          provider: "gemini",
+          default_reasoning_effort: "medium",
+          supported_reasoning_efforts: ["medium"],
+        },
+      ],
+      busy: false,
+      onChangeForm: noop,
+      onChooseDirectory: noop,
+      onArchiveProject: noop,
+      onDeleteProject: noop,
+    },
+  );
+
+  assert.match(html, /Gemini 3 Flash Preview/);
+  assert.match(html, /Gemini 2\.5 Pro/);
+  assert.doesNotMatch(html, /GPT-5\.4/);
+});
+
+test("AppSettingsView keeps direct model slug editing for OpenRouter only", async () => {
+  const html = await renderBundledComponent(
+    "app-settings-openrouter-model-render",
     "./src/components/views/AppSettingsView.jsx",
     "AppSettingsView",
     {
       settings: {
-        model_provider: "ensemble",
-        provider_api_key_env: "OPENAI_API_KEY",
-        provider_base_url: "",
-        ensemble_openai_model: "gpt-5.4-mini",
-        ensemble_gemini_model: "gemini-2.5-pro",
-        ensemble_claude_model: "claude-3.7-sonnet",
-        model: "gpt-5.4-mini",
-        model_slug_input: "gpt-5.4-mini",
+        model_provider: "openrouter",
+        provider_api_key_env: "OPENROUTER_API_KEY",
+        provider_base_url: "https://openrouter.ai/api/v1",
+        model: "openai/gpt-5.4",
+        model_slug_input: "openai/gpt-5.4",
         approval_mode: "never",
         sandbox_mode: "danger-full-access",
         checkpoint_interval_blocks: 1,
@@ -1876,10 +1940,7 @@ test("AppSettingsView shows per-provider model fields for ensemble mode", async 
     },
   );
 
-  assert.match(html, /OpenAI Model Slug/);
-  assert.match(html, /Gemini Model Slug/);
-  assert.match(html, /Claude Model Slug/);
-  assert.doesNotMatch(html, /Custom Model Slug/);
+  assert.match(html, /Custom Model Slug/);
 });
 
 test("ReportsView shows the saved Word report path next to the closeout report", async () => {

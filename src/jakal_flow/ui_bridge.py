@@ -65,6 +65,7 @@ from .step_models import (
     KIMI_DEFAULT_MODEL,
     MINIMAX_DEFAULT_MODEL,
     QWEN_CODE_DEFAULT_MODEL,
+    provider_statuses_payload,
 )
 from .ui_bridge_commands import (
     BridgeCommandContext,
@@ -100,6 +101,8 @@ def default_workspace_root() -> Path:
 
 def bootstrap_payload(workspace_root: Path) -> dict[str, Any]:
     codex_status = _codex_snapshot_service.get_snapshot(force_refresh=True)
+    codex_status_payload = codex_status.to_dict()
+    codex_status_payload["provider_statuses"] = provider_statuses_payload()
     return {
         "workspace_root": str(workspace_root),
         "model_presets": [
@@ -114,7 +117,7 @@ def bootstrap_payload(workspace_root: Path) -> dict[str, Any]:
             for preset in MODEL_PRESETS
         ],
         "model_catalog": codex_status.model_catalog,
-        "codex_status": codex_status.to_dict(),
+        "codex_status": codex_status_payload,
         "default_runtime": runtime_from_payload({}).to_dict(),
     }
 

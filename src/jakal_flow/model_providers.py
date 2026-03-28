@@ -16,6 +16,8 @@ from .model_constants import (
     VALID_MODEL_PROVIDERS,
 )
 
+ALL_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"]
+
 
 @dataclass(frozen=True, slots=True)
 class ProviderPreset:
@@ -61,7 +63,7 @@ PROVIDER_PRESETS: dict[str, ProviderPreset] = {
         default_api_key_env="ANTHROPIC_API_KEY",
         default_billing_mode=BILLING_MODE_INCLUDED,
         supports_auto_model=False,
-        supports_catalog=False,
+        supports_catalog=True,
     ),
     "gemini": ProviderPreset(
         provider="gemini",
@@ -70,7 +72,7 @@ PROVIDER_PRESETS: dict[str, ProviderPreset] = {
         default_api_key_env="GEMINI_API_KEY",
         default_billing_mode=BILLING_MODE_INCLUDED,
         supports_auto_model=False,
-        supports_catalog=False,
+        supports_catalog=True,
     ),
     "qwen_code": ProviderPreset(
         provider="qwen_code",
@@ -84,7 +86,7 @@ PROVIDER_PRESETS: dict[str, ProviderPreset] = {
         default_api_key_env="DASHSCOPE_API_KEY",
         default_billing_mode=BILLING_MODE_TOKEN,
         supports_auto_model=False,
-        supports_catalog=False,
+        supports_catalog=True,
     ),
     "deepseek": ProviderPreset(
         provider="deepseek",
@@ -97,7 +99,7 @@ PROVIDER_PRESETS: dict[str, ProviderPreset] = {
         default_api_key_env="DEEPSEEK_API_KEY",
         default_billing_mode=BILLING_MODE_TOKEN,
         supports_auto_model=False,
-        supports_catalog=False,
+        supports_catalog=True,
     ),
     "kimi": ProviderPreset(
         provider="kimi",
@@ -109,7 +111,7 @@ PROVIDER_PRESETS: dict[str, ProviderPreset] = {
         default_api_key_env="MOONSHOT_API_KEY",
         default_billing_mode=BILLING_MODE_TOKEN,
         supports_auto_model=False,
-        supports_catalog=False,
+        supports_catalog=True,
     ),
     "minimax": ProviderPreset(
         provider="minimax",
@@ -122,7 +124,7 @@ PROVIDER_PRESETS: dict[str, ProviderPreset] = {
         default_api_key_env="MINIMAX_API_KEY",
         default_billing_mode=BILLING_MODE_TOKEN,
         supports_auto_model=False,
-        supports_catalog=False,
+        supports_catalog=True,
     ),
     "glm": ProviderPreset(
         provider="glm",
@@ -135,7 +137,7 @@ PROVIDER_PRESETS: dict[str, ProviderPreset] = {
         default_api_key_env="ZHIPUAI_API_KEY",
         default_billing_mode=BILLING_MODE_TOKEN,
         supports_auto_model=False,
-        supports_catalog=False,
+        supports_catalog=True,
     ),
     "openrouter": ProviderPreset(
         provider="openrouter",
@@ -172,9 +174,114 @@ PROVIDER_PRESETS: dict[str, ProviderPreset] = {
         description="Use Codex CLI OSS mode through a local provider such as Ollama or LM Studio.",
         default_billing_mode=BILLING_MODE_PER_PASS,
         supports_auto_model=False,
-        supports_catalog=False,
+        supports_catalog=True,
         is_local=True,
     ),
+}
+
+CURATED_PROVIDER_MODEL_CATALOG: dict[str, list[dict[str, Any]]] = {
+    "claude": [
+        {
+            "model": "claude-sonnet-4-6",
+            "display_name": "Claude Sonnet 4.6",
+            "description": "Default Claude Code model for balanced coding work.",
+            "is_default": True,
+            "default_reasoning_effort": "medium",
+            "supported_reasoning_efforts": ALL_REASONING_EFFORTS,
+        },
+        {
+            "model": "claude-3.7-sonnet",
+            "display_name": "Claude 3.7 Sonnet",
+            "description": "Previous Claude coding model kept for compatibility with older projects.",
+            "is_default": False,
+            "default_reasoning_effort": "medium",
+            "supported_reasoning_efforts": ALL_REASONING_EFFORTS,
+        },
+    ],
+    "gemini": [
+        {
+            "model": "gemini-3-flash-preview",
+            "display_name": "Gemini 3 Flash Preview",
+            "description": "Default Gemini CLI model for fast code-focused runs.",
+            "is_default": True,
+            "default_reasoning_effort": "medium",
+            "supported_reasoning_efforts": ["medium"],
+        },
+        {
+            "model": "gemini-2.5-pro",
+            "display_name": "Gemini 2.5 Pro",
+            "description": "Higher-capacity Gemini model for heavier planning or implementation tasks.",
+            "is_default": False,
+            "default_reasoning_effort": "medium",
+            "supported_reasoning_efforts": ["medium"],
+        },
+        {
+            "model": "gemini-2.5-flash",
+            "display_name": "Gemini 2.5 Flash",
+            "description": "Fast Gemini model that already appears in the CLI examples.",
+            "is_default": False,
+            "default_reasoning_effort": "medium",
+            "supported_reasoning_efforts": ["medium"],
+        },
+    ],
+    "qwen_code": [
+        {
+            "model": "qwen3-coder-plus",
+            "display_name": "Qwen3 Coder Plus",
+            "description": "Default Qwen Code model for DashScope-compatible coding runs.",
+            "is_default": True,
+            "default_reasoning_effort": "medium",
+            "supported_reasoning_efforts": ["medium"],
+        },
+    ],
+    "deepseek": [
+        {
+            "model": "deepseek-chat",
+            "display_name": "DeepSeek Chat",
+            "description": "Default DeepSeek Anthropic-compatible model for general coding work.",
+            "is_default": True,
+            "default_reasoning_effort": "medium",
+            "supported_reasoning_efforts": ALL_REASONING_EFFORTS,
+        },
+        {
+            "model": "deepseek-reasoner",
+            "display_name": "DeepSeek Reasoner",
+            "description": "Reasoning-oriented DeepSeek model with a stronger default inference budget.",
+            "is_default": False,
+            "default_reasoning_effort": "high",
+            "supported_reasoning_efforts": ["medium", "high", "xhigh"],
+        },
+    ],
+    "kimi": [
+        {
+            "model": "kimi-k2.5",
+            "display_name": "Kimi K2.5",
+            "description": "Default Kimi model for Moonshot's OpenAI-compatible endpoint.",
+            "is_default": True,
+            "default_reasoning_effort": "medium",
+            "supported_reasoning_efforts": ALL_REASONING_EFFORTS,
+        },
+    ],
+    "minimax": [
+        {
+            "model": "MiniMax-M2.5",
+            "display_name": "MiniMax M2.5",
+            "description": "Default MiniMax Anthropic-compatible model for coding runs.",
+            "is_default": True,
+            "default_reasoning_effort": "medium",
+            "supported_reasoning_efforts": ALL_REASONING_EFFORTS,
+        },
+    ],
+    "glm": [
+        {
+            "model": "glm-4.7",
+            "display_name": "GLM 4.7",
+            "description": "Default GLM Anthropic-compatible coding model.",
+            "is_default": True,
+            "default_reasoning_effort": "medium",
+            "supported_reasoning_efforts": ALL_REASONING_EFFORTS,
+        },
+    ],
 }
 
 
@@ -236,6 +343,31 @@ def normalize_billing_mode(value: str, provider: str, fallback: str | None = Non
     return provider_preset(provider).default_billing_mode
 
 
+def builtin_model_catalog() -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for provider, models in CURATED_PROVIDER_MODEL_CATALOG.items():
+        for item in models:
+            entries.append(
+                {
+                    "id": f"{provider}:{item['model']}",
+                    "model": item["model"],
+                    "display_name": item["display_name"],
+                    "description": item["description"],
+                    "hidden": False,
+                    "is_default": bool(item.get("is_default", False)),
+                    "default_reasoning_effort": item["default_reasoning_effort"],
+                    "supported_reasoning_efforts": list(item["supported_reasoning_efforts"]),
+                    "input_modalities": ["text"],
+                    "supports_personality": False,
+                    "upgrade": None,
+                    "availability_nux": None,
+                    "provider": provider,
+                    "local_provider": None,
+                }
+            )
+    return entries
+
+
 def discover_local_model_catalog(third_party_root: Path | None = None) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     seen_keys: set[tuple[str, str]] = set()
@@ -253,7 +385,7 @@ def discover_local_model_catalog(third_party_root: Path | None = None) -> list[d
                 "hidden": False,
                 "is_default": False,
                 "default_reasoning_effort": "medium",
-                "supported_reasoning_efforts": ["low", "medium", "high", "xhigh"],
+                "supported_reasoning_efforts": ALL_REASONING_EFFORTS,
                 "input_modalities": ["text"],
                 "supports_personality": False,
                 "upgrade": None,

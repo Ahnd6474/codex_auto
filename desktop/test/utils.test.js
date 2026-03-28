@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   activityLineSummary,
+  applyConfigRuntimeModelSelection,
   applyProviderDefaults,
   applyProgramSettings,
   applyProgramSettingsToForm,
@@ -44,6 +45,7 @@ import {
   planningProgressCaptionDisplay,
   progressCaption,
   programSettingsFromRuntime,
+  providerSupportsCatalog,
   projectJobFromJobs,
   projectFormFromDetail,
   projectStatusWithJob,
@@ -56,6 +58,7 @@ import {
   shouldShowEstimatedCost,
   shouldReplaceVisibleProject,
   statusTone,
+  syncProgramSettingsModel,
   toolbarProgressCaptionDisplay,
   workspaceStatsFromProjects,
 } from "../src/utils.js";
@@ -395,6 +398,15 @@ test("blankProjectForm falls back to repository defaults when runtime is missing
   assert.equal(form.runtime.test_cmd, "python -m pytest");
   assert.equal(form.runtime.allow_background_queue, true);
   assert.equal(form.runtime.background_queue_priority, 0);
+});
+
+test("providerSupportsCatalog enables curated catalogs for first-party provider presets", () => {
+  assert.equal(providerSupportsCatalog("openai"), true);
+  assert.equal(providerSupportsCatalog("gemini"), true);
+  assert.equal(providerSupportsCatalog("claude"), true);
+  assert.equal(providerSupportsCatalog("deepseek"), true);
+  assert.equal(providerSupportsCatalog("openrouter"), false);
+  assert.equal(providerSupportsCatalog("local_openai"), false);
 });
 
 test("applyProviderDefaults drops the auto sentinel for providers without auto routing", () => {
@@ -1230,6 +1242,38 @@ test("planningProgressCaptionDisplay reports the active planning stage and statu
   );
 });
 
+test("syncProgramSettingsModel mirrors project model changes back into program defaults", () => {
+  const nextSettings = syncProgramSettingsModel(
+    {
+      model_provider: "openai",
+      model: "gpt-5.4",
+      model_preset: "",
+      model_selection_mode: "slug",
+      model_slug_input: "gpt-5.4",
+      ensemble_openai_model: "gpt-5.4",
+      ensemble_gemini_model: GEMINI_DEFAULT_MODEL,
+      ensemble_claude_model: CLAUDE_DEFAULT_MODEL,
+    },
+    {
+      model_provider: "gemini",
+      model: "gemini-2.5-pro",
+      model_preset: "",
+      model_selection_mode: "slug",
+      model_slug_input: "gemini-2.5-pro",
+      ensemble_openai_model: "gpt-5.4-mini",
+      ensemble_gemini_model: "gemini-2.5-pro",
+      ensemble_claude_model: "claude-3.7-sonnet",
+    },
+  );
+
+  assert.equal(nextSettings.model_provider, "gemini");
+  assert.equal(nextSettings.model, "gemini-2.5-pro");
+  assert.equal(nextSettings.model_slug_input, "gemini-2.5-pro");
+  assert.equal(nextSettings.ensemble_openai_model, "gpt-5.4-mini");
+  assert.equal(nextSettings.ensemble_gemini_model, "gemini-2.5-pro");
+  assert.equal(nextSettings.ensemble_claude_model, "claude-3.7-sonnet");
+});
+
 test("deriveExecutionProgress marks debugger recovery as an active debugging phase", () => {
   const progress = deriveExecutionProgress(
     {
@@ -1566,6 +1610,36 @@ test("config reasoning helpers keep auto separate from explicit efforts", () => 
   assert.equal(reasoningEffortLabel("auto"), "Auto");
   assert.equal(autoRoutingPresetLabel("low"), "Low Only");
   assert.equal(autoRoutingPresetLabel("xhigh", "ko"), "매우 높음만");
+});
+
+test("applyConfigRuntimeModelSelection updates reasoning for models with stricter defaults", () => {
+  const nextRuntime = applyConfigRuntimeModelSelection(
+    {
+      model_provider: "deepseek",
+      model: "deepseek-chat",
+      model_slug_input: "deepseek-chat",
+      effort: "low",
+      effort_selection_mode: "explicit",
+    },
+    [
+      {
+        model: "deepseek-chat",
+        default_reasoning_effort: "medium",
+        supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
+      },
+      {
+        model: "deepseek-reasoner",
+        default_reasoning_effort: "high",
+        supported_reasoning_efforts: ["medium", "high", "xhigh"],
+      },
+    ],
+    "deepseek-reasoner",
+  );
+
+  assert.equal(nextRuntime.model, "deepseek-reasoner");
+  assert.equal(nextRuntime.model_slug_input, "deepseek-reasoner");
+  assert.equal(nextRuntime.effort, "high");
+  assert.equal(nextRuntime.effort_selection_mode, "auto");
 });
 
 test("codexUsageBuckets separates 5h, 7d, and spark usage windows", () => {

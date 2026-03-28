@@ -341,6 +341,21 @@ export function applyProgramSettingsToForm(form, programSettings) {
   };
 }
 
+export function syncProgramSettingsModel(programSettings = {}, runtime = {}) {
+  return programSettingsFromRuntime({
+    ...(cloneValue(programSettings) || {}),
+    model_provider: runtime?.model_provider ?? programSettings?.model_provider,
+    local_model_provider: runtime?.local_model_provider ?? programSettings?.local_model_provider,
+    ensemble_openai_model: runtime?.ensemble_openai_model ?? programSettings?.ensemble_openai_model,
+    ensemble_gemini_model: runtime?.ensemble_gemini_model ?? programSettings?.ensemble_gemini_model,
+    ensemble_claude_model: runtime?.ensemble_claude_model ?? programSettings?.ensemble_claude_model,
+    model: runtime?.model ?? programSettings?.model,
+    model_preset: runtime?.model_preset ?? programSettings?.model_preset,
+    model_selection_mode: runtime?.model_selection_mode ?? programSettings?.model_selection_mode,
+    model_slug_input: runtime?.model_slug_input ?? programSettings?.model_slug_input,
+  });
+}
+
 export function normalizeMemoryBudgetGiB(value, fallback = 3) {
   const parsed = Number.parseFloat(String(value ?? "").trim());
   const fallbackValue = Number.parseFloat(String(fallback ?? "").trim());
@@ -1460,7 +1475,49 @@ export function providerSupportsAutoModel(provider = "openai") {
 
 export function providerSupportsCatalog(provider = "openai") {
   const normalized = String(provider || "").trim().toLowerCase();
-  return normalized === "openai" || normalized === "ensemble" || normalized === "oss";
+  return [
+    "openai",
+    "ensemble",
+    "claude",
+    "gemini",
+    "qwen_code",
+    "deepseek",
+    "kimi",
+    "minimax",
+    "glm",
+    "oss",
+  ].includes(normalized);
+}
+
+export function providerStatusMap(codexStatus = {}) {
+  const providerStatuses = codexStatus?.provider_statuses;
+  return providerStatuses && typeof providerStatuses === "object" ? providerStatuses : {};
+}
+
+export function providerAvailable(provider = "openai", codexStatus = {}) {
+  const status = providerStatusMap(codexStatus)[String(provider || "").trim().toLowerCase()];
+  if (!status) {
+    return true;
+  }
+  return Boolean(status.available);
+}
+
+export function providerUsable(provider = "openai", codexStatus = {}) {
+  const status = providerStatusMap(codexStatus)[String(provider || "").trim().toLowerCase()];
+  if (!status) {
+    return true;
+  }
+  return Boolean(status.usable);
+}
+
+export function providerStatusReason(provider = "openai", codexStatus = {}) {
+  const status = providerStatusMap(codexStatus)[String(provider || "").trim().toLowerCase()];
+  return String(status?.reason || "").trim();
+}
+
+export function programSettingsAllowsModelSlugInput(provider = "openai") {
+  const normalized = String(provider || "").trim().toLowerCase();
+  return normalized === "openrouter" || normalized === "opencdk";
 }
 
 export function providerDisplayName(provider = "openai", localProvider = "") {
@@ -1584,6 +1641,36 @@ export function defaultReasoningOption(modelCatalog = [], model = "", fallback =
   const preferred = String(entry?.default_reasoning_effort || fallback || "medium").trim().toLowerCase();
   const options = supportedReasoningOptions(modelCatalog, model, preferred);
   return options.includes(preferred) ? preferred : options[0] || "medium";
+}
+
+export function clampReasoningEffort(modelCatalog = [], model = "", requestedEffort = "", fallback = "medium") {
+  const normalizedRequested = String(requestedEffort || "").trim().toLowerCase();
+  const options = supportedReasoningOptions(modelCatalog, model, fallback);
+  if (options.includes(normalizedRequested)) {
+    return normalizedRequested;
+  }
+  return defaultReasoningOption(modelCatalog, model, fallback);
+}
+
+export function applyConfigRuntimeModelSelection(currentRuntime = {}, modelCatalog = [], nextModel = "", nextEffort = null) {
+  const providerAllowsAuto = providerSupportsAutoModel(currentRuntime?.model_provider || "openai");
+  const model = String(nextModel || "").trim() || (providerAllowsAuto ? "auto" : "");
+  const normalizedModel = model.toLowerCase();
+  const supported = configReasoningOptions(modelCatalog, model, currentRuntime?.effort || "medium");
+  const preferred = nextEffort || selectedConfigReasoning(modelCatalog, { ...currentRuntime, model });
+  const selection = supported.includes(preferred) ? preferred : supported[0] || "medium";
+  const effort = selection === AUTO_REASONING_OPTION ? defaultReasoningOption(modelCatalog, model, currentRuntime?.effort || "medium") : selection;
+  const planningEffort = clampReasoningEffort(modelCatalog, model, currentRuntime?.planning_effort || effort, effort);
+  return {
+    ...currentRuntime,
+    model,
+    effort,
+    planning_effort: planningEffort,
+    effort_selection_mode: selection === AUTO_REASONING_OPTION ? AUTO_REASONING_OPTION : "explicit",
+    model_preset: normalizedModel === "auto" ? (selection === AUTO_REASONING_OPTION ? "auto" : selection) : "",
+    model_selection_mode: "slug",
+    model_slug_input: model,
+  };
 }
 
 export function configReasoningOptions(modelCatalog = [], model = "", fallback = "medium") {

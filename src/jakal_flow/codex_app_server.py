@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .model_constants import AUTO_MODEL_SLUG, VALID_REASONING_EFFORTS
-from .model_providers import discover_local_model_catalog
+from .model_providers import builtin_model_catalog, discover_local_model_catalog
 from .platform_defaults import default_codex_path
 from .utils import now_utc_iso
 
@@ -205,7 +205,11 @@ def fetch_codex_backend_snapshot(codex_path: str = "") -> CodexBackendSnapshot:
         with _CodexAppServerSession(codex_path) as session:
             account_result = session.request("account/read", {"refreshToken": False})
             rate_limit_result = session.request("account/rateLimits/read", {})
-            model_catalog = _merge_model_catalogs(_read_model_catalog(session), discover_local_model_catalog())
+            model_catalog = _merge_model_catalogs(
+                _read_model_catalog(session),
+                builtin_model_catalog(),
+                discover_local_model_catalog(),
+            )
         return CodexBackendSnapshot(
             checked_at=checked_at,
             available=True,
@@ -218,7 +222,7 @@ def fetch_codex_backend_snapshot(codex_path: str = "") -> CodexBackendSnapshot:
         return CodexBackendSnapshot(
             checked_at=checked_at,
             available=bool(local_models),
-            model_catalog=_merge_model_catalogs([_auto_model_entry()], local_models),
+            model_catalog=_merge_model_catalogs([_auto_model_entry()], builtin_model_catalog(), local_models),
             account={
                 "authenticated": False,
                 "requires_openai_auth": True,
@@ -248,7 +252,7 @@ def _fetch_gemini_backend_snapshot(codex_path: str) -> CodexBackendSnapshot:
         return CodexBackendSnapshot(
             checked_at=checked_at,
             available=False,
-            model_catalog=[],
+            model_catalog=builtin_model_catalog(),
             account={
                 "authenticated": False,
                 "requires_openai_auth": False,
@@ -265,7 +269,7 @@ def _fetch_gemini_backend_snapshot(codex_path: str) -> CodexBackendSnapshot:
     return CodexBackendSnapshot(
         checked_at=checked_at,
         available=available,
-        model_catalog=[],
+        model_catalog=builtin_model_catalog(),
         account={
             "authenticated": False,
             "requires_openai_auth": False,
@@ -296,7 +300,7 @@ def _fetch_claude_backend_snapshot(codex_path: str) -> CodexBackendSnapshot:
         return CodexBackendSnapshot(
             checked_at=checked_at,
             available=False,
-            model_catalog=[],
+            model_catalog=builtin_model_catalog(),
             account={
                 "authenticated": False,
                 "requires_openai_auth": False,
@@ -324,7 +328,7 @@ def _fetch_claude_backend_snapshot(codex_path: str) -> CodexBackendSnapshot:
         return CodexBackendSnapshot(
             checked_at=checked_at,
             available=False,
-            model_catalog=[],
+            model_catalog=builtin_model_catalog(),
             account=account,
             rate_limits={"default_limit_id": "", "items": []},
             error=error,
@@ -351,7 +355,7 @@ def _fetch_claude_backend_snapshot(codex_path: str) -> CodexBackendSnapshot:
     return CodexBackendSnapshot(
         checked_at=checked_at,
         available=True,
-        model_catalog=[],
+        model_catalog=builtin_model_catalog(),
         account=account,
         rate_limits={"default_limit_id": "", "items": []},
         error=error,
@@ -375,7 +379,7 @@ def _fetch_qwen_backend_snapshot(codex_path: str) -> CodexBackendSnapshot:
         return CodexBackendSnapshot(
             checked_at=checked_at,
             available=False,
-            model_catalog=[],
+            model_catalog=builtin_model_catalog(),
             account={
                 "authenticated": False,
                 "requires_openai_auth": False,
@@ -392,7 +396,7 @@ def _fetch_qwen_backend_snapshot(codex_path: str) -> CodexBackendSnapshot:
     return CodexBackendSnapshot(
         checked_at=checked_at,
         available=available,
-        model_catalog=[],
+        model_catalog=builtin_model_catalog(),
         account={
             "authenticated": False,
             "requires_openai_auth": False,

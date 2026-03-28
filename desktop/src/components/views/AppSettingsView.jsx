@@ -1,19 +1,21 @@
 import { useI18n } from "../../i18n";
 import {
   applyProviderDefaults,
-  CLAUDE_DEFAULT_MODEL,
   defaultCodexPath,
   defaultProviderApiKeyEnv,
   defaultProviderBaseUrl,
-  GEMINI_DEFAULT_MODEL,
   normalizeMemoryBudgetGiB,
   normalizeDashboardVisibility,
+  providerAvailable,
+  providerStatusReason,
+  programSettingsAllowsModelSlugInput,
   REASONING_OPTIONS,
   reasoningEffortLabel,
 } from "../../utils";
 
 export function AppSettingsView({
   settings,
+  codexStatus,
   shareSettings,
   shareDetail,
   busy,
@@ -29,11 +31,25 @@ export function AppSettingsView({
   const activeShare = shareDetail?.active_session || null;
   const shareServer = shareDetail?.server || null;
   const selectedProvider = String(settings.model_provider || "openai").trim().toLowerCase();
-  const isEnsembleProvider = selectedProvider === "ensemble";
   const dashboardVisibility = normalizeDashboardVisibility(settings?.dashboard_visibility);
   const interfaceBusy = false;
   const runtimeBusy = busy;
   const autoParallelWorkers = String(settings?.parallel_worker_mode || "auto").trim().toLowerCase() !== "manual";
+  const providerOptions = [
+    ["ensemble", t("option.providerEnsemble")],
+    ["openai", t("option.providerOpenAI")],
+    ["claude", "Claude Code"],
+    ["gemini", "Gemini CLI"],
+    ["qwen_code", "Qwen Code"],
+    ["deepseek", "DeepSeek via Claude Code"],
+    ["kimi", "Kimi"],
+    ["minimax", "MiniMax via Claude Code"],
+    ["glm", "GLM via Claude Code"],
+    ["openrouter", t("option.providerOpenRouter")],
+    ["opencdk", t("option.providerOpenCDK")],
+    ["local_openai", t("option.providerLocalCompatible")],
+    ["oss", t("option.providerOSS")],
+  ];
   const dashboardOptions = [
     ["status", t("common.status")],
     ["remaining_steps", t("dashboard.remainingSteps")],
@@ -160,21 +176,21 @@ export function AppSettingsView({
                   }
                   disabled={runtimeBusy}
                 >
-                  <option value="ensemble">{t("option.providerEnsemble")}</option>
-                  <option value="openai">{t("option.providerOpenAI")}</option>
-                  <option value="claude">Claude Code</option>
-                  <option value="gemini">Gemini CLI</option>
-                  <option value="qwen_code">Qwen Code</option>
-                  <option value="deepseek">DeepSeek via Claude Code</option>
-                  <option value="kimi">Kimi</option>
-                  <option value="minimax">MiniMax via Claude Code</option>
-                  <option value="glm">GLM via Claude Code</option>
-                  <option value="openrouter">{t("option.providerOpenRouter")}</option>
-                  <option value="opencdk">{t("option.providerOpenCDK")}</option>
-                  <option value="local_openai">{t("option.providerLocalCompatible")}</option>
-                  <option value="oss">{t("option.providerOSS")}</option>
+                  {providerOptions.map(([value, label]) => (
+                    <option
+                      key={value}
+                      value={value}
+                      disabled={!providerAvailable(value, codexStatus)}
+                      title={providerStatusReason(value, codexStatus)}
+                    >
+                      {label}
+                    </option>
+                  ))}
                 </select>
               </label>
+              {!providerAvailable(selectedProvider, codexStatus) && providerStatusReason(selectedProvider, codexStatus) ? (
+                <p className="muted">{providerStatusReason(selectedProvider, codexStatus)}</p>
+              ) : null}
               {selectedProvider === "oss" ? (
                 <label className="field">
                   <span>{t("field.localProvider")}</span>
@@ -208,56 +224,7 @@ export function AppSettingsView({
                   />
                 </label>
               ) : null}
-              {isEnsembleProvider ? (
-                <>
-                  <label className="field">
-                    <span>OpenAI Model Slug</span>
-                    <input
-                      value={settings.ensemble_openai_model || settings.model_slug_input || settings.model || "gpt-5.4"}
-                      onChange={(event) =>
-                        onChangeSettings((current) => {
-                          const nextModel = event.target.value.trim().toLowerCase() || "gpt-5.4";
-                          return {
-                            ...current,
-                            ensemble_openai_model: nextModel,
-                            model: nextModel,
-                            model_preset: "",
-                            model_selection_mode: "slug",
-                            model_slug_input: nextModel,
-                          };
-                        })
-                      }
-                      disabled={runtimeBusy}
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Gemini Model Slug</span>
-                    <input
-                      value={settings.ensemble_gemini_model || GEMINI_DEFAULT_MODEL}
-                      onChange={(event) =>
-                        onChangeSettings((current) => ({
-                          ...current,
-                          ensemble_gemini_model: event.target.value.trim().toLowerCase() || GEMINI_DEFAULT_MODEL,
-                        }))
-                      }
-                      disabled={runtimeBusy}
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Claude Model Slug</span>
-                    <input
-                      value={settings.ensemble_claude_model || CLAUDE_DEFAULT_MODEL}
-                      onChange={(event) =>
-                        onChangeSettings((current) => ({
-                          ...current,
-                          ensemble_claude_model: event.target.value.trim().toLowerCase() || CLAUDE_DEFAULT_MODEL,
-                        }))
-                      }
-                      disabled={runtimeBusy}
-                    />
-                  </label>
-                </>
-              ) : (
+              {programSettingsAllowsModelSlugInput(selectedProvider) ? (
                 <label className="field">
                   <span>{t("field.customModelSlug")}</span>
                   <input
@@ -277,7 +244,7 @@ export function AppSettingsView({
                     disabled={runtimeBusy}
                   />
                 </label>
-              )}
+              ) : null}
               <label className="field">
                 <span>{t("field.approvalMode")}</span>
                 <select

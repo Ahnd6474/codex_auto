@@ -89,6 +89,7 @@ class CodexAppServerTests(unittest.TestCase):
         self.assertEqual(snapshot.model_catalog[0]["model"], "auto")
         self.assertEqual(snapshot.model_catalog[1]["model"], "gpt-5.3-codex-spark")
         self.assertEqual(snapshot.model_catalog[1]["supported_reasoning_efforts"], ["low", "high"])
+        self.assertIn("gemini-2.5-pro", [item["model"] for item in snapshot.model_catalog if item.get("provider") == "gemini"])
 
     def test_fetch_codex_backend_snapshot_returns_fallback_when_app_server_fails(self) -> None:
         with mock.patch("jakal_flow.codex_app_server._CodexAppServerSession", side_effect=RuntimeError("boom")), mock.patch(
@@ -144,7 +145,7 @@ class CodexAppServerTests(unittest.TestCase):
             snapshot = fetch_codex_backend_snapshot("codex.cmd")
 
         self.assertTrue(snapshot.available)
-        self.assertEqual(snapshot.model_catalog[1]["model"], "qwen2.5-coder:0.5b")
+        self.assertIn("qwen2.5-coder:0.5b", [item["model"] for item in snapshot.model_catalog if item.get("provider") == "oss"])
         self.assertIn("boom", snapshot.error)
 
     def test_fetch_codex_backend_snapshot_supports_gemini_cli(self) -> None:
@@ -157,7 +158,7 @@ class CodexAppServerTests(unittest.TestCase):
         self.assertTrue(snapshot.available)
         self.assertEqual(snapshot.account["type"], "gemini-cli")
         self.assertEqual(snapshot.account["version"], "0.1.0")
-        self.assertEqual(snapshot.model_catalog, [])
+        self.assertIn("gemini-3-flash-preview", [item["model"] for item in snapshot.model_catalog if item.get("provider") == "gemini"])
         self.assertEqual(snapshot.error, "")
 
     def test_fetch_codex_backend_snapshot_supports_claude_code(self) -> None:
@@ -182,7 +183,7 @@ class CodexAppServerTests(unittest.TestCase):
         self.assertEqual(snapshot.account["plan_type"], "pro")
         self.assertEqual(snapshot.account["type"], "claude-code")
         self.assertEqual(snapshot.account["version"], "1.2.3")
-        self.assertEqual(snapshot.model_catalog, [])
+        self.assertIn("claude-sonnet-4-6", [item["model"] for item in snapshot.model_catalog if item.get("provider") == "claude"])
         self.assertEqual(snapshot.error, "")
 
     def test_fetch_codex_backend_snapshot_supports_qwen_code(self) -> None:
@@ -195,7 +196,7 @@ class CodexAppServerTests(unittest.TestCase):
         self.assertTrue(snapshot.available)
         self.assertEqual(snapshot.account["type"], "qwen-code")
         self.assertEqual(snapshot.account["version"], "0.13.1")
-        self.assertEqual(snapshot.model_catalog, [])
+        self.assertIn("qwen3-coder-plus", [item["model"] for item in snapshot.model_catalog if item.get("provider") == "qwen_code"])
         self.assertEqual(snapshot.error, "")
 
 

@@ -1,20 +1,24 @@
 import { useI18n } from "../../i18n";
 import {
   AUTO_REASONING_OPTION,
+  applyConfigRuntimeModelSelection,
   autoRoutingPresetLabel,
+  clampReasoningEffort,
   configReasoningOptions,
   defaultModelForRuntime,
-  defaultReasoningOption,
   filterModelCatalogByProvider,
   findModelCatalogEntry,
   normalizeMemoryBudgetGiB,
   normalizedModelProvider,
+  providerAvailable,
+  providerStatusReason,
   providerSupportsAutoModel,
   providerSupportsCatalog,
   REASONING_OPTIONS,
   reasoningEffortLabel,
   runtimeSummary,
   selectedConfigReasoning,
+  syncProgramSettingsModel,
 } from "../../utils";
 
 function EffortButton({ effort, selected, onSelect, disabled, language, description, label }) {
@@ -27,10 +31,6 @@ function EffortButton({ effort, selected, onSelect, disabled, language, descript
       <p>{description}</p>
     </button>
   );
-}
-
-function autoPresetId(effort) {
-  return effort === AUTO_REASONING_OPTION ? "auto" : effort;
 }
 
 function effortDescription(modelLabel, effort, language) {
@@ -59,30 +59,27 @@ function effortDescription(modelLabel, effort, language) {
   return `Use ${reasoningLabel} reasoning with ${modelLabel}.`;
 }
 
-function updateRuntimeModel(currentRuntime, modelCatalog, nextModel, nextEffort = null) {
-  const providerAllowsAuto = providerSupportsAutoModel(currentRuntime?.model_provider || "openai");
-  const model = String(nextModel || "").trim().toLowerCase() || (providerAllowsAuto ? "auto" : "");
-  const supported = configReasoningOptions(modelCatalog, model, currentRuntime?.effort || "medium");
-  const preferred = nextEffort || selectedConfigReasoning(modelCatalog, { ...currentRuntime, model });
-  const selection = supported.includes(preferred) ? preferred : supported[0] || "medium";
-  const effort = selection === AUTO_REASONING_OPTION ? defaultReasoningOption(modelCatalog, model, "medium") : selection;
-  return {
-    ...currentRuntime,
-    model,
-    effort,
-    effort_selection_mode: selection === AUTO_REASONING_OPTION ? AUTO_REASONING_OPTION : "explicit",
-    model_preset: model === "auto" ? autoPresetId(selection) : "",
-    model_selection_mode: "slug",
-    model_slug_input: model,
-  };
+function modelReasoningSummary(entry, language) {
+  const supported = Array.isArray(entry?.supported_reasoning_efforts) ? entry.supported_reasoning_efforts : [];
+  if (!supported.length) {
+    return "";
+  }
+  const labels = supported.map((effort) => reasoningEffortLabel(effort, language)).join(", ");
+  const defaultLabel = reasoningEffortLabel(entry?.default_reasoning_effort || supported[0] || "medium", language);
+  if (language === "ko") {
+    return `지원 추론: ${labels} | 기본: ${defaultLabel}`;
+  }
+  return `Supported reasoning: ${labels} | default: ${defaultLabel}`;
 }
 
 export function ConfigEditorView({
   form,
   modelPresets,
   modelCatalog,
+  codexStatus,
   busy,
   onChangeForm,
+  onChangeProgramSettings,
   onChooseDirectory,
   onArchiveProject,
   onDeleteProject,
@@ -99,6 +96,41 @@ export function ConfigEditorView({
   const selectedCatalogEntry = findModelCatalogEntry(scopedModelCatalog, selectedModel);
   const supportedEfforts = configReasoningOptions(scopedModelCatalog, selectedModel, runtime.effort || "medium");
   const selectedEffort = selectedConfigReasoning(scopedModelCatalog, runtime);
+  const planningRuntime =
+    selectedProvider === "ensemble"
+      ? {
+          ...runtime,
+          model_provider: "openai",
+          model: runtime.ensemble_openai_model || runtime.model || defaultModelForRuntime(modelCatalog, { ...runtime, model_provider: "openai" }) || "auto",
+          model_slug_input: runtime.ensemble_openai_model || runtime.model_slug_input || runtime.model || "",
+        }
+      : runtime;
+  const planningCatalog = filterModelCatalogByProvider(modelCatalog, planningRuntime);
+  const planningModel =
+    planningRuntime.model
+    || planningRuntime.model_slug_input
+    || defaultModelForRuntime(modelCatalog, planningRuntime)
+    || selectedModel;
+  const planningEntry = findModelCatalogEntry(planningCatalog, planningModel);
+  const planningSupportedEfforts = (
+    planningEntry?.supported_reasoning_efforts?.length
+      ? planningEntry.supported_reasoning_efforts
+      : REASONING_OPTIONS
+  ).filter((effort) => REASONING_OPTIONS.includes(effort));
+  const planningSelectedEffort = clampReasoningEffort(
+    planningCatalog,
+    planningModel,
+    runtime.planning_effort || runtime.effort || "medium",
+    runtime.effort || "medium",
+  );
+  const ensembleGeminiRuntime = { ...runtime, model_provider: "gemini", model: runtime.ensemble_gemini_model || "" };
+  const ensembleGeminiCatalog = filterModelCatalogByProvider(modelCatalog, ensembleGeminiRuntime);
+  const ensembleGeminiModel = runtime.ensemble_gemini_model || defaultModelForRuntime(modelCatalog, ensembleGeminiRuntime) || "";
+  const ensembleGeminiEntry = findModelCatalogEntry(ensembleGeminiCatalog, ensembleGeminiModel);
+  const ensembleClaudeRuntime = { ...runtime, model_provider: "claude", model: runtime.ensemble_claude_model || "" };
+  const ensembleClaudeCatalog = filterModelCatalogByProvider(modelCatalog, ensembleClaudeRuntime);
+  const ensembleClaudeModel = runtime.ensemble_claude_model || defaultModelForRuntime(modelCatalog, ensembleClaudeRuntime) || "";
+  const ensembleClaudeEntry = findModelCatalogEntry(ensembleClaudeCatalog, ensembleClaudeModel);
 
   const visibleModels = (scopedModelCatalog || []).filter(
     (item) => item && item.model && (item.model !== "auto" || selectedModel === "auto"),
@@ -125,6 +157,31 @@ export function ConfigEditorView({
     ...allModels.filter((item) => !item.hidden),
   ];
   const additionalModels = allModels.filter((item) => item.hidden);
+
+  function applyModelChange(nextModel, nextEffort = null) {
+    const nextRuntime = applyConfigRuntimeModelSelection(runtime, scopedModelCatalog, nextModel, nextEffort);
+    onChangeForm((current) => ({
+      ...current,
+      runtime: nextRuntime,
+    }));
+    if (typeof onChangeProgramSettings === "function") {
+      onChangeProgramSettings((current) => syncProgramSettingsModel(current, nextRuntime));
+    }
+  }
+
+  function applyRuntimePatch(runtimePatch) {
+    const nextRuntime = {
+      ...runtime,
+      ...runtimePatch,
+    };
+    onChangeForm((current) => ({
+      ...current,
+      runtime: nextRuntime,
+    }));
+    if (typeof onChangeProgramSettings === "function") {
+      onChangeProgramSettings((current) => syncProgramSettingsModel(current, nextRuntime));
+    }
+  }
 
   return (
     <section className="workspace-view">
@@ -199,7 +256,7 @@ export function ConfigEditorView({
           <label className="field">
             <span>{planningReasoningLabel}</span>
             <select
-              value={runtime.planning_effort || runtime.effort || "medium"}
+              value={planningSelectedEffort}
               onChange={(event) =>
                 onChangeForm((current) => ({
                   ...current,
@@ -211,7 +268,7 @@ export function ConfigEditorView({
               }
               disabled={busy}
             >
-              {REASONING_OPTIONS.map((effort) => (
+              {planningSupportedEfforts.map((effort) => (
                 <option key={effort} value={effort}>
                   {reasoningEffortLabel(effort, language)}
                 </option>
@@ -404,33 +461,35 @@ export function ConfigEditorView({
               <strong>{t("config.executionModel")}</strong>
               <span>{runtimeSummary(runtime, modelPresets, language, modelCatalog)}</span>
             </div>
+            {!providerAvailable(selectedProvider, codexStatus) && providerStatusReason(selectedProvider, codexStatus) ? (
+              <p className="muted">{providerStatusReason(selectedProvider, codexStatus)}</p>
+            ) : null}
             <label className="field">
-              <span>{t("field.model")}</span>
-              <select
-                value={selectedModel}
-                onChange={(event) =>
-                  onChangeForm((current) => ({
-                    ...current,
-                    runtime: updateRuntimeModel(current.runtime, scopedModelCatalog, event.target.value),
-                  }))
-                }
-                disabled={busy}
-              >
-                {(recommendedModels.length ? recommendedModels : allModels).map((item) => (
-                  <option key={item.model || "custom"} value={item.model}>
-                    {item.display_name || item.model || t("common.none")}
-                  </option>
-                ))}
-                {providerHasCatalog && additionalModels.length ? (
-                  <optgroup label={t("config.additionalModels")}>
-                    {additionalModels.map((item) => (
-                      <option key={item.model} value={item.model}>
-                        {item.display_name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ) : null}
-              </select>
+              <span>{selectedProvider === "ensemble" ? (language === "ko" ? "Codex 모델" : "Codex Model") : t("field.model")}</span>
+              {providerHasCatalog ? (
+                <select value={selectedModel} onChange={(event) => applyModelChange(event.target.value)} disabled={busy}>
+                  {(recommendedModels.length ? recommendedModels : allModels).map((item) => (
+                    <option key={item.model || "custom"} value={item.model}>
+                      {item.display_name || item.model || t("common.none")}
+                    </option>
+                  ))}
+                  {additionalModels.length ? (
+                    <optgroup label={t("config.additionalModels")}>
+                      {additionalModels.map((item) => (
+                        <option key={item.model} value={item.model}>
+                          {item.display_name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                </select>
+              ) : (
+                <input
+                  value={runtime.model_slug_input || runtime.model || ""}
+                  onChange={(event) => applyModelChange(event.target.value)}
+                  disabled={busy}
+                />
+              )}
             </label>
             <div className="choice-grid">
               {supportedEfforts.map((effort) => (
@@ -439,18 +498,47 @@ export function ConfigEditorView({
                   effort={effort}
                   label={selectedModel === "auto" ? autoRoutingPresetLabel(effort, language) : reasoningEffortLabel(effort, language)}
                   selected={selectedEffort === effort}
-                  onSelect={(nextEffort) =>
-                    onChangeForm((current) => ({
-                      ...current,
-                      runtime: updateRuntimeModel(current.runtime, scopedModelCatalog, selectedModel, nextEffort),
-                    }))
-                  }
+                  onSelect={(nextEffort) => applyModelChange(selectedModel, nextEffort)}
                   disabled={busy}
                   language={language}
                   description={effortDescription(selectedCatalogEntry?.display_name || selectedModel || "auto", effort, language)}
                 />
               ))}
             </div>
+            {selectedProvider === "ensemble" ? (
+              <div className="choice-list">
+                <label className="field">
+                  <span>{language === "ko" ? "Gemini 모델" : "Gemini Model"}</span>
+                  <select
+                    value={ensembleGeminiModel}
+                    onChange={(event) => applyRuntimePatch({ ensemble_gemini_model: event.target.value })}
+                    disabled={busy}
+                  >
+                    {ensembleGeminiCatalog.map((item) => (
+                      <option key={item.model} value={item.model}>
+                        {item.display_name || item.model}
+                      </option>
+                    ))}
+                  </select>
+                  {modelReasoningSummary(ensembleGeminiEntry, language) ? <small className="muted">{modelReasoningSummary(ensembleGeminiEntry, language)}</small> : null}
+                </label>
+                <label className="field">
+                  <span>{language === "ko" ? "Claude 모델" : "Claude Model"}</span>
+                  <select
+                    value={ensembleClaudeModel}
+                    onChange={(event) => applyRuntimePatch({ ensemble_claude_model: event.target.value })}
+                    disabled={busy}
+                  >
+                    {ensembleClaudeCatalog.map((item) => (
+                      <option key={item.model} value={item.model}>
+                        {item.display_name || item.model}
+                      </option>
+                    ))}
+                  </select>
+                  {modelReasoningSummary(ensembleClaudeEntry, language) ? <small className="muted">{modelReasoningSummary(ensembleClaudeEntry, language)}</small> : null}
+                </label>
+              </div>
+            ) : null}
             {!providerHasCatalog ? <p className="muted">{providerHasAutoModel ? t("config.providerPresetModelHint") : t("config.customProviderModelHint")}</p> : null}
           </div>
         </div>

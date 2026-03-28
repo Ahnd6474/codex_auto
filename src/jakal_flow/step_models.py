@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 from .codex_app_server import fetch_codex_backend_snapshot
 from .model_constants import VALID_MODEL_PROVIDERS
-from .model_providers import provider_preset
+from .model_providers import discover_local_model_catalog, provider_preset
 from .models import ExecutionStep, RuntimeOptions
 from .platform_defaults import default_codex_path
 
@@ -99,13 +99,29 @@ def provider_statuses_payload(
     fetch_snapshot: Callable[[str], Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     fetch = fetch_snapshot or fetch_codex_backend_snapshot
-    openai_status = _provider_status_from_snapshot("openai", _snapshot_to_dict(fetch(default_codex_path("openai"))))
-    claude_status = _provider_status_from_snapshot("claude", _snapshot_to_dict(fetch(default_codex_path("claude"))))
-    gemini_status = _provider_status_from_snapshot("gemini", _snapshot_to_dict(fetch(default_codex_path("gemini"))))
+    snapshots = {
+        "openai": _snapshot_to_dict(fetch(default_codex_path("openai"))),
+        "claude": _snapshot_to_dict(fetch(default_codex_path("claude"))),
+        "gemini": _snapshot_to_dict(fetch(default_codex_path("gemini"))),
+        "qwen_code": _snapshot_to_dict(fetch(default_codex_path("qwen_code"))),
+    }
+    local_models = discover_local_model_catalog()
+    openai_status = _provider_status_from_snapshot("openai", snapshots["openai"])
+    claude_status = _provider_status_from_snapshot("claude", snapshots["claude"])
+    gemini_status = _provider_status_from_snapshot("gemini", snapshots["gemini"])
     statuses = {
         "openai": openai_status,
+        "openrouter": _provider_status_from_snapshot("openrouter", snapshots["openai"]),
+        "opencdk": _provider_status_from_snapshot("opencdk", snapshots["openai"]),
+        "local_openai": _provider_status_from_snapshot("local_openai", snapshots["openai"]),
         "claude": claude_status,
+        "deepseek": _provider_status_from_snapshot("deepseek", snapshots["claude"]),
         "gemini": gemini_status,
+        "qwen_code": _provider_status_from_snapshot("qwen_code", snapshots["qwen_code"]),
+        "kimi": _provider_status_from_snapshot("kimi", snapshots["openai"]),
+        "minimax": _provider_status_from_snapshot("minimax", snapshots["claude"]),
+        "glm": _provider_status_from_snapshot("glm", snapshots["claude"]),
+        "oss": _local_oss_provider_status(local_models, snapshots["openai"]),
     }
     statuses["ensemble"] = _ensemble_provider_status(statuses)
     return statuses
@@ -270,14 +286,8 @@ def _looks_like_ui_step(step: ExecutionStep) -> bool:
 def _provider_status_from_snapshot(provider: str, snapshot: dict[str, Any]) -> dict[str, Any]:
     preset = provider_preset(provider)
     account = snapshot.get("account", {}) if isinstance(snapshot.get("account", {}), dict) else {}
-    available = bool(snapshot.get("available", False))
-    default_model = ""
-    if provider == "claude":
-        default_model = CLAUDE_DEFAULT_MODEL
-    elif provider == "gemini":
-        default_model = GEMINI_DEFAULT_MODEL
-    elif provider == "openai":
-        default_model = "auto"
+    available = _command_available(default_codex_path(provider))
+    default_model = _provider_default_model(provider)
 
     if provider == "openai":
         configured = _openai_auth_env_configured() or bool(account.get("authenticated"))
@@ -285,9 +295,9 @@ def _provider_status_from_snapshot(provider: str, snapshot: dict[str, Any]) -> d
         if usable:
             reason = "Codex CLI is available for planning and general execution."
         elif available:
-            reason = "Codex CLI is available but OpenAI authentication is not configured."
+            reason = "Codex CLI is installed but OpenAI authentication is not configured."
         else:
-            reason = snapshot.get("error", "") or "Codex CLI is not available."
+            reason = snapshot.get("error", "") or "Codex CLI is not installed."
     elif provider == "claude":
         configured = _claude_auth_env_configured() or bool(account.get("authenticated"))
         usable = available and configured
@@ -296,8 +306,8 @@ def _provider_status_from_snapshot(provider: str, snapshot: dict[str, Any]) -> d
         elif available:
             reason = "Claude Code is installed but Anthropic authentication is not configured."
         else:
-            reason = snapshot.get("error", "") or "Claude Code is not available."
-    else:
+            reason = snapshot.get("error", "") or "Claude Code is not installed."
+    elif provider == "gemini":
         configured = _gemini_auth_env_configured() or _gemini_settings_file_configured()
         usable = available and configured
         if usable:
@@ -305,7 +315,45 @@ def _provider_status_from_snapshot(provider: str, snapshot: dict[str, Any]) -> d
         elif available:
             reason = "Gemini CLI is installed but Gemini authentication is not configured."
         else:
-            reason = snapshot.get("error", "") or "Gemini CLI is not available."
+            reason = snapshot.get("error", "") or "Gemini CLI is not installed."
+    elif provider == "qwen_code":
+        configured = _provider_api_env_configured(provider)
+        usable = available and configured
+        if usable:
+            reason = "Qwen Code is installed and DashScope authentication is configured."
+        elif available:
+            reason = "Qwen Code is installed but DashScope authentication is not configured."
+        else:
+            reason = snapshot.get("error", "") or "Qwen Code is not installed."
+    elif provider in {"deepseek", "minimax", "glm"}:
+        configured = _provider_api_env_configured(provider) or _claude_auth_env_configured() or bool(account.get("authenticated"))
+        usable = available and configured
+        if usable:
+            reason = f"{preset.display_name} is ready through the Claude Code backend."
+        elif available:
+            reason = f"{preset.display_name} shares the Claude Code backend but its API credentials are not configured."
+        else:
+            reason = snapshot.get("error", "") or "Claude Code is not installed."
+    elif provider in {"kimi", "openrouter", "opencdk"}:
+        configured = _provider_api_env_configured(provider)
+        usable = available and configured
+        if usable:
+            reason = f"{preset.display_name} is ready through the Codex/OpenAI-compatible backend."
+        elif available:
+            reason = f"{preset.display_name} is installed but its API credentials are not configured."
+        else:
+            reason = snapshot.get("error", "") or "Codex CLI is not installed."
+    elif provider == "local_openai":
+        configured = available
+        usable = available
+        if usable:
+            reason = "Codex CLI is installed; point it at a running local OpenAI-compatible endpoint to use this backend."
+        else:
+            reason = snapshot.get("error", "") or "Codex CLI is not installed."
+    else:
+        configured = available
+        usable = available
+        reason = snapshot.get("error", "") or (f"{preset.display_name} is available." if available else f"{preset.display_name} is not installed.")
 
     return {
         "provider": provider,
@@ -319,6 +367,32 @@ def _provider_status_from_snapshot(provider: str, snapshot: dict[str, Any]) -> d
     }
 
 
+def _local_oss_provider_status(local_models: list[dict[str, Any]], openai_snapshot: dict[str, Any]) -> dict[str, Any]:
+    preset = provider_preset("oss")
+    codex_available = _command_available(default_codex_path("openai"))
+    available_models = [item for item in local_models if isinstance(item, dict) and str(item.get("model", "")).strip()]
+    available = codex_available and bool(available_models)
+    configured = bool(available_models)
+    usable = available
+    default_model = str(available_models[0].get("model", "")).strip().lower() if available_models else ""
+    if usable:
+        reason = f"Local OSS mode is ready with {len(available_models)} detected local model(s)."
+    elif codex_available:
+        reason = "Local OSS mode requires at least one detected local model from Ollama or the bundled catalog."
+    else:
+        reason = str(openai_snapshot.get("error", "") or "Codex CLI is not installed.").strip()
+    return {
+        "provider": "oss",
+        "display_name": preset.display_name,
+        "available": available,
+        "configured": configured,
+        "usable": usable,
+        "default_model": default_model,
+        "codex_path": default_codex_path("openai"),
+        "reason": reason,
+    }
+
+
 def _ensemble_provider_status(statuses: dict[str, dict[str, Any]]) -> dict[str, Any]:
     openai_status = statuses.get("openai", {})
     claude_status = statuses.get("claude", {})
@@ -329,16 +403,25 @@ def _ensemble_provider_status(statuses: dict[str, dict[str, Any]]) -> dict[str, 
         if ui_provider == "claude"
         else (GEMINI_DEFAULT_MODEL if ui_provider == "gemini" else "auto")
     )
-    usable = bool(openai_status.get("usable"))
+    required_providers = ("openai", "claude", "gemini")
+    missing_installs = [provider for provider in required_providers if not bool(statuses.get(provider, {}).get("available"))]
+    missing_config = [provider for provider in required_providers if bool(statuses.get(provider, {}).get("available")) and not bool(statuses.get(provider, {}).get("configured"))]
+    available = not missing_installs
+    configured = not missing_installs and not missing_config
+    usable = all(bool(statuses.get(provider, {}).get("usable")) for provider in required_providers)
     if usable:
-        reason = f"Uses Codex for planning/general work and `{ui_provider}` for UI/front-end steps."
+        reason = "Uses Codex for planning/general work, Claude for UI/front-end steps, and Gemini as the fallback."
+    elif missing_installs:
+        reason = f"The ensemble requires all three installed backends: missing {', '.join(missing_installs)}."
+    elif missing_config:
+        reason = f"The ensemble has all three CLIs installed, but these backends still need credentials: {', '.join(missing_config)}."
     else:
-        reason = "The ensemble requires a usable Codex backend for planning and general execution."
+        reason = "The ensemble requires Codex, Claude Code, and Gemini CLI to be usable together."
     return {
         "provider": "ensemble",
         "display_name": provider_preset("ensemble").display_name,
-        "available": bool(openai_status.get("available")),
-        "configured": bool(openai_status.get("configured")),
+        "available": available,
+        "configured": configured,
         "usable": usable,
         "default_model": _default_model_for_provider("openai", RuntimeOptions()),
         "planning_provider": "openai",
@@ -400,3 +483,28 @@ def _gemini_settings_file_configured(settings_path: Path | None = None) -> bool:
         return bool(candidate.read_text(encoding="utf-8", errors="replace").strip())
     except OSError:
         return False
+
+
+def _provider_api_env_configured(provider: str) -> bool:
+    env_name = str(provider_preset(provider).default_api_key_env or "").strip()
+    return bool(env_name and str(os.environ.get(env_name, "")).strip())
+
+
+def _provider_default_model(provider: str) -> str:
+    if provider == "claude":
+        return CLAUDE_DEFAULT_MODEL
+    if provider == "gemini":
+        return GEMINI_DEFAULT_MODEL
+    if provider == "qwen_code":
+        return QWEN_CODE_DEFAULT_MODEL
+    if provider == "deepseek":
+        return DEEPSEEK_DEFAULT_MODEL
+    if provider == "kimi":
+        return KIMI_DEFAULT_MODEL
+    if provider == "minimax":
+        return MINIMAX_DEFAULT_MODEL
+    if provider == "glm":
+        return GLM_DEFAULT_MODEL
+    if provider in {"openai", "ensemble"}:
+        return "auto"
+    return ""

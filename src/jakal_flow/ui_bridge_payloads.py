@@ -14,6 +14,7 @@ from .orchestrator import Orchestrator
 from .runtime_insights import build_runtime_insights
 from .share import project_share_payload
 from .status_views import effective_project_status
+from .step_models import provider_statuses_payload
 from .utils import compact_text, normalize_workflow_mode, read_json, read_jsonl_tail, read_last_jsonl, read_text, write_json
 from .workspace import WorkspaceManager
 
@@ -994,6 +995,8 @@ def project_detail_payload(
         if refresh_codex_status
         else {}
     )
+    if isinstance(codex_status, dict):
+        codex_status["provider_statuses"] = provider_statuses_payload()
     return _finalize_project_detail_payload(
         base_payload,
         content_signature=content_signature,

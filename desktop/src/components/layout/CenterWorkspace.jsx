@@ -195,6 +195,7 @@ export function CenterWorkspace({
         {activeTab === "run" ? (
           <ParallelRunControlView
             detail={detail}
+            codexStatus={detail?.codex_status}
             planDraft={planDraft}
             activeJob={activeJob}
             shareSettings={shareSettings}
@@ -243,8 +244,10 @@ export function CenterWorkspace({
             form={form}
             modelPresets={modelPresets}
             modelCatalog={modelCatalog}
+            codexStatus={detail?.codex_status}
             busy={busy}
             onChangeForm={onChangeForm}
+            onChangeProgramSettings={onChangeProgramSettings}
             onChooseDirectory={onChooseDirectory}
             onArchiveProject={onArchiveProject}
             onDeleteProject={onDeleteProject}
@@ -253,6 +256,7 @@ export function CenterWorkspace({
         {activeTab === "app-settings" ? (
           <AppSettingsView
             settings={programSettings}
+            codexStatus={detail?.codex_status}
             shareSettings={shareSettings}
             shareDetail={workspaceShareDetail}
             busy={busy}
