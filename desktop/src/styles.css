@@ -97,6 +97,9 @@ select {
 
 button {
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 input,
@@ -224,23 +227,47 @@ pre {
   background: linear-gradient(180deg, var(--button-bg-start), var(--button-bg-end));
   color: var(--text);
   border-radius: var(--radius-sm);
-  padding: 7px 10px;
+  padding: 7px 12px;
   font-size: 12px;
   font-weight: 500;
+  gap: 6px;
+  transition:
+    background 130ms ease,
+    border-color 130ms ease,
+    box-shadow 130ms ease,
+    transform 130ms ease,
+    opacity 130ms ease;
+  white-space: nowrap;
 }
 
-.toolbar-button:hover:not(:disabled),
+.toolbar-button:hover:not(:disabled) {
+  background: var(--bg-panel-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
 .workspace-tab:hover,
 .tool-tab:hover,
-.sidebar-tab:hover,
+.sidebar-tab:hover {
+  background: var(--bg-panel-hover);
+}
+
 .sidebar-project:hover,
-.choice-card:hover,
+.choice-card:hover {
+  background: var(--bg-panel-hover);
+}
+
 .run-node:hover {
   background: var(--bg-panel-hover);
 }
 
+.toolbar-button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
 .toolbar-button:disabled {
-  opacity: 0.55;
+  opacity: 0.48;
   cursor: not-allowed;
 }
 
@@ -1320,4 +1347,440 @@ pre {
   .run-flow__connector--down {
     bottom: -28px;
   }
+}
+
+/* ═══════════════════════════════════════════════════
+   ENHANCED UI — scrollbar, transitions, new components
+   ═══════════════════════════════════════════════════ */
+
+/* ── Custom scrollbar ── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}
+
+/* ── Global transitions ── */
+.sidebar-project,
+.choice-card,
+.run-node,
+.workspace-tab,
+.sidebar-tab,
+.tool-tab,
+.sidebar-icon,
+.metric-card {
+  transition:
+    background 130ms ease,
+    border-color 130ms ease,
+    transform 130ms ease,
+    box-shadow 130ms ease,
+    color 130ms ease;
+}
+
+/* ── Toolbar logo / branding ── */
+.toolbar-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  user-select: none;
+}
+
+.toolbar-logo__icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #5997d6, #365880);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(95, 151, 214, 0.35);
+}
+
+.toolbar-logo__name {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(90deg, var(--text), var(--text-muted));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+:root[data-theme="light"] .toolbar-logo__name {
+  -webkit-text-fill-color: var(--text);
+  background: none;
+}
+
+/* ── Toolbar divider ── */
+.toolbar-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+/* ── Toolbar icon-only button ── */
+.toolbar-button--icon-only {
+  padding: 7px 8px;
+  min-width: 34px;
+}
+
+/* ── Button SVG size ── */
+.toolbar-button svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  stroke-width: 2;
+}
+
+/* ── Status chip indicator dot ── */
+.chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.chip-dot--success {
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success);
+}
+
+.chip-dot--danger {
+  background: var(--danger);
+  box-shadow: 0 0 6px var(--danger);
+}
+
+.chip-dot--warning {
+  background: var(--warning);
+  box-shadow: 0 0 5px var(--warning);
+}
+
+.chip-dot--info {
+  background: var(--info);
+  box-shadow: 0 0 6px var(--info);
+}
+
+.chip-dot--neutral {
+  background: var(--text-dim);
+}
+
+/* ── Sidebar section header ── */
+.sidebar-panel__header {
+  gap: 8px;
+}
+
+.sidebar-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--bg-accent);
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* ── Sidebar project card — colored left border by status ── */
+.sidebar-project {
+  border-left: 3px solid transparent;
+  padding-left: 10px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.sidebar-project.selected {
+  border-left-color: var(--bg-accent-strong);
+}
+
+.sidebar-project--success:not(.selected) {
+  border-left-color: rgba(78, 163, 109, 0.55);
+}
+
+.sidebar-project--danger:not(.selected) {
+  border-left-color: rgba(200, 93, 97, 0.55);
+}
+
+.sidebar-project--warning:not(.selected) {
+  border-left-color: rgba(211, 169, 84, 0.55);
+}
+
+.sidebar-project--info:not(.selected) {
+  border-left-color: rgba(95, 151, 214, 0.55);
+}
+
+/* ── Sidebar search with icon wrapper ── */
+.sidebar-search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-search-wrapper svg {
+  position: absolute;
+  left: 10px;
+  width: 13px;
+  height: 13px;
+  color: var(--text-dim);
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.sidebar-search-wrapper input {
+  padding-left: 30px;
+}
+
+/* ── Sidebar active icon indicator ── */
+.sidebar-icon {
+  transition:
+    background 130ms ease,
+    border-color 130ms ease,
+    color 130ms ease;
+  position: relative;
+}
+
+.sidebar-icon.active::after {
+  content: "";
+  position: absolute;
+  left: -3px;
+  top: 50%;
+  width: 3px;
+  height: 55%;
+  transform: translateY(-50%);
+  border-radius: 0 3px 3px 0;
+  background: var(--info);
+  box-shadow: 0 0 6px var(--info);
+}
+
+/* ── Workspace tabs with icons ── */
+.workspace-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.workspace-tab svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.workspace-tab.active {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
+}
+
+/* ── Progress banner shimmer ── */
+.run-progress-banner__fill {
+  position: relative;
+  overflow: hidden;
+}
+
+.run-progress-banner__fill:not(.run-progress-banner__fill--indeterminate)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.18) 50%,
+    transparent 100%
+  );
+  animation: progress-shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes progress-shimmer {
+  0% {
+    transform: translateX(-150%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+/* ── Run node improvements ── */
+.run-node:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+}
+
+/* ── Metric card hover lift ── */
+.metric-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* ── Empty block improvements ── */
+.empty-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 24px 16px;
+  font-size: 13px;
+}
+
+.empty-block svg {
+  width: 32px;
+  height: 32px;
+  color: var(--text-dim);
+  opacity: 0.6;
+}
+
+/* ── Focus ring improvements ── */
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--info);
+  box-shadow: 0 0 0 3px rgba(95, 151, 214, 0.14);
+}
+
+/* ── Keyboard shortcut hint ── */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 10px;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+/* ── Toolbar accent button glow ── */
+.toolbar-button--accent:hover:not(:disabled) {
+  box-shadow: 0 4px 14px rgba(95, 151, 214, 0.3);
+}
+
+/* ── Toolbar glass effect ── */
+.ide-toolbar {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* ── Sidebar project title status badge ── */
+.sidebar-project .sidebar-project__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── Progress banner compact meta ── */
+.run-progress-banner__meta {
+  gap: 12px;
+}
+
+/* ── Sidebar section add button ── */
+.sidebar-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  width: 100%;
+  transition: background 130ms ease, color 130ms ease, border-color 130ms ease;
+}
+
+.sidebar-add-btn:hover {
+  background: var(--bg-panel-hover);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.sidebar-add-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* ── View header icon ── */
+.view-header-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--bg-accent);
+  flex-shrink: 0;
+}
+
+.view-header-icon svg {
+  width: 18px;
+  height: 18px;
+  color: var(--text);
+}
+
+/* ── Pill badge for status ── */
+.pill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.pill-badge--running {
+  background: rgba(95, 151, 214, 0.16);
+  color: var(--info);
+  border: 1px solid rgba(95, 151, 214, 0.3);
+}
+
+.pill-badge--success {
+  background: rgba(78, 163, 109, 0.14);
+  color: var(--success);
+  border: 1px solid rgba(78, 163, 109, 0.28);
+}
+
+.pill-badge--danger {
+  background: rgba(200, 93, 97, 0.14);
+  color: var(--danger);
+  border: 1px solid rgba(200, 93, 97, 0.28);
+}
+
+/* ── Loading skeleton pulse ── */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+.skeleton {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+  background: var(--bg-panel-alt);
+  border-radius: var(--radius-sm);
+}
+
+/* ── Smooth banner transitions ── */
+.banner {
+  transition: border-color 220ms ease;
 }
