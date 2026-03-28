@@ -1,4 +1,4 @@
-import { useId, useMemo } from "react";
+import { memo, useId, useMemo } from "react";
 import { displayStatus } from "../../locale";
 import { effectiveStepStatus, statusTone } from "../../utils";
 
@@ -250,7 +250,7 @@ function buildChartData(steps = [], projectStatus = "", language = "en") {
   };
 }
 
-export function ExecutionFlowChart({ steps = [], projectStatus = "", language = "en", selectedStepId = "", onSelectStep = null }) {
+function ExecutionFlowChartComponent({ steps = [], projectStatus = "", language = "en", selectedStepId = "", onSelectStep = null }) {
   const arrowId = useId().replace(/:/g, "-");
   const chart = useMemo(() => buildChartData(steps, projectStatus, language), [steps, projectStatus, language]);
 
@@ -350,3 +350,5 @@ export function ExecutionFlowChart({ steps = [], projectStatus = "", language = 
     </div>
   );
 }
+
+export const ExecutionFlowChart = memo(ExecutionFlowChartComponent);

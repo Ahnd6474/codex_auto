@@ -3,7 +3,12 @@ import { confirm as confirmDialog, open } from "@tauri-apps/plugin-dialog";
 import { bridgeRequest, cancelBridgeJob, configureBridgeScheduler, startBridgeJob, subscribeBridgeEvents } from "../api";
 import { BRIDGE_COMMANDS } from "../bridgeProtocol";
 import { bridgeEventJob, bridgeEventProject, isJobUpdatedEvent, isProjectChangedEvent, isProjectUiEvent } from "../controller/bridgeEvents";
-import { mergeRefreshRepoId, projectRefreshDebounceMs, shouldRefreshSelectedProject } from "../controller/projectRefresh";
+import {
+  mergeRefreshRepoId,
+  projectRefreshDebounceMs,
+  shouldRefreshListingForProjectEvent,
+  shouldRefreshSelectedProject,
+} from "../controller/projectRefresh";
 import {
   carryProjectPromptDraft,
   defaultShareSettings,
@@ -609,7 +614,9 @@ export function useDesktopController() {
       if (isProjectChangedEvent(eventPayload)) {
         const project = bridgeEventProject(eventPayload);
         const eventRepoId = String(project?.repo_id || "").trim();
-        scheduleBridgeRefresh(eventRepoId, { refreshListing: true });
+        scheduleBridgeRefresh(eventRepoId, {
+          refreshListing: shouldRefreshListingForProjectEvent(selectedProjectId, eventRepoId),
+        });
         return;
       }
       if (isProjectUiEvent(eventPayload)) {

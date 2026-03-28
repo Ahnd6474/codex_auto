@@ -23,3 +23,15 @@ export function shouldRefreshSelectedProject(selectedProjectId = "", eventRepoId
   const eventRepo = normalizedRepoId(eventRepoId);
   return !eventRepo || eventRepo === selected;
 }
+
+export function shouldRefreshListingForProjectEvent(selectedProjectId = "", eventRepoId = "") {
+  const selected = normalizedRepoId(selectedProjectId);
+  const eventRepo = normalizedRepoId(eventRepoId);
+  if (!eventRepo) {
+    return true;
+  }
+  if (!selected) {
+    return true;
+  }
+  return eventRepo !== selected;
+}
