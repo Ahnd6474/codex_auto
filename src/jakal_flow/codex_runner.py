@@ -279,15 +279,15 @@ class CodexRunner:
             api_key_env_name = str(getattr(context.runtime, "provider_api_key_env", "") or "").strip() or preset.default_api_key_env
             dotenv_path = context.paths.repo_dir / ".env"
             env_updates: dict[str, str] = {}
-            if provider_base_url:
-                env_updates["OPENAI_BASE_URL"] = provider_base_url
             if api_key_env_name:
                 api_key = get_env_or_dotenv(api_key_env_name, dotenv_path).strip()
                 if api_key:
                     env_updates["OPENAI_API_KEY"] = api_key
-            selected_model = str(getattr(context.runtime, "model", "") or "").strip()
-            if selected_model:
-                env_updates["OPENAI_MODEL"] = selected_model
+                    if provider_base_url:
+                        env_updates["OPENAI_BASE_URL"] = provider_base_url
+                    selected_model = str(getattr(context.runtime, "model", "") or "").strip()
+                    if selected_model:
+                        env_updates["OPENAI_MODEL"] = selected_model
             return env_updates
         if not provider_uses_openai_compatible_api(provider):
             return {}

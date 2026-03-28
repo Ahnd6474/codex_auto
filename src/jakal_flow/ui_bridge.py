@@ -518,6 +518,8 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
         merged["model_preset"] = ""
     merged["model_selection_mode"] = str(merged.get("model_selection_mode", "slug")).strip() or "slug"
     merged["model_slug_input"] = str(merged.get("model_slug_input", merged["model"])).strip().lower() or merged["model"]
+    if provider_default_model and "model" not in payload and "model_slug_input" not in payload:
+        merged["model_slug_input"] = provider_default_model
     if "model" not in payload and str(payload.get("model_slug_input", "")).strip():
         merged["model"] = merged["model_slug_input"]
     if not merged["model"] and merged["model_slug_input"]:

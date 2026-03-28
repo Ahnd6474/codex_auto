@@ -144,6 +144,11 @@ npm.cmd run tauri:dev
 | `openai` | Yes | OpenAI / Codex cloud flow |
 | `claude` | Yes | Claude Code print-mode flow |
 | `gemini` | Yes | Gemini CLI headless flow |
+| `qwen_code` | Yes | Qwen Code headless flow |
+| `deepseek` | Yes | Claude Code against DeepSeek's Anthropic-compatible endpoint |
+| `kimi` | Yes | Codex/OpenAI-compatible flow against Moonshot Kimi |
+| `minimax` | Yes | Claude Code against MiniMax's Anthropic-compatible endpoint |
+| `glm` | Yes | Claude Code against Zhipu GLM's Anthropic-compatible endpoint |
 | `openrouter` | Yes | OpenAI-compatible endpoint |
 | `opencdk` | Yes | OpenAI-compatible endpoint |
 | `local_openai` | Yes | Local OpenAI-compatible server such as LM Studio, vLLM, llama.cpp, or LocalAI |
@@ -333,6 +338,51 @@ python -m jakal_flow run \
   --workspace-root .jakal-flow-workspace \
   --model-provider claude \
   --model sonnet \
+  --approval-mode never \
+  --sandbox-mode workspace-write \
+  --test-cmd "python -m pytest" \
+  --max-blocks 1
+```
+
+DeepSeek via Claude Code:
+
+```bash
+python -m jakal_flow run \
+  --repo-url https://github.com/Ahnd6474/lit.git \
+  --branch main \
+  --workspace-root .jakal-flow-workspace \
+  --model-provider deepseek \
+  --model deepseek-chat \
+  --approval-mode never \
+  --sandbox-mode workspace-write \
+  --test-cmd "python -m pytest" \
+  --max-blocks 1
+```
+
+Kimi via Moonshot API:
+
+```bash
+python -m jakal_flow run \
+  --repo-url https://github.com/Ahnd6474/lit.git \
+  --branch main \
+  --workspace-root .jakal-flow-workspace \
+  --model-provider kimi \
+  --model kimi-k2.5 \
+  --approval-mode never \
+  --sandbox-mode workspace-write \
+  --test-cmd "python -m pytest" \
+  --max-blocks 1
+```
+
+Qwen Code:
+
+```bash
+python -m jakal_flow run \
+  --repo-url https://github.com/Ahnd6474/lit.git \
+  --branch main \
+  --workspace-root .jakal-flow-workspace \
+  --model-provider qwen_code \
+  --model qwen3-coder-plus \
   --approval-mode never \
   --sandbox-mode workspace-write \
   --test-cmd "python -m pytest" \

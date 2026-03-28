@@ -18,7 +18,7 @@
 
 - `projects/<repo_slug>/` 단위의 다중 저장소 워크스페이스 관리
 - Python 오케스트레이터 위에 React + Tauri 데스크톱 셸 제공
-- OpenAI / Codex 클라우드, Claude Code, Gemini CLI, OpenRouter, OpenCDK, 로컬 OpenAI 호환 서버, Codex OSS 로컬 실행 지원
+- OpenAI / Codex 클라우드, Claude Code, Gemini CLI, Qwen Code, DeepSeek, Kimi, MiniMax, GLM, OpenRouter, OpenCDK, 로컬 OpenAI 호환 서버, Codex OSS 로컬 실행 지원
 - 표준 소프트웨어 워크플로와 ML 실험 워크플로 지원
 - owned path 기반 안전 조건을 둔 병렬 DAG 실행
 - 계획, 체크포인트, 로그, 메모리, 리포트, SVG, UI 이벤트 히스토리를 프로젝트별로 분리 저장
@@ -99,7 +99,13 @@ npm.cmd run tauri:build
 현재 구현에 연결된 제공자 프리셋:
 
 - `openai`
+- `claude`
 - `gemini`
+- `qwen_code`
+- `deepseek`
+- `kimi`
+- `minimax`
+- `glm`
 - `openrouter`
 - `opencdk`
 - `local_openai`
@@ -224,6 +230,51 @@ python -m jakal_flow run \
   --workspace-root .jakal-flow-workspace \
   --model-provider claude \
   --model sonnet \
+  --approval-mode never \
+  --sandbox-mode workspace-write \
+  --test-cmd "python -m pytest" \
+  --max-blocks 1
+```
+
+DeepSeek via Claude Code:
+
+```bash
+python -m jakal_flow run \
+  --repo-url https://github.com/Ahnd6474/lit.git \
+  --branch main \
+  --workspace-root .jakal-flow-workspace \
+  --model-provider deepseek \
+  --model deepseek-chat \
+  --approval-mode never \
+  --sandbox-mode workspace-write \
+  --test-cmd "python -m pytest" \
+  --max-blocks 1
+```
+
+Kimi 실행:
+
+```bash
+python -m jakal_flow run \
+  --repo-url https://github.com/Ahnd6474/lit.git \
+  --branch main \
+  --workspace-root .jakal-flow-workspace \
+  --model-provider kimi \
+  --model kimi-k2.5 \
+  --approval-mode never \
+  --sandbox-mode workspace-write \
+  --test-cmd "python -m pytest" \
+  --max-blocks 1
+```
+
+Qwen Code 실행:
+
+```bash
+python -m jakal_flow run \
+  --repo-url https://github.com/Ahnd6474/lit.git \
+  --branch main \
+  --workspace-root .jakal-flow-workspace \
+  --model-provider qwen_code \
+  --model qwen3-coder-plus \
   --approval-mode never \
   --sandbox-mode workspace-write \
   --test-cmd "python -m pytest" \
