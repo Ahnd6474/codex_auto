@@ -213,6 +213,9 @@ class GitOps:
     def abort_cherry_pick(self, repo_dir: Path) -> None:
         self.run(["cherry-pick", "--abort"], cwd=repo_dir, check=False)
 
+    def skip_cherry_pick(self, repo_dir: Path) -> None:
+        self.run(["cherry-pick", "--skip"], cwd=repo_dir, check=False)
+
     def continue_cherry_pick(self, repo_dir: Path) -> None:
         self.run(["cherry-pick", "--continue"], cwd=repo_dir)
 
