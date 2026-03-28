@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,7 @@ def source_prompt_template_path(name: str) -> Path:
     return source_docs_dir() / name
 
 
+@lru_cache(maxsize=None)
 def load_source_prompt_template(name: str) -> str:
     return source_prompt_template_path(name).read_text(encoding="utf-8")
 
@@ -117,12 +119,13 @@ def load_optimization_prompt_template() -> str:
     return load_source_prompt_template(OPTIMIZATION_PROMPT_FILENAME)
 
 
+@lru_cache(maxsize=1)
 def load_reference_guide_text() -> str:
     text = read_text(source_prompt_template_path(REFERENCE_GUIDE_FILENAME))
     return compact_text(text, 2200) or f"{REFERENCE_GUIDE_DISPLAY_PATH} not found."
 
 
-def _summarize_source_inventory(repo_dir: Path, limit: int = 12) -> str:
+def _summarize_source_inventory(repo_dir: Path, limit: int = 10) -> str:
     roots = [
         repo_dir / "src",
         repo_dir / "app",
@@ -202,20 +205,141 @@ def _summarize_source_inventory(repo_dir: Path, limit: int = 12) -> str:
     )
 
 
+def _summarize_docs_inventory(
+    repo_dir: Path,
+    *,
+    max_files: int = 8,
+    max_chars_per_file: int = 320,
+    max_total_chars: int = 2400,
+) -> str:
+    docs_dir = repo_dir / "docs"
+    if not docs_dir.exists():
+        return "No markdown files under repo/docs."
+    doc_paths = sorted(docs_dir.rglob("*.md"))
+    if not doc_paths:
+        return "No markdown files under repo/docs."
+
+    entries: list[str] = []
+    current_chars = 0
+    for path in doc_paths:
+        if len(entries) >= max_files or current_chars >= max_total_chars:
+            break
+        entry = f"## {path.relative_to(repo_dir)}\n{compact_text(read_text(path), max_chars_per_file)}"
+        if entries and current_chars + len(entry) + 2 > max_total_chars:
+            break
+        entries.append(entry)
+        current_chars += len(entry) + 2
+
+    if not entries:
+        first_path = doc_paths[0]
+        entries.append(f"## {first_path.relative_to(repo_dir)}\n{compact_text(read_text(first_path), max_chars_per_file)}")
+
+    omitted_count = max(0, len(doc_paths) - len(entries))
+    if omitted_count:
+        entries.append(f"... {omitted_count} more markdown doc file(s) omitted to keep planning context compact.")
+    return "\n\n".join(entries)
+
+
 def scan_repository_inputs(repo_dir: Path) -> dict[str, str]:
     readme = read_text(repo_dir / "README.md")
     agents = read_text(repo_dir / "AGENTS.md")
-    docs_dir = repo_dir / "docs"
-    docs_summaries: list[str] = []
-    if docs_dir.exists():
-        for path in sorted(docs_dir.rglob("*.md"))[:20]:
-            docs_summaries.append(f"## {path.relative_to(repo_dir)}\n{compact_text(read_text(path), 600)}")
     return {
         "readme": compact_text(readme, 2000) or "README.md not found.",
         "agents": compact_text(agents, 1500) or "AGENTS.md not found.",
-        "docs": "\n\n".join(docs_summaries) if docs_summaries else "No markdown files under repo/docs.",
+        "docs": _summarize_docs_inventory(repo_dir),
         "source": _summarize_source_inventory(repo_dir),
     }
+
+
+def compact_repository_inputs(
+    repo_inputs: dict[str, str],
+    *,
+    readme_chars: int = 1200,
+    agents_chars: int = 1000,
+    docs_chars: int = 1800,
+    source_chars: int = 900,
+) -> dict[str, str]:
+    return {
+        "readme": compact_text(repo_inputs.get("readme", ""), readme_chars) or "README.md not found.",
+        "agents": compact_text(repo_inputs.get("agents", ""), agents_chars) or "AGENTS.md not found.",
+        "docs": compact_text(repo_inputs.get("docs", ""), docs_chars) or "No markdown files under repo/docs.",
+        "source": compact_text(repo_inputs.get("source", ""), source_chars) or "Source inventory unavailable.",
+    }
+
+
+def followup_planning_repository_inputs(repo_inputs: dict[str, str]) -> dict[str, str]:
+    return compact_repository_inputs(
+        repo_inputs,
+        readme_chars=900,
+        agents_chars=900,
+        docs_chars=1400,
+        source_chars=750,
+    )
+
+
+def _candidate_owned_paths_from_source_summary(source_summary: str, limit: int = 4) -> list[str]:
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for match in re.findall(r"(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+", source_summary or ""):
+        normalized = match.strip().rstrip(".,")
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        candidates.append(normalized)
+        if len(candidates) >= max(1, limit):
+            break
+    return candidates
+
+
+def build_fast_planner_outline(
+    repo_inputs: dict[str, str],
+    user_prompt: str,
+) -> str:
+    source_summary = repo_inputs.get("source", "")
+    candidate_owned_paths = _candidate_owned_paths_from_source_summary(source_summary)
+    prompt_summary = compact_text(user_prompt.strip(), 180) or "Implement the requested repository change safely."
+    payload = {
+        "title": compact_text(prompt_summary, 80) or "Fast planning outline",
+        "strategy_summary": (
+            "Fast planning mode: skip the separate decomposition pass, keep the DAG narrow, and prefer direct edits "
+            "to existing implementation surfaces before introducing new scaffolding."
+        ),
+        "shared_contracts": [],
+        "skeleton_step": {
+            "block_id": "SK1",
+            "needed": False,
+            "task_title": "",
+            "purpose": "",
+            "contract_docstring": "",
+            "candidate_owned_paths": [],
+            "success_criteria": "",
+        },
+        "candidate_blocks": [
+            {
+                "block_id": "B1",
+                "goal": prompt_summary,
+                "work_items": [
+                    "Identify the smallest safe implementation slice that directly satisfies the user request.",
+                    "Reuse or extend existing modules before creating new boundaries.",
+                    "Preserve verification and traceability artifacts while shaping the final DAG.",
+                ],
+                "implementation_notes": (
+                    "Use the repository summary to keep file ownership narrow. Prefer edits to existing code paths "
+                    "and let Planner Agent B split the work further only when there are truly independent outcomes."
+                ),
+                "testable_boundary": "The final execution plan maps the request onto small, locally judgeable checkpoints.",
+                "candidate_owned_paths": candidate_owned_paths,
+                "parallelizable_after": [],
+                "parallel_notes": "Only create a parallel-ready wave when the owned paths stay narrow and non-overlapping.",
+            }
+        ],
+        "packing_notes": [
+            "Preserve any directly relevant AGENTS.md constraints and existing repository structure.",
+            "Favor a minimal prerequisite step only when a shared contract or entrypoint clearly needs to be frozen first.",
+            "Keep the resulting plan compact enough for fast iteration while still being handoff-quality.",
+        ],
+    }
+    return json.dumps(payload, indent=2, sort_keys=True)
 
 
 def assess_repository_maturity(repo_dir: Path, repo_inputs: dict[str, str]) -> tuple[bool, dict[str, int]]:
@@ -531,19 +655,20 @@ def prompt_to_execution_plan_prompt(
     runtime = getattr(context, "runtime", None)
     workflow_mode = normalize_workflow_mode(getattr(runtime, "workflow_mode", "standard"))
     template = template_text or load_plan_generation_prompt_template(execution_mode, workflow_mode)
+    compact_inputs = followup_planning_repository_inputs(repo_inputs)
     try:
         return template.format(
             repo_dir=context.paths.repo_dir,
             max_steps=max(3, max_steps),
             workflow_mode=workflow_mode,
             execution_mode=_normalize_execution_mode(execution_mode),
-            readme=repo_inputs["readme"],
-            agents=repo_inputs["agents"],
+            readme=compact_inputs["readme"],
+            agents=compact_inputs["agents"],
             reference_notes=load_reference_guide_text(),
-            docs=repo_inputs["docs"],
-            source=repo_inputs.get("source", "Source inventory unavailable."),
+            docs=compact_inputs["docs"],
+            source=compact_inputs["source"],
             user_prompt=user_prompt.strip(),
-            planner_outline=compact_text(planner_outline.strip(), 8000) or "Planner Agent A output unavailable.",
+            planner_outline=compact_text(planner_outline.strip(), 4000) or "Planner Agent A output unavailable.",
         )
     except KeyError as exc:
         raise ValueError(f"Unknown placeholder in plan generation prompt template: {exc.args[0]}") from exc

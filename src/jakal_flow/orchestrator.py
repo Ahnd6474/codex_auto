@@ -23,6 +23,7 @@ from .planning import (
     FINALIZATION_PROMPT_FILENAME,
     attempt_history_entry,
     assess_repository_maturity,
+    build_fast_planner_outline,
     build_mid_term_plan,
     build_mid_term_plan_from_plan_items,
     build_mid_term_plan_from_user_items,
@@ -193,48 +194,78 @@ class Orchestrator:
         )
         repo_inputs = scan_repository_inputs(context.paths.repo_dir)
         runner = CodexRunner(context.runtime.codex_path)
-        decomposition_prompt = prompt_to_plan_decomposition_prompt(
-            context=context,
-            repo_inputs=repo_inputs,
-            user_prompt=project_prompt,
-            max_steps=max_steps,
-            execution_mode=normalized_execution_mode,
-            template_text=decomposition_prompt_template,
-        )
-        report_progress(
-            "planner-agent-started",
-            "Planner Agent A is decomposing the work into implementation blocks.",
-            {
-                "stage_key": "planner_a",
-                "stage_index": 2,
-                "stage_count": planning_stage_count,
-                "status": "running",
-                "agent_key": "planner_a",
-                "agent_label": "Planner Agent A",
-            },
-        )
-        decomposition_result = runner.run_pass(
-            context=context,
-            prompt=decomposition_prompt,
-            pass_type="plan-agent-a-decomposition",
-            block_index=max(0, context.loop_state.block_index),
-            search_enabled=False,
-            reasoning_effort=planning_effort,
-        )
-        report_progress(
-            "planner-agent-finished",
-            "Planner Agent A finished the decomposition outline.",
-            {
-                "stage_key": "planner_a",
-                "stage_index": 2,
-                "stage_count": planning_stage_count,
-                "status": "completed" if decomposition_result.returncode == 0 else "failed",
-                "agent_key": "planner_a",
-                "agent_label": "Planner Agent A",
-                "returncode": decomposition_result.returncode,
-            },
-        )
-        planner_outline = (decomposition_result.last_message or "").strip() if decomposition_result.returncode == 0 else ""
+        skip_planner_a = self._should_skip_planner_decomposition(context, planning_effort, workflow_mode)
+        planner_outline = ""
+        if skip_planner_a:
+            report_progress(
+                "planner-agent-started",
+                "Planner Agent A fast lane is synthesizing a compact heuristic outline.",
+                {
+                    "stage_key": "planner_a",
+                    "stage_index": 2,
+                    "stage_count": planning_stage_count,
+                    "status": "running",
+                    "agent_key": "planner_a",
+                    "agent_label": "Planner Agent A",
+                },
+            )
+            planner_outline = build_fast_planner_outline(repo_inputs, project_prompt)
+            report_progress(
+                "planner-agent-finished",
+                "Planner Agent A was skipped in fast mode; a compact heuristic outline was saved instead.",
+                {
+                    "stage_key": "planner_a",
+                    "stage_index": 2,
+                    "stage_count": planning_stage_count,
+                    "status": "completed",
+                    "agent_key": "planner_a",
+                    "agent_label": "Planner Agent A",
+                    "skipped": True,
+                },
+            )
+        else:
+            decomposition_prompt = prompt_to_plan_decomposition_prompt(
+                context=context,
+                repo_inputs=repo_inputs,
+                user_prompt=project_prompt,
+                max_steps=max_steps,
+                execution_mode=normalized_execution_mode,
+                template_text=decomposition_prompt_template,
+            )
+            report_progress(
+                "planner-agent-started",
+                "Planner Agent A is decomposing the work into implementation blocks.",
+                {
+                    "stage_key": "planner_a",
+                    "stage_index": 2,
+                    "stage_count": planning_stage_count,
+                    "status": "running",
+                    "agent_key": "planner_a",
+                    "agent_label": "Planner Agent A",
+                },
+            )
+            decomposition_result = runner.run_pass(
+                context=context,
+                prompt=decomposition_prompt,
+                pass_type="plan-agent-a-decomposition",
+                block_index=max(0, context.loop_state.block_index),
+                search_enabled=False,
+                reasoning_effort=planning_effort,
+            )
+            report_progress(
+                "planner-agent-finished",
+                "Planner Agent A finished the decomposition outline.",
+                {
+                    "stage_key": "planner_a",
+                    "stage_index": 2,
+                    "stage_count": planning_stage_count,
+                    "status": "completed" if decomposition_result.returncode == 0 else "failed",
+                    "agent_key": "planner_a",
+                    "agent_label": "Planner Agent A",
+                    "returncode": decomposition_result.returncode,
+                },
+            )
+            planner_outline = (decomposition_result.last_message or "").strip() if decomposition_result.returncode == 0 else ""
         write_text(
             context.paths.docs_dir / "PLAN_AGENT_A_OUTLINE.md",
             planner_outline or "Planner Agent A did not return a reusable decomposition artifact.",
@@ -341,6 +372,18 @@ class Orchestrator:
         context.metadata.last_run_at = now_utc_iso()
         self.workspace.save_project(context)
         return context, plan_state
+
+    def _should_skip_planner_decomposition(
+        self,
+        context: ProjectContext,
+        planning_effort: str,
+        workflow_mode: str,
+    ) -> bool:
+        if workflow_mode == "ml":
+            return False
+        if planning_effort == "xhigh":
+            return False
+        return bool(getattr(context.runtime, "use_fast_mode", False))
 
     def _postprocess_generated_plan_steps(
         self,

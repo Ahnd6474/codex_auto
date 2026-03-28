@@ -30,6 +30,7 @@ from jakal_flow.share import (
     project_share_payload,
     public_execution_flow_svg,
     public_monitor_status,
+    public_session_summary,
     public_workspace_monitor_status,
     revoke_share_session,
     save_share_sessions,
@@ -518,6 +519,44 @@ class ShareMonitoringTests(unittest.TestCase):
 
         self.assertEqual(payload["share_base_url"], "http://0.0.0.0:43123")
         self.assertEqual(payload["share_base_url_source"], "local")
+
+    def test_public_session_summary_ignores_stale_local_state_when_server_is_down(self) -> None:
+        workspace_root = Path("C:/tmp/share-status-demo")
+        session = ShareSession(
+            session_id="demo-session",
+            viewer_token="secret-token",
+            created_at="2026-03-26T00:00:00+00:00",
+            expires_at="2026-03-26T01:00:00+00:00",
+            created_by="test",
+        )
+        stale_state = ShareServerState(
+            host="0.0.0.0",
+            port=43123,
+            pid=4242,
+            started_at="2026-03-26T00:00:00+00:00",
+            viewer_path="/share/view",
+        )
+
+        payload = public_session_summary(
+            workspace_root,
+            None,
+            session,
+            include_token=True,
+            server={
+                "running": False,
+                "host": "0.0.0.0",
+                "port": None,
+                "pid": None,
+                "started_at": None,
+                "base_url": None,
+                "viewer_path": "/share/view",
+                "share_base_url": None,
+            },
+            state=stale_state,
+        )
+
+        self.assertIsNone(payload["local_url"])
+        self.assertIsNone(payload["share_url"])
 
     def test_share_logs_api_builds_monitor_status_once(self) -> None:
         with TemporaryTestDir() as temp_dir:

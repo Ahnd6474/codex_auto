@@ -2338,6 +2338,27 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("finished, handoff-quality result", plan_prompt)
         self.assertIn("finished, handoff-quality implementation", bootstrap_prompt)
 
+    def test_scan_repository_inputs_compacts_large_docs_inventory(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_large_docs_summary_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        repo_dir = temp_root / "repo"
+        docs_dir = repo_dir / "docs"
+        docs_dir.mkdir(parents=True, exist_ok=True)
+        (repo_dir / "README.md").write_text("README summary", encoding="utf-8")
+        (repo_dir / "AGENTS.md").write_text("AGENTS summary", encoding="utf-8")
+
+        for index in range(1, 11):
+            (docs_dir / f"note_{index}.md").write_text(f"doc {index} " + ("detail " * 120), encoding="utf-8")
+
+        try:
+            repo_inputs = scan_repository_inputs(repo_dir)
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertLessEqual(len(repo_inputs["docs"]), 2600)
+        self.assertIn("omitted to keep planning context compact", repo_inputs["docs"])
+        self.assertIn("note_1.md", repo_inputs["docs"])
+
     def test_generate_execution_plan_runs_planner_agent_a_then_agent_b(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_dual_planner_test"
         shutil.rmtree(temp_root, ignore_errors=True)
@@ -2482,6 +2503,98 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(plan_state.plan_title, "Dual planner demo")
         self.assertEqual([step.step_id for step in plan_state.steps], ["ST1", "ST2"])
         self.assertIn("If the relevant module, class, or function already exists, update it in place", plan_state.steps[0].codex_description)
+
+    def test_generate_execution_plan_skips_planner_agent_a_in_fast_mode(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_fast_planner_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        (repo_dir / "README.md").write_text("README summary " + ("context " * 200), encoding="utf-8")
+        (repo_dir / "AGENTS.md").write_text("AGENTS summary " + ("guardrails " * 160), encoding="utf-8")
+        (repo_dir / "src").mkdir(parents=True, exist_ok=True)
+        (repo_dir / "src" / "planner.py").write_text("def run() -> None:\n    pass\n", encoding="utf-8")
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model="gpt-5.4",
+            effort="medium",
+            planning_effort="medium",
+            execution_mode="parallel",
+            use_fast_mode=True,
+            test_cmd="python -m pytest",
+        )
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(project_dir=repo_dir, branch="main", runtime=runtime)
+            planning_events: list[tuple[str, str, dict[str, object] | None]] = []
+            final_plan_json = """
+            {
+              "title": "Fast planner demo",
+              "summary": "Use the compact outline and emit the final DAG directly.",
+              "tasks": [
+                {
+                  "step_id": "ST1",
+                  "task_title": "Implement the planner update",
+                  "display_description": "Update the planning path.",
+                  "codex_description": "Tighten the planning path while preserving traceability artifacts.",
+                  "reasoning_effort": "medium",
+                  "depends_on": [],
+                  "owned_paths": ["src/planner.py"],
+                  "success_criteria": "The planner change is implemented safely."
+                }
+              ]
+            }
+            """
+            run_result = CodexRunResult(
+                pass_type="plan-agent-b-packing",
+                prompt_file=context.paths.logs_dir / "b.prompt.md",
+                output_file=context.paths.logs_dir / "b.last_message.txt",
+                event_file=context.paths.logs_dir / "b.events.jsonl",
+                returncode=0,
+                search_enabled=False,
+                changed_files=[],
+                usage={"input_tokens": 12},
+                last_message=final_plan_json,
+            )
+
+            with mock.patch.object(orchestrator, "setup_local_project", return_value=context), mock.patch(
+                "jakal_flow.orchestrator.CodexRunner.run_pass",
+                return_value=run_result,
+            ) as mocked_run_pass:
+                _context, plan_state = orchestrator.generate_execution_plan(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    project_prompt="Speed up the planning stage without losing traceability.",
+                    max_steps=4,
+                    progress_callback=lambda _context, event_type, message, details=None: planning_events.append(
+                        (event_type, message, details)
+                    ),
+                )
+                prompt = mocked_run_pass.call_args.kwargs["prompt"]
+                outline_text = (context.paths.docs_dir / "PLAN_AGENT_A_OUTLINE.md").read_text(encoding="utf-8")
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(mocked_run_pass.call_count, 1)
+        self.assertEqual(mocked_run_pass.call_args.kwargs["pass_type"], "plan-agent-b-packing")
+        self.assertIn("Fast planning mode", outline_text)
+        self.assertIn('"block_id": "B1"', outline_text)
+        self.assertIn("Planner Agent A decomposition artifact:", prompt)
+        self.assertIn('"block_id": "B1"', prompt)
+        self.assertEqual(
+            [item[0] for item in planning_events],
+            [
+                "plan-started",
+                "planner-agent-started",
+                "planner-agent-finished",
+                "planner-agent-started",
+                "planner-agent-finished",
+                "plan-finalizing",
+            ],
+        )
+        self.assertTrue(planning_events[2][2]["skipped"])
+        self.assertEqual(plan_state.plan_title, "Fast planner demo")
+        self.assertEqual([step.step_id for step in plan_state.steps], ["ST1"])
 
     def test_ensure_gitignore_adds_missing_entries_once(self) -> None:
         project_dir = Path(__file__).resolve().parents[1] / ".tmp_gitignore_test"

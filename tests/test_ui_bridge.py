@@ -97,6 +97,36 @@ def fake_codex_snapshot() -> mock.Mock:
 
 
 class UIBridgeTests(unittest.TestCase):
+    def test_start_share_server_process_replaces_stale_state_file(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            workspace_root.mkdir(parents=True, exist_ok=True)
+            stale_port = 54321
+            stale_pid = 999999
+            (workspace_root / "share_server.json").write_text(
+                json.dumps(
+                    {
+                        "host": "0.0.0.0",
+                        "port": stale_port,
+                        "pid": stale_pid,
+                        "started_at": "2026-03-28T00:00:00+00:00",
+                        "viewer_path": "/share/view",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            try:
+                status = ui_bridge.start_share_server_process(workspace_root)
+                self.assertTrue(status["running"])
+                self.assertNotEqual(status["pid"], stale_pid)
+                self.assertNotEqual(status["port"], stale_port)
+                stored_state = json.loads((workspace_root / "share_server.json").read_text(encoding="utf-8"))
+                self.assertEqual(stored_state["pid"], status["pid"])
+                self.assertEqual(stored_state["port"], status["port"])
+            finally:
+                ui_bridge.stop_share_server_process(workspace_root)
+
     def test_default_workspace_root_prefers_explicit_jakal_flow_env(self) -> None:
         with TemporaryTestDir() as temp_dir:
             explicit = temp_dir / "custom-workspace"

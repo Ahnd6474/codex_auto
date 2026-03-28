@@ -248,6 +248,13 @@ def load_share_server_state(workspace_root: Path) -> ShareServerState | None:
         return None
 
 
+def clear_share_server_state(workspace_root: Path) -> None:
+    try:
+        share_server_status_file(workspace_root).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def load_share_server_config(workspace_root: Path) -> ShareServerConfig:
     raw = read_json(share_server_config_file(workspace_root), default={})
     if not isinstance(raw, dict):
@@ -299,10 +306,12 @@ def share_server_status_payload(workspace_root: Path) -> dict[str, Any]:
         if config.public_base_url
         else ("quick_tunnel" if tunnel_matches_server else ("local" if running else None))
     )
+    if not running:
+        clear_share_server_state(workspace_root)
     payload = {
         "running": running,
         "host": state.host,
-        "port": state.port,
+        "port": state.port if running else None,
         "pid": state.pid if running else None,
         "started_at": state.started_at if running else None,
         "base_url": state.base_url if running else None,
@@ -941,8 +950,12 @@ def public_session_summary(
         server = share_server_status_payload(workspace_root)
     viewer_path = str(server.get("viewer_path") or (state.viewer_path if state is not None else DEFAULT_VIEWER_PATH))
     local_url = None
-    local_base = str(server.get("base_url") or (state.base_url if state is not None else "")).strip()
-    local_host = str(server.get("host") or (state.host if state is not None else "")).strip()
+    local_base = str(server.get("base_url") or "").strip()
+    if not local_base and bool(server.get("running")) and state is not None:
+        local_base = state.base_url
+    local_host = str(server.get("host") or "").strip()
+    if not local_host and bool(server.get("running")) and state is not None:
+        local_host = state.host
     if local_base:
         if local_host == "0.0.0.0":
             local_base = local_base.replace("http://0.0.0.0:", "http://127.0.0.1:", 1)
