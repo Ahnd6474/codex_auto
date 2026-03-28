@@ -327,6 +327,75 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIsNone(lineage.merged_by_step_id)
         self.assertIsNone(lineage.parent_lineage_id)
 
+    def test_create_lineage_state_uses_unique_branch_names_for_reused_lineage_ids(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_unique_lineage_branch_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", test_cmd="python -m pytest", execution_mode="parallel")
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            with mock.patch.object(orchestrator.git, "add_worktree") as mocked_add_worktree:
+                first = orchestrator._create_lineage_state(context, {}, source_revision="safe-main")
+                second = orchestrator._create_lineage_state(context, {}, source_revision="safe-main")
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertTrue(first.branch_name.startswith("jakal-flow-lineage-ln1-"))
+        self.assertTrue(second.branch_name.startswith("jakal-flow-lineage-ln1-"))
+        self.assertNotEqual(first.branch_name, second.branch_name)
+        self.assertEqual(mocked_add_worktree.call_count, 2)
+        self.assertNotEqual(mocked_add_worktree.call_args_list[0].args[2], mocked_add_worktree.call_args_list[1].args[2])
+
+    def test_build_lineage_context_reattaches_existing_branch_when_worktree_is_missing(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_reattach_lineage_branch_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", test_cmd="python -m pytest", execution_mode="parallel")
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            lineage = LineageState(
+                lineage_id="LN1",
+                branch_name="jakal-flow-lineage-ln1",
+                worktree_dir=temp_root / "lineages" / "ln1" / "repo",
+                project_root=temp_root / "lineages" / "ln1",
+                created_at="2026-03-28T00:00:00+00:00",
+                updated_at="2026-03-28T00:00:00+00:00",
+                head_commit="ln1-head",
+                safe_revision="ln1-head",
+            )
+            step = ExecutionStep(step_id="ST1", title="Frontend slice", owned_paths=["desktop/src"])
+            with mock.patch.object(orchestrator.git, "branch_exists", return_value=True) as mocked_branch_exists, mock.patch.object(
+                orchestrator.git,
+                "attach_worktree",
+            ) as mocked_attach, mock.patch.object(
+                orchestrator.git,
+                "add_worktree",
+            ) as mocked_add:
+                lineage_context = orchestrator._build_lineage_context(context, runtime, step, lineage)
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        mocked_branch_exists.assert_called_once_with(context.paths.repo_dir, lineage.branch_name)
+        mocked_attach.assert_called_once_with(context.paths.repo_dir, lineage.worktree_dir, lineage.branch_name)
+        mocked_add.assert_not_called()
+        self.assertEqual(lineage_context.metadata.branch, lineage.branch_name)
+
     def test_pending_execution_batches_uses_dependency_ready_waves(self) -> None:
         orchestrator = Orchestrator(Path.cwd() / ".tmp_pending_batches_workspace")
         plan_state = ExecutionPlanState(
@@ -811,6 +880,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             effort="medium",
             test_cmd="python -m pytest",
             execution_mode="parallel",
+            allow_push=True,
         )
 
         try:
@@ -924,7 +994,14 @@ class ExecutionPlanHelperTests(unittest.TestCase):
                 ), mock.patch.object(
                     orchestrator.git,
                     "merge_ff_only",
-                ) as mocked_ff_merge:
+                ) as mocked_ff_merge, mock.patch.object(
+                    orchestrator.git,
+                    "remote_url",
+                    return_value="https://example.com/repo.git",
+                ) as mocked_remote_url, mock.patch.object(
+                    orchestrator.git,
+                    "push",
+                ) as mocked_push:
                     project, saved, step = orchestrator.run_join_execution_step(
                         project_dir=repo_dir,
                         runtime=runtime,
@@ -939,6 +1016,8 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(project.metadata.current_safe_revision, "main-integrated")
         self.assertEqual([call.args[1] for call in mocked_cherry_pick.call_args_list], ["ln1-head", "ln3-head"])
         mocked_ff_merge.assert_called_once()
+        mocked_remote_url.assert_called()
+        mocked_push.assert_called_once_with(project.paths.repo_dir, project.metadata.branch)
         self.assertEqual(mocked_cleanup.call_count, 2)
         mocked_cleanup_integration.assert_called_once()
         self.assertEqual(
