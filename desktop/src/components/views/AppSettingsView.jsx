@@ -140,6 +140,7 @@ export function AppSettingsView({
                   disabled={runtimeBusy}
                 >
                   <option value="openai">{t("option.providerOpenAI")}</option>
+                  <option value="gemini">Gemini CLI</option>
                   <option value="openrouter">{t("option.providerOpenRouter")}</option>
                   <option value="opencdk">{t("option.providerOpenCDK")}</option>
                   <option value="local_openai">{t("option.providerLocalCompatible")}</option>
@@ -350,7 +351,7 @@ export function AppSettingsView({
               <label className="field">
                 <span>{t("field.codexPath")}</span>
                 <input
-                  value={settings.codex_path || defaultCodexPath()}
+                  value={settings.codex_path || defaultCodexPath(settings.model_provider)}
                   onChange={(event) => onChangeSettings((current) => ({ ...current, codex_path: event.target.value }))}
                   disabled={runtimeBusy}
                 />

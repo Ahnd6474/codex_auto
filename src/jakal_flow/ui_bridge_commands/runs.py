@@ -20,6 +20,21 @@ def build_run_command_handlers(
     execution_stop_registry,
     coerce_bool,
 ) -> dict[str, BridgeCommandHandler]:
+    def closeout_finished_event_payload(project, saved) -> tuple[str, dict]:
+        details = {
+            "status": saved.closeout_status,
+            "commit_hash": saved.closeout_commit_hash,
+        }
+        word_report_path = ""
+        report_path = getattr(project.paths, "closeout_report_docx_file", None)
+        if report_path is not None and report_path.exists():
+            word_report_path = str(report_path)
+            details["word_report_path"] = word_report_path
+        message = f"Closeout finished with status {saved.closeout_status}."
+        if saved.closeout_status == "completed" and word_report_path:
+            message = f"{message} Word report: {word_report_path}"
+        return message, details
+
     def request_stop(ctx: BridgeCommandContext) -> dict:
         project = resolve_project(ctx.orchestrator, ctx.payload)
         control = request_stop_immediately(
@@ -74,11 +89,12 @@ def build_run_command_handlers(
                     branch=branch,
                     origin_url=origin_url,
                 )
+                event_message, event_details = closeout_finished_event_payload(next_project, next_saved)
                 append_ui_event(
                     next_project,
                     "closeout-finished",
-                    f"Closeout finished with status {next_saved.closeout_status}.",
-                    {"status": next_saved.closeout_status, "commit_hash": next_saved.closeout_commit_hash},
+                    event_message,
+                    event_details,
                 )
                 return next_project, next_saved
 
@@ -337,11 +353,12 @@ def build_run_command_handlers(
                 branch=branch,
                 origin_url=origin_url,
             )
+            event_message, event_details = closeout_finished_event_payload(project, saved)
             append_ui_event(
                 project,
                 "closeout-finished",
-                f"Closeout finished with status {saved.closeout_status}.",
-                {"status": saved.closeout_status, "commit_hash": saved.closeout_commit_hash},
+                event_message,
+                event_details,
             )
             return ctx.detail_payload(project)
         finally:

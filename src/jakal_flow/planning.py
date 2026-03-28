@@ -9,6 +9,7 @@ from typing import Any
 
 from .model_selection import normalize_reasoning_effort
 from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, ProjectContext
+from .step_models import resolve_step_model_choice
 from .utils import compact_text, normalize_workflow_mode, now_utc_iso, parse_json_text, read_text, similarity_score, svg_text_element, tokenize, wrap_svg_text, write_text
 
 
@@ -771,6 +772,8 @@ def parse_execution_plan_response(
                 title=title,
                 display_description=display_description,
                 codex_description=codex_description,
+                model_provider=str(item.get("model_provider", "")).strip().lower(),
+                model=str(item.get("model", item.get("model_slug_input", ""))).strip().lower(),
                 test_command=str(item.get("test_command", "")).strip() or default_test_command,
                 success_criteria=str(item.get("success_criteria", "")).strip(),
                 reasoning_effort=reasoning_effort,
@@ -1238,12 +1241,17 @@ def execution_plan_markdown(
         lines.append("- ST1: Establish a minimal, testable first step and verify it locally.")
     for step in steps:
         step_kind = str((step.metadata or {}).get("step_kind", "")).strip().lower() or "task"
+        step_model = resolve_step_model_choice(step, context.runtime)
+        configured_provider = step.model_provider or "auto"
+        configured_model = step.model or "auto"
         lines.extend(
             [
                 f"- {step.step_id}: {step.title}",
                 f"  - UI description: {step.display_description or step.title}",
                 f"  - Codex instruction: {step.codex_description or step.display_description or step.title}",
                 f"  - Step kind: {step_kind}",
+                f"  - Model provider: {configured_provider} -> {step_model.provider} ({step_model.reason})",
+                f"  - Model: {configured_model} -> {step_model.model or 'provider default'}",
                 f"  - GPT reasoning: {step.reasoning_effort or context.runtime.effort or 'high'}",
                 f"  - Parallel group: {step.parallel_group or 'none'}",
                 f"  - Depends on: {', '.join(step.depends_on) if step.depends_on else 'none'}",

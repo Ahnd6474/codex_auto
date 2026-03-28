@@ -17,7 +17,7 @@ from .job_scheduler import (
     normalize_max_concurrent_jobs,
     write_scheduler_state,
 )
-from .ui_bridge import configure_stdio, default_workspace_root, run_command
+from .ui_bridge import configure_stdio, default_workspace_root, run_command, runtime_from_payload
 from .utils import now_utc_iso, parse_json_text
 
 
@@ -35,6 +35,25 @@ def _normalized_project_path(value: str) -> str:
         resolved = Path(text).expanduser()
     normalized = str(resolved)
     return normalized.lower() if os.name == "nt" else normalized
+
+
+def _job_queue_sort_key(snapshot: BridgeJobSnapshot) -> tuple[int, int, int, str]:
+    return (
+        -int(getattr(snapshot, "queue_priority", 0) or 0),
+        int(snapshot.updated_at_ms or 0),
+        int(snapshot.queue_position or 0),
+        snapshot.id,
+    )
+
+
+def _job_queue_settings(payload: dict[str, Any]) -> tuple[bool, int, str]:
+    request_payload = payload if isinstance(payload, dict) else {}
+    runtime_payload = request_payload.get("runtime", {})
+    if not isinstance(runtime_payload, dict):
+        runtime_payload = {}
+    runtime = runtime_from_payload(runtime_payload)
+    display_name = str(request_payload.get("display_name", "")).strip()
+    return bool(runtime.allow_background_queue), int(runtime.background_queue_priority), display_name
 
 
 class _StreamBridgeEventSink(BridgeEventSink):
@@ -121,7 +140,7 @@ class BridgeJobStore:
                 for job in self._jobs.values()
                 if job.workspace_root == workspace_key and str(job.status).strip().lower() == "queued"
             ],
-            key=lambda item: (int(item.updated_at_ms or 0), item.id),
+            key=_job_queue_sort_key,
         )
         changed: list[BridgeJobSnapshot] = []
         for index, job in enumerate(queued_jobs, start=1):
@@ -229,6 +248,7 @@ class BridgeJobStore:
         request_payload = payload if isinstance(payload, dict) else {}
         repo_id = str(request_payload.get("repo_id", "")).strip()
         project_dir = _normalized_project_path(str(request_payload.get("project_dir", "")).strip())
+        allow_background_queue, queue_priority, display_name = _job_queue_settings(request_payload)
         timestamp_ms = now_ms()
         created_at = now_utc_iso()
         publish_updates: list[BridgeJobSnapshot] = []
@@ -244,6 +264,8 @@ class BridgeJobStore:
             if existing is not None:
                 raise RuntimeError("Another background task is already active for this project.")
             running_count = self._running_count_unlocked(workspace_root)
+            if running_count >= self._max_running_jobs and not allow_background_queue:
+                raise RuntimeError("Reservations are disabled for this project, so this run must wait for a free slot.")
             status = "running" if running_count < self._max_running_jobs else "queued"
             snapshot = BridgeJobSnapshot(
                 id=job_id,
@@ -253,6 +275,9 @@ class BridgeJobStore:
                 repo_id=repo_id,
                 project_dir=project_dir,
                 workspace_root=str(workspace_root),
+                display_name=display_name,
+                allow_background_queue=allow_background_queue,
+                queue_priority=queue_priority,
                 created_at=created_at,
                 started_at=created_at if status == "running" else None,
                 queue_position=0,
@@ -360,7 +385,7 @@ class BridgeJobStore:
                         for job in self._jobs.values()
                         if job.workspace_root == str(workspace_root) and str(job.status).strip().lower() == "queued"
                     ],
-                    key=lambda item: (item.queue_position or 9999, int(item.updated_at_ms or 0), item.id),
+                    key=lambda item: (item.queue_position or 9999, *_job_queue_sort_key(item)),
                 )
                 if not queued_jobs:
                     break

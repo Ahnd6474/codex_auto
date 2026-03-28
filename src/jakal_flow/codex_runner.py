@@ -5,14 +5,13 @@ import re
 import time
 from pathlib import Path
 
-from .codex_app_server import is_auto_model, resolve_codex_path
+from .codex_app_server import cli_backend_kind, is_auto_model, resolve_codex_path
 from .execution_control import execution_scope_id, run_subprocess_capture
 from .model_selection import normalize_reasoning_effort
 from .model_providers import (
     normalize_local_model_provider,
     normalize_model_provider,
     provider_preset,
-    provider_supports_auto_model,
     provider_uses_openai_compatible_api,
 )
 from .models import CodexRunResult, ProjectContext
@@ -45,45 +44,14 @@ class CodexRunner:
         write_text(prompt_file, formatted_prompt)
 
         provider = normalize_model_provider(getattr(context.runtime, "model_provider", ""))
-        command = [self.codex_path]
-        child_env = sanitized_subprocess_env()
-        if provider == "oss":
-            command.append("--oss")
-            local_provider = normalize_local_model_provider(getattr(context.runtime, "local_model_provider", ""))
-            if local_provider:
-                command.extend(["--local-provider", local_provider])
-        else:
-            command.extend(self._provider_config_overrides(context))
-            child_env = sanitized_subprocess_env(self._provider_environment(context))
-        command.extend(["-a", context.runtime.approval_mode])
-        if search_enabled:
-            command.append("--search")
-        command.extend(
-            [
-                "exec",
-                "-c",
-                f'reasoning.effort="{normalize_reasoning_effort(str(reasoning_effort or getattr(context.runtime, "effort", "")), fallback="medium")}"',
-                "-s",
-                context.runtime.sandbox_mode,
-            ]
-        )
-        if not is_auto_model(context.runtime.model):
-            command.extend(["-m", context.runtime.model])
-        command.extend(
-            [
-                "--json",
-                "-o",
-                str(output_file),
-                "-C",
-                str(context.paths.repo_dir),
-                "--add-dir",
-                str(context.paths.docs_dir),
-                "--add-dir",
-                str(context.paths.memory_dir),
-                "--add-dir",
-                str(context.paths.state_dir),
-                "-",
-            ]
+        backend = self._backend_kind(provider)
+        child_env = sanitized_subprocess_env(self._provider_environment(context, backend=backend))
+        command = self._build_command(
+            context,
+            backend=backend,
+            output_file=output_file,
+            search_enabled=search_enabled,
+            reasoning_effort=reasoning_effort,
         )
         stdout = ""
         stderr = ""
@@ -100,12 +68,15 @@ class CodexRunner:
             completed = run_subprocess_capture(
                 command,
                 scope_id=scope_id,
-                label=f"Codex {pass_type}",
+                label=f"{backend.title()} {pass_type}",
+                cwd=context.paths.repo_dir,
                 input_bytes=formatted_prompt.encode("utf-8"),
                 env=child_env,
             )
             stdout = decode_process_output(completed.stdout)
             stderr = decode_process_output(completed.stderr)
+            if backend == "gemini":
+                self._write_gemini_output_file(output_file, stdout)
             attempt_last_message = read_text(output_file).strip()
             unexpected_token_detected = self._is_unexpected_token_failure(
                 completed.returncode,
@@ -184,6 +155,7 @@ class CodexRunner:
             "reasoning_output_tokens": 0,
             "total_tokens": 0,
         }
+        gemini_usage_detected = False
         for line in stdout.splitlines():
             line = line.strip()
             if not line:
@@ -195,12 +167,22 @@ class CodexRunner:
             if not isinstance(payload, dict):
                 continue
             if payload.get("type") != "turn.completed":
+                if isinstance(payload, dict):
+                    self._accumulate_gemini_usage(payload, usage)
+                    gemini_usage_detected = True
                 continue
             turn_usage = payload.get("usage", {})
             for key in usage:
                 value = turn_usage.get(key)
                 if isinstance(value, int):
                     usage[key] += value
+        if stdout.strip() and not gemini_usage_detected:
+            try:
+                payload = parse_json_text(stdout)
+            except json.JSONDecodeError:
+                payload = None
+            if isinstance(payload, dict):
+                self._accumulate_gemini_usage(payload, usage)
         if usage["total_tokens"] <= 0:
             usage["total_tokens"] = (
                 usage["input_tokens"] + usage["output_tokens"] + usage["reasoning_output_tokens"]
@@ -235,8 +217,8 @@ class CodexRunner:
         if last_message:
             write_text(block_dir / f"{attempt_basename}.last_message.txt", last_message)
 
-    def _provider_config_overrides(self, context: ProjectContext) -> list[str]:
-        provider = normalize_model_provider(getattr(context.runtime, "model_provider", ""))
+    def _provider_config_overrides(self, context: ProjectContext, *, provider: str | None = None) -> list[str]:
+        provider = normalize_model_provider(provider or getattr(context.runtime, "model_provider", ""))
         if not provider_uses_openai_compatible_api(provider) or provider == "openai":
             return []
         overrides: list[str] = []
@@ -246,8 +228,17 @@ class CodexRunner:
             overrides.extend(["-c", f"openai_base_url={self._toml_string(base_url)}"])
         return overrides
 
-    def _provider_environment(self, context: ProjectContext) -> dict[str, str]:
+    def _provider_environment(self, context: ProjectContext, *, backend: str) -> dict[str, str]:
         provider = normalize_model_provider(getattr(context.runtime, "model_provider", ""))
+        if backend == "gemini" or provider == "gemini":
+            api_key_env_name = str(getattr(context.runtime, "provider_api_key_env", "") or "").strip() or "GEMINI_API_KEY"
+            if not api_key_env_name:
+                return {}
+            dotenv_path = context.paths.repo_dir / ".env"
+            api_key = get_env_or_dotenv(api_key_env_name, dotenv_path).strip()
+            if not api_key:
+                return {}
+            return {"GEMINI_API_KEY": api_key}
         if not provider_uses_openai_compatible_api(provider):
             return {}
         preset = provider_preset(provider)
@@ -266,3 +257,128 @@ class CodexRunner:
     def _toml_string(self, value: str) -> str:
         escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
         return f'"{escaped}"'
+
+    def _backend_kind(self, provider: str) -> str:
+        if provider == "gemini" or cli_backend_kind(self.codex_path) == "gemini":
+            return "gemini"
+        return "codex"
+
+    def _build_command(
+        self,
+        context: ProjectContext,
+        *,
+        backend: str,
+        output_file: Path,
+        search_enabled: bool,
+        reasoning_effort: str | None,
+    ) -> list[str]:
+        provider = normalize_model_provider(getattr(context.runtime, "model_provider", ""))
+        if backend == "gemini":
+            return self._build_gemini_command(context)
+        command = [self.codex_path]
+        if provider == "oss":
+            command.append("--oss")
+            local_provider = normalize_local_model_provider(getattr(context.runtime, "local_model_provider", ""))
+            if local_provider:
+                command.extend(["--local-provider", local_provider])
+        else:
+            command.extend(self._provider_config_overrides(context, provider=provider))
+        command.extend(["-a", context.runtime.approval_mode])
+        if search_enabled:
+            command.append("--search")
+        command.extend(
+            [
+                "exec",
+                "-c",
+                f'reasoning.effort="{normalize_reasoning_effort(str(reasoning_effort or getattr(context.runtime, "effort", "")), fallback="medium")}"',
+                "-s",
+                context.runtime.sandbox_mode,
+            ]
+        )
+        if not is_auto_model(context.runtime.model):
+            command.extend(["-m", context.runtime.model])
+        command.extend(
+            [
+                "--json",
+                "-o",
+                str(output_file),
+                "-C",
+                str(context.paths.repo_dir),
+                "--add-dir",
+                str(context.paths.docs_dir),
+                "--add-dir",
+                str(context.paths.memory_dir),
+                "--add-dir",
+                str(context.paths.state_dir),
+                "-",
+            ]
+        )
+        return command
+
+    def _build_gemini_command(
+        self,
+        context: ProjectContext,
+    ) -> list[str]:
+        command = [
+            self.codex_path,
+            "--output-format",
+            "json",
+            "--approval-mode",
+            "yolo",
+            "--include-directories",
+            ",".join(
+                [
+                    str(context.paths.docs_dir),
+                    str(context.paths.memory_dir),
+                    str(context.paths.state_dir),
+                ]
+            ),
+        ]
+        if context.runtime.sandbox_mode != "danger-full-access":
+            command.append("--sandbox")
+        if not is_auto_model(context.runtime.model):
+            command.extend(["-m", context.runtime.model])
+        return command
+
+    def _write_gemini_output_file(self, output_file: Path, stdout: str) -> None:
+        response_text = stdout.strip()
+        if response_text:
+            try:
+                payload = parse_json_text(response_text)
+            except json.JSONDecodeError:
+                payload = None
+            if isinstance(payload, dict):
+                response_value = payload.get("response")
+                if isinstance(response_value, str) and response_value.strip():
+                    response_text = response_value.strip()
+        if response_text:
+            write_text(output_file, response_text)
+
+    def _accumulate_gemini_usage(self, payload: dict[str, object], usage: dict[str, int]) -> None:
+        stats = payload.get("stats")
+        if not isinstance(stats, dict):
+            return
+        models = stats.get("models")
+        if not isinstance(models, dict):
+            return
+        for details in models.values():
+            if not isinstance(details, dict):
+                continue
+            tokens = details.get("tokens")
+            if not isinstance(tokens, dict):
+                continue
+            prompt_tokens = tokens.get("prompt")
+            cached_tokens = tokens.get("cached")
+            candidate_tokens = tokens.get("candidates")
+            thought_tokens = tokens.get("thoughts")
+            total_tokens = tokens.get("total")
+            if isinstance(prompt_tokens, int):
+                usage["input_tokens"] += prompt_tokens
+            if isinstance(cached_tokens, int):
+                usage["cached_input_tokens"] += cached_tokens
+            if isinstance(candidate_tokens, int):
+                usage["output_tokens"] += candidate_tokens
+            if isinstance(thought_tokens, int):
+                usage["reasoning_output_tokens"] += thought_tokens
+            if isinstance(total_tokens, int):
+                usage["total_tokens"] += total_tokens

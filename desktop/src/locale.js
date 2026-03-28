@@ -263,6 +263,8 @@ const STRINGS = {
     "field.providerBaseUrl": "Provider Base URL",
     "field.providerApiKeyEnv": "Provider API Key Env",
     "field.billingMode": "Billing Mode",
+    "field.allowBackgroundQueue": "Allow Reservations",
+    "field.backgroundQueuePriority": "Reservation Priority",
     "field.inputTokenRate": "Input $ / 1M",
     "field.outputTokenRate": "Output $ / 1M",
     "field.reasoningTokenRate": "Reasoning $ / 1M",
@@ -392,6 +394,7 @@ const STRINGS = {
     "run.noSteps": "No steps yet. Generate a plan or add one.",
     "run.noSummary": "No summary",
     "run.parallelReady": "Ready Nodes",
+    "run.queuePriority": "Priority {priority}",
     "run.queuePosition": "Queue #{position}",
     "run.remoteMonitor": "Remote Monitor",
     "run.reasoning": "Reasoning {effort}",
@@ -829,6 +832,8 @@ STRINGS.ko["progress.closeoutRunning"] = "{completed}/{total}단계 완료, 마�
 STRINGS.ko["progress.closeoutFailed"] = "{completed}/{total}단계 완료, 마감 실패";
 STRINGS.ko["progress.closeoutPending"] = "{completed}/{total}단계 완료, 마감 대기";
 STRINGS.ko["field.backgroundConcurrencyLimit"] = "동시 백그라운드 작업 수";
+STRINGS.ko["field.allowBackgroundQueue"] = "이 프로젝트에서 예약 허용";
+STRINGS.ko["field.backgroundQueuePriority"] = "예약 우선순위";
 STRINGS.ko["action.backgroundJob"] = "백그라운드 작업";
 STRINGS.ko["prompt.confirmDeleteAllProjects"] =
   "모든 프로젝트를 삭제할까요? 관리 중인 문서, 로그, 상태만 삭제되고 원본 저장소 폴더는 그대로 유지됩니다.";
@@ -1031,6 +1036,9 @@ KO_HIGH_QUALITY_OVERRIDES["run.debugging"] = "디버깅";
 KO_HIGH_QUALITY_OVERRIDES["run.workingOnStep"] = "{step} 작업 중";
 KO_HIGH_QUALITY_OVERRIDES["run.workingOnSteps"] = "{steps} 작업 중";
 KO_HIGH_QUALITY_OVERRIDES["field.backgroundConcurrencyLimit"] = "동시 백그라운드 작업 수";
+KO_HIGH_QUALITY_OVERRIDES["field.allowBackgroundQueue"] = "이 프로젝트에서 예약 허용";
+KO_HIGH_QUALITY_OVERRIDES["field.backgroundQueuePriority"] = "예약 우선순위";
+KO_HIGH_QUALITY_OVERRIDES["run.queuePriority"] = "우선순위 {priority}";
 
 KO_HIGH_QUALITY_OVERRIDES["progress.runningIds"] = "{completed}/{total}\ub2e8\uacc4 \uc644\ub8cc, \uc2e4\ud589 \uc911: {ids}";
 KO_HIGH_QUALITY_OVERRIDES["progress.readyIds"] = "{completed}/{total}\ub2e8\uacc4 \uc644\ub8cc, \uc2e4\ud589 \uac00\ub2a5: {ids}";

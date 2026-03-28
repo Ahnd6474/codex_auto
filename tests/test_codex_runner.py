@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -293,6 +294,74 @@ class CodexRunnerTests(unittest.TestCase):
             self.assertIn('openai_base_url="https://openrouter.ai/api/v1"', observed_commands[0])
             self.assertEqual(observed_envs[0]["OPENAI_API_KEY"], "router-secret")
             self.assertEqual(observed_envs[0]["OPENAI_BASE_URL"], "https://openrouter.ai/api/v1")
+
+    def test_run_pass_uses_gemini_headless_mode(self) -> None:
+        with _TemporaryTestDir() as temp_root:
+            repo_dir = temp_root / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            manager = WorkspaceManager(temp_root / "workspace")
+            context = manager.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=RuntimeOptions(
+                    model_provider="gemini",
+                    provider_api_key_env="GEMINI_API_KEY",
+                    model="gemini-2.5-flash",
+                    effort="medium",
+                    codex_path="gemini.cmd",
+                ),
+            )
+            runner = CodexRunner("gemini.cmd")
+            observed_commands: list[list[str]] = []
+            observed_envs: list[dict[str, str]] = []
+
+            def fake_run(command, scope_id=None, label="", input_bytes=None, env=None, cwd=None, **_kwargs):
+                observed_commands.append(command)
+                observed_envs.append(dict(env or {}))
+                payload = {
+                    "response": "Gemini response",
+                    "stats": {
+                        "models": {
+                            "gemini-2.5-flash": {
+                                "tokens": {
+                                    "prompt": 11,
+                                    "cached": 2,
+                                    "candidates": 7,
+                                    "thoughts": 3,
+                                    "total": 23,
+                                }
+                            }
+                        }
+                    },
+                }
+                return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload).encode("utf-8"), stderr=b"")
+
+            with mock.patch.dict("os.environ", {"GEMINI_API_KEY": "gemini-secret"}, clear=False), mock.patch(
+                "jakal_flow.codex_runner.run_subprocess_capture",
+                side_effect=fake_run,
+            ):
+                result = runner.run_pass(
+                    context=context,
+                    prompt="Apply a safe fix",
+                    pass_type="demo pass",
+                    block_index=1,
+                    search_enabled=False,
+                )
+
+            self.assertEqual(len(observed_commands), 1)
+            self.assertIn("--output-format", observed_commands[0])
+            self.assertIn("json", observed_commands[0])
+            self.assertIn("--approval-mode", observed_commands[0])
+            self.assertIn("yolo", observed_commands[0])
+            self.assertIn("--include-directories", observed_commands[0])
+            self.assertIn("gemini-2.5-flash", observed_commands[0])
+            self.assertEqual(observed_envs[0]["GEMINI_API_KEY"], "gemini-secret")
+            self.assertEqual(result.last_message, "Gemini response")
+            self.assertEqual(result.usage["input_tokens"], 11)
+            self.assertEqual(result.usage["cached_input_tokens"], 2)
+            self.assertEqual(result.usage["output_tokens"], 7)
+            self.assertEqual(result.usage["reasoning_output_tokens"], 3)
+            self.assertEqual(result.usage["total_tokens"], 23)
 
     def test_run_pass_strips_inherited_pythonpath_from_child_env(self) -> None:
         with tempfile.TemporaryDirectory() as raw_temp:

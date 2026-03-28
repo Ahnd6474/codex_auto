@@ -112,6 +112,36 @@ class VerificationRunnerTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_root, ignore_errors=True)
 
+    def test_verification_runner_includes_failure_reason_in_summary_and_cache(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_verification_failure_reason_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        try:
+            context = self._build_context(temp_root)
+            runner = VerificationRunner()
+            completed = subprocess.CompletedProcess(
+                args=["python", "-m", "pytest"],
+                returncode=1,
+                stdout=b"",
+                stderr=b"Traceback (most recent call last):\nAssertionError: experiment2 failed\n",
+            )
+
+            with mock.patch.object(runner, "_compute_state_fingerprint", return_value="state-a"), mock.patch.object(
+                runner,
+                "_environment_fingerprint",
+                return_value="env-a",
+            ), mock.patch("jakal_flow.verification.run_subprocess_capture", return_value=completed) as mocked_run:
+                first = runner.run(context=context, block_index=1, label="experiment2", command="python -m pytest")
+                second = runner.run(context=context, block_index=2, label="experiment2", command="python -m pytest")
+
+            self.assertEqual(mocked_run.call_count, 1)
+            self.assertIn("AssertionError: experiment2 failed", first.summary)
+            self.assertEqual(first.failure_reason, "Traceback (most recent call last): | AssertionError: experiment2 failed")
+            self.assertIn("(cached)", second.summary)
+            self.assertIn("AssertionError: experiment2 failed", second.summary)
+            self.assertEqual(second.failure_reason, first.failure_reason)
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

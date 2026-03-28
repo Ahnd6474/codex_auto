@@ -236,6 +236,41 @@ export function ConfigEditorView({
               disabled={busy}
             />
           </label>
+          <label className="choice-radio">
+            <input
+              type="checkbox"
+              checked={runtime.allow_background_queue ?? true}
+              onChange={(event) =>
+                onChangeForm((current) => ({
+                  ...current,
+                  runtime: {
+                    ...current.runtime,
+                    allow_background_queue: event.target.checked,
+                  },
+                }))
+              }
+              disabled={busy}
+            />
+            <span>{t("field.allowBackgroundQueue")}</span>
+          </label>
+          <label className="field">
+            <span>{t("field.backgroundQueuePriority")}</span>
+            <input
+              type="number"
+              step="1"
+              value={Number.parseInt(String(runtime.background_queue_priority ?? 0), 10) || 0}
+              onChange={(event) =>
+                onChangeForm((current) => ({
+                  ...current,
+                  runtime: {
+                    ...current.runtime,
+                    background_queue_priority: Number.parseInt(event.target.value || "0", 10) || 0,
+                  },
+                }))
+              }
+              disabled={busy}
+            />
+          </label>
           <div className="field">
             <span>{t("field.executionMode")}</span>
             <strong>{t("option.executionParallel")}</strong>

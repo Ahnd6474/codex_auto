@@ -1395,6 +1395,78 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(step.notes, "attempt 2 failed")
         self.assertEqual(context.metadata.current_status, "failed")
 
+    def test_execute_verified_repo_pass_keeps_failure_reason_in_notes(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_verified_repo_pass_failure_reason_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", test_cmd="python -m pytest")
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            reporter = Reporter(context)
+            runner = mock.Mock()
+            runner.run_pass.return_value = CodexRunResult(
+                pass_type="block-search-pass",
+                prompt_file=context.paths.logs_dir / "initial.prompt.md",
+                output_file=context.paths.logs_dir / "initial.last_message.txt",
+                event_file=context.paths.logs_dir / "initial.events.jsonl",
+                returncode=0,
+                search_enabled=False,
+                changed_files=[],
+                usage={"input_tokens": 10},
+                last_message="initial implementation pass",
+            )
+
+            block_dir = context.paths.logs_dir / "block_0001"
+            block_dir.mkdir(parents=True, exist_ok=True)
+            failing_stdout = block_dir / "block-search-pass.test.stdout.log"
+            failing_stderr = block_dir / "block-search-pass.test.stderr.log"
+            failing_stdout.write_text("", encoding="utf-8")
+            failing_stderr.write_text("AssertionError: experiment2 failed\n", encoding="utf-8")
+            failing_test = TestRunResult(
+                command="python -m pytest",
+                returncode=1,
+                stdout_file=failing_stdout,
+                stderr_file=failing_stderr,
+                summary="python -m pytest exited with 1: AssertionError: experiment2 failed",
+                failure_reason="AssertionError: experiment2 failed",
+            )
+
+            with mock.patch.object(orchestrator, "_run_test_command", return_value=failing_test), mock.patch.object(
+                orchestrator.git,
+                "changed_files",
+                return_value=["src/app.py"],
+            ), mock.patch.object(orchestrator.git, "hard_reset") as mocked_reset:
+                pass_result = orchestrator._execute_verified_repo_pass(
+                    context=context,
+                    runner=runner,
+                    reporter=reporter,
+                    prompt="Implement the change safely.",
+                    pass_type="block-search-pass",
+                    block_index=1,
+                    task_name="Experiment 2",
+                    safe_revision="safe-revision",
+                )
+
+            logged_test = read_last_jsonl(context.paths.logs_dir / "test_runs.jsonl")
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertFalse(pass_result["success"])
+        self.assertIn("AssertionError: experiment2 failed", str(pass_result["notes"]))
+        self.assertIn("rolled back", str(pass_result["notes"]))
+        self.assertIsInstance(pass_result["test_result"], TestRunResult)
+        self.assertIsNotNone(logged_test)
+        self.assertEqual(logged_test["failure_reason"], "AssertionError: experiment2 failed")
+        mocked_reset.assert_called_once_with(repo_dir, "safe-revision")
+
     def test_execute_pass_invokes_debugger_with_failure_logs_and_recovers(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_step_debugger_test"
         shutil.rmtree(temp_root, ignore_errors=True)

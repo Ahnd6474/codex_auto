@@ -33,6 +33,14 @@ def resolve_codex_path(codex_path: str) -> str:
     return codex_path
 
 
+def cli_backend_kind(codex_path: str) -> str:
+    resolved = str(codex_path or "").strip() or default_codex_path()
+    command_name = Path(resolved).name.strip().lower()
+    if command_name.startswith("gemini"):
+        return "gemini"
+    return "codex"
+
+
 def is_auto_model(model: str) -> bool:
     return not str(model or "").strip() or str(model).strip().lower() == AUTO_MODEL_SLUG
 
@@ -181,6 +189,8 @@ class _CodexAppServerSession:
 
 
 def fetch_codex_backend_snapshot(codex_path: str = "") -> CodexBackendSnapshot:
+    if cli_backend_kind(codex_path) == "gemini":
+        return _fetch_gemini_backend_snapshot(codex_path)
     checked_at = now_utc_iso()
     try:
         with _CodexAppServerSession(codex_path) as session:
@@ -210,6 +220,54 @@ def fetch_codex_backend_snapshot(codex_path: str = "") -> CodexBackendSnapshot:
             rate_limits={"default_limit_id": "", "items": []},
             error=str(exc),
         )
+
+
+def _fetch_gemini_backend_snapshot(codex_path: str) -> CodexBackendSnapshot:
+    checked_at = now_utc_iso()
+    resolved_path = resolve_codex_path(codex_path or default_codex_path("gemini"))
+    try:
+        completed = subprocess.run(
+            [resolved_path, "--version"],
+            capture_output=True,
+            check=False,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=4,
+        )
+    except (FileNotFoundError, OSError, subprocess.SubprocessError) as exc:
+        return CodexBackendSnapshot(
+            checked_at=checked_at,
+            available=False,
+            model_catalog=[],
+            account={
+                "authenticated": False,
+                "requires_openai_auth": False,
+                "type": "gemini-cli",
+                "email": "",
+                "plan_type": "unknown",
+            },
+            rate_limits={"default_limit_id": "", "items": []},
+            error=str(exc),
+        )
+    version_text = (completed.stdout or completed.stderr or "").strip()
+    available = completed.returncode == 0
+    error = "" if available else (version_text or f"Gemini CLI exited with {completed.returncode}.")
+    return CodexBackendSnapshot(
+        checked_at=checked_at,
+        available=available,
+        model_catalog=[],
+        account={
+            "authenticated": False,
+            "requires_openai_auth": False,
+            "type": "gemini-cli",
+            "email": "",
+            "plan_type": "unknown",
+            "version": version_text,
+        },
+        rate_limits={"default_limit_id": "", "items": []},
+        error=error,
+    )
 
 
 def _read_model_catalog(session: _CodexAppServerSession) -> list[dict[str, Any]]:

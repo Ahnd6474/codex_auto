@@ -10,6 +10,7 @@ import {
   emptyPlanDraft,
   messagePayload,
   needsExpandedProjectDetail,
+  planGenerationValidation,
   resolveConfirmation,
   shareSettingsFromDetail,
   shouldPreserveProjectPrompt,
@@ -18,6 +19,7 @@ import { useI18n } from "../i18n";
 import { translate } from "../locale";
 import {
   applyProgramSettings,
+  backgroundJobProjectKey,
   applyProgramSettingsToForm,
   basename,
   blankProjectForm,
@@ -27,6 +29,7 @@ import {
   commandLabel,
   firstSelectableStepId,
   inheritProjectIdentityForm,
+  isDuplicateProjectJobError,
   projectJobFromJobs,
   programSettingsFromRuntime,
   projectFormFromDetail,
@@ -72,6 +75,7 @@ export function useDesktopController() {
   const [selectedStepId, setSelectedStepId] = usePersistentState("jakal-flow:selected-step", "");
   const [planDirty, setPlanDirty] = useState(false);
   const [pendingAction, setPendingAction] = useState("");
+  const [startingJobCount, setStartingJobCount] = useState(0);
   const [loadingProjectId, setLoadingProjectId] = useState("");
   const [jobs, setJobs] = useState([]);
   const [message, setMessage] = useState(null);
@@ -83,6 +87,7 @@ export function useDesktopController() {
   const bridgeRefreshTimerRef = useRef(null);
   const pendingBridgeRefreshRepoIdRef = useRef("");
   const pendingBridgeRefreshListingRef = useRef(false);
+  const startingProjectJobsRef = useRef(new Set());
   const activeJobRef = useRef(null);
   const appliedSchedulerLimitRef = useRef(0);
   const autoRunAfterPlanRef = useRef(false);
@@ -129,7 +134,7 @@ export function useDesktopController() {
     [jobs],
   );
 
-  const busy = Boolean(pendingAction || ["queued", "running"].includes(String(activeJob?.status || "").trim().toLowerCase()));
+  const busy = Boolean(pendingAction || startingJobCount > 0 || ["queued", "running"].includes(String(activeJob?.status || "").trim().toLowerCase()));
   const canRequestStop = String(activeJob?.status || "").trim().toLowerCase() === "running";
   const canCancelReservation = String(activeJob?.status || "").trim().toLowerCase() === "queued";
   const shareBusy = pendingAction === "create_share_session" || pendingAction === "revoke_share_session";
@@ -1163,6 +1168,23 @@ export function useDesktopController() {
   }
 
   async function startJob(command, payload) {
+    const targetProject = {
+      repo_id: String(payload?.repo_id || "").trim(),
+      project_dir: String(payload?.project_dir || "").trim(),
+    };
+    const currentProjectJob = () => projectJobFromJobs(jobsRef.current, targetProject);
+    const projectJobKey = backgroundJobProjectKey(payload, workspaceRoot || "");
+    const existingJob = currentProjectJob();
+    if (["queued", "running"].includes(String(existingJob?.status || "").trim().toLowerCase())) {
+      return existingJob;
+    }
+    if (projectJobKey && startingProjectJobsRef.current.has(projectJobKey)) {
+      return currentProjectJob() || null;
+    }
+    if (projectJobKey) {
+      startingProjectJobsRef.current.add(projectJobKey);
+    }
+    setStartingJobCount((count) => count + 1);
     try {
       setMessage(null);
       const job = await startBridgeJob(command, payload, workspaceRoot || null);
@@ -1185,8 +1207,26 @@ export function useDesktopController() {
       );
       return job;
     } catch (error) {
+      if (isDuplicateProjectJobError(error)) {
+        try {
+          const jobSnapshot = await syncRunningJobSnapshot(activeJobRef.current?.id || "");
+          applyCurrentJobSnapshot(jobSnapshot);
+          reapplyProjectJobState(jobSnapshot?.jobs || []);
+          const recoveredJob = projectJobFromJobs(jobSnapshot?.jobs || [], targetProject);
+          if (["queued", "running"].includes(String(recoveredJob?.status || "").trim().toLowerCase())) {
+            return recoveredJob;
+          }
+        } catch {
+          // Fall through to the original bridge error when the recovery snapshot is unavailable.
+        }
+      }
       setMessage(messagePayload("error", String(error)));
       return null;
+    } finally {
+      if (projectJobKey) {
+        startingProjectJobsRef.current.delete(projectJobKey);
+      }
+      setStartingJobCount((count) => Math.max(0, count - 1));
     }
   }
 
@@ -1207,20 +1247,21 @@ export function useDesktopController() {
 
   async function generatePlan() {
     const prompt = planDraft?.project_prompt?.trim() || "";
-    if (!projectForm.project_dir.trim()) {
+    const generationValidation = planGenerationValidation({
+      projectDir: projectForm.project_dir,
+      prompt,
+      plan: planDraft,
+    });
+    if (generationValidation === "prepareProjectFirst") {
       setMessage(messagePayload("error", translate(language, "message.prepareProjectFirst")));
       return;
     }
-    if (!prompt) {
+    if (generationValidation === "promptRequired") {
       setMessage(messagePayload("error", translate(language, "message.promptRequired")));
       return;
     }
-    if ((planDraft?.steps || []).some((step) => step.status === "completed")) {
-      setMessage(messagePayload("error", translate(language, "message.editRemainingSteps")));
-      return;
-    }
     if (
-      (planDraft?.steps || []).length
+      generationValidation?.requiresReplacementConfirmation
       && !(await requestConfirmation("prompt.confirmRegeneratePlan", { kind: "info", okLabel: translate(language, "action.generatePlan") }))
     ) {
       return;

@@ -15,10 +15,12 @@ from .codex_runner import CodexRunner
 from .execution_control import ImmediateStopRequested
 from .git_ops import GitOps
 from .memory import MemoryStore
+from .model_providers import normalize_billing_mode, provider_preset, provider_supports_auto_model
 from .model_selection import normalize_reasoning_effort
 from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, LineageState, LoopState, MLExperimentRecord, MLModeState, ProjectContext, ProjectPaths, RepoMetadata, RuntimeOptions, TestRunResult
 from .optimization import scan_optimization_candidates
 from .parallel_resources import build_parallel_resource_plan, normalize_parallel_worker_mode
+from .platform_defaults import default_codex_path
 from .planning import (
     FINALIZATION_PROMPT_FILENAME,
     attempt_history_entry,
@@ -61,6 +63,7 @@ from .planning import (
 )
 from .reporting import Reporter
 from .status_views import status_from_plan_state
+from .step_models import normalize_step_model, normalize_step_model_provider, resolve_step_model_choice
 from .utils import compact_text, ensure_dir, normalize_workflow_mode, now_utc_iso, parse_json_text, read_json, read_last_jsonl, read_text, remove_tree, similarity_score, svg_text_element, wrap_svg_text, write_json, write_text
 from .verification import VerificationRunner
 from .workspace import WorkspaceManager
@@ -1744,6 +1747,8 @@ class Orchestrator:
                     title=step.title.strip(),
                     display_description=step.display_description.strip(),
                     codex_description=step.codex_description.strip() or step.display_description.strip() or step.title.strip(),
+                    model_provider=normalize_step_model_provider(step.model_provider),
+                    model=normalize_step_model(step.model),
                     test_command=step.test_command.strip() or default_test_command or context.runtime.test_cmd,
                     success_criteria=step.success_criteria.strip(),
                     reasoning_effort=normalize_reasoning_effort(step.reasoning_effort, fallback=fallback_effort),
@@ -1919,21 +1924,16 @@ class Orchestrator:
         plan_state = self.save_execution_plan_state(context, plan_state)
 
         previous_runtime = context.runtime
-        context.runtime = RuntimeOptions(
-            **{
-                **previous_runtime.to_dict(),
-                "test_cmd": target_step.test_command or runtime.test_cmd,
-                "effort": normalize_reasoning_effort(
-                    target_step.reasoning_effort,
-                    fallback=normalize_reasoning_effort(runtime.effort, fallback="high"),
-                ),
-                "max_blocks": 1,
-                "allow_push": True,
-                "approval_mode": runtime.approval_mode,
-                "sandbox_mode": runtime.sandbox_mode,
-                "require_checkpoint_approval": False,
-                "checkpoint_interval_blocks": 1,
-            }
+        context.runtime = self._build_execution_step_runtime(
+            previous_runtime,
+            target_step,
+            execution_mode=previous_runtime.execution_mode or "parallel",
+            max_blocks=1,
+            allow_push=True,
+            approval_mode=runtime.approval_mode,
+            sandbox_mode=runtime.sandbox_mode,
+            require_checkpoint_approval=False,
+            checkpoint_interval_blocks=1,
         )
         self.workspace.save_project(context)
 
@@ -2742,6 +2742,81 @@ class Orchestrator:
     def _normalize_execution_mode(self, value: str | None) -> str:
         return "parallel"
 
+    def _step_model_runtime_overrides(
+        self,
+        runtime: RuntimeOptions,
+        step: ExecutionStep,
+    ) -> dict[str, object]:
+        choice = resolve_step_model_choice(step, runtime)
+        provider = provider_preset(choice.provider)
+        previous_provider = str(runtime.model_provider or "").strip().lower()
+        current_path = str(runtime.codex_path or "").strip()
+        previous_default_path = default_codex_path(previous_provider or "openai")
+        if not current_path or previous_provider != choice.provider or current_path == previous_default_path:
+            next_path = default_codex_path(choice.provider)
+        else:
+            next_path = current_path
+        next_model = normalize_step_model(choice.model)
+        if provider_supports_auto_model(choice.provider) and next_model == "auto":
+            next_model_preset = str(runtime.model_preset or "").strip().lower() or (
+                "auto" if normalize_reasoning_effort(runtime.effort, fallback="medium") == "medium" else normalize_reasoning_effort(runtime.effort, fallback="medium")
+            )
+        else:
+            next_model_preset = ""
+        return {
+            "model_provider": choice.provider,
+            "provider_base_url": str(runtime.provider_base_url or "").strip() if previous_provider == choice.provider else provider.default_base_url,
+            "provider_api_key_env": str(runtime.provider_api_key_env or "").strip() if previous_provider == choice.provider else provider.default_api_key_env,
+            "billing_mode": normalize_billing_mode(
+                str(runtime.billing_mode or "") if previous_provider == choice.provider else "",
+                choice.provider,
+                fallback=provider.default_billing_mode,
+            ),
+            "codex_path": next_path,
+            "model": next_model,
+            "model_slug_input": next_model,
+            "model_preset": next_model_preset,
+            "model_selection_mode": "slug",
+            "effort_selection_mode": "auto" if provider_supports_auto_model(choice.provider) and next_model == "auto" else "explicit",
+        }
+
+    def _build_execution_step_runtime(
+        self,
+        runtime: RuntimeOptions,
+        step: ExecutionStep,
+        *,
+        allow_push: bool,
+        max_blocks: int,
+        require_checkpoint_approval: bool,
+        checkpoint_interval_blocks: int,
+        execution_mode: str,
+        parallel_workers: int | None = None,
+        parallel_worker_mode: str | None = None,
+        approval_mode: str | None = None,
+        sandbox_mode: str | None = None,
+    ) -> RuntimeOptions:
+        fallback_effort = normalize_reasoning_effort(runtime.effort, fallback="high")
+        merged: dict[str, object] = {
+            **runtime.to_dict(),
+            **self._step_model_runtime_overrides(runtime, step),
+            "test_cmd": step.test_command.strip() or runtime.test_cmd,
+            "effort": normalize_reasoning_effort(step.reasoning_effort, fallback=fallback_effort),
+            "execution_mode": execution_mode,
+            "max_blocks": max_blocks,
+            "allow_push": allow_push,
+            "require_checkpoint_approval": require_checkpoint_approval,
+            "checkpoint_interval_blocks": checkpoint_interval_blocks,
+        }
+        if parallel_workers is not None:
+            merged["parallel_workers"] = parallel_workers
+        if parallel_worker_mode is not None:
+            merged["parallel_worker_mode"] = parallel_worker_mode
+        if approval_mode is not None:
+            merged["approval_mode"] = approval_mode
+        if sandbox_mode is not None:
+            merged["sandbox_mode"] = sandbox_mode
+        return RuntimeOptions(**merged)
+
     def _parallel_worker_plan(self, runtime: RuntimeOptions):
         return build_parallel_resource_plan(
             getattr(runtime, "parallel_worker_mode", "auto"),
@@ -2761,19 +2836,15 @@ class Orchestrator:
         runtime: RuntimeOptions,
         step: ExecutionStep,
     ) -> RuntimeOptions:
-        fallback_effort = normalize_reasoning_effort(runtime.effort, fallback="high")
-        return RuntimeOptions(
-            **{
-                **runtime.to_dict(),
-                "test_cmd": step.test_command.strip() or runtime.test_cmd,
-                "effort": normalize_reasoning_effort(step.reasoning_effort, fallback=fallback_effort),
-                "execution_mode": "parallel",
-                "parallel_workers": 1,
-                "max_blocks": 1,
-                "allow_push": False,
-                "require_checkpoint_approval": False,
-                "checkpoint_interval_blocks": 1,
-            }
+        return self._build_execution_step_runtime(
+            runtime,
+            step,
+            execution_mode="parallel",
+            parallel_workers=1,
+            max_blocks=1,
+            allow_push=False,
+            require_checkpoint_approval=False,
+            checkpoint_interval_blocks=1,
         )
 
     def _build_parallel_worker_paths(
@@ -3055,6 +3126,37 @@ class Orchestrator:
         latest_logged_block_index = int(latest_logged_block.get("block_index", 0)) if latest_logged_block else 0
         return max(1, context.loop_state.block_index + 1, latest_logged_block_index + 1)
 
+    def _codex_failure_note(self, task_name: str, run_result: CodexRunResult) -> str:
+        detail = ""
+        if run_result.last_message:
+            detail = compact_text(str(run_result.last_message).strip(), max_chars=280)
+        if not detail:
+            attempts = run_result.diagnostics.get("attempts", []) if isinstance(run_result.diagnostics, dict) else []
+            for attempt in reversed(attempts if isinstance(attempts, list) else []):
+                if not isinstance(attempt, dict):
+                    continue
+                detail = compact_text(
+                    str(
+                        attempt.get("stderr_excerpt")
+                        or attempt.get("last_message_excerpt")
+                        or attempt.get("stdout_excerpt")
+                        or ""
+                    ).strip(),
+                    max_chars=280,
+                )
+                if detail:
+                    break
+        summary = f"{task_name} Codex pass failed and changes were rolled back."
+        if detail:
+            return f"{summary} Cause: {detail}"
+        return summary
+
+    def _rolled_back_test_failure_note(self, test_result: TestRunResult, *, fallback_task_name: str) -> str:
+        detail = str(test_result.summary or "").strip()
+        if detail:
+            return f"{detail} (changes were rolled back)"
+        return f"{fallback_task_name} verification failed and changes were rolled back."
+
     def _execute_verified_repo_pass(
         self,
         *,
@@ -3090,7 +3192,7 @@ class Orchestrator:
         if run_result.returncode != 0:
             self.git.hard_reset(context.paths.repo_dir, safe_revision)
             rollback_status = "rolled_back_to_safe_revision"
-            notes = f"{task_name} Codex pass failed and changes were rolled back."
+            notes = self._codex_failure_note(task_name, run_result)
         else:
             try:
                 test_result = self._run_test_command(context, block_index, pass_type)
@@ -3101,8 +3203,7 @@ class Orchestrator:
             if test_result.returncode != 0:
                 self.git.hard_reset(context.paths.repo_dir, safe_revision)
                 rollback_status = "rolled_back_to_safe_revision"
-                test_result = None
-                notes = f"{task_name} verification failed and changes were rolled back."
+                notes = self._rolled_back_test_failure_note(test_result, fallback_task_name=task_name)
             else:
                 if self.git.has_changes(context.paths.repo_dir):
                     commit_descriptor = build_commit_descriptor(context, pass_type, task_name)
@@ -4821,6 +4922,7 @@ class Orchestrator:
             stdout_file=merge_stdout,
             stderr_file=merge_stderr,
             summary=summary,
+            failure_reason=summary,
         )
 
     def _parallel_merge_conflict_test_result(

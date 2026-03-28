@@ -40,6 +40,15 @@ PROVIDER_PRESETS: dict[str, ProviderPreset] = {
         supports_auto_model=True,
         supports_catalog=True,
     ),
+    "gemini": ProviderPreset(
+        provider="gemini",
+        display_name="Gemini CLI",
+        description="Use the installed Gemini CLI in headless mode with Gemini authentication.",
+        default_api_key_env="GEMINI_API_KEY",
+        default_billing_mode=BILLING_MODE_INCLUDED,
+        supports_auto_model=False,
+        supports_catalog=False,
+    ),
     "openrouter": ProviderPreset(
         provider="openrouter",
         display_name="OpenRouter",

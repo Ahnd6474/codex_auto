@@ -46,6 +46,9 @@ class BridgeJobSnapshot:
     repo_id: str = ""
     project_dir: str = ""
     workspace_root: str = ""
+    display_name: str = ""
+    allow_background_queue: bool = True
+    queue_priority: int = 0
     queue_position: int = 0
     created_at: str | None = None
     started_at: str | None = None

@@ -46,7 +46,7 @@ function queuedPosition(value) {
 }
 
 function reservationProjectLabel(job, fallbackLabel) {
-  return basename(job?.project_dir || "") || String(job?.repo_id || "").trim() || fallbackLabel;
+  return String(job?.display_name || "").trim() || basename(job?.project_dir || "") || String(job?.repo_id || "").trim() || fallbackLabel;
 }
 
 export function ParallelRunControlView({
@@ -231,6 +231,7 @@ export function ParallelRunControlView({
                   <span>{t("run.queuePosition", { position: queuedPosition(job?.queue_position) })}</span>
                   <strong>{reservationProjectLabel(job, t("project.none"))}</strong>
                   <p>{commandLabel(job?.command, language)}</p>
+                  <p>{t("run.queuePriority", { priority: Number.parseInt(String(job?.queue_priority ?? 0), 10) || 0 })}</p>
                   <p>{String(job?.project_dir || job?.repo_id || "").trim() || t("common.unavailable")}</p>
                   <div className="action-row">
                     <span className={`status-badge status-badge--${statusTone(`queued:${job?.command || ""}`)}`}>

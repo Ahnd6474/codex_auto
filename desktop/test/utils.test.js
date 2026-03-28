@@ -7,6 +7,7 @@ import {
   applyProgramSettings,
   applyProgramSettingsToForm,
   autoRoutingPresetLabel,
+  backgroundJobProjectKey,
   configReasoningOptions,
   basename,
   blankProjectForm,
@@ -28,6 +29,7 @@ import {
   executionProgressCaptionDisplay,
   firstSelectableStepId,
   inheritProjectIdentityForm,
+  isDuplicateProjectJobError,
   mergeProjectDetailCodexStatus,
   normalizeMemoryBudgetGiB,
   normalizeInterruptedPlan,
@@ -115,6 +117,34 @@ test("project job helpers match jobs by repo id or project path and derive displ
   assert.equal(projectStatusWithJob("setup_ready", jobs[1]), "running:generate-plan");
 });
 
+test("backgroundJobProjectKey normalizes workspace and project paths for deduping", () => {
+  assert.equal(
+    backgroundJobProjectKey(
+      {
+        project_dir: "C:\\Work\\Repo",
+      },
+      "C:\\Users\\alber\\Workspace",
+    ),
+    "c:/users/alber/workspace||c:/work/repo",
+  );
+  assert.equal(
+    backgroundJobProjectKey(
+      {
+        repo_id: "repo-1",
+      },
+      "/tmp/workspace",
+    ),
+    "/tmp/workspace|repo-1|",
+  );
+  assert.equal(backgroundJobProjectKey({}, "/tmp/workspace"), "");
+});
+
+test("isDuplicateProjectJobError detects bridge rejections for already-active jobs", () => {
+  assert.equal(isDuplicateProjectJobError("Another background task is already active for this project."), true);
+  assert.equal(isDuplicateProjectJobError(new Error("another background task is already active for this project.")), true);
+  assert.equal(isDuplicateProjectJobError("The requested background job was not found."), false);
+});
+
 test("project job helpers ignore stale running jobs when the project has a newer saved state", () => {
   const jobs = [
     {
@@ -152,6 +182,7 @@ test("deriveGithubMode distinguishes manual and existing projects", () => {
 
 test("defaultCodexPath follows the current platform", () => {
   assert.equal(defaultCodexPath(), process.platform === "win32" ? "codex.cmd" : "codex");
+  assert.equal(defaultCodexPath("gemini"), process.platform === "win32" ? "gemini.cmd" : "gemini");
 });
 
 test("program settings helpers keep global runtime controls separate from project-specific values", () => {
@@ -202,6 +233,7 @@ test("program settings helpers keep global runtime controls separate from projec
       codex_usage_card: false,
       word_report_card: true,
     },
+    background_concurrency_limit: 2,
   });
 
   assert.deepEqual(
@@ -301,6 +333,8 @@ test("blankProjectForm seeds runtime defaults without mutating the source runtim
   assert.equal(form.runtime.model, "gpt-5.4");
   assert.equal(form.runtime.max_blocks, 9);
   assert.equal(form.runtime.generate_word_report, false);
+  assert.equal(form.runtime.allow_background_queue, true);
+  assert.equal(form.runtime.background_queue_priority, 0);
 });
 
 test("blankProjectForm falls back to repository defaults when runtime is missing", () => {
@@ -313,6 +347,8 @@ test("blankProjectForm falls back to repository defaults when runtime is missing
   assert.equal(form.runtime.max_blocks, 5);
   assert.equal(form.runtime.optimization_mode, "light");
   assert.equal(form.runtime.test_cmd, "python -m pytest");
+  assert.equal(form.runtime.allow_background_queue, true);
+  assert.equal(form.runtime.background_queue_priority, 0);
 });
 
 test("applyProviderDefaults drops the auto sentinel for providers without auto routing", () => {
@@ -330,6 +366,24 @@ test("applyProviderDefaults drops the auto sentinel for providers without auto r
   assert.equal(runtime.model, "");
   assert.equal(runtime.model_slug_input, "");
   assert.equal(runtime.model_preset, "");
+});
+
+test("applyProviderDefaults switches the runtime path for Gemini CLI and clears OpenAI-only defaults", () => {
+  const runtime = applyProviderDefaults(
+    {
+      model_provider: "openai",
+      model: "gpt-5.4",
+      model_slug_input: "gpt-5.4",
+      codex_path: defaultCodexPath(),
+    },
+    "gemini",
+  );
+
+  assert.equal(runtime.model_provider, "gemini");
+  assert.equal(runtime.codex_path, defaultCodexPath("gemini"));
+  assert.equal(runtime.model, "");
+  assert.equal(runtime.model_slug_input, "");
+  assert.equal(runtime.provider_api_key_env, "GEMINI_API_KEY");
 });
 
 test("normalizeMemoryBudgetGiB keeps one decimal place for UI memory budgets", () => {
@@ -372,6 +426,8 @@ test("projectFormFromDetail merges persisted runtime and derives GitHub mode", (
       effort: "high",
       optimization_mode: "refactor",
       execution_mode: "parallel",
+      allow_background_queue: true,
+      background_queue_priority: 0,
       test_cmd: "npm run check",
       model: "gpt-5.4",
     },
@@ -950,6 +1006,8 @@ test("buildRunPlanPayloadFromDetail reuses the generated plan and persisted runt
       max_blocks: 7,
       effort: "high",
       execution_mode: "parallel",
+      allow_background_queue: true,
+      background_queue_priority: 0,
       model: "gpt-5.4",
       test_cmd: "npm run check",
     },
@@ -1056,6 +1114,20 @@ test("runtimeSummary includes the selected local provider for OSS models", () =>
       [],
     ),
     "Local/Ollama | Standard Mode | qwen2.5-coder:0.5b | reasoning Medium | parallel auto",
+  );
+});
+
+test("runtimeSummary shows Gemini CLI as a first-class backend", () => {
+  assert.equal(
+    runtimeSummary(
+      {
+        model_provider: "gemini",
+        model: "gemini-2.5-flash",
+        effort: "medium",
+      },
+      [],
+    ),
+    "Gemini CLI | Standard Mode | gemini-2.5-flash | reasoning Medium | parallel auto",
   );
 });
 

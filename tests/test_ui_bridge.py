@@ -237,6 +237,8 @@ class UIBridgeTests(unittest.TestCase):
                 "optimization_long_function_lines": "bogus",
                 "optimization_duplicate_block_lines": 1,
                 "optimization_max_files": "0",
+                "allow_background_queue": "false",
+                "background_queue_priority": "7",
             }
         )
 
@@ -258,6 +260,8 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(runtime.optimization_long_function_lines, 80)
         self.assertEqual(runtime.optimization_duplicate_block_lines, 3)
         self.assertEqual(runtime.optimization_max_files, 1)
+        self.assertFalse(runtime.allow_background_queue)
+        self.assertEqual(runtime.background_queue_priority, 7)
 
     def test_runtime_from_payload_defaults_parallel_workers_to_auto_mode(self) -> None:
         runtime = runtime_from_payload({"execution_mode": "parallel"})
@@ -397,6 +401,20 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(runtime.provider_api_key_env, "OPENROUTER_API_KEY")
         self.assertEqual(runtime.model, "openai/gpt-4.1-mini")
         self.assertEqual(runtime.billing_mode, "token")
+
+    def test_runtime_from_payload_applies_gemini_defaults(self) -> None:
+        runtime = runtime_from_payload(
+            {
+                "model_provider": "gemini",
+            }
+        )
+
+        self.assertEqual(runtime.model_provider, "gemini")
+        self.assertEqual(runtime.provider_api_key_env, "GEMINI_API_KEY")
+        self.assertEqual(runtime.provider_base_url, "")
+        self.assertEqual(runtime.codex_path, "gemini.cmd" if os.name == "nt" else "gemini")
+        self.assertEqual(runtime.model, "")
+        self.assertEqual(runtime.model_slug_input, "")
 
     def test_bootstrap_exposes_workspace_and_model_presets(self) -> None:
         with TemporaryTestDir() as temp_dir:
@@ -1298,6 +1316,82 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(result["project"]["current_status"], "closed_out")
             self.assertTrue(any("closeout-started" in line for line in result["activity"]))
             self.assertTrue(any("closeout-finished" in line for line in result["activity"]))
+
+    def test_run_closeout_reports_generated_word_report_path_in_activity(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Closeout Report Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                    "generate_word_report": True,
+                },
+            }
+            completed_plan = {
+                "plan_title": "Closeout Report Demo",
+                "project_prompt": "Finish the work",
+                "summary": "Everything is ready for closeout.",
+                "workflow_mode": "standard",
+                "execution_mode": "parallel",
+                "default_test_command": "python -m unittest",
+                "steps": [
+                    {
+                        "step_id": "ST1",
+                        "title": "Implement",
+                        "display_description": "Implementation finished",
+                        "codex_description": "Implementation finished",
+                        "success_criteria": "Tests pass",
+                        "test_command": "python -m unittest",
+                        "reasoning_effort": "high",
+                        "status": "completed",
+                    }
+                ],
+            }
+
+            def fake_run_execution_closeout(self, project_dir, runtime, branch="main", origin_url=""):
+                context = self.local_project(project_dir)
+                assert context is not None
+                plan_state = self.load_execution_plan_state(context)
+                plan_state.closeout_status = "completed"
+                plan_state.closeout_started_at = "2026-03-26T00:10:00+00:00"
+                plan_state.closeout_completed_at = "2026-03-26T00:12:00+00:00"
+                plan_state.closeout_notes = "Closeout finished successfully."
+                context.paths.closeout_report_docx_file.parent.mkdir(parents=True, exist_ok=True)
+                context.paths.closeout_report_docx_file.write_bytes(b"demo")
+                saved = self.save_execution_plan_state(context, plan_state)
+                context.metadata.current_status = self._status_from_plan_state(saved)
+                self.workspace.save_project(context)
+                return context, saved
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ), mock.patch(
+                "jakal_flow.orchestrator.Orchestrator.run_execution_closeout",
+                new=fake_run_execution_closeout,
+            ):
+                result = run_command(
+                    "run-closeout",
+                    workspace_root,
+                    {
+                        **payload,
+                        "plan": completed_plan,
+                    },
+                )
+
+            expected_path = str(Path(result["files"]["project_root"]) / "reports" / "CLOSEOUT_REPORT.docx")
+            self.assertEqual(result["reports"]["word_report_path"], expected_path)
+            self.assertTrue(any(expected_path in line for line in result["activity"]))
 
     def test_run_plan_routes_single_hybrid_task_batches_through_lineage_execution(self) -> None:
         with TemporaryTestDir() as temp_dir:

@@ -1,6 +1,18 @@
 import { normalizeLanguage, translate } from "./locale.js";
 
-export function defaultCodexPath() {
+export function defaultCodexPath(provider = "openai") {
+  const normalizedProvider = String(provider || "").trim().toLowerCase();
+  if (normalizedProvider === "gemini") {
+    const platform = String(globalThis.process?.platform || "").trim().toLowerCase();
+    if (platform === "win32") {
+      return "gemini.cmd";
+    }
+    const userAgent = String(globalThis.navigator?.userAgent || "").toLowerCase();
+    if (userAgent.includes("windows")) {
+      return "gemini.cmd";
+    }
+    return "gemini";
+  }
   const platform = String(globalThis.process?.platform || "").trim().toLowerCase();
   if (platform === "win32") {
     return "codex.cmd";
@@ -29,6 +41,23 @@ export function normalizeProjectPath(value = "") {
   }
   const normalized = text.replace(/\\/g, "/").replace(/\/+/g, "/");
   return normalized.toLowerCase();
+}
+
+export function backgroundJobProjectKey(payload = null, workspaceRoot = "") {
+  const repoId = String(payload?.repo_id || "").trim();
+  const projectDir = normalizeProjectPath(payload?.project_dir || "");
+  if (!repoId && !projectDir) {
+    return "";
+  }
+  return [
+    normalizeProjectPath(workspaceRoot),
+    repoId,
+    projectDir,
+  ].join("|");
+}
+
+export function isDuplicateProjectJobError(error = null) {
+  return String(error || "").trim().toLowerCase().includes("already active for this project");
 }
 
 export function jobMatchesProject(job = null, project = {}) {
@@ -96,7 +125,7 @@ export function detailApplySignature(detail = null, runningJob = null) {
 export const AUTO_REASONING_OPTION = "auto";
 export const REASONING_OPTIONS = ["low", "medium", "high", "xhigh"];
 export const MODEL_REASONING_OPTIONS = [AUTO_REASONING_OPTION, ...REASONING_OPTIONS];
-export const MODEL_PROVIDER_OPTIONS = ["openai", "openrouter", "opencdk", "local_openai", "oss"];
+export const MODEL_PROVIDER_OPTIONS = ["openai", "gemini", "openrouter", "opencdk", "local_openai", "oss"];
 export const PROGRAM_RUNTIME_KEYS = [
   "model_provider",
   "local_model_provider",
@@ -286,7 +315,13 @@ export function applyProviderDefaults(runtime = {}, nextProvider = "openai", nex
   const localProvider = provider === "oss" ? (String(nextLocalProvider || runtime?.local_model_provider || "ollama").trim().toLowerCase() === "lmstudio" ? "lmstudio" : "ollama") : "";
   const supportsAuto = providerSupportsAutoModel(provider);
   const currentModel = String(runtime?.model_slug_input || runtime?.model || "").trim().toLowerCase();
-  const nextModel = supportsAuto ? (currentModel || "auto") : currentModel === "auto" ? "" : currentModel;
+  const nextModel = supportsAuto
+    ? (currentModel || "auto")
+    : provider === "gemini" && previousProvider !== "gemini" && !currentModel.startsWith("gemini")
+      ? ""
+      : currentModel === "auto"
+        ? ""
+        : currentModel;
   return {
     ...(cloneValue(runtime) || {}),
     model_provider: provider,
@@ -307,6 +342,10 @@ export function applyProviderDefaults(runtime = {}, nextProvider = "openai", nex
     model_preset: nextModel === "auto" && supportsAuto ? String(runtime?.model_preset || "auto").trim().toLowerCase() || "auto" : "",
     model_selection_mode: "slug",
     model_slug_input: nextModel,
+    codex_path:
+      previousProvider === provider
+        ? String(runtime?.codex_path || "").trim() || defaultCodexPath(provider)
+        : defaultCodexPath(provider),
   };
 }
 
@@ -340,6 +379,8 @@ export function blankProjectForm(defaultRuntime) {
       optimization_mode: runtimeDefaults.optimization_mode || "light",
       test_cmd: runtimeDefaults.test_cmd || "python -m pytest",
       execution_mode: "parallel",
+      allow_background_queue: runtimeDefaults.allow_background_queue ?? true,
+      background_queue_priority: Number.parseInt(String(runtimeDefaults.background_queue_priority ?? 0), 10) || 0,
     },
   };
 }
@@ -355,6 +396,13 @@ export function projectFormFromDetail(detail, defaultRuntime) {
       ...(cloneValue(defaultRuntime) || {}),
       ...(cloneValue(detail?.runtime) || {}),
       execution_mode: "parallel",
+      allow_background_queue:
+        detail?.runtime?.allow_background_queue ?? defaultRuntime?.allow_background_queue ?? true,
+      background_queue_priority:
+        Number.parseInt(
+          String(detail?.runtime?.background_queue_priority ?? defaultRuntime?.background_queue_priority ?? 0),
+          10,
+        ) || 0,
     },
   };
 }
@@ -959,6 +1007,8 @@ export function defaultProviderBaseUrl(provider = "openai") {
 
 export function defaultProviderApiKeyEnv(provider = "openai") {
   switch (String(provider || "").trim().toLowerCase()) {
+    case "gemini":
+      return "GEMINI_API_KEY";
     case "openrouter":
       return "OPENROUTER_API_KEY";
     case "opencdk":
@@ -993,6 +1043,9 @@ export function providerSupportsCatalog(provider = "openai") {
 
 export function providerDisplayName(provider = "openai", localProvider = "") {
   const normalized = String(provider || "").trim().toLowerCase();
+  if (normalized === "gemini") {
+    return "Gemini CLI";
+  }
   if (normalized === "oss") {
     const local = String(localProvider || "").trim().toLowerCase();
     if (local === "lmstudio") {

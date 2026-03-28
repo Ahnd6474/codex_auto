@@ -21,16 +21,77 @@ class BridgeJobStoreTests(unittest.TestCase):
 
             self.assertEqual(running.status, "running")
             self.assertEqual(queued.status, "queued")
+            self.assertTrue(queued.allow_background_queue)
+            self.assertEqual(queued.queue_priority, 0)
             self.assertEqual(queued.queue_position, 1)
 
             state = read_json(workspace_root / "job_scheduler.json", default={}) or {}
             self.assertEqual(state.get("max_concurrent_jobs"), 1)
             self.assertEqual([item.get("status") for item in state.get("jobs", [])], ["running", "queued"])
+            self.assertEqual([item.get("queue_priority") for item in state.get("jobs", [])], [0, 0])
             self.assertEqual([item.get("queue_position") for item in state.get("jobs", [])], [0, 1])
 
             events = read_jsonl(workspace_root / "job_scheduler_events.jsonl")
             self.assertEqual([item.get("event_type") for item in events], ["job-started", "job-queued"])
             self.assertTrue(any(item.get("payload", {}).get("job", {}).get("status") == "queued" for item in published))
+
+    def test_create_rejects_queueing_when_project_reservations_are_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace_root = Path(temp_dir) / "workspace"
+            store = BridgeJobStore(lambda _envelope: None, max_running_jobs=1)
+
+            store.create("run-plan", workspace_root, {"project_dir": str(workspace_root / "repo-a")})
+
+            with self.assertRaisesRegex(RuntimeError, "Reservations are disabled for this project"):
+                store.create(
+                    "run-plan",
+                    workspace_root,
+                    {
+                        "project_dir": str(workspace_root / "repo-b"),
+                        "runtime": {
+                            "allow_background_queue": False,
+                        },
+                    },
+                )
+
+    def test_create_orders_queued_jobs_by_higher_project_priority(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace_root = Path(temp_dir) / "workspace"
+            store = BridgeJobStore(lambda _envelope: None, max_running_jobs=1)
+
+            running = store.create("run-plan", workspace_root, {"project_dir": str(workspace_root / "repo-a")})
+            low = store.create(
+                "run-plan",
+                workspace_root,
+                {
+                    "project_dir": str(workspace_root / "repo-low"),
+                    "runtime": {"background_queue_priority": -5},
+                    "display_name": "Low Priority",
+                },
+            )
+            high = store.create(
+                "run-plan",
+                workspace_root,
+                {
+                    "project_dir": str(workspace_root / "repo-high"),
+                    "runtime": {"background_queue_priority": 10},
+                    "display_name": "High Priority",
+                },
+            )
+
+            low_snapshot = store.get_job(low.id) or {}
+            high_snapshot = store.get_job(high.id) or {}
+            self.assertEqual(high_snapshot.get("queue_position"), 1)
+            self.assertEqual(high_snapshot.get("queue_priority"), 10)
+            self.assertEqual(high_snapshot.get("display_name"), "High Priority")
+            self.assertEqual(low_snapshot.get("queue_position"), 2)
+            self.assertEqual(low_snapshot.get("queue_priority"), -5)
+
+            store.update(running.id, status="completed", error=None, result={})
+            promoted = store.dequeue_startable_jobs(workspace_root)
+
+            self.assertEqual([item.id for item in promoted], [high.id])
+            self.assertEqual((store.get_job(low.id) or {}).get("queue_position"), 1)
 
     def test_duplicate_project_jobs_are_rejected_and_queued_jobs_start_after_completion(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
