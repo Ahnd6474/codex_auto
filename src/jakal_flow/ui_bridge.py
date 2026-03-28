@@ -548,7 +548,7 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
         merged["model"] = merged["model_slug_input"]
     if not merged["model"] and merged["model_slug_input"]:
         merged["model"] = merged["model_slug_input"]
-    return RuntimeOptions(**merged)
+    return RuntimeOptions.from_dict(merged)
 
 
 def parse_plan_state(payload: dict[str, Any]) -> ExecutionPlanState:

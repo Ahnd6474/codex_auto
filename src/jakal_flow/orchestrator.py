@@ -3101,69 +3101,25 @@ class Orchestrator:
                     context=integration_context,
                     runtime=runtime,
                     step_id=target_step.step_id,
+                    allow_push=False,
                 )
                 if result_step.status != "completed":
-                    if result_step.status == "paused":
-                        context.metadata.current_status = self._status_from_plan_state(plan_state)
-                        target_step.status = "paused"
-                        target_step.completed_at = None
-                        target_step.commit_hash = None
-                        target_step.notes = result_step.notes or "Immediate stop requested."
-                        saved = self.save_execution_plan_state(context, plan_state)
-                        self.workspace.save_project(context)
-                        return context, saved, target_step
-                    raise RuntimeError(result_step.notes or "Join execution failed.")
-            _integration_project, _integration_saved, result_step = self._run_saved_execution_step_with_context(
-                context=integration_context,
-                runtime=runtime,
-                step_id=target_step.step_id,
-                allow_push=False,
-            )
-        except ImmediateStopRequested as exc:
-            if integration_info is not None:
-                integration_context = integration_info.get("integration_context")
-                if isinstance(integration_context, ProjectContext):
-                    self.git.abort_cherry_pick(integration_context.paths.repo_dir)
-                    self.git.hard_reset(integration_context.paths.repo_dir, pre_join_safe_revision)
-                self._cleanup_integration_worktree(context.paths.repo_dir, integration_info)
-            context.metadata.current_status = self._status_from_plan_state(plan_state)
-            target_step.status = "paused"
-            target_step.completed_at = None
-            target_step.commit_hash = None
-            target_step.notes = str(exc).strip() or "Immediate stop requested."
-            saved = self.save_execution_plan_state(context, plan_state)
-            self.workspace.save_project(context)
-            return context, saved, target_step
-        except Exception as exc:
-            if integration_info is not None:
-                integration_context = integration_info.get("integration_context")
-                if isinstance(integration_context, ProjectContext):
-                    self.git.abort_cherry_pick(integration_context.paths.repo_dir)
-                    self.git.hard_reset(integration_context.paths.repo_dir, pre_join_safe_revision)
-                self._cleanup_integration_worktree(context.paths.repo_dir, integration_info)
-            context.metadata.current_status = "failed"
-            target_step.status = "failed"
-            target_step.notes = str(exc).strip() or "Join execution failed."
-            saved = self.save_execution_plan_state(context, plan_state)
-            self.workspace.save_project(context)
-            raise
-
-        if result_step.status != "completed":
-            if integration_info is not None:
-                integration_context = integration_info.get("integration_context")
-                if isinstance(integration_context, ProjectContext):
-                    self.git.abort_cherry_pick(integration_context.paths.repo_dir)
-                    self.git.hard_reset(integration_context.paths.repo_dir, pre_join_safe_revision)
-                self._cleanup_integration_worktree(context.paths.repo_dir, integration_info)
-            interrupted = result_step.status == "paused"
-            context.metadata.current_status = self._status_from_plan_state(plan_state) if interrupted else "failed"
-            target_step.status = "paused" if interrupted else "failed"
-            target_step.completed_at = None
-            target_step.commit_hash = None
-            target_step.notes = result_step.notes or ("Immediate stop requested." if interrupted else "Join execution failed.")
-            saved = self.save_execution_plan_state(context, plan_state)
-            self.workspace.save_project(context)
-            return context, saved, target_step
+                    if integration_info is not None:
+                        if isinstance(integration_context, ProjectContext):
+                            self.git.abort_cherry_pick(integration_context.paths.repo_dir)
+                            self.git.hard_reset(integration_context.paths.repo_dir, pre_join_safe_revision)
+                        self._cleanup_integration_worktree(context.paths.repo_dir, integration_info)
+                    interrupted = result_step.status == "paused"
+                    context.metadata.current_status = self._status_from_plan_state(plan_state) if interrupted else "failed"
+                    target_step.status = "paused" if interrupted else "failed"
+                    target_step.completed_at = None
+                    target_step.commit_hash = None
+                    target_step.notes = result_step.notes or (
+                        "Immediate stop requested." if interrupted else "Join execution failed."
+                    )
+                    saved = self.save_execution_plan_state(context, plan_state)
+                    self.workspace.save_project(context)
+                    return context, saved, target_step
 
                 branch_name = str(integration_info.get("branch_name") if integration_info else "").strip()
                 self.git.merge_ff_only(context.paths.repo_dir, branch_name)
@@ -3187,30 +3143,20 @@ class Orchestrator:
                 refreshed_step.notes = result_step.notes or "Join step completed successfully."
                 if not pushed and push_reason not in {"already_up_to_date"}:
                     refreshed_step.notes = f"{refreshed_step.notes} (push skipped: {push_reason})"
+                if pushed or push_reason == "already_up_to_date":
+                    remote_cleanup_notes: list[str] = []
+                    for candidate_branch in [lineage.branch_name for lineage in merge_lineages] + ([branch_name] if branch_name else []):
+                        _deleted, delete_reason = self._delete_remote_branch_if_present(
+                            context,
+                            context.paths.repo_dir,
+                            candidate_branch,
+                        )
+                        if delete_reason not in {"deleted", "missing_remote_branch", "push_disabled", "missing_remote"}:
+                            remote_cleanup_notes.append(f"{candidate_branch}: {delete_reason}")
+                    if remote_cleanup_notes:
+                        refreshed_step.notes = f"{refreshed_step.notes} (remote cleanup: {'; '.join(remote_cleanup_notes)})"
                 saved = self.save_execution_plan_state(context, refreshed)
                 context.metadata.current_status = self._status_from_plan_state(saved)
-        refreshed = self.load_execution_plan_state(context)
-        refreshed_step = next((step for step in refreshed.steps if step.step_id == result_step.step_id), target_step)
-        refreshed_step.status = "completed"
-        refreshed_step.completed_at = result_step.completed_at or now_utc_iso()
-        refreshed_step.commit_hash = integrated_revision
-        refreshed_step.notes = result_step.notes or "Join step completed successfully."
-        if not pushed and push_reason not in {"already_up_to_date"}:
-            refreshed_step.notes = f"{refreshed_step.notes} (push skipped: {push_reason})"
-        if pushed or push_reason == "already_up_to_date":
-            remote_cleanup_notes: list[str] = []
-            for candidate_branch in [lineage.branch_name for lineage in merge_lineages] + ([branch_name] if branch_name else []):
-                deleted, delete_reason = self._delete_remote_branch_if_present(
-                    context,
-                    context.paths.repo_dir,
-                    candidate_branch,
-                )
-                if delete_reason not in {"deleted", "missing_remote_branch", "push_disabled", "missing_remote"}:
-                    remote_cleanup_notes.append(f"{candidate_branch}: {delete_reason}")
-            if remote_cleanup_notes:
-                refreshed_step.notes = f"{refreshed_step.notes} (remote cleanup: {'; '.join(remote_cleanup_notes)})"
-        saved = self.save_execution_plan_state(context, refreshed)
-        context.metadata.current_status = self._status_from_plan_state(saved)
 
                 merged_at = now_utc_iso()
                 for lineage in merge_lineages:
@@ -3268,6 +3214,7 @@ class Orchestrator:
                 plan_state = self.save_execution_plan_state(context, plan_state)
                 target_step = next(step for step in plan_state.steps if step.step_id == target_step.step_id)
                 self.workspace.save_project(context)
+                continue
 
         context.metadata.current_status = "failed"
         target_step.status = "failed"
@@ -3363,7 +3310,7 @@ class Orchestrator:
             merged["approval_mode"] = approval_mode
         if sandbox_mode is not None:
             merged["sandbox_mode"] = sandbox_mode
-        return RuntimeOptions(**merged)
+        return RuntimeOptions.from_dict(merged)
 
     def _parallel_worker_plan(self, runtime: RuntimeOptions):
         return build_parallel_resource_plan(
@@ -4927,12 +4874,21 @@ class Orchestrator:
         )
         block_changed_files.extend(search_pass.changed_files)
         if search_tests is None:
-            context.loop_state.counters.regression_failures += 1
-            context.loop_state.stop_reason = self._stop_reason(context)
+            regression_failure = search_pass.returncode == 0
+            failure_summary = (
+                "Search-enabled Codex pass regressed tests and was rolled back."
+                if regression_failure
+                else self._codex_failure_note(selected_task, search_pass)
+            )
+            if regression_failure:
+                context.loop_state.counters.regression_failures += 1
+                context.loop_state.stop_reason = self._stop_reason(context)
+            else:
+                context.loop_state.stop_reason = failure_summary
             memory.record_failure(
                 task=selected_task,
-                summary="Search-enabled Codex pass regressed tests and was rolled back.",
-                tags=["search", "regression"],
+                summary=failure_summary,
+                tags=["search", "regression"] if regression_failure else ["search", "codex_failure"],
                 block_index=block_index,
                 commit_hash=None,
             )
@@ -4950,7 +4906,7 @@ class Orchestrator:
                     "status": "rolled_back",
                     "selected_task": selected_task,
                     "changed_files": [],
-                    "test_summary": "search regression failure",
+                    "test_summary": failure_summary,
                     "commit_hashes": [],
                     "rollback_status": "rolled_back_to_safe_revision",
                 }
@@ -4960,7 +4916,7 @@ class Orchestrator:
                     context,
                     reporter,
                     failure_type="block_failed",
-                    summary="Search-enabled Codex pass regressed tests and was rolled back.",
+                    summary=failure_summary,
                     block_index=block_index,
                     selected_task=selected_task,
                 )

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from pathlib import Path
 from typing import Any
 import re
@@ -130,6 +130,14 @@ class RuntimeOptions:
         provider_default_path = default_codex_path(normalized_provider)
         if not current_path or (provider_default_path != legacy_default_path and current_path == legacy_default_path):
             self.codex_path = provider_default_path
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "RuntimeOptions":
+        if not isinstance(data, dict):
+            return cls()
+        allowed = {item.name for item in fields(cls)}
+        normalized = {key: value for key, value in data.items() if key in allowed}
+        return cls(**normalized)
 
     def to_dict(self) -> dict[str, Any]:
         return _normalize(self)

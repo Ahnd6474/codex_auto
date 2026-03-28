@@ -375,7 +375,7 @@ class WorkspaceManager:
         runtime_data["parallel_worker_mode"] = normalize_parallel_worker_mode(runtime_data.get("parallel_worker_mode", "auto"))
         if "planning_effort" not in runtime_data:
             runtime_data["planning_effort"] = runtime_data.get("effort", "")
-        runtime = RuntimeOptions(**runtime_data)
+        runtime = RuntimeOptions.from_dict(runtime_data)
         counters_data = loop_state_data.get("counters", {})
         loop_state = LoopState(
             repo_id=loop_state_data["repo_id"],
