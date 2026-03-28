@@ -12,6 +12,7 @@ export const BRIDGE_COMMANDS = Object.freeze({
   LOAD_PROJECT_WORKSPACE: "load-project-workspace",
   LOAD_PROJECT_CHECKPOINTS: "load-project-checkpoints",
   LOAD_PROJECT_SHARE: "load-project-share",
+  LOAD_WORKSPACE_SHARE: "load-workspace-share",
   SAVE_PROJECT_SETUP: "save-project-setup",
   SAVE_PLAN: "save-plan",
   RESET_PLAN: "reset-plan",

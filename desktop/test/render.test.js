@@ -1462,6 +1462,7 @@ test("AppSettingsView exposes dashboard visibility controls", async () => {
         sandbox_mode: "danger-full-access",
         checkpoint_interval_blocks: 1,
         execution_mode: "serial",
+        background_concurrency_limit: 3,
         parallel_workers: 2,
         parallel_memory_per_worker_gib: 3,
         codex_path: "codex.cmd",
@@ -1494,6 +1495,7 @@ test("AppSettingsView exposes dashboard visibility controls", async () => {
   assert.match(html, /Codex Spark/);
   assert.match(html, /Custom Model Slug/);
   assert.match(html, /Planning Reasoning/);
+  assert.match(html, /Concurrent Background Jobs/);
   assert.match(html, /Memory \/ Worker \(GiB\)/);
   assert.match(html, /Codex Usage/);
   assert.doesNotMatch(html, /Billing Mode/);

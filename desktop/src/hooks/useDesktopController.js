@@ -1,6 +1,6 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { confirm as confirmDialog, open } from "@tauri-apps/plugin-dialog";
-import { bridgeRequest, cancelBridgeJob, startBridgeJob, subscribeBridgeEvents } from "../api";
+import { bridgeRequest, cancelBridgeJob, configureBridgeScheduler, startBridgeJob, subscribeBridgeEvents } from "../api";
 import { BRIDGE_COMMANDS } from "../bridgeProtocol";
 import { bridgeEventJob, bridgeEventProject, isJobUpdatedEvent, isProjectChangedEvent, isProjectUiEvent } from "../controller/bridgeEvents";
 import { mergeRefreshRepoId, projectRefreshDebounceMs, shouldRefreshSelectedProject } from "../controller/projectRefresh";
@@ -66,6 +66,7 @@ export function useDesktopController() {
   const [projectForm, setProjectForm] = useState(blankProjectForm(null));
   const [programSettings, setProgramSettings] = useState(programSettingsFromRuntime(null));
   const [projectDetail, setProjectDetail] = useState(null);
+  const [workspaceShareDetail, setWorkspaceShareDetail] = useState(null);
   const [historyDetail, setHistoryDetail] = useState(null);
   const [planDraft, setPlanDraft] = useState(() => emptyPlanDraft());
   const [selectedStepId, setSelectedStepId] = usePersistentState("jakal-flow:selected-step", "");
@@ -83,6 +84,7 @@ export function useDesktopController() {
   const pendingBridgeRefreshRepoIdRef = useRef("");
   const pendingBridgeRefreshListingRef = useRef(false);
   const activeJobRef = useRef(null);
+  const appliedSchedulerLimitRef = useRef(0);
   const autoRunAfterPlanRef = useRef(false);
   const defaultRuntimeRef = useRef(null);
   const jobsRef = useRef([]);
@@ -203,6 +205,32 @@ export function useDesktopController() {
   }, [jobs]);
 
   useEffect(() => {
+    let cancelled = false;
+    const nextLimit = Math.max(1, Number.parseInt(String(programSettings?.background_concurrency_limit || 2), 10) || 2);
+    if (!workspaceRoot || appliedSchedulerLimitRef.current === nextLimit) {
+      return undefined;
+    }
+
+    async function syncSchedulerLimit() {
+      try {
+        await configureBridgeScheduler(nextLimit, workspaceRoot || null);
+        if (!cancelled) {
+          appliedSchedulerLimitRef.current = nextLimit;
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setMessage(messagePayload("error", String(error)));
+        }
+      }
+    }
+
+    void syncSchedulerLimit();
+    return () => {
+      cancelled = true;
+    };
+  }, [programSettings?.background_concurrency_limit, workspaceRoot]);
+
+  useEffect(() => {
     if (selectedHistoryId && !historyProjects.some((item) => item.archive_id === selectedHistoryId)) {
       setSelectedHistoryId("");
       setHistoryDetail(null);
@@ -273,6 +301,9 @@ export function useDesktopController() {
         setPlanDirty,
       },
     });
+    if (detail?.share) {
+      setWorkspaceShareDetail(detail.share);
+    }
     if (applied) {
       const nextProjects = applyProjectDetailListingState({
         projects: projectsRef.current,
@@ -298,6 +329,11 @@ export function useDesktopController() {
           return;
         }
         setWorkspaceRoot(bootstrap.workspace_root);
+        const workspaceShare = await bridgeRequest(BRIDGE_COMMANDS.LOAD_WORKSPACE_SHARE, {}, bootstrap.workspace_root);
+        if (cancelled) {
+          return;
+        }
+        setWorkspaceShareDetail(workspaceShare?.share || null);
         setBaseRuntime(bootstrap.default_runtime);
         setModelPresets(bootstrap.model_presets || []);
         setModelCatalog(bootstrap.model_catalog || []);
@@ -1255,7 +1291,7 @@ export function useDesktopController() {
   }
 
   async function copyShareLink() {
-    const shareUrl = projectDetail?.share?.active_session?.share_url || "";
+    const shareUrl = workspaceShareDetail?.active_session?.share_url || "";
     if (!shareUrl) {
       setMessage(messagePayload("error", translate(language, "message.noShareLinkAvailable")));
       return;
@@ -1272,26 +1308,19 @@ export function useDesktopController() {
   }
 
   async function generateShareLink() {
-    if (!projectForm.project_dir.trim()) {
-      setMessage(messagePayload("error", translate(language, "message.openOrCreateProjectFirst")));
-      return;
-    }
     await withPending("create_share_session", async () => {
-      const detail = await bridgeRequest(
+      const shareResult = await bridgeRequest(
         BRIDGE_COMMANDS.CREATE_SHARE_SESSION,
         {
-          project_dir: projectForm.project_dir.trim(),
           created_by: "tauri-react-ui",
           bind_host: shareSettings.bind_host,
           public_base_url: shareSettings.public_base_url,
         },
         workspaceRoot || null,
       );
-      lastAppliedDetailSignatureRef.current = "";
-      setProjectDetail(detail);
-      setModelCatalog(detail?.codex_status?.model_catalog || []);
-      setShareSettings(shareSettingsFromDetail(detail));
-      const shareUrl = detail?.created_share_session?.share_url || detail?.share?.active_session?.share_url || "";
+      setWorkspaceShareDetail(shareResult?.share || null);
+      setShareSettings(shareSettingsFromDetail(shareResult));
+      const shareUrl = shareResult?.created_share_session?.share_url || shareResult?.share?.active_session?.share_url || "";
       if (shareUrl && navigator?.clipboard?.writeText) {
         try {
           await navigator.clipboard.writeText(shareUrl);
@@ -1304,28 +1333,21 @@ export function useDesktopController() {
   }
 
   async function revokeShareLink() {
-    const sessionId = projectDetail?.share?.active_session?.session_id || "";
-    if (!projectForm.project_dir.trim()) {
-      setMessage(messagePayload("error", translate(language, "message.openOrCreateProjectFirst")));
-      return;
-    }
+    const sessionId = workspaceShareDetail?.active_session?.session_id || "";
     if (!sessionId) {
       setMessage(messagePayload("error", translate(language, "message.noShareLinkAvailable")));
       return;
     }
     await withPending("revoke_share_session", async () => {
-      const detail = await bridgeRequest(
+      const shareResult = await bridgeRequest(
         BRIDGE_COMMANDS.REVOKE_SHARE_SESSION,
         {
-          project_dir: projectForm.project_dir.trim(),
           session_id: sessionId,
         },
         workspaceRoot || null,
       );
-      lastAppliedDetailSignatureRef.current = "";
-      setProjectDetail(detail);
-      setModelCatalog(detail?.codex_status?.model_catalog || []);
-      setShareSettings(shareSettingsFromDetail(detail));
+      setWorkspaceShareDetail(shareResult?.share || null);
+      setShareSettings(shareSettingsFromDetail(shareResult));
       setMessage(messagePayload("success", translate(language, "message.shareLinkRevoked")));
     });
   }
@@ -1469,6 +1491,7 @@ export function useDesktopController() {
     selectedHistoryId,
     projectForm,
     projectDetail,
+    workspaceShareDetail,
     historyDetail,
     planDraft,
     selectedStepId,

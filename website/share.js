@@ -48,6 +48,18 @@ const builtInEnglishShareTranslations = {
   polling_every_5s: "Polling every 5s",
   polling: "Polling",
   access_denied: "Access denied",
+  link_unavailable: "Link unavailable",
+  link_expired: "Link expired",
+  link_revoked: "Link revoked",
+  invalid_link: "Invalid link",
+  share_link_not_found_title: "Share link is no longer active",
+  share_link_not_found: "This share link no longer matches an active session. Generate a new share link and try again.",
+  share_link_expired_title: "Share link expired",
+  share_link_expired: "This share link has expired. Generate a new share link to continue.",
+  share_link_revoked_title: "Share link revoked",
+  share_link_revoked: "This share link was revoked, usually because a newer share link replaced it.",
+  share_link_invalid_title: "Share link looks incomplete",
+  share_link_invalid: "The token in this link is invalid. Recopy the full URL and make sure no extra characters were added.",
   unable_keep_live_connection: "Unable to keep live connection",
   live_stream_unavailable: "Live stream unavailable",
   falling_back_to_polling: "{message} Falling back to polling.",
@@ -435,6 +447,52 @@ async function sendControlAction(session, token, repoId, action) {
   return data;
 }
 
+function shareErrorDescriptor(error) {
+  const status = Number(error?.status || 0);
+  const message = String(error?.message || error || "").trim();
+  const normalized = message.toLowerCase();
+
+  if (status === 404 || normalized === "unknown share session.") {
+    return {
+      pill: t("link_unavailable"),
+      title: t("share_link_not_found_title"),
+      message: t("share_link_not_found"),
+    };
+  }
+  if (normalized.includes("expired")) {
+    return {
+      pill: t("link_expired"),
+      title: t("share_link_expired_title"),
+      message: t("share_link_expired"),
+    };
+  }
+  if (normalized.includes("revoked")) {
+    return {
+      pill: t("link_revoked"),
+      title: t("share_link_revoked_title"),
+      message: t("share_link_revoked"),
+    };
+  }
+  if (normalized.includes("invalid share token")) {
+    return {
+      pill: t("invalid_link"),
+      title: t("share_link_invalid_title"),
+      message: t("share_link_invalid"),
+    };
+  }
+  return {
+    pill: t("access_denied"),
+    title: t("error_unable_load"),
+    message: message || t("request_failed_with", { status: status || "?" }),
+  };
+}
+
+function showShareError(error) {
+  const descriptor = shareErrorDescriptor(error);
+  setPollState(descriptor.pill, "danger");
+  showError(descriptor.title, descriptor.message);
+}
+
 function connectEventStream(session, token, onStatus, onFailure) {
   if (typeof window.EventSource !== "function") {
     return null;
@@ -548,8 +606,7 @@ async function bootstrap() {
       hideError();
       setPollState(t("polling"), "success");
     } catch (error) {
-      setPollState(t("access_denied"), "danger");
-      showError(t("error_unable_load"), String(error.message || error));
+      showShareError(error);
     } finally {
       inFlight = false;
     }
@@ -611,7 +668,7 @@ async function bootstrap() {
   try {
     await reconcileStatus();
   } catch (error) {
-    showError(t("error_unable_load"), String(error.message || error));
+    showShareError(error);
   }
 
   const stream = connectEventStream(

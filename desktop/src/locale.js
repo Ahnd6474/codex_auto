@@ -801,6 +801,7 @@ STRINGS.en["run.parallelLimitMemoryCap"] = "Memory cap {memoryCap}, CPU cap {cpu
 STRINGS.en["run.parallelLimitCpuCap"] = "CPU cap {cpuCap}, logical CPUs {logicalCpuCount}";
 STRINGS.en["run.parallelLimitRequestedCap"] = "Requested {requested}, capped to {recommended} by CPU {cpuCap} and memory {memoryCap}";
 STRINGS.en["run.parallelLimitAutoCap"] = "CPU cap {cpuCap}, memory cap {memoryCap}";
+STRINGS.en["field.backgroundConcurrencyLimit"] = "Concurrent Background Jobs";
 STRINGS.en["reports.wordReportReady"] = "Word report saved at {path}";
 STRINGS.en["reports.wordReportDisabled"] = "Word report generation is disabled for this project.";
 STRINGS.en["message.commandCompletedWithWordReport"] = "{command} completed. Word report: {path}";
@@ -827,6 +828,7 @@ STRINGS.ko["progress.closeoutCompleted"] = "{completed}/{total}단계 완료, �
 STRINGS.ko["progress.closeoutRunning"] = "{completed}/{total}단계 완료, 마감 진행 중";
 STRINGS.ko["progress.closeoutFailed"] = "{completed}/{total}단계 완료, 마감 실패";
 STRINGS.ko["progress.closeoutPending"] = "{completed}/{total}단계 완료, 마감 대기";
+STRINGS.ko["field.backgroundConcurrencyLimit"] = "동시 백그라운드 작업 수";
 STRINGS.ko["action.backgroundJob"] = "백그라운드 작업";
 STRINGS.ko["prompt.confirmDeleteAllProjects"] =
   "모든 프로젝트를 삭제할까요? 관리 중인 문서, 로그, 상태만 삭제되고 원본 저장소 폴더는 그대로 유지됩니다.";
@@ -1028,6 +1030,7 @@ KO_HIGH_QUALITY_OVERRIDES["run.stepProgress"] = "단계 진행도";
 KO_HIGH_QUALITY_OVERRIDES["run.debugging"] = "디버깅";
 KO_HIGH_QUALITY_OVERRIDES["run.workingOnStep"] = "{step} 작업 중";
 KO_HIGH_QUALITY_OVERRIDES["run.workingOnSteps"] = "{steps} 작업 중";
+KO_HIGH_QUALITY_OVERRIDES["field.backgroundConcurrencyLimit"] = "동시 백그라운드 작업 수";
 
 KO_HIGH_QUALITY_OVERRIDES["progress.runningIds"] = "{completed}/{total}\ub2e8\uacc4 \uc644\ub8cc, \uc2e4\ud589 \uc911: {ids}";
 KO_HIGH_QUALITY_OVERRIDES["progress.readyIds"] = "{completed}/{total}\ub2e8\uacc4 \uc644\ub8cc, \uc2e4\ud589 \uac00\ub2a5: {ids}";

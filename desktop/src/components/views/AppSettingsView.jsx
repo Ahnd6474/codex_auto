@@ -297,6 +297,21 @@ export function AppSettingsView({
                 />
               </label>
               <label className="field">
+                <span>{t("field.backgroundConcurrencyLimit")}</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={settings.background_concurrency_limit || 2}
+                  onChange={(event) =>
+                    onChangeSettings((current) => ({
+                      ...current,
+                      background_concurrency_limit: Math.max(1, Number.parseInt(event.target.value || "1", 10) || 1),
+                    }))
+                  }
+                  disabled={interfaceBusy}
+                />
+              </label>
+              <label className="field">
                 <span>{t("field.parallelMemoryPerWorkerGiB")}</span>
                 <input
                   type="number"

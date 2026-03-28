@@ -145,6 +145,23 @@ class BridgeJobStore:
             jobs=active_jobs,
         )
 
+    def _scheduler_snapshot_unlocked(self, workspace_root: Path) -> dict[str, Any]:
+        workspace_key = str(workspace_root)
+        active_jobs = [
+            job.to_dict()
+            for job in self._list_jobs_unlocked()
+            if job.workspace_root == workspace_key and str(job.status).strip().lower() in {"queued", "running"}
+        ]
+        running_jobs = [job for job in active_jobs if str(job.get("status", "")).strip().lower() == "running"]
+        queued_jobs = [job for job in active_jobs if str(job.get("status", "")).strip().lower() == "queued"]
+        return {
+            "workspace_root": workspace_key,
+            "max_concurrent_jobs": self._max_running_jobs,
+            "running_jobs": running_jobs,
+            "queued_jobs": queued_jobs,
+            "jobs": active_jobs,
+        }
+
     def _matching_active_job_unlocked(self, *, repo_id: str, project_dir: str, workspace_root: Path) -> BridgeJobSnapshot | None:
         normalized_project_dir = _normalized_project_path(project_dir)
         workspace_key = str(workspace_root)
@@ -177,10 +194,34 @@ class BridgeJobStore:
             jobs = self._list_jobs_unlocked()
             return [job.to_dict() for job in jobs]
 
+    def scheduler_snapshot(self, workspace_root: Path) -> dict[str, Any]:
+        with self._lock:
+            return self._scheduler_snapshot_unlocked(workspace_root)
+
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         with self._lock:
             snapshot = self._jobs.get(job_id)
             return None if snapshot is None else snapshot.to_dict()
+
+    def set_max_running_jobs(self, workspace_root: Path, max_running_jobs: Any) -> tuple[dict[str, Any], list[BridgeJobSnapshot]]:
+        publish_updates: list[BridgeJobSnapshot] = []
+        impacted_workspaces: list[Path] = []
+        with self._lock:
+            self._max_running_jobs = normalize_max_concurrent_jobs(max_running_jobs)
+            impacted_keys = {
+                str(key).strip()
+                for key in [workspace_root, *[job.workspace_root for job in self._jobs.values()]]
+                if str(key).strip()
+            }
+            impacted_workspaces = [Path(key) for key in sorted(impacted_keys)]
+            for item in impacted_workspaces:
+                publish_updates.extend(self._refresh_queue_positions_unlocked(item, touch_timestamp=False))
+                self._persist_workspace_state_unlocked(item)
+        self._publish_many(publish_updates)
+        promoted: list[BridgeJobSnapshot] = []
+        for item in impacted_workspaces:
+            promoted.extend(self.dequeue_startable_jobs(item))
+        return self.scheduler_snapshot(workspace_root), promoted
 
     def create(self, command: str, workspace_root: Path, payload: dict[str, Any] | None = None) -> BridgeJobSnapshot:
         repo_id = ""
@@ -476,6 +517,19 @@ class BridgeServer:
 
         if method == "list_jobs":
             self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=self._jobs.list_jobs()))
+            return
+
+        if method == "get_scheduler":
+            self._send_envelope(
+                BridgeEnvelope(kind="response", id=request_id, ok=True, result=self._jobs.scheduler_snapshot(workspace_root))
+            )
+            return
+
+        if method == "configure_scheduler":
+            result, promoted = self._jobs.set_max_running_jobs(workspace_root, params.get("max_concurrent_jobs"))
+            for snapshot in promoted:
+                self._start_job_thread(snapshot.id)
+            self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=result))
             return
 
         if method == "cancel_job":

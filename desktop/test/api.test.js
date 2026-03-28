@@ -73,6 +73,19 @@ test("listBridgeJobs forwards the listing request without payload", async () => 
   assert.deepEqual(calls, [["list_bridge_jobs"]]);
 });
 
+test("configureBridgeScheduler forwards the scheduler update request", async () => {
+  const calls = [];
+  const client = createBridgeClient(async (...args) => {
+    calls.push(args);
+    return { max_concurrent_jobs: 3 };
+  });
+
+  const result = await client.configureBridgeScheduler(3, "C:/workspace");
+
+  assert.deepEqual(result, { max_concurrent_jobs: 3 });
+  assert.deepEqual(calls, [["configure_bridge_scheduler", { maxConcurrentJobs: 3, workspaceRoot: "C:/workspace" }]]);
+});
+
 test("cancelBridgeJob forwards the queued job cancellation request", async () => {
   const calls = [];
   const client = createBridgeClient(async (...args) => {

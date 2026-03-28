@@ -137,7 +137,7 @@ export const DEFAULT_DASHBOARD_VISIBILITY = Object.freeze({
   codex_usage_card: false,
   word_report_card: true,
 });
-export const PROGRAM_UI_KEYS = ["ui_theme", "developer_mode", "dashboard_visibility"];
+export const PROGRAM_UI_KEYS = ["ui_theme", "developer_mode", "dashboard_visibility", "background_concurrency_limit"];
 
 const LEGACY_DASHBOARD_VISIBILITY_ALIASES = Object.freeze({
   rate_limit_window_5h: "rate_limits",
@@ -172,6 +172,7 @@ const DEFAULT_PROGRAM_UI = {
   ui_theme: "dark",
   developer_mode: false,
   dashboard_visibility: DEFAULT_DASHBOARD_VISIBILITY,
+  background_concurrency_limit: 2,
 };
 
 export function normalizeDashboardVisibility(value) {
@@ -241,6 +242,7 @@ export function programSettingsFromRuntime(runtime) {
   });
   settings.execution_mode = "parallel";
   settings.dashboard_visibility = normalizeDashboardVisibility(settings.dashboard_visibility);
+  settings.background_concurrency_limit = Math.max(1, Number.parseInt(String(settings.background_concurrency_limit || 2), 10) || 2);
   return settings;
 }
 

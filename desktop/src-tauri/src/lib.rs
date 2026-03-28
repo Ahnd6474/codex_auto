@@ -472,6 +472,24 @@ fn list_bridge_jobs<R: tauri::Runtime>(
 }
 
 #[tauri::command]
+fn configure_bridge_scheduler<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    max_concurrent_jobs: i64,
+    workspace_root: Option<String>,
+) -> Result<Value, String> {
+    let session = bridge_session(&app, state.inner())?;
+    session.request(
+        "configure_scheduler",
+        json!({
+            "max_concurrent_jobs": max_concurrent_jobs,
+            "workspace_root": normalize_workspace_root(workspace_root)?,
+        }),
+        bridge_timeout(),
+    )
+}
+
+#[tauri::command]
 fn cancel_bridge_job<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
@@ -490,6 +508,7 @@ pub fn run() {
             start_bridge_job,
             get_bridge_job,
             list_bridge_jobs,
+            configure_bridge_scheduler,
             cancel_bridge_job
         ])
         .run(tauri::generate_context!())

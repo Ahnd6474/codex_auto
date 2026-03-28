@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..public_tunnel import public_tunnel_status_payload
-from ..share import project_share_payload, share_server_status_payload
+from ..share import project_share_payload, share_server_status_payload, workspace_share_payload
 from ..ui_bridge_payloads import (
     checkpoint_payload,
     config_payload,
@@ -85,6 +85,7 @@ def build_read_model_handlers(
         "load-project-workspace": load_project_workspace,
         "load-project-checkpoints": load_project_checkpoints,
         "load-project-share": load_project_share,
+        "load-workspace-share": lambda ctx: {"share": workspace_share_payload(ctx.workspace_root)},
         "get_share_server_status": lambda ctx: share_server_status_payload(ctx.workspace_root),
         "get_public_tunnel_status": lambda ctx: public_tunnel_status_payload(ctx.workspace_root),
     }

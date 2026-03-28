@@ -80,6 +80,8 @@ def _workspace_share_signature(workspace_root: Path) -> str:
     digest = hashlib.sha1()
     manager = WorkspaceManager(workspace_root)
     digest.update(_path_signature(manager.registry_file).encode("utf-8"))
+    digest.update(_path_signature(workspace_root / "share_sessions.json").encode("utf-8"))
+    digest.update(_path_signature(workspace_root / "share_session_events.jsonl").encode("utf-8"))
     for project in manager.list_projects():
         digest.update(project.metadata.repo_id.encode("utf-8"))
         digest.update(_path_signature(project.paths.state_dir / "share_sessions.json").encode("utf-8"))
@@ -293,8 +295,14 @@ def progress_caption(plan_state: ExecutionPlanState) -> str:
     )
     if uses_dag:
         running = [step.step_id for step in plan_state.steps if step.status == "running"]
-        if running:
-            return f"Completed {completed}/{total} steps, running: {', '.join(running)}"
+        integrating = [step.step_id for step in plan_state.steps if step.status == "integrating"]
+        if running or integrating:
+            parts: list[str] = []
+            if running:
+                parts.append(f"running: {', '.join(running)}")
+            if integrating:
+                parts.append(f"integrating: {', '.join(integrating)}")
+            return f"Completed {completed}/{total} steps, {'; '.join(parts)}"
         completed_ids = {step.step_id for step in plan_state.steps if step.status == "completed"}
         ready = [
             step.step_id
@@ -354,7 +362,7 @@ def project_summary(
 def project_stats(plan_state: ExecutionPlanState) -> dict[str, Any]:
     completed = len([step for step in plan_state.steps if step.status == "completed"])
     failed = len([step for step in plan_state.steps if step.status == "failed"])
-    running = len([step for step in plan_state.steps if step.status == "running"])
+    running = len([step for step in plan_state.steps if step.status in {"running", "integrating"}])
     return {
         "total_steps": len(plan_state.steps),
         "completed_steps": completed,

@@ -6,6 +6,8 @@ from pathlib import Path
 import shutil
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from unittest import mock
 
@@ -1652,6 +1654,144 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("integration assertion failed", debug_prompt_text)
         self.assertIn("parallel batch traceback", debug_prompt_text)
         self.assertIn("Do not modify tests unless", debug_prompt_text)
+
+    def test_parallel_batch_persists_worker_sync_before_last_worker_finishes(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_batch_sync_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model="gpt-5.4",
+            effort="medium",
+            test_cmd="python -m pytest",
+            execution_mode="parallel",
+            parallel_workers=2,
+        )
+
+        first_worker_finished = threading.Event()
+        release_second_worker = threading.Event()
+        background_error: list[BaseException] = []
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            context.metadata.current_safe_revision = "safe-revision"
+            context.loop_state.current_safe_revision = "safe-revision"
+            orchestrator.workspace.save_project(context)
+            orchestrator.save_execution_plan_state(
+                context,
+                ExecutionPlanState(
+                    plan_title="Parallel Sync Demo",
+                    execution_mode="parallel",
+                    default_test_command="python -m pytest",
+                    steps=[
+                        ExecutionStep(step_id="ST1", title="Frontend", owned_paths=["desktop/src"]),
+                        ExecutionStep(step_id="ST2", title="Backend", owned_paths=["src/jakal_flow"]),
+                    ],
+                ),
+            )
+
+            passing_stdout = workspace_root / "parallel-batch-pass.stdout.log"
+            passing_stderr = workspace_root / "parallel-batch-pass.stderr.log"
+            passing_stdout.parent.mkdir(parents=True, exist_ok=True)
+            passing_stdout.write_text("batch green\n", encoding="utf-8")
+            passing_stderr.write_text("", encoding="utf-8")
+            passing_test = TestRunResult(
+                command="python -m pytest",
+                returncode=0,
+                stdout_file=passing_stdout,
+                stderr_file=passing_stderr,
+                summary="python -m pytest exited with 0",
+            )
+
+            def fake_parallel_worker(_context, _runtime, step, _base_revision, _batch_token, _worker_index):
+                if step.step_id == "ST1":
+                    first_worker_finished.set()
+                    return {
+                        "step_id": "ST1",
+                        "status": "completed",
+                        "notes": "frontend worker ok",
+                        "commit_hash": "worker-1-commit",
+                        "changed_files": ["desktop/src/App.jsx"],
+                        "pass_log": {"pass_type": "block-search-pass"},
+                        "block_log": {"status": "completed"},
+                        "test_summary": "frontend worker ok",
+                    }
+                release_second_worker.wait(timeout=5)
+                return {
+                    "step_id": "ST2",
+                    "status": "completed",
+                    "notes": "backend worker ok",
+                    "commit_hash": "worker-2-commit",
+                    "changed_files": ["src/jakal_flow/orchestrator.py"],
+                    "pass_log": {"pass_type": "block-search-pass"},
+                    "block_log": {"status": "completed"},
+                    "test_summary": "backend worker ok",
+                }
+
+            def run_batch() -> None:
+                try:
+                    orchestrator.run_parallel_execution_batch(
+                        project_dir=repo_dir,
+                        runtime=runtime,
+                        step_ids=["ST1", "ST2"],
+                    )
+                except BaseException as exc:  # pragma: no cover - surfaced by assertion below
+                    background_error.append(exc)
+
+            with mock.patch.object(orchestrator, "_run_parallel_step_worker", side_effect=fake_parallel_worker), mock.patch.object(
+                orchestrator,
+                "_run_test_command",
+                return_value=passing_test,
+            ), mock.patch.object(
+                orchestrator.git,
+                "try_cherry_pick",
+                return_value=CommandResult(command=["git", "cherry-pick"], returncode=0, stdout="", stderr=""),
+            ), mock.patch.object(
+                orchestrator.git,
+                "current_revision",
+                side_effect=["merge-commit-1", "merge-commit-2"],
+            ), mock.patch.object(
+                orchestrator.git,
+                "remote_url",
+                return_value=None,
+            ), mock.patch.object(
+                orchestrator,
+                "setup_local_project",
+                return_value=context,
+            ):
+                thread = threading.Thread(target=run_batch, daemon=True)
+                thread.start()
+
+                self.assertTrue(first_worker_finished.wait(timeout=2))
+
+                synced_statuses: list[str] = []
+                deadline = time.monotonic() + 2
+                while time.monotonic() < deadline:
+                    try:
+                        current_plan = read_json(context.paths.execution_plan_file, default={})
+                    except json.JSONDecodeError:
+                        time.sleep(0.05)
+                        continue
+                    steps = current_plan.get("steps", []) if isinstance(current_plan, dict) else []
+                    synced_statuses = [str(item.get("status", "")) for item in steps[:2]]
+                    if synced_statuses == ["integrating", "running"]:
+                        break
+                    time.sleep(0.05)
+
+                release_second_worker.set()
+                thread.join(timeout=5)
+
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertFalse(background_error, str(background_error[0]) if background_error else "")
+        self.assertEqual(synced_statuses, ["integrating", "running"])
 
     def test_parallel_batch_merge_conflict_invokes_merger_and_continues(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_merge_debugger_test"

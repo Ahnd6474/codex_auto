@@ -112,6 +112,7 @@ export default function App() {
             activeTab={controller.centerTab}
             onChangeTab={controller.setCenterTab}
             detail={detail}
+            workspaceShareDetail={controller.workspaceShareDetail}
             form={controller.projectForm}
             programSettings={controller.programSettings}
             planDraft={controller.planDraft}

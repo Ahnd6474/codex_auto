@@ -76,6 +76,7 @@ export function CenterWorkspace({
   activeTab,
   onChangeTab,
   detail,
+  workspaceShareDetail,
   historyDetail,
   selectedHistoryId,
   form,
@@ -253,7 +254,7 @@ export function CenterWorkspace({
           <AppSettingsView
             settings={programSettings}
             shareSettings={shareSettings}
-            shareDetail={detail?.share}
+            shareDetail={workspaceShareDetail}
             busy={busy}
             shareBusy={shareBusy}
             onChangeSettings={onChangeProgramSettings}

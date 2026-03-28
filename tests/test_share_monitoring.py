@@ -24,6 +24,7 @@ from jakal_flow.share import (
     create_workspace_share_session,
     current_step_summary,
     create_share_session,
+    load_workspace_share_sessions,
     load_share_sessions,
     process_is_running,
     project_share_payload,
@@ -150,6 +151,25 @@ class ShareMonitoringTests(unittest.TestCase):
         self.assertEqual(summary["title"], "Parallel batch: ST2, ST3")
         self.assertEqual(summary["summary"], "Frontend, Backend")
 
+    def test_current_step_summary_includes_integrating_parallel_steps(self) -> None:
+        summary = current_step_summary(
+            ExecutionPlanState(
+                execution_mode="parallel",
+                steps=[
+                    ExecutionStep(step_id="ST1", title="Root", status="completed"),
+                    ExecutionStep(step_id="ST2", title="Frontend", depends_on=["ST1"], owned_paths=["desktop/src"], status="integrating"),
+                    ExecutionStep(step_id="ST3", title="Backend", depends_on=["ST1"], owned_paths=["src/jakal_flow"], status="running"),
+                ],
+            )
+        )
+
+        self.assertIsNotNone(summary)
+        assert summary is not None
+        self.assertEqual(summary["status"], "running")
+        self.assertEqual(summary["step_id"], "ST2, ST3")
+        self.assertEqual(summary["title"], "Parallel batch: ST2, ST3")
+        self.assertEqual(summary["summary"], "Frontend, Backend")
+
     def test_normalize_tunnel_target_url_rewrites_wildcard_host(self) -> None:
         self.assertEqual(
             normalize_tunnel_target_url("http://0.0.0.0:55180"),
@@ -242,16 +262,16 @@ class ShareMonitoringTests(unittest.TestCase):
             first = create_workspace_share_session(workspace_root, project_one, expires_in_minutes=60, created_by="test")
             second = create_workspace_share_session(workspace_root, project_two, expires_in_minutes=60, created_by="test")
 
-            first_sessions = load_share_sessions(project_one)
-            second_sessions = load_share_sessions(project_two)
+            workspace_sessions = load_workspace_share_sessions(workspace_root)
             active = workspace_active_share_session(workspace_root)
 
-            self.assertIsNotNone(next(item for item in first_sessions if item.session_id == first.session_id).revoked_at)
-            self.assertTrue(next(item for item in second_sessions if item.session_id == second.session_id).is_active())
+            self.assertEqual(len(workspace_sessions), 2)
+            self.assertIsNotNone(next(item for item in workspace_sessions if item.session_id == first.session_id).revoked_at)
+            self.assertTrue(next(item for item in workspace_sessions if item.session_id == second.session_id).is_active())
             self.assertIsNotNone(active)
             assert active is not None
             self.assertEqual(active["session_id"], second.session_id)
-            self.assertEqual(active["project"]["display_name"], "Share Demo")
+            self.assertEqual(active["created_by"], "test")
 
     def test_session_expiry_and_token_validation_and_revoke_behavior(self) -> None:
         session = ShareSession(
@@ -428,8 +448,8 @@ class ShareMonitoringTests(unittest.TestCase):
             repo_dir = temp_dir / "repo"
             repo_dir.mkdir(parents=True, exist_ok=True)
             _orchestrator, project = create_project(workspace_root, repo_dir)
-            create_share_session(project, expires_in_minutes=60, created_by="test")
-            create_share_session(project, expires_in_minutes=60, created_by="test")
+            create_workspace_share_session(workspace_root, project, expires_in_minutes=60, created_by="test")
+            create_workspace_share_session(workspace_root, project, expires_in_minutes=60, created_by="test")
 
             server_payload = {
                 "viewer_path": "/share/view",
@@ -463,11 +483,11 @@ class ShareMonitoringTests(unittest.TestCase):
 
             payload = project_share_payload(workspace_root, project_one)
 
-            self.assertEqual(payload["sessions"], [])
+            self.assertEqual(len(payload["sessions"]), 1)
             self.assertIsNone(payload["project_active_session"])
             self.assertIsNotNone(payload["active_session"])
             assert payload["active_session"] is not None
-            self.assertEqual(payload["active_session"]["project"]["slug"], project_two.metadata.slug)
+            self.assertEqual(payload["active_session"]["session_id"], payload["sessions"][0]["session_id"])
 
     def test_share_server_status_ignores_stale_tunnel_target(self) -> None:
         workspace_root = Path("C:/tmp/share-status-demo")
@@ -586,6 +606,13 @@ class ShareMonitoringTests(unittest.TestCase):
                 self.assertNotIn("repo_path", json.dumps(payload))
                 self.assertNotIn("project_root", json.dumps(payload))
 
+                with self.assertRaises(urllib.error.HTTPError) as unknown_session:
+                    urllib.request.urlopen(
+                        f"{base_url}/share/api/status?session=missing-session&token={session.viewer_token}"
+                    )
+                self.assertEqual(unknown_session.exception.code, 404)
+                self.assertIn("Unknown share session.", unknown_session.exception.read().decode("utf-8"))
+
                 with self.assertRaises(urllib.error.HTTPError) as bad_token:
                     urllib.request.urlopen(f"{base_url}/share/api/status?session={session.session_id}&token=bad-token")
                 self.assertEqual(bad_token.exception.code, 403)
@@ -641,6 +668,11 @@ class ShareMonitoringTests(unittest.TestCase):
         self.assertIn('shareEndpoint("api/control")', script)
         self.assertIn('builtInEnglishShareTranslations', script)
         self.assertIn('language === "en" ? builtInEnglishShareTranslations : {}', script)
+        self.assertIn("shareErrorDescriptor", script)
+        self.assertIn("share_link_not_found_title", script)
+        self.assertIn("share_link_expired_title", script)
+        self.assertIn("share_link_revoked_title", script)
+        self.assertIn("share_link_invalid_title", script)
         self.assertIn("await reconcileStatus()", script)
         self.assertNotIn('new URL("/share/api/status", window.location.origin)', script)
         self.assertNotIn('new URL("/share/api/events", window.location.origin)', script)

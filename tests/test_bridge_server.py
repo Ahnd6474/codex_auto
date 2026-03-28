@@ -86,6 +86,34 @@ class BridgeJobStoreTests(unittest.TestCase):
             self.assertEqual([item.get("event_type") for item in events], ["job-started", "job-queued", "job-queued", "job-cancelled"])
             self.assertTrue(any(item.get("payload", {}).get("job", {}).get("status") == "cancelled" for item in published))
 
+    def test_increasing_concurrency_promotes_queued_jobs_and_updates_scheduler_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace_root = Path(temp_dir) / "workspace"
+            store = BridgeJobStore(lambda _envelope: None, max_running_jobs=1)
+
+            first = store.create("run-plan", workspace_root, {"project_dir": str(workspace_root / "repo-a")})
+            second = store.create("run-plan", workspace_root, {"project_dir": str(workspace_root / "repo-b")})
+            third = store.create("run-plan", workspace_root, {"project_dir": str(workspace_root / "repo-c")})
+
+            snapshot, promoted = store.set_max_running_jobs(workspace_root, 2)
+
+            self.assertEqual(snapshot.get("max_concurrent_jobs"), 2)
+            self.assertEqual([job.get("status") for job in snapshot.get("jobs", [])], ["running", "running", "queued"])
+            self.assertEqual(len(promoted), 1)
+            self.assertEqual(promoted[0].id, second.id)
+            self.assertEqual(promoted[0].status, "running")
+
+            queued_snapshot = store.get_job(third.id) or {}
+            self.assertEqual(queued_snapshot.get("status"), "queued")
+            self.assertEqual(queued_snapshot.get("queue_position"), 1)
+
+            state = read_json(workspace_root / "job_scheduler.json", default={}) or {}
+            self.assertEqual(state.get("max_concurrent_jobs"), 2)
+            self.assertEqual(
+                [(item.get("id"), item.get("status"), item.get("queue_position")) for item in state.get("jobs", [])],
+                [(second.id, "running", 0), (first.id, "running", 0), (third.id, "queued", 1)],
+            )
+
     def test_create_uses_unique_ids_even_with_same_timestamp(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace_root = Path(temp_dir) / "workspace"

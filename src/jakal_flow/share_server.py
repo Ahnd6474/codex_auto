@@ -273,6 +273,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             offset = max(0, int(self._query_arg(query, "offset") or "0"))
             repo_id = self._query_arg(query, "repo_id")
             project = self._workspace_project(repo_id) if repo_id else owner_project
+            if project is None:
+                raise ValueError("repo_id is required for workspace share sessions.")
             orchestrator = Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
             plan_state = orchestrator.load_execution_plan_state(project)
             status_payload = public_monitor_status(project, plan_state, log_limit=50)
@@ -349,6 +351,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
                 raise ValueError("action is required.")
             repo_id = str(body.get("repo_id", "")).strip()
             project = self._workspace_project(repo_id) if repo_id else owner_project
+            if project is None:
+                raise ValueError("repo_id is required for workspace share sessions.")
             orchestrator = Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
             if action == "pause":
                 control = self.server.remote_control_manager.request_pause(project)  # type: ignore[attr-defined]
@@ -387,6 +391,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             owner_project, _session = self._validated_session(query)
             repo_id = self._query_arg(query, "repo_id")
             project = self._workspace_project(repo_id) if repo_id else owner_project
+            if project is None:
+                raise ValueError("repo_id is required for workspace share sessions.")
             orchestrator = Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
             plan_state = orchestrator.load_execution_plan_state(project)
             raw = public_execution_flow_svg(project, plan_state).encode("utf-8")

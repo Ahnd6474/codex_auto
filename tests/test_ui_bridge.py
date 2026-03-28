@@ -16,6 +16,7 @@ import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from jakal_flow.cli import main as cli_main
+import jakal_flow.ui_bridge as ui_bridge
 import jakal_flow.ui_bridge_payloads as ui_bridge_payloads
 from jakal_flow.models import ExecutionPlanState, ExecutionStep
 from jakal_flow.share import share_server_status_payload
@@ -155,6 +156,20 @@ class UIBridgeTests(unittest.TestCase):
         )
 
         self.assertEqual(caption, "Completed 1/3 steps, running: ST2, ST3")
+
+    def test_progress_caption_reports_integrating_nodes_for_parallel_dag(self) -> None:
+        caption = progress_caption(
+            ExecutionPlanState(
+                execution_mode="parallel",
+                steps=[
+                    ExecutionStep(step_id="ST1", title="Root", status="completed"),
+                    ExecutionStep(step_id="ST2", title="Frontend", depends_on=["ST1"], owned_paths=["desktop/src"], status="integrating"),
+                    ExecutionStep(step_id="ST3", title="Backend", depends_on=["ST1"], owned_paths=["src/jakal_flow"], status="running"),
+                ],
+            )
+        )
+
+        self.assertEqual(caption, "Completed 1/3 steps, running: ST3; integrating: ST2")
 
     def test_effective_project_status_prefers_parallel_plan_status_when_steps_are_running(self) -> None:
         status = effective_project_status(
@@ -2068,7 +2083,7 @@ class UIBridgeTests(unittest.TestCase):
                         },
                     )
                 active_session = created["share"]["active_session"]
-                self.assertEqual(active_session["project"]["display_name"], "Share Bridge Demo One")
+                self.assertEqual(active_session["session_id"], created["created_share_session"]["session_id"])
 
                 with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
                     revoked = run_command(
@@ -2082,6 +2097,67 @@ class UIBridgeTests(unittest.TestCase):
 
                 self.assertIsNone(revoked["share"]["active_session"])
                 self.assertEqual(revoked["project"]["display_name"], "Share Bridge Demo Two")
+            finally:
+                run_command("stop_share_server", workspace_root, {})
+
+    def test_share_bridge_can_create_workspace_share_without_project(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+
+            try:
+                run_command("start_share_server", workspace_root, {})
+                created = run_command(
+                    "create_share_session",
+                    workspace_root,
+                    {
+                        "created_by": "unit-test",
+                        "bind_host": "0.0.0.0",
+                        "public_base_url": "https://share.example.com/base",
+                    },
+                )
+
+                self.assertIn("share", created)
+                self.assertTrue(created["created_share_session"]["share_url"].startswith("https://share.example.com/base/share/view?"))
+                self.assertEqual(created["share"]["active_session"]["session_id"], created["created_share_session"]["session_id"])
+                self.assertEqual(created["share"]["server"]["config"]["public_base_url"], "https://share.example.com/base")
+
+                share_payload = run_command("load-workspace-share", workspace_root, {})
+                self.assertEqual(
+                    share_payload["share"]["active_session"]["session_id"],
+                    created["created_share_session"]["session_id"],
+                )
+            finally:
+                run_command("stop_share_server", workspace_root, {})
+
+    def test_share_bridge_restarts_stale_share_server_when_new_session_validation_fails(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+
+            try:
+                with mock.patch(
+                    "jakal_flow.ui_bridge.start_share_server_process",
+                    wraps=ui_bridge.start_share_server_process,
+                ) as start_server, mock.patch(
+                    "jakal_flow.ui_bridge.stop_share_server_process",
+                    wraps=ui_bridge.stop_share_server_process,
+                ) as stop_server, mock.patch(
+                    "jakal_flow.ui_bridge_commands.share.verify_local_share_session_access",
+                    side_effect=[RuntimeError("Unknown share session."), None],
+                ) as verify_share:
+                    created = run_command(
+                        "create_share_session",
+                        workspace_root,
+                        {
+                            "created_by": "unit-test",
+                            "bind_host": "0.0.0.0",
+                            "public_base_url": "https://share.example.com/base",
+                        },
+                    )
+
+                self.assertTrue(created["created_share_session"]["share_url"].startswith("https://share.example.com/base/share/view?"))
+                self.assertEqual(verify_share.call_count, 2)
+                self.assertEqual(start_server.call_count, 2)
+                self.assertGreaterEqual(stop_server.call_count, 1)
             finally:
                 run_command("stop_share_server", workspace_root, {})
 

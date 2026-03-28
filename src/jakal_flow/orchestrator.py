@@ -1083,7 +1083,17 @@ class Orchestrator:
                     by_step_id: dict[str, dict[str, object]] = {}
                     for future in as_completed(future_map):
                         result = future.result()
-                        by_step_id[str(result["step_id"])] = result
+                        result_step_id = str(result["step_id"])
+                        by_step_id[result_step_id] = result
+                        plan_state, ordered_targets = self._sync_parallel_batch_step_progress(
+                            context=context,
+                            plan_state=plan_state,
+                            ordered_targets=ordered_targets,
+                            step_id=result_step_id,
+                            worker_result=result,
+                            success_status="completed",
+                            running_status="running:lineages",
+                        )
                     worker_results = [by_step_id[step.step_id] for step in ordered_targets]
 
             completion_time = now_utc_iso()
@@ -2079,7 +2089,17 @@ class Orchestrator:
                 by_step_id: dict[str, dict[str, object]] = {}
                 for future in as_completed(future_map):
                     result = future.result()
-                    by_step_id[str(result["step_id"])] = result
+                    result_step_id = str(result["step_id"])
+                    by_step_id[result_step_id] = result
+                    plan_state, ordered_targets = self._sync_parallel_batch_step_progress(
+                        context=context,
+                        plan_state=plan_state,
+                        ordered_targets=ordered_targets,
+                        step_id=result_step_id,
+                        worker_result=result,
+                        success_status="integrating",
+                        running_status="running:parallel",
+                    )
                 worker_results = [by_step_id[step.step_id] for step in ordered_targets]
 
             failed_worker = next((item for item in worker_results if str(item.get("status")) != "completed"), None)
@@ -2742,6 +2762,59 @@ class Orchestrator:
             "worker_context": worker_context,
             "worktree_dir": worktree_dir,
         }
+
+    def _sync_parallel_batch_step_progress(
+        self,
+        *,
+        context: ProjectContext,
+        plan_state: ExecutionPlanState,
+        ordered_targets: list[ExecutionStep],
+        step_id: str,
+        worker_result: dict[str, object],
+        success_status: str,
+        running_status: str,
+    ) -> tuple[ExecutionPlanState, list[ExecutionStep]]:
+        step_by_id = {step.step_id: step for step in plan_state.steps}
+        step = step_by_id.get(step_id.strip())
+        if step is None:
+            return plan_state, ordered_targets
+
+        synced_at = now_utc_iso()
+        result_status = str(worker_result.get("status") or "").strip().lower() or "failed"
+        worker_note = str(worker_result.get("test_summary") or worker_result.get("notes") or "").strip()
+        worker_commit = str(worker_result.get("commit_hash") or "").strip()
+        metadata = deepcopy(step.metadata) if isinstance(step.metadata, dict) else {}
+        metadata["parallel_worker_status"] = result_status
+        metadata["parallel_worker_synced_at"] = synced_at
+        if worker_commit:
+            metadata["parallel_worker_commit_hash"] = worker_commit
+        else:
+            metadata.pop("parallel_worker_commit_hash", None)
+        step.metadata = metadata
+
+        if result_status == "completed":
+            step.status = success_status
+            if success_status == "completed":
+                step.completed_at = synced_at
+                step.commit_hash = worker_commit or None
+                step.notes = worker_note or "Parallel lineage worker completed."
+            else:
+                step.completed_at = None
+                step.commit_hash = None
+                step.notes = worker_note or "Parallel worker finished and is waiting for batch integration."
+            context.metadata.current_status = running_status
+        else:
+            step.status = "failed"
+            step.completed_at = None
+            step.commit_hash = None
+            step.notes = worker_note or "Parallel worker failed."
+            context.metadata.current_status = "failed"
+
+        context.metadata.last_run_at = synced_at
+        plan_state = self.save_execution_plan_state(context, plan_state)
+        self.workspace.save_project(context)
+        refreshed_targets = {item.step_id: item for item in plan_state.steps}
+        return plan_state, [refreshed_targets.get(item.step_id, item) for item in ordered_targets]
 
     def _run_parallel_step_worker(
         self,
@@ -3869,7 +3942,7 @@ class Orchestrator:
             status = "pending"
             if step.status == "completed":
                 status = "approved"
-            elif step.status == "running":
+            elif step.status in {"running", "integrating"}:
                 status = "running"
             elif step.status in {"failed", "paused"}:
                 status = step.status
