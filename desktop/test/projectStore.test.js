@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { applyProjectDetailListingState, applyProjectDetailState } from "../src/controller/projectStore.js";
+import {
+  applyProjectDetailListingState,
+  applyProjectDetailState,
+  mergeProjectDetailSupplement,
+  preserveProjectDetailSupplement,
+} from "../src/controller/projectStore.js";
 
 test("applyProjectDetailListingState merges refreshed detail into the existing project row", () => {
   let nextProjects = null;
@@ -290,4 +295,88 @@ test("applyProjectDetailState clears a stale selected step when the refreshed pl
       { step_id: "ST2", status: "completed", title: "Ship" },
     ],
   });
+});
+
+test("preserveProjectDetailSupplement keeps loaded sidebar and report sections on core refresh", () => {
+  const preserved = preserveProjectDetailSupplement(
+    {
+      detail_level: "core",
+      project: { repo_id: "demo" },
+      reports: { latest_failure: { summary: "fresh" } },
+      workspace_tree: [],
+      checkpoints: { items: [], pending: null, timeline_markdown: "" },
+      history: { ui_events: [], blocks: [], passes: [], test_runs: [] },
+      config: {},
+    },
+    {
+      detail_level: "core",
+      project: { repo_id: "demo" },
+      workspace_tree: [{ label: "Repository" }],
+      reports: {
+        closeout_report_text: "closeout",
+        latest_failure: { summary: "older" },
+      },
+      checkpoints: {
+        items: [{ checkpoint_id: "CP1" }],
+        pending: { checkpoint_id: "CP1" },
+        timeline_markdown: "timeline",
+      },
+      history: {
+        ui_events: [{ event_type: "run-started" }],
+        blocks: [{ block_index: 1 }],
+        passes: [],
+        test_runs: [],
+      },
+      config: { active_task: "Ship it" },
+      loaded_sections: {
+        reports: true,
+        workspace: true,
+        checkpoints: true,
+        history: true,
+        config: true,
+      },
+    },
+  );
+
+  assert.deepEqual(preserved.workspace_tree, [{ label: "Repository" }]);
+  assert.equal(preserved.reports.closeout_report_text, "closeout");
+  assert.equal(preserved.reports.latest_failure.summary, "fresh");
+  assert.equal(preserved.checkpoints.timeline_markdown, "timeline");
+  assert.equal(preserved.history.ui_events.length, 1);
+  assert.equal(preserved.config.active_task, "Ship it");
+  assert.equal(preserved.loaded_sections.workspace, true);
+});
+
+test("mergeProjectDetailSupplement applies loaded partial sections onto the selected project", () => {
+  const merged = mergeProjectDetailSupplement(
+    {
+      detail_level: "core",
+      project: { repo_id: "demo" },
+      reports: { latest_failure: { summary: "old" } },
+      workspace_tree: [],
+      checkpoints: { items: [], pending: null, timeline_markdown: "" },
+      history: { ui_events: [], blocks: [], passes: [], test_runs: [] },
+      loaded_sections: {},
+    },
+    {
+      reports: {
+        closeout_report_text: "closeout",
+        latest_failure: {},
+      },
+      workspace_tree: [{ label: "Repository" }],
+      checkpoints: { items: [], pending: null, timeline_markdown: "" },
+      loaded_sections: {
+        reports: true,
+        workspace: true,
+        checkpoints: true,
+      },
+    },
+  );
+
+  assert.equal(merged.reports.closeout_report_text, "closeout");
+  assert.deepEqual(merged.reports.latest_failure, {});
+  assert.deepEqual(merged.workspace_tree, [{ label: "Repository" }]);
+  assert.equal(merged.loaded_sections.reports, true);
+  assert.equal(merged.loaded_sections.workspace, true);
+  assert.equal(merged.loaded_sections.checkpoints, true);
 });

@@ -87,13 +87,7 @@ export function needsExpandedProjectDetail({
   bottomCollapsed,
   bottomTab,
 }) {
-  if (centerTab === "dashboard" || centerTab === "reports" || centerTab === "history") {
-    return true;
-  }
-  if (sidebarTab === "workspace" || sidebarTab === "plans") {
-    return true;
-  }
-  return !bottomCollapsed && bottomTab === "tokens";
+  return false;
 }
 
 export function nextSidebarTab(currentTab, requestedTab) {

@@ -12,6 +12,233 @@ import {
   workspaceStatsFromProjects,
 } from "../utils.js";
 
+const PROJECT_DETAIL_SECTION_KEYS = ["reports", "workspace", "checkpoints", "history", "config"];
+
+function hasOwnValue(value, key) {
+  return Boolean(value) && Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function sameProjectDetail(left, right) {
+  const leftRepoId = String(left?.project?.repo_id || "").trim();
+  const rightRepoId = String(right?.project?.repo_id || "").trim();
+  return Boolean(leftRepoId) && leftRepoId === rightRepoId;
+}
+
+function mergeLoadedSections(currentSections = null, fallbackSections = null, detailLevel = "") {
+  const nextSections = {
+    ...(fallbackSections && typeof fallbackSections === "object" ? fallbackSections : {}),
+    ...(currentSections && typeof currentSections === "object" ? currentSections : {}),
+  };
+  if (String(detailLevel || "").trim().toLowerCase() === "full") {
+    PROJECT_DETAIL_SECTION_KEYS.forEach((key) => {
+      nextSections[key] = true;
+    });
+  }
+  return nextSections;
+}
+
+function mergeReportsSection(primary = null, fallback = null, preserveSparse = false) {
+  if (!primary && !fallback) {
+    return primary ?? fallback;
+  }
+  const primaryReports = primary && typeof primary === "object" ? primary : {};
+  const fallbackReports = fallback && typeof fallback === "object" ? fallback : {};
+  const nextReports = {
+    ...cloneValue(fallbackReports),
+    ...cloneValue(primaryReports),
+  };
+  const textKeys = [
+    "closeout_report_text",
+    "ml_experiment_report_text",
+    "attempt_history_text",
+    "word_report_path",
+    "ml_results_svg_path",
+  ];
+  textKeys.forEach((key) => {
+    if (!hasOwnValue(primaryReports, key)) {
+      nextReports[key] = fallbackReports?.[key] || "";
+      return;
+    }
+    const primaryText = String(primaryReports?.[key] || "");
+    const fallbackText = String(fallbackReports?.[key] || "");
+    nextReports[key] = preserveSparse && !primaryText.trim() && fallbackText.trim() ? fallbackText : primaryText;
+  });
+  nextReports.word_report_enabled =
+    primaryReports?.word_report_enabled ?? fallbackReports?.word_report_enabled ?? false;
+  if (!hasOwnValue(primaryReports, "latest_failure")) {
+    nextReports.latest_failure = cloneValue(fallbackReports?.latest_failure || {});
+  } else {
+    const primaryFailure = primaryReports?.latest_failure;
+    const fallbackFailure = fallbackReports?.latest_failure;
+    const primaryHasContent =
+      primaryFailure && typeof primaryFailure === "object" && Object.keys(primaryFailure).length > 0;
+    nextReports.latest_failure =
+      preserveSparse && !primaryHasContent && fallbackFailure && typeof fallbackFailure === "object"
+        ? cloneValue(fallbackFailure)
+        : cloneValue(primaryFailure || {});
+  }
+  return nextReports;
+}
+
+function mergeCheckpointsSection(primary = null, fallback = null, preserveSparse = false) {
+  if (!primary && !fallback) {
+    return primary ?? fallback;
+  }
+  const primaryCheckpoints = primary && typeof primary === "object" ? primary : {};
+  const fallbackCheckpoints = fallback && typeof fallback === "object" ? fallback : {};
+  const nextCheckpoints = {
+    ...cloneValue(fallbackCheckpoints),
+    ...cloneValue(primaryCheckpoints),
+  };
+  if (!hasOwnValue(primaryCheckpoints, "items")) {
+    nextCheckpoints.items = cloneValue(fallbackCheckpoints?.items || []);
+  } else {
+    const primaryItems = Array.isArray(primaryCheckpoints?.items) ? primaryCheckpoints.items : [];
+    const fallbackItems = Array.isArray(fallbackCheckpoints?.items) ? fallbackCheckpoints.items : [];
+    nextCheckpoints.items =
+      preserveSparse && primaryItems.length === 0 && fallbackItems.length > 0
+        ? cloneValue(fallbackItems)
+        : cloneValue(primaryItems);
+  }
+  if (!hasOwnValue(primaryCheckpoints, "pending")) {
+    nextCheckpoints.pending = cloneValue(fallbackCheckpoints?.pending ?? null);
+  } else {
+    const primaryPending = primaryCheckpoints?.pending ?? null;
+    nextCheckpoints.pending =
+      preserveSparse && primaryPending == null && fallbackCheckpoints?.pending != null
+        ? cloneValue(fallbackCheckpoints.pending)
+        : cloneValue(primaryPending);
+  }
+  if (!hasOwnValue(primaryCheckpoints, "timeline_markdown")) {
+    nextCheckpoints.timeline_markdown = String(fallbackCheckpoints?.timeline_markdown || "");
+  } else {
+    const primaryTimeline = String(primaryCheckpoints?.timeline_markdown || "");
+    const fallbackTimeline = String(fallbackCheckpoints?.timeline_markdown || "");
+    nextCheckpoints.timeline_markdown =
+      preserveSparse && !primaryTimeline.trim() && fallbackTimeline.trim() ? fallbackTimeline : primaryTimeline;
+  }
+  return nextCheckpoints;
+}
+
+function mergeHistorySection(primary = null, fallback = null, preserveSparse = false) {
+  if (!primary && !fallback) {
+    return primary ?? fallback;
+  }
+  const primaryHistory = primary && typeof primary === "object" ? primary : {};
+  const fallbackHistory = fallback && typeof fallback === "object" ? fallback : {};
+  const nextHistory = {
+    ...cloneValue(fallbackHistory),
+    ...cloneValue(primaryHistory),
+  };
+  ["ui_events", "blocks", "passes", "test_runs"].forEach((key) => {
+    if (!hasOwnValue(primaryHistory, key)) {
+      nextHistory[key] = cloneValue(fallbackHistory?.[key] || []);
+      return;
+    }
+    const primaryItems = Array.isArray(primaryHistory?.[key]) ? primaryHistory[key] : [];
+    const fallbackItems = Array.isArray(fallbackHistory?.[key]) ? fallbackHistory[key] : [];
+    nextHistory[key] =
+      preserveSparse && primaryItems.length === 0 && fallbackItems.length > 0
+        ? cloneValue(fallbackItems)
+        : cloneValue(primaryItems);
+  });
+  ["flow_svg_path", "flow_svg_text"].forEach((key) => {
+    if (!hasOwnValue(primaryHistory, key)) {
+      nextHistory[key] = String(fallbackHistory?.[key] || "");
+      return;
+    }
+    const primaryText = String(primaryHistory?.[key] || "");
+    const fallbackText = String(fallbackHistory?.[key] || "");
+    nextHistory[key] = preserveSparse && !primaryText.trim() && fallbackText.trim() ? fallbackText : primaryText;
+  });
+  return nextHistory;
+}
+
+function mergeConfigSection(primary = null, fallback = null, preserveSparse = false) {
+  if (!primary && !fallback) {
+    return primary ?? fallback;
+  }
+  const primaryConfig = primary && typeof primary === "object" ? primary : {};
+  const fallbackConfig = fallback && typeof fallback === "object" ? fallback : {};
+  const primaryHasEntries = Object.keys(primaryConfig).length > 0;
+  if (preserveSparse && !primaryHasEntries && Object.keys(fallbackConfig).length > 0) {
+    return cloneValue(fallbackConfig);
+  }
+  return {
+    ...cloneValue(fallbackConfig),
+    ...cloneValue(primaryConfig),
+  };
+}
+
+export function preserveProjectDetailSupplement(detail, previousDetail = null) {
+  if (!detail) {
+    return detail;
+  }
+  const sameProject = sameProjectDetail(detail, previousDetail);
+  const loadedSections = mergeLoadedSections(
+    detail?.loaded_sections,
+    sameProject ? previousDetail?.loaded_sections : null,
+    detail?.detail_level,
+  );
+  if (!sameProject || String(detail?.detail_level || "").trim().toLowerCase() === "full") {
+    return {
+      ...detail,
+      loaded_sections: loadedSections,
+    };
+  }
+  return {
+    ...detail,
+    workspace_tree:
+      loadedSections.workspace
+        ? (Array.isArray(detail?.workspace_tree) && detail.workspace_tree.length > 0
+          ? cloneValue(detail.workspace_tree)
+          : cloneValue(previousDetail?.workspace_tree || []))
+        : detail?.workspace_tree,
+    reports: loadedSections.reports
+      ? mergeReportsSection(detail?.reports, previousDetail?.reports, true)
+      : detail?.reports,
+    checkpoints: loadedSections.checkpoints
+      ? mergeCheckpointsSection(detail?.checkpoints, previousDetail?.checkpoints, true)
+      : detail?.checkpoints,
+    history: loadedSections.history
+      ? mergeHistorySection(detail?.history, previousDetail?.history, true)
+      : detail?.history,
+    config: loadedSections.config
+      ? mergeConfigSection(detail?.config, previousDetail?.config, true)
+      : detail?.config,
+    loaded_sections: loadedSections,
+  };
+}
+
+export function mergeProjectDetailSupplement(detail, supplement = {}) {
+  if (!detail) {
+    return detail;
+  }
+  return {
+    ...detail,
+    ...(hasOwnValue(supplement, "workspace_tree")
+      ? { workspace_tree: cloneValue(supplement.workspace_tree || []) }
+      : {}),
+    ...(hasOwnValue(supplement, "reports")
+      ? { reports: mergeReportsSection(supplement.reports, detail?.reports, false) }
+      : {}),
+    ...(hasOwnValue(supplement, "checkpoints")
+      ? { checkpoints: mergeCheckpointsSection(supplement.checkpoints, detail?.checkpoints, false) }
+      : {}),
+    ...(hasOwnValue(supplement, "history")
+      ? { history: mergeHistorySection(supplement.history, detail?.history, false) }
+      : {}),
+    ...(hasOwnValue(supplement, "config")
+      ? { config: mergeConfigSection(supplement.config, detail?.config, false) }
+      : {}),
+    loaded_sections: mergeLoadedSections(
+      supplement?.loaded_sections,
+      detail?.loaded_sections,
+      detail?.detail_level,
+    ),
+  };
+}
+
 export function applyListingState({ listing, runningJob = null, setProjects, setWorkspaceStats }) {
   const nextProjects = sanitizeProjectListForJobState(listing?.projects || [], runningJob);
   setProjects(nextProjects);
@@ -88,7 +315,8 @@ export function applyProjectDetailState({
   state,
   setters,
 }) {
-  const mergedDetail = mergeProjectDetailCodexStatus(detail, state.projectDetail?.codex_status, state.modelCatalog);
+  const preservedDetail = preserveProjectDetailSupplement(detail, state.projectDetail);
+  const mergedDetail = mergeProjectDetailCodexStatus(preservedDetail, state.projectDetail?.codex_status, state.modelCatalog);
   const normalizedDetail = sanitizeProjectDetailForJobState(mergedDetail, options.runningJob ?? state.activeJob);
   const applySignature = detailApplySignature(normalizedDetail, options.runningJob ?? state.activeJob);
   if (

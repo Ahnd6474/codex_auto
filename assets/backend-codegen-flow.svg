@@ -25,7 +25,7 @@
       .body { font: 500 12px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: #4C6074; }
       .mono { font: 700 11px 'Consolas', 'Courier New', monospace; fill: #1F3447; }
       .chipLabel { font: 700 11px 'Segoe UI', 'Bahnschrift', sans-serif; fill: #FFFFFF; }
-      .chipText { font: 600 11px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: rgba(255,255,255,0.92); }
+      .chipText { font: 600 10px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: rgba(255,255,255,0.92); }
       .panel { fill: #FFFFFF; stroke: #D6E1EB; stroke-width: 1.5; filter: url(#shadow); }
       .soft { fill: #FFFFFF; stroke: #D6E1EB; stroke-width: 1.2; }
       .line { stroke: #60748A; stroke-width: 2.6; fill: none; marker-end: url(#arrow); }
@@ -69,8 +69,8 @@
   <text x="592" y="252" class="chipText">model/provider, reasoning effort, sandbox, approval mode, checkpoint rules</text>
 
   <rect x="1000" y="240" width="392" height="16" rx="8" fill="#B45309"/>
-  <text x="1014" y="252" class="chipLabel">Verification Contract</text>
-  <text x="1150" y="252" class="chipText">test_cmd, rollback policy, optional push, failure reporting</text>
+  <text x="1014" y="252" class="chipLabel">Verify Contract</text>
+  <text x="1112" y="252" class="chipText">test_cmd, rollback, optional push, PR failure bundles</text>
 
   <rect x="40" y="286" width="260" height="460" rx="20" class="panel"/>
   <text x="60" y="314" class="section">1. PROJECT ISOLATION</text>

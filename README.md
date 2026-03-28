@@ -1,11 +1,11 @@
 # jakal-flow
 
 <p align="center">
-  <strong>Traceable multi-repository Codex automation with a Python-first CLI and a React + Tauri desktop shell.</strong>
+  <strong>Traceable multi-repository Codex automation with a Python-first CLI, a React + Tauri desktop shell, and a masked remote monitor.</strong>
 </p>
 
 <p align="center">
-  Run safe, repeatable Codex improvement loops across multiple repositories without mixing plans, logs, memory, reports, rollback state, or share sessions.
+  Keep plans, checkpoints, logs, memory, reports, rollback state, share sessions, and archived run history isolated per managed repository.
 </p>
 
 <p align="center">
@@ -23,13 +23,12 @@
   <a href="#desktop-ui">Desktop UI</a> &middot;
   <a href="#configuration">Configuration</a> &middot;
   <a href="#how-it-works">How It Works</a> &middot;
+  <a href="#workspace-layout">Workspace Layout</a> &middot;
   <a href="#star-history">Star History</a> &middot;
   <a href="README.ko.md">Korean Guide</a>
 </p>
 
-`jakal-flow` is built for long-running repository automation, not one-off patches. It manages isolated per-project workspaces, generates and executes plans, preserves safe revisions, records structured history, and lets you supervise runs from either the CLI or the desktop app.
-
-If you want to run the same Codex-driven workflow across several repositories while keeping every project's plan, checkpoints, logs, memory, reports, and rollback state separate, this is the tool.
+`jakal-flow` is built for long-running repository automation rather than one-off patches. The Python orchestration core owns planning, execution, verification, rollback, checkpointing, reporting, and project isolation. The desktop app and share viewer sit on top of that same backend instead of replacing it.
 
 ## Architecture
 
@@ -46,7 +45,7 @@ Backend planning, execution, verification, rollback, and reporting flow:
 Recommended runtime:
 
 - Python 3.11+
-- Codex CLI available on `PATH`
+- Codex CLI on `PATH`
 - For the desktop shell: Node.js 20+, Rust, and Tauri prerequisites
 
 Install the Python package in editable mode:
@@ -90,7 +89,7 @@ python -m jakal_flow run \
   --max-blocks 2
 ```
 
-Inspect progress later:
+Inspect status later:
 
 ```bash
 python -m jakal_flow list-repos --workspace-root .jakal-flow-workspace
@@ -103,18 +102,19 @@ Open the desktop shell in development:
 
 ```bash
 cd desktop
-npm.cmd install
-npm.cmd run test
-npm.cmd run tauri:dev
+npm install
+npm run test
+npm run tauri:dev
 ```
 
 ## Why jakal-flow
 
 - Multi-repository by design: every managed repository gets its own isolated workspace subtree.
-- Traceability first: plans, checkpoints, UI events, test runs, block logs, reports, SVG summaries, and memory files are persisted.
-- Safe execution: safe revisions, rollback, checkpoint review, and verified-only commit flow stay in the core loop.
-- One backend, two surfaces: use the CLI directly or supervise the same Python backend through the desktop shell.
-- Flexible model routing: run the workflow through OpenAI/Codex cloud, Claude Code, Gemini CLI, OpenAI-compatible providers, or local OSS backends.
+- Traceability first: plans, checkpoints, UI events, verification runs, block logs, reports, SVG summaries, and task memory are persisted.
+- Safe execution: safe revisions, rollback, checkpoint review, and verified-only commits stay in the core loop.
+- One backend, multiple surfaces: use the CLI directly, supervise the same run from the desktop shell, or expose a temporary masked monitor link.
+- Flexible routing: run through OpenAI/Codex cloud, Claude Code, Gemini CLI, Qwen Code, OpenAI-compatible providers, Anthropic-compatible providers, or local OSS backends.
+- Long-lived project history: the desktop shell can archive finished managed workspaces into `history/` without collapsing them into one shared state tree.
 
 ## What It Supports
 
@@ -123,8 +123,8 @@ npm.cmd run tauri:dev
 | Surface | Supported |
 | --- | --- |
 | CLI | `init-repo`, `run`, `resume`, `list-repos`, `status`, `history`, `report` |
-| Desktop UI | React + Tauri shell over `python -m jakal_flow.ui_bridge` |
-| Remote monitor | Local share server, temporary share sessions, masked live status, remote pause/resume controls, optional public base URL, optional automatic Cloudflare Quick Tunnel |
+| Desktop UI | Register existing local repos, save runtime defaults, generate and edit plans, run or stop work, approve checkpoints, archive or delete managed history, and manage share sessions |
+| Remote monitor | Local share server, temporary share sessions, masked status/log views, execution-flow SVG access, optional public base URL, optional Cloudflare Quick Tunnel, remote pause, and remote resume when pending work remains |
 
 ### Workflow Modes
 
@@ -133,15 +133,19 @@ npm.cmd run tauri:dev
 | Standard software workflow | Yes |
 | ML experiment workflow | Yes, via `--workflow-mode ml` |
 | Automatic ML replanning | Yes, up to `--ml-max-cycles` |
-| Execution mode | Parallel DAG scheduler is the normalized execution mode |
+| Planning model | Planner Agent A decomposition plus Planner Agent B packing |
+| Execution mode | Parallel DAG scheduling is the normalized execution mode |
+| Hybrid lineage / join / barrier steps | Yes |
 | Closeout pass | Yes, separate from normal planned steps |
-| Stop-after-step | Yes, through the desktop run control |
+| Stop after current step | Yes, through desktop run control and shared monitor pause |
+| Immediate stop | Yes, through desktop run control |
 
 ### Model / Provider Support
 
 | Provider preset | Supported | Notes |
 | --- | --- | --- |
 | `openai` | Yes | OpenAI / Codex cloud flow |
+| `ensemble` | Yes | Uses OpenAI as the default planning/general backend while allowing step-level routing for UI or explicitly pinned work |
 | `claude` | Yes | Claude Code print-mode flow |
 | `gemini` | Yes | Gemini CLI headless flow |
 | `qwen_code` | Yes | Qwen Code headless flow |
@@ -166,21 +170,24 @@ Reasoning effort levels:
 - `high`
 - `xhigh`
 
-### Planning and Execution
+### Planning, Execution, and Review
 
 | Capability | Supported |
 | --- | --- |
 | Saved project plan generation | Yes |
+| Planner Agent A outline persistence | Yes, `docs/PLAN_AGENT_A_OUTLINE.md` |
 | Mid-term subset regeneration | Yes |
 | Dependency-aware execution tree | Yes |
+| Per-step provider/model overrides | Yes |
 | Per-step reasoning effort | Yes |
 | Per-step success criteria | Yes |
 | Per-step verification command overrides | Yes |
 | Owned-path based parallel safety | Yes |
 | Manual step editing before execution | Yes |
 | Background polling from desktop UI | Yes |
+| Checkpoint timeline and approval state | Yes |
 
-### Safety, Review, and Recovery
+### Safety, Recovery, and Outputs
 
 | Capability | Supported |
 | --- | --- |
@@ -188,61 +195,37 @@ Reasoning effort levels:
 | Rollback on regression | Yes |
 | Verified-only commit flow | Yes |
 | Optional push after safe runs | Yes, when `--allow-push` is enabled and `origin` exists |
-| Checkpoint timeline | Yes |
-| Checkpoint approval mode | Yes |
-| Git conflict abort for unsafe parallel merges | Yes |
+| Verification cache replay | Yes |
 | PR-ready failure bundle generation | Yes |
 | Optional PR failure reporting with GitHub token | Yes |
-
-### Observability and Outputs
-
-| Capability | Supported |
-| --- | --- |
-| JSONL pass logs | Yes |
-| JSONL block logs | Yes |
-| JSONL UI event logs | Yes |
-| Verification run history | Yes |
-| Verification cache replay | Yes |
-| Execution flow SVG | Yes |
-| ML experiment results SVG | Yes |
 | Closeout markdown report | Yes |
 | Word closeout report | Yes, with `--word-report` or desktop toggle |
+| Execution flow SVG | Yes |
+| ML experiment results SVG | Yes |
 | Runtime time/cost estimates | Yes |
 | Codex usage aggregation | Yes |
 
-### Share / Monitoring
-
-| Capability | Supported |
-| --- | --- |
-| Local-only monitor link | Yes |
-| Network-ready bind mode (`0.0.0.0`) | Yes |
-| Public base URL override | Yes |
-| Automatic Cloudflare Quick Tunnel | Yes, and on Windows the app can auto-install `cloudflared` through `winget` when needed |
-| Temporary session creation and revocation | Yes |
-| Masked status / task / log viewer | Yes |
-| Live updates with polling fallback | Yes |
-| Remote pause / resume from shared monitor | Yes |
-
 ## Desktop UI
 
-The desktop shell keeps the Python backend intact and adds a more user-friendly control layer for planning, execution, and monitoring.
+The desktop shell keeps the Python backend intact and adds a control layer for planning, execution, monitoring, and project history management.
 
 What you can do from the desktop app:
 
-- register and reopen managed projects with saved runtime settings
-- choose model presets and provider defaults
-- edit the project prompt and generate an execution tree
-- inspect DAG layers, dependencies, owned paths, and per-step metadata
-- run the plan, stop after the current step, and trigger closeout
+- register an existing local repository as a managed project
+- save runtime defaults such as provider, model, Codex path, checkpoint rules, and parallel worker settings
+- generate an execution plan, edit the DAG, and rerun planning without losing project state
+- inspect dependencies, owned paths, hybrid lineage steps, recent logs, and generated reports
+- run the plan, request immediate stop, pause after the current step, and trigger closeout
 - review estimated remaining time, estimated cost, actual recent cost, and Codex usage windows
-- configure share links and copy or revoke remote monitor URLs
-- toggle dashboard cards, theme, and UI language
+- create, copy, and revoke temporary remote monitor links
+- archive finished managed workspaces into history and delete old history entries
+- change dashboard cards, theme, language, and background concurrency limits
 
 Build the desktop app:
 
 ```bash
 cd desktop
-npm.cmd run tauri:build
+npm run tauri:build
 ```
 
 Related files:
@@ -267,23 +250,28 @@ Related files:
 | Safety and validation | `--approval-mode`, `--sandbox-mode`, `--test-cmd`, `--allow-push` |
 | Reporting | `--word-report` |
 
-To inspect the latest command surface from your local checkout:
+To inspect the current command surface from your local checkout:
 
 ```bash
 python -m jakal_flow --help
+python -m jakal_flow run --help
 ```
 
 ### Desktop-managed Defaults
 
 The desktop shell additionally manages:
 
-- `parallel_worker_mode` and `parallel_workers`
+- `planning_effort`
+- `parallel_worker_mode`, `parallel_workers`, and `parallel_memory_per_worker_gib`
 - `checkpoint_interval_blocks`
 - `require_checkpoint_approval`
 - `codex_path`
+- `allow_push`
+- `save_project_logs`
 - dashboard visibility preferences
 - UI theme and language
 - share server bind host and public base URL
+- background job concurrency limit
 
 ### Cost Modes
 
@@ -294,6 +282,22 @@ Supported billing estimation modes:
 - `per_pass`
 
 ### Example Provider Setups
+
+Ensemble routing:
+
+```bash
+python -m jakal_flow run \
+  --repo-url https://github.com/Ahnd6474/lit.git \
+  --branch main \
+  --workspace-root .jakal-flow-workspace \
+  --model-provider ensemble \
+  --model gpt-5.4 \
+  --effort high \
+  --approval-mode never \
+  --sandbox-mode workspace-write \
+  --test-cmd "python -m pytest" \
+  --max-blocks 1
+```
 
 OpenRouter:
 
@@ -322,7 +326,7 @@ python -m jakal_flow run \
   --branch main \
   --workspace-root .jakal-flow-workspace \
   --model-provider gemini \
-  --model gemini-2.5-flash \
+  --model gemini-3-flash-preview \
   --approval-mode never \
   --sandbox-mode workspace-write \
   --test-cmd "python -m pytest" \
@@ -337,37 +341,7 @@ python -m jakal_flow run \
   --branch main \
   --workspace-root .jakal-flow-workspace \
   --model-provider claude \
-  --model sonnet \
-  --approval-mode never \
-  --sandbox-mode workspace-write \
-  --test-cmd "python -m pytest" \
-  --max-blocks 1
-```
-
-DeepSeek via Claude Code:
-
-```bash
-python -m jakal_flow run \
-  --repo-url https://github.com/Ahnd6474/lit.git \
-  --branch main \
-  --workspace-root .jakal-flow-workspace \
-  --model-provider deepseek \
-  --model deepseek-chat \
-  --approval-mode never \
-  --sandbox-mode workspace-write \
-  --test-cmd "python -m pytest" \
-  --max-blocks 1
-```
-
-Kimi via Moonshot API:
-
-```bash
-python -m jakal_flow run \
-  --repo-url https://github.com/Ahnd6474/lit.git \
-  --branch main \
-  --workspace-root .jakal-flow-workspace \
-  --model-provider kimi \
-  --model kimi-k2.5 \
+  --model claude-sonnet-4-6 \
   --approval-mode never \
   --sandbox-mode workspace-write \
   --test-cmd "python -m pytest" \
@@ -406,23 +380,6 @@ python -m jakal_flow run \
   --max-blocks 1
 ```
 
-Local OpenAI-compatible server:
-
-```bash
-python -m jakal_flow run \
-  --repo-url https://github.com/Ahnd6474/lit.git \
-  --branch main \
-  --workspace-root .jakal-flow-workspace \
-  --model-provider local_openai \
-  --provider-base-url http://127.0.0.1:1234/v1 \
-  --model llama-3.1-8b-instruct \
-  --effort medium \
-  --approval-mode never \
-  --sandbox-mode workspace-write \
-  --test-cmd "python -m pytest" \
-  --max-blocks 1
-```
-
 ML workflow:
 
 ```bash
@@ -445,7 +402,7 @@ python -m jakal_flow run \
 ### Short version
 
 ```text
-CLI / Desktop UI / Share viewer
+CLI / Desktop UI / Share monitor
             |
             v
       Python orchestration core
@@ -465,21 +422,21 @@ CLI / Desktop UI / Share viewer
 ### Initialization
 
 1. Create an isolated project directory under the workspace root.
-2. Clone or update the target repository into `repo/`.
+2. Clone or refresh a remote repository into `repo/`, or register an existing local repository path from the desktop shell.
 3. Scan `README.md`, `AGENTS.md`, and `repo/docs/**`.
-4. Generate or refresh the saved plan and supporting guard documents.
-5. Record the current safe revision and checkpoint timeline.
+4. Generate or refresh the saved plan, scope guard, Planner Agent A outline, and checkpoint timeline.
+5. Record the current safe revision and persist project metadata outside the repository working tree.
 
 ### Each run block
 
-1. Load saved plan context and memory.
-2. Rebuild the mid-term subset from the saved plan.
-3. Generate or update the execution plan.
-4. Run dependency-ready steps through the parallel scheduler.
-5. Verify changes, reusing cached verification results when the fingerprint matches.
-6. Commit only safe validated changes.
-7. Roll back to the last safe revision on regression or unsafe merge outcomes.
-8. Write logs, reports, SVG summaries, and memory updates.
+1. Load saved plan context, runtime settings, and task memory.
+2. Rebuild the mid-term subset and refresh ready steps.
+3. Run dependency-ready steps through the parallel DAG scheduler.
+4. Verify changes, reusing cached verification results when the fingerprint matches.
+5. Commit only safe validated changes.
+6. Roll back to the last safe revision on regression or unsafe merge outcomes.
+7. Write logs, reports, SVG summaries, and memory updates.
+8. Run a separate closeout pass when planned work is complete.
 
 ## Workspace Layout
 
@@ -497,11 +454,15 @@ workspace_root/
       state/
       metadata.json
       project_config.json
+  history/
+    <archived_run_slug>/
+  registry.json
 ```
 
-Key generated artifacts can include:
+Common project artifacts can include:
 
 - `docs/PLAN.md`
+- `docs/PLAN_AGENT_A_OUTLINE.md`
 - `docs/MID_TERM_PLAN.md`
 - `docs/SCOPE_GUARD.md`
 - `docs/ACTIVE_TASK.md`
@@ -521,13 +482,18 @@ Key generated artifacts can include:
 - `logs/test_runs.jsonl`
 - `logs/ui_events.jsonl`
 - `reports/latest_report.json`
-- `reports/*pr_failure.json`
-- `reports/*pr_failure.md`
+- `reports/*.prfail.json`
+- `reports/*.prfail.md`
 - `reports/latest_pr_failure_status.json`
+- `reports/CLOSEOUT_REPORT.docx`
 - `state/LOOP_STATE.json`
 - `state/CHECKPOINTS.json`
+- `state/EXECUTION_PLAN.json`
+- `state/LINEAGES.json`
 - `state/ML_MODE_STATE.json`
 - `state/ML_STEP_REPORT.json`
+- `state/PROJECT_DETAIL_CACHE_CORE.json`
+- `state/PROJECT_DETAIL_CACHE_FULL.json`
 - `state/UI_RUN_CONTROL.json`
 - `state/ml_experiments/*.json`
 - `state/share_sessions.json`
@@ -535,14 +501,25 @@ Key generated artifacts can include:
 - `metadata.json`
 - `project_config.json`
 
+Workspace-level sidecar files can additionally include:
+
+- `registry.json`
+- `share_sessions.json`
+- `share_session_events.jsonl`
+- `share_server.json`
+- `share_server_config.json`
+- `share_server.log`
+- `public_tunnel.json`
+
 ## Notes
 
 - `codex exec` is invoked non-interactively and JSON event streams are saved under `logs/block_*/`.
-- Claude Code runs use print-mode JSON output and the same per-block trace files under `logs/block_*/`.
-- Gemini CLI runs use headless JSON output and the same per-block trace files under `logs/block_*/`.
+- Claude Code uses print-mode JSON output and Gemini CLI uses headless JSON output, but both are normalized into the same trace files.
 - Local OSS runs still go through Codex CLI rather than bypassing it.
 - The desktop bridge forces UTF-8 stdio on Windows so JSON payloads and Korean text survive the bridge boundary.
-- CLI defaults stay conservative: `--max-blocks` defaults to `1`, and pushing requires explicit `--allow-push`.
+- CLI defaults stay conservative: `--max-blocks` defaults to `1`, `--allow-push` is opt-in, and examples in this README use `python -m jakal_flow ...` so they work from a source checkout.
+- Desktop-managed defaults are stored per project and can be more permissive than the CLI examples.
+- Temporary public share links can use a configured public base URL or a Cloudflare Quick Tunnel; on Windows the app can install `cloudflared` via `winget` when needed.
 
 ## Star History
 

@@ -1071,3 +1071,33 @@ def workspace_share_payload(workspace_root: Path, context: ProjectContext | None
 
 def project_share_payload(workspace_root: Path, context: ProjectContext) -> dict[str, Any]:
     return workspace_share_payload(workspace_root, context)
+
+
+def project_share_config_payload(workspace_root: Path, context: ProjectContext | None = None) -> dict[str, Any]:
+    config = load_share_server_config(workspace_root).to_dict()
+    project_repo_id = str(context.metadata.repo_id).strip() if context is not None else ""
+    return {
+        "server": {
+            "running": False,
+            "host": None,
+            "port": None,
+            "base_url": None,
+            "viewer_path": DEFAULT_VIEWER_PATH,
+            "config": config,
+            "share_base_url": config.get("public_base_url") or None,
+            "share_base_url_source": "config" if config.get("public_base_url") else None,
+            "public_tunnel": {
+                "running": False,
+                "provider": None,
+                "public_url": "",
+                "target_url": "",
+                "pid": None,
+                "started_at": None,
+                "available": True,
+            },
+        },
+        "sessions": [],
+        "project_active_session": None,
+        "active_session": None,
+        "project": {"repo_id": project_repo_id} if project_repo_id else None,
+    }

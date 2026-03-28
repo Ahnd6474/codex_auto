@@ -1,12 +1,12 @@
 # jakal-flow (한국어)
 
-`jakal-flow`는 격리된 워크스페이스 안에서 여러 저장소를 관리하면서, 각 저장소별 계획, 로그, 메모리, 리포트, 롤백 상태를 분리해 유지하는 Codex 기반 Python CLI 및 데스크톱 셸입니다. 단일 저장소 안에 모든 상태를 몰아넣지 않고, 관리 대상 저장소마다 추적 가능한 자동화 루프를 유지하는 데 초점을 둡니다.
+`jakal-flow`는 여러 저장소를 격리된 워크스페이스로 운영하면서, 저장소별 계획, 체크포인트, 로그, 메모리, 리포트, 롤백 상태, 공유 세션, 아카이브 히스토리를 분리해 유지하는 Python 중심 자동화 도구입니다. 핵심 경로는 Python 오케스트레이션 코어에 있고, 데스크톱 UI와 공유 뷰어는 그 위에 올라가는 보조 표면입니다.
 
 영문 문서는 [README.md](README.md)를 참고하세요.
 
-## 흐름
+## 아키텍처
 
-전체 구조와 워크스페이스 격리 흐름:
+전체 표면과 워크스페이스 격리 구조:
 
 ![jakal-flow 흐름도 (KO)](assets/readme-flow-ko.svg)
 
@@ -14,132 +14,26 @@
 
 ![jakal-flow 백엔드 코드 생성 흐름 (KO)](assets/backend-codegen-flow-ko.svg)
 
-## 핵심 특징
+## 빠른 시작
 
-- `projects/<repo_slug>/` 단위의 다중 저장소 워크스페이스 관리
-- Python 오케스트레이터 위에 React + Tauri 데스크톱 셸 제공
-- OpenAI / Codex 클라우드, Claude Code, Gemini CLI, Qwen Code, DeepSeek, Kimi, MiniMax, GLM, OpenRouter, OpenCDK, 로컬 OpenAI 호환 서버, Codex OSS 로컬 실행 지원
-- 표준 소프트웨어 워크플로와 ML 실험 워크플로 지원
-- owned path 기반 안전 조건을 둔 병렬 DAG 실행
-- 계획, 체크포인트, 로그, 메모리, 리포트, SVG, UI 이벤트 히스토리를 프로젝트별로 분리 저장
-- 로컬 공유 서버와 읽기 전용 모니터링 링크, 선택적 공개 URL, Cloudflare Quick Tunnel 연동
+권장 런타임:
 
-## 프로젝트 레이아웃
+- Python 3.11+
+- `PATH`에 있는 Codex CLI
+- 데스크톱 셸용 Node.js 20+, Rust, Tauri 선행조건
 
-```text
-workspace_root/
-  projects/
-    <repo_slug>/
-      repo/
-      docs/
-      memory/
-      logs/
-      reports/
-      state/
-      metadata.json
-      project_config.json
-```
-
-## 설치
+패키지 설치:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
 python -m pip install -e .
 ```
 
-이 저장소 문서는 Linux 개발 환경을 기준으로 작성합니다.
-
-- 예시는 `python3`, `source .venv/bin/activate`, POSIX 셸 명령을 사용합니다.
-- 데스크톱 UI 개발에는 Node.js 20+, Rust, 그리고 배포판에 맞는 Tauri용 WebKitGTK 또는 GTK 계열 시스템 패키지가 필요합니다.
-- Windows에서는 아래 명령을 그대로 복붙하기보다 PowerShell 또는 CMD 문법에 맞게 바꿔서 실행해야 합니다.
-
-## 자주 쓰는 명령
-설치 후 다음 엔트리포인트를 사용할 수 있습니다.
+설치 후 사용할 수 있는 엔트리포인트:
 
 - `jakal-flow`
 - `jakal-flow-ui-bridge`
 
-## 데스크톱 UI
-
-데스크톱 셸은 `desktop/` 아래에 있으며, `python -m jakal_flow.ui_bridge`를 통해 기존 Python 백엔드를 그대로 사용합니다.
-
-개발 환경 요구사항:
-
-- Node.js 20+
-- Rust toolchain 및 OS별 Tauri 선행조건
-- `PATH`에 잡힌 Python 3.11+ 또는 `JAKAL_FLOW_PYTHON`
-
-개발 실행:
-
-```bash
-cd desktop
-npm.cmd install
-npm.cmd run test
-npm.cmd run tauri:dev
-```
-
-빌드:
-
-```bash
-cd desktop
-npm.cmd run tauri:build
-```
-
-데스크톱 앱의 주요 기능:
-
-- 관리 프로젝트 등록, 런타임 설정 저장, 요약 상태 확인
-- 모델 프리셋 및 제공자 선택, OSS 로컬 모델 탐색
-- 계획 생성, 단계 편집, stop-after-step 요청, closeout 실행
-- 비용 및 시간 추정 패널과 Codex 사용량 기반 대시보드
-- 읽기 전용 공유 링크 생성 및 철회
-
-## 런타임 지원
-
-현재 구현에 연결된 제공자 프리셋:
-
-- `openai`
-- `claude`
-- `gemini`
-- `qwen_code`
-- `deepseek`
-- `kimi`
-- `minimax`
-- `glm`
-- `openrouter`
-- `opencdk`
-- `local_openai`
-- `oss`
-
-로컬 OSS 제공자:
-
-- `ollama`
-- `lmstudio`
-
-워크플로 모드:
-
-- `standard`
-- `ml`
-
-실행 모드는 현재 CLI와 데스크톱 모두 병렬 DAG 스케줄러로 정규화됩니다.
-
-## 공유 뷰어
-
-읽기 전용 모니터링 링크는 로컬 Python 공유 서버를 기반으로 하며, 오케스트레이션과 외부 노출을 분리합니다.
-
-1. 데스크톱 앱을 실행합니다.
-2. 관리 프로젝트를 엽니다.
-3. 공유 bind host와 선택적 public base URL을 설정합니다.
-4. share link를 생성합니다.
-5. `public_base_url`이 비어 있고 `cloudflared`가 설치되어 있으면 임시 Cloudflare Quick Tunnel을 자동으로 시작할 수 있습니다.
-6. 생성된 링크를 다른 브라우저나 기기에서 엽니다.
-7. 사용이 끝나면 데스크톱 UI에서 세션을 철회합니다.
-
-공유 페이지에는 마스킹된 상태, 현재 작업, 최근 로그, 최신 테스트 결과, 마지막 갱신 시각이 표시됩니다.
-
-## CLI 예시
-
-관리 저장소 초기화와 첫 계획 생성:
+관리 저장소 초기화:
 
 ```bash
 python -m jakal_flow init-repo \
@@ -154,7 +48,7 @@ python -m jakal_flow init-repo \
   --test-cmd "python -m pytest"
 ```
 
-표준 개선 블록 2회 실행과 Word closeout 리포트 생성:
+검증 포함 개선 루프 실행:
 
 ```bash
 python -m jakal_flow run \
@@ -163,31 +57,223 @@ python -m jakal_flow run \
   --workspace-root .jakal-flow-workspace \
   --model gpt-5.4 \
   --effort high \
-  --word-report \
   --approval-mode never \
   --sandbox-mode workspace-write \
   --test-cmd "python -m pytest" \
   --max-blocks 2
 ```
 
-Codex OSS + 로컬 제공자 실행:
+상태 확인:
+
+```bash
+python -m jakal_flow list-repos --workspace-root .jakal-flow-workspace
+python -m jakal_flow status --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
+python -m jakal_flow history --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace --limit 20
+python -m jakal_flow report --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
+```
+
+데스크톱 개발 실행:
+
+```bash
+cd desktop
+npm install
+npm run test
+npm run tauri:dev
+```
+
+## 왜 jakal-flow인가
+
+- 다중 저장소 전제: 관리 저장소마다 독립된 프로젝트 트리를 가집니다.
+- 추적성 우선: 계획, 체크포인트, UI 이벤트, 검증 실행, 블록 로그, 리포트, SVG, 태스크 메모리를 남깁니다.
+- 안전한 실행: safe revision, 롤백, 체크포인트 승인, 검증된 커밋만 반영하는 흐름을 유지합니다.
+- 하나의 백엔드, 여러 표면: CLI, 데스크톱 셸, 임시 공유 모니터가 모두 같은 Python 코어를 사용합니다.
+- 유연한 모델 라우팅: OpenAI/Codex, Claude Code, Gemini CLI, Qwen Code, OpenAI 호환 공급자, Anthropic 호환 공급자, 로컬 OSS 백엔드를 연결할 수 있습니다.
+- 장기 보존용 히스토리: 데스크톱 셸에서 완료된 관리 워크스페이스를 `history/`로 아카이브할 수 있습니다.
+
+## 현재 지원 범위
+
+### 표면
+
+| 표면 | 지원 내용 |
+| --- | --- |
+| CLI | `init-repo`, `run`, `resume`, `list-repos`, `status`, `history`, `report` |
+| 데스크톱 UI | 기존 로컬 저장소 등록, 런타임 기본값 저장, 계획 생성/편집, 실행/중단 제어, 체크포인트 승인, 히스토리 아카이브/삭제, 공유 세션 관리 |
+| 원격 모니터 | 로컬 공유 서버, 임시 공유 세션, 마스킹된 상태/로그, 실행 흐름 SVG, 선택적 공개 URL, 선택적 Cloudflare Quick Tunnel, 원격 pause, 남은 작업이 있을 때 원격 resume |
+
+### 워크플로
+
+| 기능 | 지원 여부 |
+| --- | --- |
+| 일반 소프트웨어 워크플로 | 예 |
+| ML 실험 워크플로 | 예, `--workflow-mode ml` |
+| 자동 ML 재계획 | 예, 최대 `--ml-max-cycles` |
+| 계획 생성 방식 | Planner Agent A 분해 + Planner Agent B 패킹 |
+| 실행 방식 | 병렬 DAG 스케줄링이 기본 정규화 모드 |
+| Hybrid lineage / join / barrier step | 예 |
+| Closeout 패스 | 예, 일반 step과 별도 |
+| 현재 step 이후 일시정지 | 예, 데스크톱과 공유 모니터에서 가능 |
+| 즉시 중단 | 예, 데스크톱에서 가능 |
+
+### 모델 / 공급자
+
+| 공급자 프리셋 | 지원 여부 | 비고 |
+| --- | --- | --- |
+| `openai` | 예 | OpenAI / Codex 클라우드 |
+| `ensemble` | 예 | 기본 계획/일반 작업은 OpenAI를 쓰고, step 단위로 UI 또는 명시적 작업을 다른 백엔드로 라우팅 가능 |
+| `claude` | 예 | Claude Code print-mode |
+| `gemini` | 예 | Gemini CLI headless |
+| `qwen_code` | 예 | Qwen Code headless |
+| `deepseek` | 예 | DeepSeek Anthropic 호환 엔드포인트를 Claude Code로 사용 |
+| `kimi` | 예 | Moonshot Kimi OpenAI 호환 경로 |
+| `minimax` | 예 | MiniMax Anthropic 호환 엔드포인트를 Claude Code로 사용 |
+| `glm` | 예 | GLM Anthropic 호환 엔드포인트를 Claude Code로 사용 |
+| `openrouter` | 예 | OpenAI 호환 엔드포인트 |
+| `opencdk` | 예 | OpenAI 호환 엔드포인트 |
+| `local_openai` | 예 | LM Studio, vLLM, llama.cpp, LocalAI 같은 로컬 OpenAI 호환 서버 |
+| `oss` | 예 | 로컬 제공자를 통한 Codex OSS 모드 |
+
+`--model-provider oss`에서 쓸 수 있는 로컬 제공자:
+
+- `ollama`
+- `lmstudio`
+
+추론 강도:
+
+- `low`
+- `medium`
+- `high`
+- `xhigh`
+
+### 계획, 실행, 검토
+
+| 기능 | 지원 여부 |
+| --- | --- |
+| 저장형 프로젝트 계획 생성 | 예 |
+| Planner Agent A 개요 저장 | 예, `docs/PLAN_AGENT_A_OUTLINE.md` |
+| Mid-term subset 재생성 | 예 |
+| 의존성 기반 실행 트리 | 예 |
+| step 단위 provider/model override | 예 |
+| step 단위 reasoning effort | 예 |
+| step 단위 success criteria | 예 |
+| step 단위 verification command override | 예 |
+| owned-path 기반 병렬 안전성 | 예 |
+| 실행 전 step 수동 편집 | 예 |
+| 데스크톱 백그라운드 폴링 | 예 |
+| 체크포인트 타임라인과 승인 상태 | 예 |
+
+### 안전성, 복구, 산출물
+
+| 기능 | 지원 여부 |
+| --- | --- |
+| Safe revision 기록 | 예 |
+| 회귀 시 롤백 | 예 |
+| 검증된 커밋만 반영 | 예 |
+| 안전 실행 후 선택적 push | 예, `--allow-push`와 `origin`이 있을 때 |
+| Verification cache 재사용 | 예 |
+| PR용 실패 번들 생성 | 예 |
+| GitHub 토큰 기반 PR 실패 보고 | 예 |
+| Closeout markdown 리포트 | 예 |
+| Word closeout 리포트 | 예, `--word-report` 또는 데스크톱 토글 |
+| Execution flow SVG | 예 |
+| ML experiment 결과 SVG | 예 |
+| 시간/비용 추정 | 예 |
+| Codex 사용량 집계 | 예 |
+
+## 데스크톱 UI
+
+데스크톱 셸은 Python 백엔드를 유지한 채, 계획과 실행, 모니터링, 프로젝트 히스토리 관리를 위한 제어 계층을 제공합니다.
+
+데스크톱 앱에서 할 수 있는 일:
+
+- 기존 로컬 저장소를 관리 프로젝트로 등록
+- provider, model, Codex 경로, 체크포인트 규칙, 병렬 워커 설정 같은 런타임 기본값 저장
+- 실행 계획 생성, DAG 편집, 재계획 수행
+- 의존성, owned path, hybrid lineage step, 최근 로그, 생성된 리포트 확인
+- 실행 시작, 즉시 중단 요청, 현재 step 이후 pause, closeout 실행
+- 남은 시간 추정, 비용 추정, 최근 실제 비용, Codex 사용량 창 확인
+- 임시 원격 모니터 링크 생성/복사/철회
+- 완료된 관리 워크스페이스를 히스토리로 아카이브하거나 오래된 히스토리 삭제
+- 대시보드 카드, 테마, 언어, 백그라운드 동시성 제한 변경
+
+데스크톱 빌드:
+
+```bash
+cd desktop
+npm run tauri:build
+```
+
+관련 문서:
+
+- [desktop/README.md](desktop/README.md)
+- [website/README.md](website/README.md)
+
+## 설정
+
+`jakal-flow`는 CLI 런타임 옵션과 데스크톱 저장 기본값을 함께 지원합니다.
+
+### CLI / 런타임 설정
+
+| 그룹 | 지원 옵션 |
+| --- | --- |
+| 저장소 지정 | `--repo-url`, `--branch`, `--workspace-root`, `--plan-file`, `--resume` |
+| 모델 선택 | `--model-provider`, `--local-model-provider`, `--model`, `--effort`, `--fast` |
+| 공급자 연결 | `--provider-base-url`, `--provider-api-key-env` |
+| 비용 추정 | `--billing-mode`, `--input-cost-per-million-usd`, `--cached-input-cost-per-million-usd`, `--output-cost-per-million-usd`, `--reasoning-output-cost-per-million-usd`, `--per-pass-cost-usd` |
+| 워크플로 제어 | `--workflow-mode`, `--ml-max-cycles`, `--max-blocks`, `--extra-prompt`, `--plan-prompt` |
+| 최적화 제어 | `--optimization-mode`, `--optimization-large-file-lines`, `--optimization-long-function-lines`, `--optimization-duplicate-block-lines`, `--optimization-max-files` |
+| 안전성과 검증 | `--approval-mode`, `--sandbox-mode`, `--test-cmd`, `--allow-push` |
+| 리포팅 | `--word-report` |
+
+현재 checkout 기준 명령 표면 확인:
+
+```bash
+python -m jakal_flow --help
+python -m jakal_flow run --help
+```
+
+### 데스크톱 저장 기본값
+
+데스크톱 셸은 추가로 다음 값을 저장합니다.
+
+- `planning_effort`
+- `parallel_worker_mode`, `parallel_workers`, `parallel_memory_per_worker_gib`
+- `checkpoint_interval_blocks`
+- `require_checkpoint_approval`
+- `codex_path`
+- `allow_push`
+- `save_project_logs`
+- 대시보드 가시성 설정
+- UI 테마와 언어
+- 공유 서버 bind host와 public base URL
+- 백그라운드 작업 동시성 제한
+
+### 비용 모드
+
+지원되는 비용 추정 모드:
+
+- `included`
+- `token`
+- `per_pass`
+
+### 제공자 예시
+
+Ensemble 라우팅:
 
 ```bash
 python -m jakal_flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
-  --model-provider oss \
-  --local-model-provider ollama \
-  --model qwen2.5-coder:0.5b \
-  --effort medium \
+  --model-provider ensemble \
+  --model gpt-5.4 \
+  --effort high \
   --approval-mode never \
   --sandbox-mode workspace-write \
   --test-cmd "python -m pytest" \
   --max-blocks 1
 ```
 
-OpenRouter 같은 OpenAI 호환 엔드포인트 실행:
+OpenRouter:
 
 ```bash
 python -m jakal_flow run \
@@ -206,7 +292,7 @@ python -m jakal_flow run \
   --max-blocks 1
 ```
 
-Gemini CLI 실행:
+Gemini CLI:
 
 ```bash
 python -m jakal_flow run \
@@ -214,14 +300,14 @@ python -m jakal_flow run \
   --branch main \
   --workspace-root .jakal-flow-workspace \
   --model-provider gemini \
-  --model gemini-2.5-flash \
+  --model gemini-3-flash-preview \
   --approval-mode never \
   --sandbox-mode workspace-write \
   --test-cmd "python -m pytest" \
   --max-blocks 1
 ```
 
-Claude Code 실행:
+Claude Code:
 
 ```bash
 python -m jakal_flow run \
@@ -229,44 +315,14 @@ python -m jakal_flow run \
   --branch main \
   --workspace-root .jakal-flow-workspace \
   --model-provider claude \
-  --model sonnet \
+  --model claude-sonnet-4-6 \
   --approval-mode never \
   --sandbox-mode workspace-write \
   --test-cmd "python -m pytest" \
   --max-blocks 1
 ```
 
-DeepSeek via Claude Code:
-
-```bash
-python -m jakal_flow run \
-  --repo-url https://github.com/Ahnd6474/lit.git \
-  --branch main \
-  --workspace-root .jakal-flow-workspace \
-  --model-provider deepseek \
-  --model deepseek-chat \
-  --approval-mode never \
-  --sandbox-mode workspace-write \
-  --test-cmd "python -m pytest" \
-  --max-blocks 1
-```
-
-Kimi 실행:
-
-```bash
-python -m jakal_flow run \
-  --repo-url https://github.com/Ahnd6474/lit.git \
-  --branch main \
-  --workspace-root .jakal-flow-workspace \
-  --model-provider kimi \
-  --model kimi-k2.5 \
-  --approval-mode never \
-  --sandbox-mode workspace-write \
-  --test-cmd "python -m pytest" \
-  --max-blocks 1
-```
-
-Qwen Code 실행:
+Qwen Code:
 
 ```bash
 python -m jakal_flow run \
@@ -281,16 +337,16 @@ python -m jakal_flow run \
   --max-blocks 1
 ```
 
-로컬 OpenAI 호환 서버 실행:
+로컬 OSS + Ollama:
 
 ```bash
 python -m jakal_flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
-  --model-provider local_openai \
-  --provider-base-url http://127.0.0.1:1234/v1 \
-  --model llama-3.1-8b-instruct \
+  --model-provider oss \
+  --local-model-provider ollama \
+  --model qwen2.5-coder:0.5b \
   --effort medium \
   --approval-mode never \
   --sandbox-mode workspace-write \
@@ -298,7 +354,7 @@ python -m jakal_flow run \
   --max-blocks 1
 ```
 
-ML 워크플로와 자동 cycle 재계획:
+ML 워크플로:
 
 ```bash
 python -m jakal_flow run \
@@ -315,110 +371,72 @@ python -m jakal_flow run \
   --max-blocks 6
 ```
 
-기존 관리 저장소 재개:
-
-```bash
-python -m jakal_flow resume \
-  --repo-url https://github.com/Ahnd6474/lit.git \
-  --branch main \
-  --workspace-root .jakal-flow-workspace \
-  --model gpt-5.4 \
-  --effort high \
-  --approval-mode never \
-  --sandbox-mode workspace-write \
-  --test-cmd "python -m pytest" \
-  --max-blocks 1
-```
-
-관리 저장소와 리포트 확인:
-
-```bash
-python -m jakal_flow list-repos --workspace-root .jakal-flow-workspace
-python -m jakal_flow status --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
-python -m jakal_flow history --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace --limit 20
-python -m jakal_flow report --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
-cd desktop
-npm install
-npm run tauri:dev
-```
-
-Linux 데스크톱 패키지 빌드:
-
-```bash
-cd desktop
-npm install
-npm run tauri build
-```
-
-Linux 번들 결과물은 `desktop/src-tauri/target/release/bundle/` 아래에 생성됩니다. 일반적인 Linux 환경에서는 `.deb`, `.rpm`이 만들어지고, 호스트 도구가 갖춰져 있으면 AppImage도 함께 생성될 수 있습니다.
-
-프론트엔드 화면만 빠르게 확인하려면:
-
-```bash
-cd desktop
-npm install
-npm run dev
-```
-
-## Linux 빠른 시작
-
-가상환경을 만들고 패키지를 설치한 뒤, 워크스페이스를 초기화하고 실행하면 됩니다.
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
-
-jakal-flow init-repo \
-  --repo-url https://github.com/Ahnd6474/lit.git \
-  --branch main \
-  --workspace-root .jakal-flow-workspace \
-  --model gpt-5.4 \
-  --effort high \
-  --approval-mode never \
-  --sandbox-mode workspace-write \
-  --test-cmd "python -m pytest"
-
-jakal-flow run \
-  --repo-url https://github.com/Ahnd6474/lit.git \
-  --branch main \
-  --workspace-root .jakal-flow-workspace \
-  --model gpt-5.4 \
-  --effort high \
-  --approval-mode never \
-  --sandbox-mode workspace-write \
-  --test-cmd "python -m pytest" \
-  --max-blocks 2
-```
-
 ## 동작 방식
 
-초기화 단계:
+### 요약
+
+```text
+CLI / Desktop UI / Share monitor
+            |
+            v
+      Python orchestration core
+            |
+            +-- planning.py
+            +-- codex_runner.py
+            +-- git_ops.py
+            +-- workspace.py
+            +-- memory.py
+            +-- reporting.py
+            |
+            v
+  projects/<repo_slug>/
+    repo/ docs/ memory/ logs/ reports/ state/
+```
+
+### 초기화 단계
 
 1. 워크스페이스 아래에 격리된 프로젝트 디렉터리를 만듭니다.
-2. 대상 저장소를 `repo/`에 클론하거나 갱신합니다.
+2. 원격 저장소는 `repo/`로 clone 또는 갱신하고, 데스크톱에서는 기존 로컬 저장소 경로를 그대로 등록할 수도 있습니다.
 3. `README.md`, `AGENTS.md`, `repo/docs/**`를 스캔합니다.
-4. 저장소 문서만으로 판단이 어려우면 `src/jakal_flow/docs/REFERENCE_GUIDE.md`를 참고 기준으로 사용합니다.
-5. `docs/PLAN.md`, `docs/SCOPE_GUARD.md`, `docs/MID_TERM_PLAN.md`, 메모리 파일, 루프 상태를 준비합니다.
-6. 체크포인트 타임라인을 만들고 현재 safe revision을 기록합니다.
+4. 저장형 계획, scope guard, Planner Agent A 개요, 체크포인트 타임라인을 준비합니다.
+5. 현재 safe revision과 프로젝트 메타데이터를 저장소 바깥에 기록합니다.
 
-실행 블록마다:
+### 실행 블록마다
 
-1. 저장된 계획과 메모리 문맥을 불러옵니다.
-2. 저장 계획에서 mid-term subset을 다시 만듭니다.
-3. 실행 계획을 생성하거나 갱신합니다.
-4. 의존성이 충족된 단계를 병렬 스케줄러로 실행합니다.
-5. 검증을 수행하고, 저장소 상태와 테스트 fingerprint가 완전히 같으면 캐시된 성공 결과를 재사용합니다.
-6. 검증된 안전한 변경만 커밋합니다.
-7. 회귀나 병합 충돌 시 마지막 safe revision으로 되돌립니다.
-8. 로그, 리포트, SVG, 리뷰 문서, 메모리를 갱신합니다.
-9. `--allow-push`가 켜져 있고 `origin`이 설정되어 있으면 검증된 커밋을 푸시할 수 있습니다.
+1. 저장된 계획, 런타임 설정, 태스크 메모리를 불러옵니다.
+2. Mid-term subset과 ready step을 다시 계산합니다.
+3. 의존성이 충족된 step을 병렬 DAG 스케줄러로 실행합니다.
+4. 검증을 수행하고 fingerprint가 같으면 verification cache를 재사용합니다.
+5. 검증된 안전한 변경만 커밋합니다.
+6. 회귀나 위험한 병합 결과가 나오면 마지막 safe revision으로 롤백합니다.
+7. 로그, 리포트, SVG, 메모리를 갱신합니다.
+8. 계획된 작업이 끝나면 별도의 closeout 패스를 실행합니다.
 
-## 프로젝트별 산출물
+## 워크스페이스 구조
 
-관리 프로젝트마다 다음과 같은 파일이 생성되거나 유지될 수 있습니다.
+관리 저장소마다 독립된 프로젝트 트리를 가집니다.
+
+```text
+workspace_root/
+  projects/
+    <repo_slug>/
+      repo/
+      docs/
+      memory/
+      logs/
+      reports/
+      state/
+      metadata.json
+      project_config.json
+  history/
+    <archived_run_slug>/
+  registry.json
+```
+
+프로젝트별로 자주 생기는 파일:
 
 - `docs/PLAN.md`
+- `docs/PLAN_AGENT_A_OUTLINE.md`
 - `docs/MID_TERM_PLAN.md`
 - `docs/SCOPE_GUARD.md`
 - `docs/ACTIVE_TASK.md`
@@ -438,13 +456,18 @@ jakal-flow run \
 - `logs/test_runs.jsonl`
 - `logs/ui_events.jsonl`
 - `reports/latest_report.json`
-- `reports/*pr_failure.json`
-- `reports/*pr_failure.md`
+- `reports/*.prfail.json`
+- `reports/*.prfail.md`
 - `reports/latest_pr_failure_status.json`
+- `reports/CLOSEOUT_REPORT.docx`
 - `state/LOOP_STATE.json`
 - `state/CHECKPOINTS.json`
+- `state/EXECUTION_PLAN.json`
+- `state/LINEAGES.json`
 - `state/ML_MODE_STATE.json`
 - `state/ML_STEP_REPORT.json`
+- `state/PROJECT_DETAIL_CACHE_CORE.json`
+- `state/PROJECT_DETAIL_CACHE_FULL.json`
 - `state/UI_RUN_CONTROL.json`
 - `state/ml_experiments/*.json`
 - `state/share_sessions.json`
@@ -452,12 +475,22 @@ jakal-flow run \
 - `metadata.json`
 - `project_config.json`
 
+워크스페이스 레벨 부가 파일:
+
+- `registry.json`
+- `share_sessions.json`
+- `share_session_events.jsonl`
+- `share_server.json`
+- `share_server_config.json`
+- `share_server.log`
+- `public_tunnel.json`
+
 ## 참고
 
-- `codex exec`는 비대화형으로 호출되며 JSON 이벤트 스트림은 `logs/block_*/` 아래에 저장됩니다.
-- Gemini CLI 실행도 headless JSON 출력으로 기록되며 같은 `logs/block_*/` 추적 파일 구조를 사용합니다.
-- Claude Code 실행도 print-mode JSON 출력으로 기록되며 같은 `logs/block_*/` 추적 파일 구조를 사용합니다.
-- Gemini CLI 실행도 headless JSON 출력으로 기록되며 같은 `logs/block_*/` 추적 파일 구조를 사용합니다.
-- 로컬 OSS 실행도 Codex CLI를 통해 수행됩니다.
+- `codex exec`는 비대화형으로 호출되고 JSON 이벤트 스트림은 `logs/block_*/` 아래에 저장됩니다.
+- Claude Code는 print-mode JSON, Gemini CLI는 headless JSON을 쓰지만 최종 추적 파일 구조는 동일하게 정규화됩니다.
+- 로컬 OSS 실행도 Codex CLI를 우회하지 않고 그 경로를 사용합니다.
 - 데스크톱 브리지는 Windows에서 UTF-8 stdio를 강제해 JSON과 한글 텍스트가 깨지지 않도록 처리합니다.
-- CLI 기본값은 보수적으로 유지됩니다. `--max-blocks` 기본값은 `1`이고, 푸시는 `--allow-push`를 명시해야 합니다.
+- CLI 기본값은 보수적입니다. `--max-blocks` 기본값은 `1`이고, `--allow-push`는 명시적으로 켜야 합니다.
+- 데스크톱 저장 기본값은 프로젝트별로 저장되며, CLI 예시보다 더 적극적인 설정을 가질 수 있습니다.
+- 임시 공개 공유 링크는 설정된 public base URL이나 Cloudflare Quick Tunnel을 사용할 수 있고, Windows에서는 필요하면 `winget`으로 `cloudflared`를 설치할 수 있습니다.

@@ -45,8 +45,12 @@ import {
 } from "../utils";
 import {
   fetchHistoryDetail,
+  fetchProjectCheckpoints,
   fetchProjectDetail,
   fetchProjectDetailBySelector,
+  fetchProjectHistory,
+  fetchProjectReports,
+  fetchProjectWorkspace,
   loadInitialDesktopState,
   loadProjectListing,
   refreshVisibleProjectState,
@@ -57,6 +61,7 @@ import {
   applyProjectDetailState,
   applyProjectDetailListingState,
   clearSelectedProjectState as clearProjectSelectionState,
+  mergeProjectDetailSupplement,
 } from "../controller/projectStore";
 import { usePersistentState } from "./usePersistentState";
 
@@ -330,6 +335,24 @@ export function useDesktopController() {
     return normalizedDetail;
   }
 
+  function mergeSelectedProjectSupplement(repoId, supplement) {
+    if (!repoId || !supplement) {
+      return;
+    }
+    startTransition(() => {
+      setProjectDetail((current) => {
+        if (String(current?.project?.repo_id || "").trim() !== String(repoId || "").trim()) {
+          return current;
+        }
+        return mergeProjectDetailSupplement(current, supplement);
+      });
+    });
+  }
+
+  function projectSectionLoaded(sectionKey) {
+    return Boolean(projectDetail?.loaded_sections?.[sectionKey]);
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -472,6 +495,77 @@ export function useDesktopController() {
     projectDetail?.project?.repo_id,
     selectedProjectId,
     wantsExpandedDetail,
+    workspaceRoot,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProjectSupplements() {
+      const repoId = String(selectedProjectId || "").trim();
+      if (!repoId || !workspaceRoot || pendingAction || loadingProjectId) {
+        return;
+      }
+      if (String(projectDetail?.project?.repo_id || "").trim() !== repoId) {
+        return;
+      }
+      const supplementRequests = [];
+      if (Boolean(programSettings?.developer_mode) && centerTab === "reports" && !projectSectionLoaded("reports")) {
+        supplementRequests.push(fetchProjectReports(bridgeRequest, repoId, workspaceRoot));
+      }
+      if (sidebarTab === "workspace" && !projectSectionLoaded("workspace")) {
+        supplementRequests.push(fetchProjectWorkspace(bridgeRequest, repoId, workspaceRoot));
+      }
+      if (sidebarTab === "plans" && !projectSectionLoaded("checkpoints")) {
+        supplementRequests.push(fetchProjectCheckpoints(bridgeRequest, repoId, workspaceRoot));
+      }
+      if (centerTab === "history" && !selectedHistoryId && !projectSectionLoaded("history")) {
+        supplementRequests.push(fetchProjectHistory(bridgeRequest, repoId, workspaceRoot));
+      }
+      if (!supplementRequests.length) {
+        return;
+      }
+      try {
+        const supplements = await Promise.all(supplementRequests);
+        if (cancelled) {
+          return;
+        }
+        const mergedSupplement = supplements.reduce(
+          (combined, supplement) => ({
+            ...combined,
+            ...supplement,
+            loaded_sections: {
+              ...(combined?.loaded_sections || {}),
+              ...(supplement?.loaded_sections || {}),
+            },
+          }),
+          {},
+        );
+        mergeSelectedProjectSupplement(repoId, mergedSupplement);
+      } catch (error) {
+        if (!cancelled && !pendingAction) {
+          setMessage(messagePayload("error", String(error)));
+        }
+      }
+    }
+
+    void loadProjectSupplements();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    centerTab,
+    loadingProjectId,
+    pendingAction,
+    programSettings?.developer_mode,
+    projectDetail?.loaded_sections?.checkpoints,
+    projectDetail?.loaded_sections?.history,
+    projectDetail?.loaded_sections?.reports,
+    projectDetail?.loaded_sections?.workspace,
+    projectDetail?.project?.repo_id,
+    selectedHistoryId,
+    selectedProjectId,
+    sidebarTab,
     workspaceRoot,
   ]);
 

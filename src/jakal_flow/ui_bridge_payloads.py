@@ -13,14 +13,14 @@ from .model_providers import normalize_local_model_provider, normalize_model_pro
 from .models import ExecutionPlanState, ProjectContext
 from .orchestrator import Orchestrator
 from .runtime_insights import build_runtime_insights
-from .share import project_share_payload
+from .share import project_share_config_payload, project_share_payload
 from .status_views import effective_project_status
 from .step_models import provider_statuses_payload
 from .utils import append_jsonl, compact_text, normalize_workflow_mode, now_utc_iso, read_json, read_jsonl_tail, read_last_jsonl, read_text, write_json
 from .workspace import WorkspaceManager
 
 
-DETAIL_CACHE_VERSION = 8
+DETAIL_CACHE_VERSION = 9
 
 PLANNING_STAGE_DEFINITIONS = (
     {"key": "context_scan", "label": "Scan repository context"},
@@ -1003,7 +1003,11 @@ def _build_project_detail_base_payload(
             "repo_url": project.metadata.repo_url,
             "branch": project.metadata.branch,
         },
-        "share": project_share_payload(orchestrator.workspace.workspace_root, project),
+        "share": (
+            project_share_payload(orchestrator.workspace.workspace_root, project)
+            if normalized_detail_level == "full"
+            else project_share_config_payload(orchestrator.workspace.workspace_root, project)
+        ),
     }
 
 

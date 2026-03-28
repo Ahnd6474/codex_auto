@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { carryProjectPromptDraft, nextSidebarTab, resolveConfirmation, shouldPreserveProjectPrompt } from "../src/controllerHelpers.js";
+import {
+  carryProjectPromptDraft,
+  needsExpandedProjectDetail,
+  nextSidebarTab,
+  resolveConfirmation,
+  shouldPreserveProjectPrompt,
+} from "../src/controllerHelpers.js";
 
 test("resolveConfirmation accepts an explicit native confirmation", async () => {
   const confirmed = await resolveConfirmation(async () => true, () => false, "Delete project?");
@@ -95,4 +101,16 @@ test("nextSidebarTab toggles the active sidebar section off on repeat click", ()
   assert.equal(nextSidebarTab("", "workspace"), "workspace");
   assert.equal(nextSidebarTab("history", "plans"), "plans");
   assert.equal(nextSidebarTab("plans", ""), "");
+});
+
+test("needsExpandedProjectDetail keeps the base project request on core detail", () => {
+  assert.equal(
+    needsExpandedProjectDetail({
+      centerTab: "reports",
+      sidebarTab: "workspace",
+      bottomCollapsed: false,
+      bottomTab: "tokens",
+    }),
+    false,
+  );
 });
