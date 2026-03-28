@@ -4,7 +4,7 @@ import http.client
 import json
 import time
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 from urllib.request import urlopen
 
 from .context import BridgeCommandContext, BridgeCommandHandler
@@ -28,12 +28,19 @@ def verify_local_share_session_access(session_payload: dict) -> None:
     local_url = str(session_payload.get("local_url") or "").strip()
     session_id = str(session_payload.get("session_id") or "").strip()
     viewer_token = str(session_payload.get("viewer_token") or "").strip()
-    if not local_url or not session_id or not viewer_token:
-        raise RuntimeError("Local share validation requires a session_id, viewer_token, and local_url.")
+    if not local_url:
+        raise RuntimeError("Local share validation requires a local_url.")
 
     parsed = urlsplit(local_url)
     if not parsed.scheme or not parsed.netloc:
         raise RuntimeError(f"Local share URL is invalid: {local_url}")
+    query_params = parse_qs(parsed.query, keep_blank_values=False)
+    if query_params.get("access"):
+        status_query = urlencode({"access": str(query_params["access"][0]).strip()})
+    elif session_id and viewer_token:
+        status_query = urlencode({"session": session_id, "token": viewer_token})
+    else:
+        raise RuntimeError("Local share validation requires either an access token URL or a session_id/viewer_token pair.")
     base_path = parsed.path
     if base_path.endswith("/share/view"):
         status_path = f"{base_path[:-len('/view')]}/api/status"
@@ -46,7 +53,7 @@ def verify_local_share_session_access(session_payload: dict) -> None:
             parsed.scheme,
             parsed.netloc,
             status_path,
-            urlencode({"session": session_id, "token": viewer_token}),
+            status_query,
             "",
         )
     )
@@ -85,6 +92,7 @@ def build_share_command_handlers(
     save_share_server_config,
 ) -> dict[str, BridgeCommandHandler]:
     def save_share_config(ctx: BridgeCommandContext) -> dict:
+        current_config = share_server_status_payload(ctx.workspace_root).get("config", {})
         config = save_share_server_config(
             ctx.workspace_root,
             ShareServerConfig(
@@ -95,6 +103,7 @@ def build_share_command_handlers(
                     minimum=0,
                 ),
                 public_base_url=str(ctx.payload.get("public_base_url", DEFAULT_SHARE_PUBLIC_BASE_URL)).strip(),
+                access_token=str(current_config.get("access_token", "")).strip(),
             ),
         )
         result = share_server_status_payload(ctx.workspace_root)

@@ -26,6 +26,7 @@ from .share import (
     public_execution_flow_svg,
     public_monitor_status,
     public_workspace_monitor_status,
+    resolve_shared_access,
     resolve_shared_session,
     share_server_log_file,
     share_server_status_file,
@@ -227,10 +228,13 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         return str(values[0]).strip()
 
     def _validated_session(self, query: str):
+        access_token = self._query_arg(query, "access")
+        if access_token:
+            return resolve_shared_access(self.server.workspace_root, access_token)  # type: ignore[attr-defined]
         session_id = self._query_arg(query, "session")
         token = self._query_arg(query, "token")
         if not session_id or not token:
-            raise ValueError("session and token are required.")
+            raise ValueError("access or session/token is required.")
         project, session = resolve_shared_session(self.server.workspace_root, session_id)  # type: ignore[attr-defined]
         validate_share_session(session, token)
         return project, session
@@ -323,8 +327,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             self._write_sse_comment("connected")
             self._write_sse_event("ready", {"ok": True})
             while True:
-                _owner_project, session = resolve_shared_session(self.server.workspace_root, session.session_id)  # type: ignore[attr-defined]
-                validate_share_session(session, self._query_arg(query, "token"))
+                _owner_project, session = self._validated_session(query)
                 payload = self._workspace_status_payload(session, orchestrator=orchestrator)
                 serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
                 if serialized != last_payload:

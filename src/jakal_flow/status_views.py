@@ -50,6 +50,8 @@ def _should_prefer_plan_status(raw_status: str, plan_status: str) -> bool:
         return False
     if normalized_plan in {"running:parallel", "running:closeout"}:
         return normalized_raw != normalized_plan
+    if normalized_raw.startswith("running:") and not normalized_plan.startswith("running:"):
+        return True
     if normalized_plan.startswith("running:") and normalized_raw in _READY_LIKE_STATUSES:
         return True
     return False

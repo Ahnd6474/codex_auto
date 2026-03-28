@@ -218,6 +218,21 @@ class UIBridgeTests(unittest.TestCase):
 
         self.assertEqual(status, "running:parallel")
 
+    def test_effective_project_status_clears_stale_running_step_when_plan_is_idle(self) -> None:
+        status = effective_project_status(
+            "running:st1",
+            ExecutionPlanState(
+                execution_mode="parallel",
+                steps=[
+                    ExecutionStep(step_id="ST1", title="Root", status="completed"),
+                    ExecutionStep(step_id="ST2", title="Frontend", status="pending"),
+                ],
+            ),
+            mock.Mock(pending_checkpoint_approval=False),
+        )
+
+        self.assertEqual(status, "plan_ready")
+
     def test_runtime_from_payload_coerces_invalid_scalar_values(self) -> None:
         runtime = runtime_from_payload(
             {
@@ -2367,6 +2382,38 @@ class UIBridgeTests(unittest.TestCase):
                     share_payload["share"]["active_session"]["session_id"],
                     created["created_share_session"]["session_id"],
                 )
+            finally:
+                run_command("stop_share_server", workspace_root, {})
+
+    def test_share_bridge_reuses_stable_share_url_when_regenerating_link(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+
+            try:
+                run_command("start_share_server", workspace_root, {})
+                first = run_command(
+                    "create_share_session",
+                    workspace_root,
+                    {
+                        "created_by": "unit-test",
+                        "bind_host": "0.0.0.0",
+                        "public_base_url": "https://share.example.com/base",
+                    },
+                )
+                second = run_command(
+                    "create_share_session",
+                    workspace_root,
+                    {
+                        "created_by": "unit-test",
+                        "bind_host": "0.0.0.0",
+                        "public_base_url": "https://share.example.com/base",
+                    },
+                )
+
+                self.assertEqual(first["created_share_session"]["share_url"], second["created_share_session"]["share_url"])
+                self.assertEqual(first["created_share_session"]["local_url"], second["created_share_session"]["local_url"])
+                self.assertNotEqual(first["created_share_session"]["session_id"], second["created_share_session"]["session_id"])
+                self.assertIn("?access=", first["created_share_session"]["share_url"])
             finally:
                 run_command("stop_share_server", workspace_root, {})
 

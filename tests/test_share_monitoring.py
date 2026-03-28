@@ -13,6 +13,7 @@ import unittest
 from unittest import mock
 import urllib.error
 import urllib.request
+from urllib.parse import parse_qs, urlsplit
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -580,6 +581,69 @@ class ShareMonitoringTests(unittest.TestCase):
         self.assertIsNone(payload["local_url"])
         self.assertIsNone(payload["share_url"])
 
+    def test_public_session_summary_keeps_stable_access_link_across_session_regeneration(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            _orchestrator, project = create_project(workspace_root, repo_dir)
+
+            first = create_workspace_share_session(workspace_root, project, expires_in_minutes=60, created_by="test")
+            first_payload = public_session_summary(
+                workspace_root,
+                project,
+                first,
+                include_token=True,
+                server={
+                    "running": True,
+                    "host": "0.0.0.0",
+                    "port": 43123,
+                    "pid": 4242,
+                    "started_at": "2026-03-26T00:00:00+00:00",
+                    "base_url": "http://0.0.0.0:43123",
+                    "viewer_path": "/share/view",
+                    "share_base_url": "https://share.example.com/base",
+                },
+                state=ShareServerState(
+                    host="0.0.0.0",
+                    port=43123,
+                    pid=4242,
+                    started_at="2026-03-26T00:00:00+00:00",
+                    viewer_path="/share/view",
+                ),
+            )
+
+            second = create_workspace_share_session(workspace_root, project, expires_in_minutes=60, created_by="test")
+            second_payload = public_session_summary(
+                workspace_root,
+                project,
+                second,
+                include_token=True,
+                server={
+                    "running": True,
+                    "host": "0.0.0.0",
+                    "port": 43123,
+                    "pid": 4242,
+                    "started_at": "2026-03-26T00:00:00+00:00",
+                    "base_url": "http://0.0.0.0:43123",
+                    "viewer_path": "/share/view",
+                    "share_base_url": "https://share.example.com/base",
+                },
+                state=ShareServerState(
+                    host="0.0.0.0",
+                    port=43123,
+                    pid=4242,
+                    started_at="2026-03-26T00:00:00+00:00",
+                    viewer_path="/share/view",
+                ),
+            )
+
+            self.assertNotEqual(first_payload["session_id"], second_payload["session_id"])
+            self.assertEqual(first_payload["share_url"], second_payload["share_url"])
+            self.assertEqual(first_payload["local_url"], second_payload["local_url"])
+            self.assertIn("?access=", str(first_payload["share_url"]))
+            self.assertEqual(first_payload["access_token"], second_payload["access_token"])
+
     def test_share_logs_api_builds_monitor_status_once(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"
@@ -667,6 +731,35 @@ class ShareMonitoringTests(unittest.TestCase):
                 self.assertNotIn("repo_path", json.dumps(payload))
                 self.assertNotIn("project_root", json.dumps(payload))
 
+                access_payload = public_session_summary(
+                    workspace_root,
+                    project,
+                    session,
+                    include_token=True,
+                    server={
+                        "running": True,
+                        "host": "127.0.0.1",
+                        "port": server.server_address[1],
+                        "pid": 4242,
+                        "started_at": "2026-03-26T00:00:00+00:00",
+                        "base_url": base_url,
+                        "viewer_path": "/share/view",
+                        "share_base_url": base_url,
+                    },
+                    state=ShareServerState(
+                        host="127.0.0.1",
+                        port=server.server_address[1],
+                        pid=4242,
+                        started_at="2026-03-26T00:00:00+00:00",
+                        viewer_path="/share/view",
+                    ),
+                )
+                access_url = str(access_payload["share_url"])
+                access_token = parse_qs(urlsplit(access_url).query).get("access", [""])[0]
+                access_response = urllib.request.urlopen(f"{base_url}/share/api/status?access={access_token}")
+                access_status_payload = json.loads(access_response.read().decode("utf-8"))
+                self.assertEqual(access_status_payload["share_session"]["session_id"], session.session_id)
+
                 with self.assertRaises(urllib.error.HTTPError) as unknown_session:
                     urllib.request.urlopen(
                         f"{base_url}/share/api/status?session=missing-session&token={session.viewer_token}"
@@ -734,6 +827,8 @@ class ShareMonitoringTests(unittest.TestCase):
         self.assertIn("share_link_expired_title", script)
         self.assertIn("share_link_revoked_title", script)
         self.assertIn("share_link_invalid_title", script)
+        self.assertIn('const access = queryValue("access")', script)
+        self.assertIn('applyShareCredentials(url, credentials)', script)
         self.assertIn("await reconcileStatus()", script)
         self.assertNotIn('new URL("/share/api/status", window.location.origin)', script)
         self.assertNotIn('new URL("/share/api/events", window.location.origin)', script)
