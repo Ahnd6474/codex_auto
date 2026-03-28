@@ -7,6 +7,7 @@ import {
   fetchProjectReports,
   fetchProjectWorkspace,
   loadInitialDesktopState,
+  loadWorkspaceShareDetail,
   refreshVisibleProjectState,
 } from "../src/controller/projectQueries.js";
 
@@ -208,6 +209,25 @@ test("project supplement fetches wrap partial bridge payloads for detail merging
     {
       command: "load-project-history",
       payload: { repo_id: "demo" },
+      workspaceRoot: "/workspace",
+    },
+  ]);
+});
+
+test("loadWorkspaceShareDetail fetches workspace share only on demand", async () => {
+  const calls = [];
+  const bridgeRequest = async (command, payload, workspaceRoot) => {
+    calls.push({ command, payload, workspaceRoot });
+    return { share: { active_session: null } };
+  };
+
+  const result = await loadWorkspaceShareDetail(bridgeRequest, "/workspace");
+
+  assert.deepEqual(result, { share: { active_session: null } });
+  assert.deepEqual(calls, [
+    {
+      command: "load-workspace-share",
+      payload: {},
       workspaceRoot: "/workspace",
     },
   ]);

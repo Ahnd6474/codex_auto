@@ -53,6 +53,7 @@ import {
   fetchProjectWorkspace,
   loadInitialDesktopState,
   loadProjectListing,
+  loadWorkspaceShareDetail,
   refreshVisibleProjectState,
   syncRunningJobSnapshot,
 } from "../controller/projectQueries";
@@ -353,6 +354,19 @@ export function useDesktopController() {
     return Boolean(projectDetail?.loaded_sections?.[sectionKey]);
   }
 
+  async function ensureWorkspaceShareLoaded(options = {}) {
+    const force = options.force === true;
+    if (!workspaceRoot) {
+      return null;
+    }
+    if (!force && workspaceShareDetail) {
+      return workspaceShareDetail;
+    }
+    const shareDetail = await loadWorkspaceShareDetail(bridgeRequest, workspaceRoot);
+    setWorkspaceShareDetail(shareDetail?.share || null);
+    return shareDetail?.share || null;
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -363,11 +377,6 @@ export function useDesktopController() {
           return;
         }
         setWorkspaceRoot(bootstrap.workspace_root);
-        const workspaceShare = await bridgeRequest(BRIDGE_COMMANDS.LOAD_WORKSPACE_SHARE, {}, bootstrap.workspace_root);
-        if (cancelled) {
-          return;
-        }
-        setWorkspaceShareDetail(workspaceShare?.share || null);
         setBaseRuntime(bootstrap.default_runtime);
         setModelPresets(bootstrap.model_presets || []);
         setModelCatalog(bootstrap.model_catalog || []);
@@ -568,6 +577,34 @@ export function useDesktopController() {
     sidebarTab,
     workspaceRoot,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWorkspaceShare() {
+      if (!workspaceRoot || pendingAction) {
+        return;
+      }
+      if (centerTab !== "app-settings" || workspaceShareDetail) {
+        return;
+      }
+      try {
+        const shareDetail = await ensureWorkspaceShareLoaded();
+        if (cancelled || !shareDetail) {
+          return;
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setMessage(messagePayload("error", String(error)));
+        }
+      }
+    }
+
+    void loadWorkspaceShare();
+    return () => {
+      cancelled = true;
+    };
+  }, [centerTab, pendingAction, workspaceRoot, workspaceShareDetail]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1444,7 +1481,8 @@ export function useDesktopController() {
   }
 
   async function copyShareLink() {
-    const shareUrl = workspaceShareDetail?.active_session?.share_url || "";
+    const detail = workspaceShareDetail || (await ensureWorkspaceShareLoaded());
+    const shareUrl = detail?.active_session?.share_url || "";
     if (!shareUrl) {
       setMessage(messagePayload("error", translate(language, "message.noShareLinkAvailable")));
       return;
@@ -1486,7 +1524,8 @@ export function useDesktopController() {
   }
 
   async function revokeShareLink() {
-    const sessionId = workspaceShareDetail?.active_session?.session_id || "";
+    const detail = workspaceShareDetail || (await ensureWorkspaceShareLoaded());
+    const sessionId = detail?.active_session?.session_id || "";
     if (!sessionId) {
       setMessage(messagePayload("error", translate(language, "message.noShareLinkAvailable")));
       return;

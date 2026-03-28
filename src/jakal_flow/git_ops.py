@@ -16,6 +16,8 @@ UNTRACKED_OVERWRITE_MARKER = "The following untracked working tree files would b
 
 
 class GitOps:
+    _UNTRACKED_SCRATCH_PREFIXES = ("_tmp_",)
+
     def _safe_directory_args(self, cwd: Path) -> list[str]:
         resolved = cwd.resolve()
         args: list[str] = []
@@ -131,15 +133,35 @@ class GitOps:
         self.run(["remote", "add", remote_name, remote_url], cwd=repo_dir)
 
     def has_changes(self, repo_dir: Path) -> bool:
-        return bool(self.run(["status", "--porcelain"], cwd=repo_dir).stdout.strip())
+        output = self.run(["status", "--porcelain"], cwd=repo_dir).stdout.splitlines()
+        return any(self._parse_status_path(line) is not None for line in output)
 
     def changed_files(self, repo_dir: Path) -> list[str]:
         output = self.run(["status", "--porcelain"], cwd=repo_dir).stdout.splitlines()
         changed: list[str] = []
         for line in output:
-            if len(line) >= 4:
-                changed.append(line[3:].strip())
+            parsed_path = self._parse_status_path(line)
+            if parsed_path is not None:
+                changed.append(parsed_path)
         return changed
+
+    def _parse_status_path(self, line: str) -> str | None:
+        if len(line) < 4:
+            return None
+        status = line[:2]
+        path = line[3:].strip()
+        if not path:
+            return None
+        if status == "??" and self._is_untracked_scratch_path(path):
+            return None
+        return path
+
+    def _is_untracked_scratch_path(self, path: str) -> bool:
+        normalized = path.strip().replace("\\", "/").rstrip("/")
+        if not normalized:
+            return False
+        leaf_name = normalized.rsplit("/", 1)[-1]
+        return any(leaf_name.startswith(prefix) for prefix in self._UNTRACKED_SCRATCH_PREFIXES)
 
     def commit_all(self, repo_dir: Path, message: str, author_name: str | None = None) -> str:
         self.run(["add", "-A"], cwd=repo_dir)

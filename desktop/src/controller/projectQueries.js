@@ -24,6 +24,10 @@ export async function loadProjectListing(bridgeRequest, workspaceRoot) {
   return bridgeRequest(BRIDGE_COMMANDS.LIST_PROJECTS, null, workspaceRoot || null);
 }
 
+export async function loadWorkspaceShareDetail(bridgeRequest, workspaceRoot) {
+  return bridgeRequest(BRIDGE_COMMANDS.LOAD_WORKSPACE_SHARE, {}, workspaceRoot || null);
+}
+
 export async function fetchProjectDetailBySelector(bridgeRequest, selector, workspaceRoot, options = {}) {
   return loadProjectDetail(bridgeRequest, selector, workspaceRoot || null, {
     refreshCodexStatus: options.refreshCodexStatus ?? false,

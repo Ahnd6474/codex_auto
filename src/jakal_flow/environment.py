@@ -8,6 +8,7 @@ from .utils import decode_process_output
 
 
 DEFAULT_GITIGNORE_ENTRIES = [
+    "_tmp_*/",
     ".venv/",
     "__pycache__/",
     ".pytest_cache/",

@@ -3528,13 +3528,14 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         gitignore = project_dir / ".gitignore"
         gitignore.write_text("node_modules/\n", encoding="utf-8")
 
-        changed_first = ensure_gitignore(project_dir, entries=[".venv/", "__pycache__/"])
-        changed_second = ensure_gitignore(project_dir, entries=[".venv/", "__pycache__/"])
+        changed_first = ensure_gitignore(project_dir, entries=["_tmp_*/", ".venv/", "__pycache__/"])
+        changed_second = ensure_gitignore(project_dir, entries=["_tmp_*/", ".venv/", "__pycache__/"])
         content = gitignore.read_text(encoding="utf-8")
         shutil.rmtree(project_dir, ignore_errors=True)
 
         self.assertTrue(changed_first)
         self.assertFalse(changed_second)
+        self.assertIn("_tmp_*/", content)
         self.assertIn(".venv/", content)
         self.assertIn("__pycache__/", content)
 

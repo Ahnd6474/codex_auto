@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+import shutil
 from pathlib import Path
 from unittest import mock
 
@@ -155,6 +156,48 @@ class GitOpsTests(unittest.TestCase):
             temp_dir.cleanup()
 
         self.assertEqual(blocker_contents, "dist/\n")
+
+    def test_changed_files_ignores_untracked_tmp_scratch_directories(self) -> None:
+        repo_dir = Path(__file__).resolve().parents[1] / ".tmp_git_ops_scratch_filter_test"
+        shutil.rmtree(repo_dir, ignore_errors=True)
+        git = GitOps()
+        git.ensure_repository(repo_dir, "main")
+        git.configure_local_identity(repo_dir, "Test User", "test@example.com")
+        (repo_dir / "README.md").write_text("seed\n", encoding="utf-8")
+        git.create_initial_commit(repo_dir, "Initial commit")
+        (repo_dir / "_tmp_remote_experiment_repo").mkdir(parents=True, exist_ok=True)
+        (repo_dir / "_tmp_remote_experiment_repo" / "README.md").write_text("scratch\n", encoding="utf-8")
+        (repo_dir / "docs").mkdir(parents=True, exist_ok=True)
+        (repo_dir / "docs" / "guide.md").write_text("tracked change\n", encoding="utf-8")
+
+        try:
+            changed_files = git.changed_files(repo_dir)
+            has_changes = git.has_changes(repo_dir)
+        finally:
+            shutil.rmtree(repo_dir, ignore_errors=True)
+
+        self.assertEqual(changed_files, ["docs/"])
+        self.assertTrue(has_changes)
+
+    def test_has_changes_returns_false_for_only_untracked_tmp_scratch_directories(self) -> None:
+        repo_dir = Path(__file__).resolve().parents[1] / ".tmp_git_ops_only_scratch_filter_test"
+        shutil.rmtree(repo_dir, ignore_errors=True)
+        git = GitOps()
+        git.ensure_repository(repo_dir, "main")
+        git.configure_local_identity(repo_dir, "Test User", "test@example.com")
+        (repo_dir / "README.md").write_text("seed\n", encoding="utf-8")
+        git.create_initial_commit(repo_dir, "Initial commit")
+        (repo_dir / "_tmp_remote_experiment_repo").mkdir(parents=True, exist_ok=True)
+        (repo_dir / "_tmp_remote_experiment_repo" / "README.md").write_text("scratch\n", encoding="utf-8")
+
+        try:
+            changed_files = git.changed_files(repo_dir)
+            has_changes = git.has_changes(repo_dir)
+        finally:
+            shutil.rmtree(repo_dir, ignore_errors=True)
+
+        self.assertEqual(changed_files, [])
+        self.assertFalse(has_changes)
 
 
 if __name__ == "__main__":
