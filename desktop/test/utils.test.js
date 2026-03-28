@@ -215,6 +215,8 @@ test("defaultCodexPath follows the current platform", () => {
   assert.equal(defaultCodexPath(), process.platform === "win32" ? "codex.cmd" : "codex");
   assert.equal(defaultCodexPath("claude"), process.platform === "win32" ? "claude.cmd" : "claude");
   assert.equal(defaultCodexPath("gemini"), process.platform === "win32" ? "gemini.cmd" : "gemini");
+  assert.equal(defaultCodexPath("qwen_code"), process.platform === "win32" ? "qwen.cmd" : "qwen");
+  assert.equal(defaultCodexPath("deepseek"), process.platform === "win32" ? "claude.cmd" : "claude");
 });
 
 test("program settings helpers keep global runtime controls separate from project-specific values", () => {
@@ -439,6 +441,81 @@ test("applyProviderDefaults switches the runtime path for Claude Code and applie
   assert.equal(runtime.provider_api_key_env, "ANTHROPIC_API_KEY");
 });
 
+test("applyProviderDefaults switches the runtime path for Qwen Code and applies DashScope defaults", () => {
+  const runtime = applyProviderDefaults(
+    {
+      model_provider: "openai",
+      model: "gpt-5.4",
+      model_slug_input: "gpt-5.4",
+      codex_path: defaultCodexPath(),
+    },
+    "qwen_code",
+  );
+
+  assert.equal(runtime.model_provider, "qwen_code");
+  assert.equal(runtime.codex_path, defaultCodexPath("qwen_code"));
+  assert.equal(runtime.model, QWEN_CODE_DEFAULT_MODEL);
+  assert.equal(runtime.model_slug_input, QWEN_CODE_DEFAULT_MODEL);
+  assert.equal(runtime.provider_base_url, "https://dashscope.aliyuncs.com/compatible-mode/v1");
+  assert.equal(runtime.provider_api_key_env, "DASHSCOPE_API_KEY");
+});
+
+test("applyProviderDefaults seeds Claude-compatible vendor defaults", () => {
+  const deepseek = applyProviderDefaults(
+    {
+      model_provider: "openai",
+      model: "gpt-5.4",
+      model_slug_input: "gpt-5.4",
+      codex_path: defaultCodexPath(),
+    },
+    "deepseek",
+  );
+  const minimax = applyProviderDefaults(
+    {
+      model_provider: "openai",
+      model: "gpt-5.4",
+      model_slug_input: "gpt-5.4",
+      codex_path: defaultCodexPath(),
+    },
+    "minimax",
+  );
+  const glm = applyProviderDefaults(
+    {
+      model_provider: "openai",
+      model: "gpt-5.4",
+      model_slug_input: "gpt-5.4",
+      codex_path: defaultCodexPath(),
+    },
+    "glm",
+  );
+
+  assert.equal(deepseek.codex_path, defaultCodexPath("deepseek"));
+  assert.equal(deepseek.model, DEEPSEEK_DEFAULT_MODEL);
+  assert.equal(deepseek.provider_api_key_env, "DEEPSEEK_API_KEY");
+  assert.equal(minimax.model, MINIMAX_DEFAULT_MODEL);
+  assert.equal(minimax.provider_base_url, "https://api.minimax.io/anthropic/v1");
+  assert.equal(glm.model, GLM_DEFAULT_MODEL);
+  assert.equal(glm.provider_base_url, "https://open.bigmodel.cn/api/anthropic");
+});
+
+test("applyProviderDefaults seeds Kimi defaults on the Codex/OpenAI-compatible path", () => {
+  const runtime = applyProviderDefaults(
+    {
+      model_provider: "openai",
+      model: "gpt-5.4",
+      model_slug_input: "gpt-5.4",
+      codex_path: defaultCodexPath(),
+    },
+    "kimi",
+  );
+
+  assert.equal(runtime.model_provider, "kimi");
+  assert.equal(runtime.codex_path, defaultCodexPath());
+  assert.equal(runtime.model, KIMI_DEFAULT_MODEL);
+  assert.equal(runtime.provider_base_url, "https://api.moonshot.cn/v1");
+  assert.equal(runtime.provider_api_key_env, "MOONSHOT_API_KEY");
+});
+
 test("applyProviderDefaults switches the runtime path for the ensemble provider and keeps Codex defaults", () => {
   const runtime = applyProviderDefaults(
     {
@@ -479,6 +556,18 @@ test("blankProjectForm keeps Claude Code projects on the Claude default model", 
   assert.equal(form.runtime.model_provider, "claude");
   assert.equal(form.runtime.model, CLAUDE_DEFAULT_MODEL);
   assert.equal(form.runtime.model_slug_input, CLAUDE_DEFAULT_MODEL);
+});
+
+test("blankProjectForm keeps Qwen Code projects on the Qwen default model", () => {
+  const form = blankProjectForm({
+    model_provider: "qwen_code",
+    provider_api_key_env: "DASHSCOPE_API_KEY",
+    codex_path: defaultCodexPath("qwen_code"),
+  });
+
+  assert.equal(form.runtime.model_provider, "qwen_code");
+  assert.equal(form.runtime.model, QWEN_CODE_DEFAULT_MODEL);
+  assert.equal(form.runtime.model_slug_input, QWEN_CODE_DEFAULT_MODEL);
 });
 
 test("blankProjectForm keeps ensemble projects on the Codex default model", () => {
