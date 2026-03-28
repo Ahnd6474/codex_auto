@@ -205,6 +205,23 @@ Reasoning effort levels:
 | Runtime time/cost estimates | Yes |
 | Codex usage aggregation | Yes |
 
+### Fail-state Guardrails (Run / UI)
+
+To avoid marking a project as `failed` too early, the execution loop applies these safeguards:
+
+1. **Immediate stop is treated as pause, not failure.**  
+   When an immediate stop signal is received, the current or next step transitions to `paused` and the run loop exits cleanly so operators can resume later.
+2. **Stop-after-current-step pauses before the next batch.**  
+   A normal stop request does not force a failure; it pauses scheduling before the next execution batch.
+3. **Join/integration steps retry before final failure.**  
+   Join execution can retry on transient merge/integration problems, and only marks `failed` after retry limits are exhausted.
+4. **Safe revision rollback is applied on join exceptions.**  
+   If a join attempt throws, the repository is reset to the pre-join safe revision before status is finalized.
+5. **Closeout failure is isolated from normal run steps.**  
+   Closeout uses its own `closeout_status`; regular step status does not become failed merely because closeout has not run yet.
+6. **Run-loop exit checks preserve non-failure states.**  
+   The loop exits on `paused` / non-completed step outcomes without forcing a global failure transition unless a step truly ends as failed.
+
 ## Desktop UI
 
 The desktop shell keeps the Python backend intact and adds a control layer for planning, execution, monitoring, and project history management.
