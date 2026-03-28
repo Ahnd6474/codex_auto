@@ -7,6 +7,7 @@ _SPECIAL_RUNNING_STATUSES = {
     "running:generate-plan",
     "running:debugging",
     "running:parallel-debugging",
+    "running:merging",
 }
 _ACTIVE_STEP_STATUSES = {"running", "integrating"}
 _READY_LIKE_STATUSES = {

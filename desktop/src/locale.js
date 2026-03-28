@@ -451,6 +451,7 @@ const STRINGS = {
     "sidebar.searchProjects": "Search projects",
     "sidebar.selectedSummary": "Selected summary",
     "sidebar.targetBlock": "Target block {block}",
+    "status.awaiting_checkpoint_approval": "Awaiting checkpoint approval",
     "status.awaiting_review": "Awaiting review",
     "status.cancelled": "Cancelled",
     "status.closeout_failed": "Closeout failed",
@@ -458,6 +459,8 @@ const STRINGS = {
     "status.completed": "Completed",
     "status.failed": "Failed",
     "status.idle": "Idle",
+    "status.integrating": "Integrating",
+    "status.merging": "Merging",
     "status.not_started": "Not started",
     "status.paused_for_review": "Paused for review",
     "status.pending": "Pending",
@@ -785,6 +788,8 @@ STRINGS.en["progress.closeoutRunning"] = "Completed {completed}/{total} steps, c
 STRINGS.en["progress.closeoutFailed"] = "Completed {completed}/{total} steps, closeout failed";
 STRINGS.en["progress.closeoutPending"] = "Completed {completed}/{total} steps, closeout pending";
 STRINGS.en["progress.runningIds"] = "Completed {completed}/{total} steps, running: {ids}";
+STRINGS.en["progress.integratingIds"] = "Completed {completed}/{total} steps, integrating: {ids}";
+STRINGS.en["progress.runningAndIntegratingIds"] = "Completed {completed}/{total} steps, running: {runningIds}; integrating: {integratingIds}";
 STRINGS.en["progress.readyIds"] = "Completed {completed}/{total} steps, ready: {ids}";
 STRINGS.en["action.backgroundJob"] = "Background Job";
 STRINGS.en["run.closeoutRunning"] = "Running closeout";
@@ -1041,7 +1046,12 @@ KO_HIGH_QUALITY_OVERRIDES["field.backgroundQueuePriority"] = "예약 우선순�
 KO_HIGH_QUALITY_OVERRIDES["run.queuePriority"] = "우선순위 {priority}";
 
 KO_HIGH_QUALITY_OVERRIDES["progress.runningIds"] = "{completed}/{total}\ub2e8\uacc4 \uc644\ub8cc, \uc2e4\ud589 \uc911: {ids}";
+KO_HIGH_QUALITY_OVERRIDES["progress.integratingIds"] = "{completed}/{total}\ub2e8\uacc4 \uc644\ub8cc, \ubcd1\ud569 \uc911: {ids}";
+KO_HIGH_QUALITY_OVERRIDES["progress.runningAndIntegratingIds"] = "{completed}/{total}\ub2e8\uacc4 \uc644\ub8cc, \uc2e4\ud589 \uc911: {runningIds}; \ubcd1\ud569 \uc911: {integratingIds}";
 KO_HIGH_QUALITY_OVERRIDES["progress.readyIds"] = "{completed}/{total}\ub2e8\uacc4 \uc644\ub8cc, \uc2e4\ud589 \uac00\ub2a5: {ids}";
+KO_HIGH_QUALITY_OVERRIDES["status.awaiting_checkpoint_approval"] = "\uccb4\ud06c\ud3ec\uc778\ud2b8 \uc2b9\uc778 \ub300\uae30";
+KO_HIGH_QUALITY_OVERRIDES["status.integrating"] = "\ubcd1\ud569 \uc911";
+KO_HIGH_QUALITY_OVERRIDES["status.merging"] = "\ubcd1\ud569 \uc911";
 KO_HIGH_QUALITY_OVERRIDES["action.archiveAllProjects"] = "모두 보관";
 KO_HIGH_QUALITY_OVERRIDES["action.archiveProject"] = "프로젝트 보관";
 KO_HIGH_QUALITY_OVERRIDES["history.noFlowChart"] = "저장된 플로우 차트가 없습니다.";
@@ -1226,6 +1236,12 @@ export function displayStatus(status, language) {
   }
   if (normalized === "debugging" || normalized === "running:debugging" || normalized === "running:parallel-debugging") {
     return translate(normalizedLanguage, "run.debugging");
+  }
+  if (normalized === "running:merging") {
+    return translate(normalizedLanguage, "status.merging");
+  }
+  if (normalized === "running:closeout") {
+    return translate(normalizedLanguage, "run.closeoutRunning");
   }
   if (normalized === "queued") {
     return translate(normalizedLanguage, "status.queued");

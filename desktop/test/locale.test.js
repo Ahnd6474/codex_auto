@@ -42,6 +42,9 @@ test("displayStatus still localizes existing translations", async () => {
 
   assert.equal(displayStatus("completed", "ko"), "완료");
   assert.equal(displayStatus("paused_for_review", "en"), "Paused for review");
+  assert.equal(displayStatus("integrating", "ko"), "병합 중");
+  assert.equal(displayStatus("running:merging", "en"), "Merging");
+  assert.equal(displayStatus("awaiting_checkpoint_approval", "en"), "Awaiting checkpoint approval");
   assert.equal(displayStatus("running:generate plan", "ko"), "실행 중: generate plan");
   assert.equal(displayStatus("setup_ready", "fr"), "Configuration prête");
 });

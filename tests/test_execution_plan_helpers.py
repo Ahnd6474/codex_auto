@@ -939,6 +939,139 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(mocked_push.call_count, 2)
         self.assertEqual(mocked_pr.call_count, 2)
 
+    def test_run_parallel_execution_batch_promotes_single_leaf_lineage_immediately(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_hybrid_lineage_single_promote_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model="gpt-5.4",
+            effort="medium",
+            test_cmd="python -m pytest",
+            execution_mode="parallel",
+            parallel_workers=1,
+        )
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            context.metadata.current_safe_revision = "safe-main"
+            context.loop_state.current_safe_revision = "safe-main"
+            orchestrator.workspace.save_project(context)
+            orchestrator.save_execution_plan_state(
+                context,
+                ExecutionPlanState(
+                    plan_title="Hybrid Singleton Promotion Demo",
+                    execution_mode="parallel",
+                    default_test_command="python -m pytest",
+                    steps=[
+                        ExecutionStep(step_id="ST1", title="Frontend slice", owned_paths=["desktop/src"]),
+                        ExecutionStep(step_id="ST2", title="Backend slice", status="completed", metadata={"lineage_id": "LN2"}),
+                        ExecutionStep(
+                            step_id="ST3",
+                            title="Join slices",
+                            depends_on=["ST1", "ST2"],
+                            metadata={"step_kind": "join", "merge_from": ["ST1", "ST2"], "join_policy": "all"},
+                        ),
+                    ],
+                ),
+            )
+            orchestrator._save_lineage_states(
+                context,
+                {
+                    "LN2": LineageState(
+                        lineage_id="LN2",
+                        branch_name="jakal-flow-lineage-ln2",
+                        worktree_dir=temp_root / "ln2" / "repo",
+                        project_root=temp_root / "ln2",
+                        created_at="2026-03-27T00:00:00+00:00",
+                        updated_at="2026-03-27T00:00:00+00:00",
+                        head_commit="ln2-head",
+                        safe_revision="ln2-head",
+                        status="merged",
+                        merged_by_step_id="ST0",
+                    ),
+                },
+            )
+            worker_result = {
+                "step_id": "ST1",
+                "status": "completed",
+                "notes": "frontend lineage ok",
+                "commit_hash": "ln1-step",
+                "changed_files": ["desktop/src/App.jsx"],
+                "pass_log": {"pass_type": "block-search-pass"},
+                "block_log": {"status": "completed"},
+                "test_summary": "frontend lineage ok",
+                "head_commit": "ln1-head",
+                "ml_report_payload": {},
+            }
+
+            def fake_promote(promotion_context, lineage):
+                promotion_context.metadata.current_safe_revision = "main-promoted"
+                promotion_context.loop_state.current_safe_revision = "main-promoted"
+                promotion_context.loop_state.last_commit_hash = "main-promoted"
+                return True, "pushed", "main-promoted"
+
+            with mock.patch.object(orchestrator, "setup_local_project", return_value=context), mock.patch.object(
+                orchestrator.git,
+                "add_worktree",
+            ), mock.patch.object(
+                orchestrator,
+                "_parallel_worker_count",
+                return_value=1,
+            ), mock.patch.object(
+                orchestrator,
+                "_build_lineage_context",
+                return_value=mock.Mock(name="lineage-1"),
+            ), mock.patch.object(
+                orchestrator,
+                "_run_lineage_step_worker",
+                return_value=worker_result,
+            ), mock.patch.object(
+                orchestrator,
+                "_promote_lineage_to_target_branch",
+                side_effect=fake_promote,
+            ) as mocked_promote, mock.patch.object(
+                orchestrator,
+                "_push_if_ready",
+            ) as mocked_push, mock.patch.object(
+                orchestrator,
+                "_maybe_open_pull_request",
+            ) as mocked_pr, mock.patch.object(
+                orchestrator,
+                "_cleanup_lineage_worktree",
+            ) as mocked_cleanup:
+                context, plan_state, steps = orchestrator.run_parallel_execution_batch(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    step_ids=["ST1"],
+                )
+                lineage_state = read_json(context.paths.lineage_state_file, default={})
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual([step.step_id for step in steps], ["ST1"])
+        self.assertEqual([step.status for step in steps], ["completed"])
+        self.assertEqual(steps[0].commit_hash, "main-promoted")
+        self.assertEqual(context.metadata.current_safe_revision, "main-promoted")
+        mocked_promote.assert_called_once()
+        mocked_push.assert_not_called()
+        mocked_pr.assert_not_called()
+        mocked_cleanup.assert_called_once()
+        self.assertEqual(
+            {item["lineage_id"]: item["status"] for item in lineage_state["lineages"]},
+            {"LN2": "merged", "LN3": "merged"},
+        )
+        self.assertEqual(
+            {item["lineage_id"]: item["merged_by_step_id"] for item in lineage_state["lineages"]},
+            {"LN2": "ST0", "LN3": "ST1"},
+        )
+
     def test_run_parallel_execution_batch_keeps_completed_lineages_when_one_worker_errors(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_hybrid_lineage_partial_failure_test"
         shutil.rmtree(temp_root, ignore_errors=True)
@@ -1170,7 +1303,11 @@ class ExecutionPlanHelperTests(unittest.TestCase):
                     orchestrator,
                     "_push_if_ready",
                     return_value=(True, "pushed"),
-                ) as mocked_push_if_ready:
+                ) as mocked_push_if_ready, mock.patch.object(
+                    orchestrator,
+                    "_delete_remote_branch_if_present",
+                    return_value=(True, "deleted"),
+                ) as mocked_delete_remote:
                     project, saved, step = orchestrator.run_join_execution_step(
                         project_dir=repo_dir,
                         runtime=runtime,
@@ -1191,6 +1328,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             project.metadata.branch,
             commit_hash="main-integrated",
         )
+        self.assertEqual(mocked_delete_remote.call_count, 3)
         self.assertEqual(mocked_cleanup.call_count, 2)
         mocked_cleanup_integration.assert_called_once()
         self.assertEqual(

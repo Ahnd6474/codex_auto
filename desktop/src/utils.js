@@ -506,7 +506,7 @@ export function computePlanStats(plan = {}) {
   const steps = Array.isArray(plan?.steps) ? plan.steps : [];
   const completed = steps.filter((step) => step.status === "completed").length;
   const failed = steps.filter((step) => step.status === "failed").length;
-  const running = steps.filter((step) => step.status === "running").length;
+  const running = steps.filter((step) => ["running", "integrating"].includes(String(step?.status || "").trim().toLowerCase())).length;
   return {
     total_steps: steps.length,
     completed_steps: completed,
@@ -617,9 +617,49 @@ function readyExecutionNodeIds(plan = {}) {
     .map((step) => step.step_id);
 }
 
-function runningExecutionSteps(plan = {}) {
+function executionStepsByStatus(plan = {}, statuses = []) {
+  const allowed = new Set(statuses.map((status) => String(status || "").trim().toLowerCase()));
   const steps = Array.isArray(plan?.steps) ? plan.steps : [];
-  return steps.filter((step) => step?.status === "running");
+  return steps.filter((step) => allowed.has(String(step?.status || "").trim().toLowerCase()));
+}
+
+function runningExecutionSteps(plan = {}) {
+  return executionStepsByStatus(plan, ["running", "integrating"]);
+}
+
+function activeExecutionStepIds(plan = {}) {
+  return {
+    runningIds: summarizeStepIds(executionStepsByStatus(plan, ["running"])),
+    integratingIds: summarizeStepIds(executionStepsByStatus(plan, ["integrating"])),
+  };
+}
+
+function progressActiveStatusCaption(plan, language = "en", completed = 0, total = 0) {
+  const locale = normalizeLanguage(language);
+  const { runningIds, integratingIds } = activeExecutionStepIds(plan);
+  if (runningIds && integratingIds) {
+    return translate(locale, "progress.runningAndIntegratingIds", {
+      completed,
+      total,
+      runningIds,
+      integratingIds,
+    });
+  }
+  if (runningIds) {
+    return translate(locale, "progress.runningIds", {
+      completed,
+      total,
+      ids: runningIds,
+    });
+  }
+  if (integratingIds) {
+    return translate(locale, "progress.integratingIds", {
+      completed,
+      total,
+      ids: integratingIds,
+    });
+  }
+  return "";
 }
 
 export function planDependencyValidationMessage(plan = {}) {
@@ -942,7 +982,7 @@ export function normalizeInterruptedPlan(plan = null) {
   const nextPlan = cloneValue(plan) || {};
   const rawSteps = Array.isArray(nextPlan.steps) ? nextPlan.steps : [];
   nextPlan.steps = rawSteps.map((step) =>
-    step?.status === "running"
+    ["running", "integrating"].includes(String(step?.status || "").trim().toLowerCase())
       ? {
           ...step,
           status: "pending",
@@ -1607,11 +1647,9 @@ export function executionProgressCaption(plan, language = "en") {
   }
   const usesDag = steps.some((step) => (step?.depends_on || []).length || (step?.owned_paths || []).length);
   if (usesDag) {
-    const runningIds = summarizeStepIds(runningExecutionSteps(plan));
-    if (runningIds) {
-      return locale === "ko"
-        ? `${completed}/${total}단계 완료, 실행 중: ${runningIds}`
-        : `Completed ${completed}/${total} steps, running: ${runningIds}`;
+    const activeCaption = progressActiveStatusCaption(plan, language, completed, total);
+    if (activeCaption) {
+      return activeCaption;
     }
     const completedIds = new Set(steps.filter((step) => step.status === "completed").map((step) => step.step_id));
     const readyIds = steps
@@ -1654,9 +1692,9 @@ export function toolbarProgressCaption(plan) {
   }
   const usesDag = steps.some((step) => (step?.depends_on || []).length || (step?.owned_paths || []).length);
   if (usesDag) {
-    const runningIds = summarizeStepIds(runningExecutionSteps(plan));
-    if (runningIds) {
-      return `Completed ${completed}/${total} steps, running: ${runningIds}`;
+    const activeCaption = progressActiveStatusCaption(plan, "en", completed, total);
+    if (activeCaption) {
+      return activeCaption;
     }
     const completedIds = new Set(steps.filter((step) => step.status === "completed").map((step) => step.step_id));
     const readyIds = steps
@@ -1691,9 +1729,9 @@ function progressDisplayCaption(plan, language = "en", dagAware = false) {
     return translate(locale, "progress.closeoutPending", { completed: completedCount, total: totalCount });
   }
   if (dagAware) {
-    const runningIds = summarizeStepIds(runningExecutionSteps(plan));
-    if (runningIds) {
-      return translate(locale, "progress.runningIds", { completed: completedCount, total: totalCount, ids: runningIds });
+    const activeCaption = progressActiveStatusCaption(plan, locale, completedCount, totalCount);
+    if (activeCaption) {
+      return activeCaption;
     }
     const completedIds = new Set(steps.filter((step) => step.status === "completed").map((step) => step.step_id));
     const readyIds = steps
@@ -1750,6 +1788,9 @@ export function statusTone(status) {
   if (isDebuggingStatus(status)) {
     return "warning";
   }
+  if (normalized === "awaiting_review" || normalized === "awaiting_checkpoint_approval") {
+    return "warning";
+  }
   if (normalized.startsWith("queued")) {
     return "info";
   }
@@ -1758,6 +1799,9 @@ export function statusTone(status) {
   }
   if (normalized.includes("failed")) {
     return "danger";
+  }
+  if (normalized === "integrating") {
+    return "info";
   }
   if (normalized.includes("running")) {
     return "info";

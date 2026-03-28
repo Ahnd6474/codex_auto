@@ -578,7 +578,7 @@ test("running-state helpers fall back to idle project status when no job is acti
     closeout_status: "running",
     steps: [
       { step_id: "ST1", status: "completed" },
-      { step_id: "ST2", status: "running" },
+      { step_id: "ST2", status: "integrating" },
     ],
   };
   const normalizedPlan = normalizeInterruptedPlan(plan);
@@ -1023,6 +1023,44 @@ test("deriveExecutionProgress marks debugger recovery as an active debugging pha
   assert.equal(progress.headlineActivity, "Debugging ST2 - Build | python -m pytest exited with 1");
 });
 
+test("deriveExecutionProgress keeps integrating steps in the active execution set", () => {
+  const progress = deriveExecutionProgress(
+    {
+      project: {
+        current_status: "running:parallel",
+      },
+      activity: [
+        "2026-03-26T09:02:00Z | batch-started | Integrating ST2 while ST3 keeps running",
+      ],
+      plan: {
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [
+          { step_id: "ST1", title: "Plan", status: "completed" },
+          { step_id: "ST2", title: "Integrate", status: "integrating", depends_on: ["ST1"] },
+          { step_id: "ST3", title: "Backend", status: "running", depends_on: ["ST1"] },
+        ],
+      },
+      stats: {
+        total_steps: 3,
+        completed_steps: 1,
+        failed_steps: 0,
+        running_steps: 2,
+        remaining_steps: 2,
+      },
+    },
+    null,
+    {
+      status: "running",
+      command: "run-plan",
+    },
+  );
+
+  assert.equal(progress.isActive, true);
+  assert.deepEqual(progress.runningStepList.map((step) => step.step_id), ["ST2", "ST3"]);
+  assert.equal(progress.runningStep?.status, "integrating");
+});
+
 test("buildProjectPayload trims fields, blanks origin_url for existing repos, and clones plan data", () => {
   const form = {
     project_dir: "  C:/work/demo  ",
@@ -1333,6 +1371,9 @@ test("statusTone maps operational states to UI tones", () => {
   assert.equal(statusTone("running"), "info");
   assert.equal(statusTone("running:debugging"), "warning");
   assert.equal(statusTone("running:parallel-debugging"), "warning");
+  assert.equal(statusTone("integrating"), "info");
+  assert.equal(statusTone("awaiting_review"), "warning");
+  assert.equal(statusTone("awaiting_checkpoint_approval"), "warning");
   assert.equal(statusTone("cancelled"), "neutral");
   assert.equal(statusTone("completed"), "success");
   assert.equal(statusTone("paused_for_review"), "warning");
@@ -1375,12 +1416,12 @@ test("display progress captions include closeout in the visible total", () => {
     executionProgressCaptionDisplay({
       steps: [
         { step_id: "ST1", status: "completed" },
-        { step_id: "ST2", status: "pending", depends_on: ["ST1"], owned_paths: ["desktop/src"] },
-        { step_id: "ST3", status: "pending", depends_on: ["ST1"], owned_paths: ["src/jakal_flow"] },
+        { step_id: "ST2", status: "integrating", depends_on: ["ST1"], owned_paths: ["desktop/src"] },
+        { step_id: "ST3", status: "running", depends_on: ["ST1"], owned_paths: ["src/jakal_flow"] },
       ],
       closeout_status: "not_started",
     }),
-    "Completed 1/4 steps, ready: ST2, ST3",
+    "Completed 1/4 steps, running: ST3; integrating: ST2",
   );
   assert.equal(
     toolbarProgressCaptionDisplay({

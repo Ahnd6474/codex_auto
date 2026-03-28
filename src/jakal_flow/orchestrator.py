@@ -1077,6 +1077,81 @@ class Orchestrator:
             detail = str(exc).strip().splitlines()[0] if str(exc).strip() else "unknown_error"
             return False, f"push_failed:{detail}"
 
+    def _delete_remote_branch_if_present(
+        self,
+        context: ProjectContext,
+        repo_dir: Path,
+        branch: str,
+        remote_name: str = "origin",
+    ) -> tuple[bool, str]:
+        target_branch = branch.strip()
+        if not context.runtime.allow_push:
+            return False, "push_disabled"
+        if not repo_dir.exists():
+            return False, "missing_repo_dir"
+        if not target_branch:
+            return False, "missing_branch"
+        remote_url = self.git.remote_url(repo_dir, remote_name)
+        if not remote_url:
+            return False, "missing_remote"
+        remote_head = self.git.remote_branch_revision(repo_dir, remote_name, target_branch)
+        if not remote_head:
+            return False, "missing_remote_branch"
+        try:
+            self.git.delete_remote_branch(repo_dir, remote_name, target_branch)
+            return True, "deleted"
+        except Exception as exc:
+            detail = str(exc).strip().splitlines()[0] if str(exc).strip() else "unknown_error"
+            return False, f"delete_failed:{detail}"
+
+    def _can_auto_promote_lineage_step(
+        self,
+        step: ExecutionStep,
+        child_counts: dict[str, int],
+        *,
+        batch_size: int,
+    ) -> bool:
+        return batch_size == 1 and self._step_kind(step) == "task" and child_counts.get(step.step_id, 0) == 0
+
+    def _promote_lineage_to_target_branch(
+        self,
+        context: ProjectContext,
+        lineage: LineageState,
+    ) -> tuple[bool, str, str | None]:
+        base_safe_revision = str(
+            context.metadata.current_safe_revision
+            or context.loop_state.current_safe_revision
+            or self.git.current_revision(context.paths.repo_dir)
+        ).strip()
+        branch_name = str(lineage.branch_name or "").strip()
+        if not branch_name:
+            return False, "missing_lineage_branch", None
+        try:
+            self.git.merge_ff_only(context.paths.repo_dir, branch_name)
+            integrated_revision = self.git.current_revision(context.paths.repo_dir)
+        except Exception as exc:
+            self.git.hard_reset(context.paths.repo_dir, base_safe_revision)
+            detail = str(exc).strip().splitlines()[0] if str(exc).strip() else "unknown_error"
+            return False, f"merge_failed:{detail}", None
+
+        context.metadata.current_safe_revision = integrated_revision
+        context.loop_state.current_safe_revision = integrated_revision
+        context.loop_state.last_commit_hash = integrated_revision
+        pushed, push_reason = self._push_if_ready(
+            context,
+            context.paths.repo_dir,
+            context.metadata.branch,
+            commit_hash=integrated_revision,
+        )
+        if pushed or push_reason == "already_up_to_date":
+            return True, push_reason, integrated_revision
+
+        self.git.hard_reset(context.paths.repo_dir, base_safe_revision)
+        context.metadata.current_safe_revision = base_safe_revision
+        context.loop_state.current_safe_revision = base_safe_revision
+        context.loop_state.last_commit_hash = base_safe_revision
+        return False, push_reason, None
+
     def _run_lineage_execution_batch(
         self,
         context: ProjectContext,
@@ -1295,6 +1370,35 @@ class Orchestrator:
                         lineage.safe_revision = head_commit
                     lineage.status = "active"
                     lineage.notes = str(worker_result.get("test_summary") or worker_result.get("notes") or "").strip()
+
+                    promotion_result = {"promoted": False, "reason": "not_applicable", "commit_hash": None}
+                    if self._can_auto_promote_lineage_step(step, child_counts, batch_size=len(ordered_targets)):
+                        promoted, promotion_reason, integrated_revision = self._promote_lineage_to_target_branch(context, lineage)
+                        promotion_result = {
+                            "promoted": promoted,
+                            "reason": promotion_reason,
+                            "commit_hash": integrated_revision,
+                        }
+                        if promoted:
+                            lineage.status = "merged"
+                            lineage.merged_by_step_id = step.step_id
+                            lineage.updated_at = completion_time
+                            if integrated_revision:
+                                lineage.head_commit = integrated_revision
+                                lineage.safe_revision = integrated_revision
+                            lineage.notes = (
+                                lineage.notes + f" | Merged into `{context.metadata.branch}` immediately."
+                            ).strip(" |")
+                            worker_result["lineage_promotion"] = promotion_result
+                            self._cleanup_lineage_worktree(context.paths.repo_dir, lineage)
+                            step.status = "completed"
+                            step.completed_at = completion_time
+                            step.commit_hash = integrated_revision or (lineage.head_commit or None)
+                            step.notes = lineage.notes or "Lineage step completed successfully."
+                            continue
+                        if promotion_reason not in {"not_applicable"}:
+                            lineage.notes = (lineage.notes + f" | Immediate merge skipped: {promotion_reason}").strip(" |")
+                    worker_result["lineage_promotion"] = promotion_result
 
                     push_result = {"pushed": False, "reason": "missing_head_commit"}
                     if lineage.head_commit:
@@ -2160,6 +2264,7 @@ class Orchestrator:
         context: ProjectContext,
         runtime: RuntimeOptions,
         step_id: str | None = None,
+        allow_push: bool = True,
     ) -> tuple[ProjectContext, ExecutionPlanState, ExecutionStep]:
         plan_state = self.load_execution_plan_state(context)
         if not plan_state.steps:
@@ -2201,7 +2306,7 @@ class Orchestrator:
             target_step,
             execution_mode=previous_runtime.execution_mode or "parallel",
             max_blocks=1,
-            allow_push=True,
+            allow_push=allow_push,
             approval_mode=runtime.approval_mode,
             sandbox_mode=runtime.sandbox_mode,
             require_checkpoint_approval=False,
@@ -2913,6 +3018,7 @@ class Orchestrator:
                 context=integration_context,
                 runtime=runtime,
                 step_id=target_step.step_id,
+                allow_push=False,
             )
         except ImmediateStopRequested as exc:
             if integration_info is not None:
@@ -2995,6 +3101,18 @@ class Orchestrator:
         refreshed_step.notes = result_step.notes or "Join step completed successfully."
         if not pushed and push_reason not in {"already_up_to_date"}:
             refreshed_step.notes = f"{refreshed_step.notes} (push skipped: {push_reason})"
+        if pushed or push_reason == "already_up_to_date":
+            remote_cleanup_notes: list[str] = []
+            for candidate_branch in [lineage.branch_name for lineage in merge_lineages] + ([branch_name] if branch_name else []):
+                deleted, delete_reason = self._delete_remote_branch_if_present(
+                    context,
+                    context.paths.repo_dir,
+                    candidate_branch,
+                )
+                if delete_reason not in {"deleted", "missing_remote_branch", "push_disabled", "missing_remote"}:
+                    remote_cleanup_notes.append(f"{candidate_branch}: {delete_reason}")
+            if remote_cleanup_notes:
+                refreshed_step.notes = f"{refreshed_step.notes} (remote cleanup: {'; '.join(remote_cleanup_notes)})"
         saved = self.save_execution_plan_state(context, refreshed)
         context.metadata.current_status = self._status_from_plan_state(saved)
 

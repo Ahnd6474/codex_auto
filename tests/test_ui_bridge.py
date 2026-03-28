@@ -218,6 +218,22 @@ class UIBridgeTests(unittest.TestCase):
 
         self.assertEqual(status, "running:parallel")
 
+    def test_effective_project_status_preserves_explicit_merge_phase(self) -> None:
+        status = effective_project_status(
+            "running:merging",
+            ExecutionPlanState(
+                execution_mode="parallel",
+                steps=[
+                    ExecutionStep(step_id="ST1", title="Root", status="completed"),
+                    ExecutionStep(step_id="ST2", title="Frontend", depends_on=["ST1"], owned_paths=["desktop/src"], status="integrating"),
+                    ExecutionStep(step_id="ST3", title="Backend", depends_on=["ST1"], owned_paths=["src/jakal_flow"], status="running"),
+                ],
+            ),
+            mock.Mock(pending_checkpoint_approval=False),
+        )
+
+        self.assertEqual(status, "running:merging")
+
     def test_effective_project_status_clears_stale_running_step_when_plan_is_idle(self) -> None:
         status = effective_project_status(
             "running:st1",

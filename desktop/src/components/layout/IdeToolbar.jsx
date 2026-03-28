@@ -19,9 +19,11 @@ export function IdeToolbar({
   const livePlan = String(activeJob?.status || "").trim().toLowerCase() === "running" && projectDetail?.plan ? projectDetail.plan : planDraft;
   const projectName = projectDetail?.project?.display_name || projectDetail?.project?.slug || null;
   const { language, t } = useI18n();
+  const normalizedProjectStatus = String(projectStatus || "").trim().toLowerCase();
   const statusLabel =
     String(activeJob?.status || "").trim().toLowerCase() === "running"
     && !isDebuggingStatus(projectDetail?.project?.current_status || "")
+    && normalizedProjectStatus !== "running:merging"
       ? commandLabel(activeJob.command, language)
       : displayStatus(projectStatus, language);
 

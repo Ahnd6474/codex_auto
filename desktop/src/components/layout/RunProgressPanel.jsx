@@ -57,6 +57,10 @@ export function RunProgressPanel({ detail, planDraft, activeJob }) {
     currentWork = t("run.closeoutRunning");
   } else if (progress.phase === "debugging") {
     currentWork = t("run.debugging");
+  } else if (String(progress.status || "").trim().toLowerCase() === "running:merging") {
+    currentWork = displayStatus(progress.status, language);
+  } else if (String(progress.runningStep?.status || "").trim().toLowerCase() === "integrating") {
+    currentWork = `${displayStatus("integrating", language)} ${stepLabel(progress.runningStep)}`.trim();
   } else if ((progress.runningStepList || []).length > 1) {
     currentWork = t("run.workingOnSteps", { steps: runningStepLabels(progress.runningStepList) });
   } else if (progress.runningStep) {
@@ -79,7 +83,11 @@ export function RunProgressPanel({ detail, planDraft, activeJob }) {
   const badgeLabel =
     progress.phase === "debugging"
       ? displayStatus(progress.status || "running:debugging", language)
-      : commandLabel(progress.command, language) || t("action.backgroundJob");
+      : String(progress.status || "").trim().toLowerCase() === "running:merging"
+        ? displayStatus(progress.status, language)
+        : String(progress.runningStep?.status || "").trim().toLowerCase() === "integrating"
+          ? displayStatus("integrating", language)
+          : commandLabel(progress.command, language) || t("action.backgroundJob");
 
   return (
     <section className="run-progress-banner">

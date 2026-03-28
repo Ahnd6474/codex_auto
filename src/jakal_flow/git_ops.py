@@ -161,6 +161,9 @@ class GitOps:
     def push(self, repo_dir: Path, branch: str) -> None:
         self.run(["push", "origin", branch], cwd=repo_dir)
 
+    def delete_remote_branch(self, repo_dir: Path, remote_name: str, branch_name: str) -> None:
+        self.run(["push", remote_name, "--delete", branch_name], cwd=repo_dir)
+
     def branch_exists(self, repo_dir: Path, branch_name: str) -> bool:
         result = self.run(["rev-parse", "--verify", f"refs/heads/{branch_name}"], cwd=repo_dir, check=False)
         return result.returncode == 0
