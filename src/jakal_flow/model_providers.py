@@ -31,6 +31,18 @@ class ProviderPreset:
 
 
 PROVIDER_PRESETS: dict[str, ProviderPreset] = {
+    "ensemble": ProviderPreset(
+        provider="ensemble",
+        display_name="GPT + Gemini + Claude Ensemble",
+        description=(
+            "Use Codex CLI as the primary planner and general executor while allowing per-step routing "
+            "to Claude Code or Gemini CLI when the plan pins those backends."
+        ),
+        default_api_key_env="OPENAI_API_KEY",
+        default_billing_mode=BILLING_MODE_INCLUDED,
+        supports_auto_model=True,
+        supports_catalog=True,
+    ),
     "openai": ProviderPreset(
         provider="openai",
         display_name="OpenAI / Codex Cloud",
@@ -127,7 +139,7 @@ def provider_supports_catalog(value: str) -> bool:
 
 
 def provider_uses_openai_compatible_api(value: str) -> bool:
-    return normalize_model_provider(value) in {"openai", "openrouter", "opencdk", "local_openai"}
+    return normalize_model_provider(value) in {"ensemble", "openai", "openrouter", "opencdk", "local_openai"}
 
 
 def normalize_billing_mode(value: str, provider: str, fallback: str | None = None) -> str:

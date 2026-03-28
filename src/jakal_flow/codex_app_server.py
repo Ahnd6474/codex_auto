@@ -24,7 +24,7 @@ MODEL_PAGE_LIMIT = 100
 
 def resolve_codex_path(codex_path: str) -> str:
     codex_path = str(codex_path or "").strip() or default_codex_path()
-    if codex_path.lower() in {"codex.cmd", "claude.cmd"}:
+    if codex_path.lower() in {"codex.cmd", "claude.cmd", "gemini.cmd"}:
         appdata = os.environ.get("APPDATA")
         if appdata:
             candidate = Path(appdata) / "npm" / codex_path

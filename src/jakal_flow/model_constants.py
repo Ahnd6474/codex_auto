@@ -5,6 +5,7 @@ VALID_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
 DEFAULT_MODEL_PROVIDER = "openai"
 VALID_MODEL_PROVIDERS = {
     DEFAULT_MODEL_PROVIDER,
+    "ensemble",
     "claude",
     "gemini",
     "openrouter",

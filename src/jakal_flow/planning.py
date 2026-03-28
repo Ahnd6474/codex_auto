@@ -9,7 +9,7 @@ from typing import Any
 
 from .model_selection import normalize_reasoning_effort
 from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, ProjectContext
-from .step_models import resolve_step_model_choice
+from .step_models import planning_model_selection_guidance, resolve_step_model_choice
 from .utils import compact_text, normalize_workflow_mode, now_utc_iso, parse_json_text, read_text, similarity_score, svg_text_element, tokenize, wrap_svg_text, write_text
 
 
@@ -670,6 +670,7 @@ def prompt_to_execution_plan_prompt(
             source=compact_inputs["source"],
             user_prompt=user_prompt.strip(),
             planner_outline=compact_text(planner_outline.strip(), 4000) or "Planner Agent A output unavailable.",
+            model_selection_guidance=planning_model_selection_guidance(runtime),
         )
     except KeyError as exc:
         raise ValueError(f"Unknown placeholder in plan generation prompt template: {exc.args[0]}") from exc

@@ -16,6 +16,7 @@ import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from jakal_flow.cli import main as cli_main
+from jakal_flow.bridge_events import bridge_event_context
 import jakal_flow.ui_bridge as ui_bridge
 import jakal_flow.ui_bridge_payloads as ui_bridge_payloads
 from jakal_flow.models import ExecutionPlanState, ExecutionStep
@@ -23,6 +24,7 @@ from jakal_flow.share import share_server_status_payload
 from jakal_flow.status_views import effective_project_status
 from jakal_flow.ui_bridge import default_workspace_root, progress_caption, run_command, runtime_from_payload
 from jakal_flow.step_models import CLAUDE_DEFAULT_MODEL, GEMINI_DEFAULT_MODEL
+from jakal_flow.workspace import WorkspaceManager
 
 
 def local_temp_root() -> Path:
@@ -98,6 +100,56 @@ def fake_codex_snapshot() -> mock.Mock:
 
 
 class UIBridgeTests(unittest.TestCase):
+    def test_workspace_save_project_emits_bridge_ui_event_for_running_state(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            project_dir = temp_dir / "repo"
+            workspace = WorkspaceManager(workspace_root)
+            context = workspace.initialize_local_project(project_dir, "main", runtime_from_payload({}), display_name="Demo")
+            context.metadata.current_status = "running:st1"
+            context.metadata.last_run_at = "2026-03-28T10:00:00+00:00"
+            context.loop_state.current_task = "Execute ST1"
+
+            events: list[tuple[str, dict]] = []
+
+            class Sink:
+                def emit(self, event: str, payload: dict | None = None) -> None:
+                    events.append((event, payload or {}))
+
+            with bridge_event_context(Sink()):
+                workspace.save_project(context)
+
+            self.assertEqual(len(events), 1)
+            event_name, payload = events[0]
+            self.assertEqual(event_name, "project.ui_event")
+            self.assertEqual(payload["repo_id"], context.metadata.repo_id)
+            self.assertEqual(payload["project_dir"], str(context.metadata.repo_path))
+            self.assertEqual(payload["project_status"], "running:st1")
+            self.assertEqual(payload["event"]["event_type"], "project-state-synced")
+            self.assertEqual(payload["event"]["details"]["current_task"], "Execute ST1")
+            self.assertTrue(payload["event"]["details"]["last_run_at"])
+
+    def test_workspace_save_project_skips_bridge_ui_event_for_idle_state(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            project_dir = temp_dir / "repo"
+            workspace = WorkspaceManager(workspace_root)
+            context = workspace.initialize_local_project(project_dir, "main", runtime_from_payload({}), display_name="Demo")
+            context.metadata.current_status = "plan_ready"
+            context.loop_state.current_task = None
+            context.loop_state.pending_checkpoint_approval = False
+
+            events: list[tuple[str, dict]] = []
+
+            class Sink:
+                def emit(self, event: str, payload: dict | None = None) -> None:
+                    events.append((event, payload or {}))
+
+            with bridge_event_context(Sink()):
+                workspace.save_project(context)
+
+            self.assertEqual(events, [])
+
     def test_start_share_server_process_replaces_stale_state_file(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"

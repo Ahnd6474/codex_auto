@@ -156,6 +156,7 @@ export function AppSettingsView({
                   }
                   disabled={runtimeBusy}
                 >
+                  <option value="ensemble">{t("option.providerEnsemble")}</option>
                   <option value="openai">{t("option.providerOpenAI")}</option>
                   <option value="claude">Claude Code</option>
                   <option value="gemini">Gemini CLI</option>

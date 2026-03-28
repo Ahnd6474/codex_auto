@@ -136,7 +136,7 @@ export function detailApplySignature(detail = null, runningJob = null) {
 export const AUTO_REASONING_OPTION = "auto";
 export const REASONING_OPTIONS = ["low", "medium", "high", "xhigh"];
 export const MODEL_REASONING_OPTIONS = [AUTO_REASONING_OPTION, ...REASONING_OPTIONS];
-export const MODEL_PROVIDER_OPTIONS = ["openai", "claude", "gemini", "openrouter", "opencdk", "local_openai", "oss"];
+export const MODEL_PROVIDER_OPTIONS = ["openai", "ensemble", "claude", "gemini", "openrouter", "opencdk", "local_openai", "oss"];
 export const PROGRAM_RUNTIME_KEYS = [
   "model_provider",
   "local_model_provider",
@@ -179,8 +179,8 @@ export const DEFAULT_DASHBOARD_VISIBILITY = Object.freeze({
   word_report_card: true,
 });
 export const PROGRAM_UI_KEYS = ["ui_theme", "developer_mode", "dashboard_visibility", "background_concurrency_limit"];
-export const CLAUDE_DEFAULT_MODEL = "sonnet";
-export const GEMINI_DEFAULT_MODEL = "gemini-3-flash";
+export const CLAUDE_DEFAULT_MODEL = "claude-sonnet-4-6";
+export const GEMINI_DEFAULT_MODEL = "gemini-3-flash-preview";
 
 const LEGACY_DASHBOARD_VISIBILITY_ALIASES = Object.freeze({
   rate_limit_window_5h: "rate_limits",
@@ -343,8 +343,14 @@ export function defaultModelForProvider(provider = "openai", runtime = {}) {
   if (normalizedProvider === "gemini") {
     return currentModel.startsWith("gemini") ? currentModel : GEMINI_DEFAULT_MODEL;
   }
-  if (normalizedProvider === "openai") {
-    return currentModel || "gpt-5.4";
+  if (normalizedProvider === "ensemble" || normalizedProvider === "openai") {
+    if (!currentModel) {
+      return "gpt-5.4";
+    }
+    if (currentModel === "auto") {
+      return "auto";
+    }
+    return looksLikeClaudeModel(currentModel) || currentModel.startsWith("gemini") ? "gpt-5.4" : currentModel;
   }
   if (normalizedProvider === "oss") {
     return currentModel;
@@ -360,8 +366,12 @@ export function applyProviderDefaults(runtime = {}, nextProvider = "openai", nex
   const localProvider = provider === "oss" ? (String(nextLocalProvider || runtime?.local_model_provider || "ollama").trim().toLowerCase() === "lmstudio" ? "lmstudio" : "ollama") : "";
   const supportsAuto = providerSupportsAutoModel(provider);
   const currentModel = String(runtime?.model_slug_input || runtime?.model || "").trim().toLowerCase();
+  const autoModelBase =
+    previousProvider === provider
+      ? (currentModel || "auto")
+      : defaultModelForProvider(provider, { ...runtime, model: "", model_slug_input: "" });
   const nextModel = supportsAuto
-    ? (currentModel || "auto")
+    ? autoModelBase
     : provider === "claude" && !looksLikeClaudeModel(currentModel)
       ? CLAUDE_DEFAULT_MODEL
     : provider === "gemini" && !currentModel.startsWith("gemini")
@@ -1291,6 +1301,8 @@ export function defaultProviderBaseUrl(provider = "openai") {
 
 export function defaultProviderApiKeyEnv(provider = "openai") {
   switch (String(provider || "").trim().toLowerCase()) {
+    case "ensemble":
+      return "OPENAI_API_KEY";
     case "claude":
       return "ANTHROPIC_API_KEY";
     case "gemini":
@@ -1319,16 +1331,20 @@ export function defaultBillingMode(provider = "openai") {
 }
 
 export function providerSupportsAutoModel(provider = "openai") {
-  return String(provider || "").trim().toLowerCase() === "openai";
+  const normalized = String(provider || "").trim().toLowerCase();
+  return normalized === "openai" || normalized === "ensemble";
 }
 
 export function providerSupportsCatalog(provider = "openai") {
   const normalized = String(provider || "").trim().toLowerCase();
-  return normalized === "openai" || normalized === "oss";
+  return normalized === "openai" || normalized === "ensemble" || normalized === "oss";
 }
 
 export function providerDisplayName(provider = "openai", localProvider = "") {
   const normalized = String(provider || "").trim().toLowerCase();
+  if (normalized === "ensemble") {
+    return "GPT+Gemini+Claude Ensemble";
+  }
   if (normalized === "claude") {
     return "Claude Code";
   }
@@ -1390,7 +1406,8 @@ export function filterModelCatalogByProvider(modelCatalog = [], runtime = {}) {
   }
   return (modelCatalog || []).filter((item) => {
     const itemProvider = String(item?.provider || "openai").trim().toLowerCase() || "openai";
-    if (itemProvider !== provider) {
+    const matchesProvider = provider === "ensemble" ? itemProvider === "openai" : itemProvider === provider;
+    if (!matchesProvider) {
       return false;
     }
     if (provider !== "oss") {

@@ -4,10 +4,12 @@ import { ExecutionFlowChart } from "../common/ExecutionFlowChart";
 import {
   basename,
   canEditStep,
+  CLAUDE_DEFAULT_MODEL,
   commandLabel,
   effectiveStepStatus,
   formatDurationCompact,
   formatUsd,
+  GEMINI_DEFAULT_MODEL,
   isSystemStep,
   parallelLimitDescription,
   parallelLimitTone,

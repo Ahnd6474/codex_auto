@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 from uuid import uuid4
 
+from .bridge_events import emit_bridge_event
 from .models import LoopCounters, LoopState, ProjectContext, ProjectPaths, RepoMetadata, RuntimeOptions
 from .parallel_resources import normalize_parallel_worker_mode
 from .utils import ensure_dir, now_utc_iso, read_json, remove_tree, stable_repo_identity, write_json
@@ -272,16 +273,49 @@ class WorkspaceManager:
             "display_name": str(context.metadata.display_name or context.metadata.slug),
         }
 
+    def _should_emit_project_state_sync(self, context: ProjectContext) -> bool:
+        status = str(context.metadata.current_status or "").strip().lower()
+        current_task = str(context.loop_state.current_task or "").strip()
+        return (
+            status.startswith("running:")
+            or bool(current_task)
+            or bool(context.loop_state.pending_checkpoint_approval)
+        )
+
+    def _emit_project_state_sync(self, context: ProjectContext) -> None:
+        if not self._should_emit_project_state_sync(context):
+            return
+        emit_bridge_event(
+            "project.ui_event",
+            {
+                "repo_id": context.metadata.repo_id,
+                "project_dir": str(context.metadata.repo_path),
+                "project_status": str(context.metadata.current_status or "").strip(),
+                "event": {
+                    "timestamp": now_utc_iso(),
+                    "event_type": "project-state-synced",
+                    "message": "Project state updated during execution.",
+                    "details": {
+                        "current_task": str(context.loop_state.current_task or "").strip(),
+                        "pending_checkpoint_approval": bool(context.loop_state.pending_checkpoint_approval),
+                        "last_run_at": str(context.metadata.last_run_at or "").strip(),
+                    },
+                },
+            },
+        )
+
     def save_project(self, context: ProjectContext) -> None:
         self._write_project_files(context)
         registry = self._read_registry()
         if context.metadata.archived and context.metadata.archive_id:
             registry["history"][context.metadata.archive_id] = self._history_registry_item(context)
             self._write_registry(registry)
+            self._emit_project_state_sync(context)
             return
         if context.metadata.repo_id in registry["projects"]:
             registry["projects"][context.metadata.repo_id] = self._active_registry_item(context)
             self._write_registry(registry)
+        self._emit_project_state_sync(context)
 
     def load_project_by_id(self, repo_id: str) -> ProjectContext:
         registry = self._read_registry()

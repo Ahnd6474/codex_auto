@@ -330,6 +330,7 @@ class Orchestrator:
                 planner_outline=planner_outline,
                 execution_mode=normalized_execution_mode,
             )
+            steps = self._materialize_generated_step_models(steps, runtime)
         if not steps:
             steps = [
                 ExecutionStep(
@@ -454,6 +455,31 @@ class Orchestrator:
                 shared_contracts=shared_contracts,
             )
         return processed_steps
+
+    def _materialize_generated_step_models(
+        self,
+        steps: list[ExecutionStep],
+        runtime: RuntimeOptions,
+    ) -> list[ExecutionStep]:
+        if str(getattr(runtime, "model_provider", "") or "").strip().lower() != "ensemble":
+            return steps
+
+        materialized: list[ExecutionStep] = []
+        for step in steps:
+            next_step = deepcopy(step)
+            choice = resolve_step_model_choice(next_step, runtime)
+            metadata = deepcopy(next_step.metadata) if isinstance(next_step.metadata, dict) else {}
+            if not next_step.model_provider:
+                next_step.model_provider = choice.provider
+            if not next_step.model:
+                next_step.model = choice.model
+            if "model_selection_source" not in metadata:
+                metadata["model_selection_source"] = choice.source
+            if "model_selection_reason" not in metadata:
+                metadata["model_selection_reason"] = choice.reason
+            next_step.metadata = metadata
+            materialized.append(next_step)
+        return materialized
 
     def _parse_planner_outline_payload(self, planner_outline: str) -> dict[str, object]:
         raw = planner_outline.strip()
