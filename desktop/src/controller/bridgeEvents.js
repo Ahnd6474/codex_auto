@@ -1,4 +1,4 @@
-import { BRIDGE_EVENTS } from "../bridgeProtocol";
+import { BRIDGE_EVENTS } from "../bridgeProtocol.js";
 
 export function bridgeEventType(eventPayload) {
   return String(eventPayload?.event || "").trim();
@@ -9,7 +9,24 @@ export function bridgeEventJob(eventPayload) {
 }
 
 export function bridgeEventProject(eventPayload) {
-  return eventPayload?.payload?.project || null;
+  const payload = eventPayload?.payload;
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  if (payload.project && typeof payload.project === "object") {
+    return payload.project;
+  }
+  const repoId = String(payload.repo_id || "").trim();
+  const projectDir = String(payload.project_dir || "").trim();
+  const status = String(payload.status || payload.project_status || "").trim();
+  if (!repoId && !projectDir && !status) {
+    return null;
+  }
+  return {
+    repo_id: repoId,
+    project_dir: projectDir,
+    status,
+  };
 }
 
 export function isJobUpdatedEvent(eventPayload) {

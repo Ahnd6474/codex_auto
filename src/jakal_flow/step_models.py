@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
+from pathlib import Path
 import re
 
 from .model_constants import VALID_MODEL_PROVIDERS
 from .models import ExecutionStep, RuntimeOptions
 
 GEMINI_DEFAULT_MODEL = "gemini-3-flash"
+_GEMINI_AUTH_ENV_VARS = (
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "GOOGLE_GENAI_USE_VERTEXAI",
+    "GOOGLE_GENAI_USE_GCA",
+)
 
 _UI_PATH_PREFIXES = (
     "desktop/",
@@ -57,6 +65,9 @@ def resolve_step_model_choice(step: ExecutionStep, runtime: RuntimeOptions) -> S
 
     inferred_provider = "gemini" if _looks_like_ui_step(step) else "openai"
     reason = "AGENTS.md UI preference" if inferred_provider == "gemini" else "AGENTS.md Codex preference"
+    if inferred_provider == "gemini" and not gemini_available_for_auto_selection():
+        inferred_provider = "openai"
+        reason = "AGENTS.md UI preference skipped because Gemini auth is not configured"
     return StepModelChoice(
         provider=inferred_provider,
         model=explicit_model or _default_model_for_provider(inferred_provider, runtime),
@@ -97,3 +108,21 @@ def _looks_like_ui_step(step: ExecutionStep) -> bool:
         ]
     )
     return bool(_UI_KEYWORD_PATTERN.search(text))
+
+
+def gemini_available_for_auto_selection() -> bool:
+    return _gemini_auth_env_configured() or _gemini_settings_file_configured()
+
+
+def _gemini_auth_env_configured() -> bool:
+    return any(str(os.environ.get(name, "")).strip() for name in _GEMINI_AUTH_ENV_VARS)
+
+
+def _gemini_settings_file_configured(settings_path: Path | None = None) -> bool:
+    candidate = settings_path or (Path.home() / ".gemini" / "settings.json")
+    try:
+        if not candidate.is_file():
+            return False
+        return bool(candidate.read_text(encoding="utf-8", errors="replace").strip())
+    except OSError:
+        return False

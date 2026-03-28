@@ -269,11 +269,45 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             owned_paths=["desktop/src/components/views/AppSettingsView.jsx"],
         )
 
-        choice = resolve_step_model_choice(step, runtime)
+        with mock.patch("jakal_flow.step_models.gemini_available_for_auto_selection", return_value=True):
+            choice = resolve_step_model_choice(step, runtime)
 
         self.assertEqual(choice.provider, "gemini")
         self.assertEqual(choice.model, GEMINI_DEFAULT_MODEL)
         self.assertEqual(choice.source, "auto")
+
+    def test_resolve_step_model_choice_falls_back_when_gemini_auth_is_unavailable(self) -> None:
+        runtime = RuntimeOptions(model="gpt-5.4", model_provider="openai")
+        step = ExecutionStep(
+            step_id="ST1",
+            title="Refresh desktop settings panel",
+            display_description="Update the UI layout for the settings screen.",
+            owned_paths=["desktop/src/components/views/AppSettingsView.jsx"],
+        )
+
+        with mock.patch("jakal_flow.step_models.gemini_available_for_auto_selection", return_value=False):
+            choice = resolve_step_model_choice(step, runtime)
+
+        self.assertEqual(choice.provider, "openai")
+        self.assertEqual(choice.model, "gpt-5.4")
+        self.assertEqual(choice.source, "auto")
+        self.assertIn("Gemini auth is not configured", choice.reason)
+
+    def test_resolve_step_model_choice_keeps_explicit_gemini_override(self) -> None:
+        runtime = RuntimeOptions(model="gpt-5.4", model_provider="openai")
+        step = ExecutionStep(
+            step_id="ST1",
+            title="Refresh desktop settings panel",
+            model_provider="gemini",
+            owned_paths=["desktop/src/components/views/AppSettingsView.jsx"],
+        )
+
+        with mock.patch("jakal_flow.step_models.gemini_available_for_auto_selection", return_value=False):
+            choice = resolve_step_model_choice(step, runtime)
+
+        self.assertEqual(choice.provider, "gemini")
+        self.assertEqual(choice.model, GEMINI_DEFAULT_MODEL)
+        self.assertEqual(choice.source, "manual")
 
     def test_resolve_step_model_choice_keeps_codex_for_non_ui_steps(self) -> None:
         runtime = RuntimeOptions(model="gpt-5.4", model_provider="openai")
