@@ -257,8 +257,15 @@ Related files:
 | Provider connection | `--provider-base-url`, `--provider-api-key-env` |
 | Cost estimation | `--billing-mode`, `--input-cost-per-million-usd`, `--cached-input-cost-per-million-usd`, `--output-cost-per-million-usd`, `--reasoning-output-cost-per-million-usd`, `--per-pass-cost-usd` |
 | Workflow control | `--workflow-mode`, `--ml-max-cycles`, `--max-blocks`, `--extra-prompt`, `--plan-prompt` |
+| Optimization controls | `--optimization-mode`, `--optimization-large-file-lines`, `--optimization-long-function-lines`, `--optimization-duplicate-block-lines`, `--optimization-max-files` |
 | Safety and validation | `--approval-mode`, `--sandbox-mode`, `--test-cmd`, `--allow-push` |
 | Reporting | `--word-report` |
+
+To inspect the latest command surface from your local checkout:
+
+```bash
+python -m jakal_flow --help
+```
 
 ### Desktop-managed Defaults
 
