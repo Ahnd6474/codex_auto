@@ -464,6 +464,42 @@ def managed_workspace_tree(context: ProjectContext) -> list[dict[str, Any]]:
 
 
 def report_payload(context: ProjectContext) -> dict[str, Any]:
+    latest_failure_status = safe_json(context.paths.reports_dir / "latest_pr_failure_status.json", default={})
+    latest_failure: dict[str, Any] = {}
+    if isinstance(latest_failure_status, dict) and latest_failure_status:
+        report_json_file = str(latest_failure_status.get("report_json_file", "")).strip()
+        report_markdown_file = str(latest_failure_status.get("report_markdown_file", "")).strip()
+        bundle_json = safe_json(Path(report_json_file), default={}) if report_json_file else {}
+        block_index = bundle_json.get("block_index") if isinstance(bundle_json, dict) else None
+        block_dir = (
+            context.paths.logs_dir / f"block_{int(block_index):04d}"
+            if isinstance(block_index, int) and block_index >= 0
+            else None
+        )
+        artifact_files = []
+        if block_dir is not None and block_dir.exists():
+            try:
+                artifact_files = [
+                    str(path)
+                    for path in sorted(block_dir.iterdir(), key=lambda item: item.name.lower())
+                    if path.is_file()
+                ]
+            except OSError:
+                artifact_files = []
+        latest_failure = {
+            "generated_at": str(latest_failure_status.get("generated_at", "")).strip(),
+            "failure_type": str(latest_failure_status.get("failure_type", "")).strip(),
+            "posted": bool(latest_failure_status.get("posted")),
+            "result": latest_failure_status.get("result", {}) if isinstance(latest_failure_status.get("result"), dict) else {},
+            "summary": str(bundle_json.get("summary", "")).strip() if isinstance(bundle_json, dict) else "",
+            "selected_task": str(bundle_json.get("selected_task", "")).strip() if isinstance(bundle_json, dict) else "",
+            "report_json_file": report_json_file,
+            "report_markdown_file": report_markdown_file,
+            "report_markdown_text": preview_text(Path(report_markdown_file), default="", max_chars=4000) if report_markdown_file else "",
+            "block_index": block_index if isinstance(block_index, int) else None,
+            "block_dir": str(block_dir) if block_dir is not None else "",
+            "artifact_files": artifact_files,
+        }
     return {
         "closeout_report_text": preview_text(
             context.paths.closeout_report_file,
@@ -477,6 +513,7 @@ def report_payload(context: ProjectContext) -> dict[str, Any]:
         "word_report_enabled": bool(context.runtime.generate_word_report),
         "word_report_path": str(context.paths.closeout_report_docx_file) if context.paths.closeout_report_docx_file.exists() else "",
         "ml_results_svg_path": str(context.paths.ml_experiment_results_svg_file) if context.paths.ml_experiment_results_svg_file.exists() else "",
+        "latest_failure": latest_failure,
     }
 
 
@@ -784,7 +821,7 @@ def _build_project_detail_base_payload(
         recent_blocks = []
         recent_passes = []
         pending_checkpoint = checkpoint_payload(project).get("pending")
-        reports = {}
+        reports = {"latest_failure": report_payload(project).get("latest_failure", {})}
         history = {
             "ui_events": [],
             "blocks": [],

@@ -63,6 +63,7 @@ from jakal_flow.planning import (
     source_prompt_template_path,
 )
 from jakal_flow.reporting import Reporter
+from jakal_flow.step_models import GEMINI_DEFAULT_MODEL, resolve_step_model_choice
 from jakal_flow.utils import append_jsonl, read_json, read_jsonl_tail, read_last_jsonl, write_json
 
 
@@ -245,6 +246,48 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(step.reasoning_effort, "xhigh")
         self.assertEqual(step.depends_on, ["ST0", "ST2"])
         self.assertEqual(step.owned_paths, ["src/app.py", "src/lib.py"])
+
+    def test_execution_step_from_dict_reads_model_fields(self) -> None:
+        step = ExecutionStep.from_dict(
+            {
+                "step_id": "ST1",
+                "title": "UI pass",
+                "model_provider": "gemini",
+                "model": "gemini-3-flash",
+            }
+        )
+
+        self.assertEqual(step.model_provider, "gemini")
+        self.assertEqual(step.model, "gemini-3-flash")
+
+    def test_resolve_step_model_choice_prefers_gemini_for_ui_steps(self) -> None:
+        runtime = RuntimeOptions(model="gpt-5.4", model_provider="openai")
+        step = ExecutionStep(
+            step_id="ST1",
+            title="Refresh desktop settings panel",
+            display_description="Update the UI layout for the settings screen.",
+            owned_paths=["desktop/src/components/views/AppSettingsView.jsx"],
+        )
+
+        choice = resolve_step_model_choice(step, runtime)
+
+        self.assertEqual(choice.provider, "gemini")
+        self.assertEqual(choice.model, GEMINI_DEFAULT_MODEL)
+        self.assertEqual(choice.source, "auto")
+
+    def test_resolve_step_model_choice_keeps_codex_for_non_ui_steps(self) -> None:
+        runtime = RuntimeOptions(model="gpt-5.4", model_provider="openai")
+        step = ExecutionStep(
+            step_id="ST1",
+            title="Refactor orchestrator runtime overlay",
+            owned_paths=["src/jakal_flow/orchestrator.py"],
+        )
+
+        choice = resolve_step_model_choice(step, runtime)
+
+        self.assertEqual(choice.provider, "openai")
+        self.assertEqual(choice.model, "gpt-5.4")
+        self.assertEqual(choice.source, "auto")
 
     def test_execution_plan_state_reads_closeout_fields(self) -> None:
         state = ExecutionPlanState.from_dict(
@@ -675,6 +718,35 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_root, ignore_errors=True)
 
+    def test_save_execution_plan_state_reports_dependency_cycle_path(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_cycle_plan_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", execution_mode="parallel")
+
+        try:
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), self.assertRaisesRegex(
+                ValueError,
+                r"Parallel execution plan contains a dependency cycle: ST1 -> ST2 -> ST1\.",
+            ):
+                orchestrator.update_execution_plan(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    plan_state=ExecutionPlanState(
+                        execution_mode="parallel",
+                        default_test_command="python -m pytest",
+                        steps=[
+                            ExecutionStep(step_id="NODE-A", title="Frontend", depends_on=["NODE-B"], owned_paths=["desktop/src"]),
+                            ExecutionStep(step_id="NODE-B", title="Backend", depends_on=["NODE-A"], owned_paths=["src/jakal_flow"]),
+                        ],
+                    ),
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
     def test_run_parallel_execution_batch_persists_lineages_for_hybrid_tasks(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_hybrid_lineage_batch_test"
         shutil.rmtree(temp_root, ignore_errors=True)
@@ -764,12 +836,17 @@ class ExecutionPlanHelperTests(unittest.TestCase):
                 "_push_if_ready",
                 return_value=(True, "pushed"),
             ) as mocked_push:
-                context, plan_state, steps = orchestrator.run_parallel_execution_batch(
-                    project_dir=repo_dir,
-                    runtime=runtime,
-                    step_ids=["ST1", "ST2"],
-                )
-                lineage_state = read_json(context.paths.lineage_state_file, default={})
+                with mock.patch.object(
+                    orchestrator,
+                    "_maybe_open_pull_request",
+                    return_value={"created": True, "html_url": "https://github.com/example/project/pull/1"},
+                ) as mocked_pr:
+                    context, plan_state, steps = orchestrator.run_parallel_execution_batch(
+                        project_dir=repo_dir,
+                        runtime=runtime,
+                        step_ids=["ST1", "ST2"],
+                    )
+                    lineage_state = read_json(context.paths.lineage_state_file, default={})
         finally:
             shutil.rmtree(temp_root, ignore_errors=True)
 
@@ -789,6 +866,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             {"LN1": "ln1-head", "LN2": "ln2-head"},
         )
         self.assertEqual(mocked_push.call_count, 2)
+        self.assertEqual(mocked_pr.call_count, 2)
 
     def test_run_parallel_execution_batch_keeps_completed_lineages_when_one_worker_errors(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_hybrid_lineage_partial_failure_test"

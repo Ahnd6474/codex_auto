@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import http.client
 import json
 import time
 from urllib.error import HTTPError, URLError
@@ -65,6 +66,10 @@ def verify_local_share_session_access(session_payload: dict) -> None:
         except URLError as exc:
             if time.monotonic() >= deadline:
                 raise RuntimeError(f"Local share server is unreachable: {exc.reason}") from exc
+            time.sleep(0.2)
+        except http.client.RemoteDisconnected as exc:
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f"Local share server closed the connection before responding: {exc}") from exc
             time.sleep(0.2)
 
 

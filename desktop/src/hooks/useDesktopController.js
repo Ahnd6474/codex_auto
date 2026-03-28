@@ -30,6 +30,7 @@ import {
   firstSelectableStepId,
   inheritProjectIdentityForm,
   isDuplicateProjectJobError,
+  planDependencyValidationMessage,
   projectJobFromJobs,
   programSettingsFromRuntime,
   projectFormFromDetail,
@@ -1123,6 +1124,11 @@ export function useDesktopController() {
       setMessage(messagePayload("error", translate(language, "message.openOrCreateProjectFirst")));
       return;
     }
+    const dependencyValidationError = planDependencyValidationMessage(planDraft);
+    if (dependencyValidationError) {
+      setMessage(messagePayload("error", dependencyValidationError));
+      return;
+    }
     await withPending("save-plan", async () => {
       const detail = await bridgeRequest(
         BRIDGE_COMMANDS.SAVE_PLAN,
@@ -1276,6 +1282,11 @@ export function useDesktopController() {
   async function runPlan() {
     if (!(planDraft?.steps || []).length) {
       setMessage(messagePayload("error", translate(language, "message.createStepBeforeRun")));
+      return;
+    }
+    const dependencyValidationError = planDependencyValidationMessage(planDraft);
+    if (dependencyValidationError) {
+      setMessage(messagePayload("error", dependencyValidationError));
       return;
     }
     const job = await startJob(BRIDGE_COMMANDS.RUN_PLAN, buildProjectPayload(projectForm, planDraft));
@@ -1453,6 +1464,8 @@ export function useDesktopController() {
       title: translate(language, "run.newPendingStep"),
       display_description: translate(language, "run.stepCheckpointDescription"),
       codex_description: translate(language, "run.stepCodexDescription"),
+      model_provider: "",
+      model: "",
       test_command: projectForm.runtime?.test_cmd || "python -m pytest",
       success_criteria: translate(language, "run.stepSuccessCriteria"),
       reasoning_effort: projectForm.runtime?.effort || "high",

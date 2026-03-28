@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import http.client
 import json
 import time
 import urllib.error
@@ -80,6 +81,8 @@ class GitHubClient:
             raise GitHubAPIError(f"GitHub API 요청 실패: HTTP {exc.code}\n{body}") from exc
         except urllib.error.URLError as exc:
             raise GitHubAPIError(f"GitHub API 연결 실패: {exc.reason}") from exc
+        except http.client.RemoteDisconnected as exc:
+            raise GitHubAPIError(f"GitHub API 연결 실패: {exc}") from exc
 
     def search_repositories(self, query: str, per_page: int = 20) -> list[GitHubRepository]:
         if not query.strip():
@@ -98,11 +101,19 @@ class GitHubClient:
         items = payload if isinstance(payload, list) else []
         return [self._parse_repo(item) for item in items]
 
-    def find_open_pull_request_for_branch(self, owner: str, repo: str, branch: str) -> dict | None:
+    def find_open_pull_request_for_branch(
+        self,
+        owner: str,
+        repo: str,
+        branch: str,
+        base: str = "",
+    ) -> dict | None:
         if not self.token:
             raise GitHubAPIError("PR 조회에는 GitHub Personal Access Token 이 필요합니다.")
         encoded_head = urllib.parse.quote(f"{owner}:{branch}")
         url = f"https://api.github.com/repos/{owner}/{repo}/pulls?state=open&head={encoded_head}"
+        if base.strip():
+            url = f"{url}&base={urllib.parse.quote(base.strip())}"
         payload = self._request_json(url)
         items = payload if isinstance(payload, list) else []
         return items[0] if items else None
@@ -112,6 +123,42 @@ class GitHubClient:
             raise GitHubAPIError("PR 코멘트 등록에는 GitHub Personal Access Token 이 필요합니다.")
         url = f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/comments"
         payload = self._request_json(url, method="POST", payload={"body": body})
+        return payload if isinstance(payload, dict) else {}
+
+    def get_repository(self, owner: str, repo: str) -> GitHubRepository:
+        if not self.token:
+            raise GitHubAPIError("저장소 조회에는 GitHub Personal Access Token 이 필요합니다.")
+        url = f"https://api.github.com/repos/{owner}/{repo}"
+        payload = self._request_json(url)
+        if not isinstance(payload, dict):
+            raise GitHubAPIError("GitHub 저장소 응답 형식이 올바르지 않습니다.")
+        return self._parse_repo(payload)
+
+    def create_pull_request(
+        self,
+        owner: str,
+        repo: str,
+        *,
+        title: str,
+        head: str,
+        base: str,
+        body: str = "",
+        draft: bool = False,
+    ) -> dict:
+        if not self.token:
+            raise GitHubAPIError("PR 생성에는 GitHub Personal Access Token 이 필요합니다.")
+        url = f"https://api.github.com/repos/{owner}/{repo}/pulls"
+        payload = self._request_json(
+            url,
+            method="POST",
+            payload={
+                "title": title.strip(),
+                "head": head.strip(),
+                "base": base.strip(),
+                "body": body,
+                "draft": bool(draft),
+            },
+        )
         return payload if isinstance(payload, dict) else {}
 
     def _parse_repo(self, item: dict) -> GitHubRepository:
@@ -151,6 +198,8 @@ class GitHubClient:
             raise GitHubAPIError(f"디바이스 로그인 시작 실패: HTTP {exc.code}\n{body}") from exc
         except urllib.error.URLError as exc:
             raise GitHubAPIError(f"디바이스 로그인 연결 실패: {exc.reason}") from exc
+        except http.client.RemoteDisconnected as exc:
+            raise GitHubAPIError(f"디바이스 로그인 연결 실패: {exc}") from exc
 
     def poll_device_flow(self, client_id: str, device_code: str, interval: int, timeout_seconds: int) -> str:
         deadline = time.time() + timeout_seconds
@@ -180,6 +229,8 @@ class GitHubClient:
                 raise GitHubAPIError(f"디바이스 로그인 토큰 조회 실패: HTTP {exc.code}\n{body}") from exc
             except urllib.error.URLError as exc:
                 raise GitHubAPIError(f"디바이스 로그인 연결 실패: {exc.reason}") from exc
+            except http.client.RemoteDisconnected as exc:
+                raise GitHubAPIError(f"디바이스 로그인 연결 실패: {exc}") from exc
 
             if "access_token" in data:
                 return str(data["access_token"])
@@ -249,6 +300,8 @@ class GitHubClient:
             raise GitHubAPIError(f"OAuth 토큰 교환 실패: HTTP {exc.code}\n{body}") from exc
         except urllib.error.URLError as exc:
             raise GitHubAPIError(f"OAuth 토큰 교환 연결 실패: {exc.reason}") from exc
+        except http.client.RemoteDisconnected as exc:
+            raise GitHubAPIError(f"OAuth 토큰 교환 연결 실패: {exc}") from exc
 
         access_token = data.get("access_token")
         if access_token:

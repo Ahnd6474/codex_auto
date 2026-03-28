@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import http.client
 import json
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -47,6 +48,7 @@ from jakal_flow.public_tunnel import (
 )
 from jakal_flow.share_server import ShareHTTPServer, ShareRequestHandler
 from jakal_flow.ui_bridge import run_command
+from jakal_flow.ui_bridge_commands.share import verify_local_share_session_access
 from jakal_flow.utils import append_jsonl
 
 
@@ -121,6 +123,26 @@ def _fake_codex_snapshot() -> mock.Mock:
 
 
 class ShareMonitoringTests(unittest.TestCase):
+    def test_verify_local_share_session_access_retries_after_remote_disconnect(self) -> None:
+        session_payload = {
+            "local_url": "http://127.0.0.1:55180/share/view",
+            "session_id": "demo-session",
+            "viewer_token": "demo-token",
+        }
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = b"{}"
+        response.status = 200
+
+        with mock.patch(
+            "jakal_flow.ui_bridge_commands.share.urlopen",
+            side_effect=[
+                http.client.RemoteDisconnected("Remote end closed connection without response"),
+                response,
+            ],
+        ):
+            verify_local_share_session_access(session_payload)
+
     def test_process_is_running_treats_posix_zombie_as_not_running(self) -> None:
         if not Path("/proc").exists():
             self.skipTest("Requires /proc to verify zombie process state.")

@@ -203,11 +203,7 @@ class Reporter:
         return "\n".join(lines).strip() + "\n"
 
     def post_pr_failure_report(self, bundle: dict) -> dict:
-        token = (
-            os.environ.get("JAKAL_FLOW_GITHUB_TOKEN", "").strip()
-            or os.environ.get("GITHUB_TOKEN", "").strip()
-            or os.environ.get("GH_TOKEN", "").strip()
-        )
+        token = self.github_token()
         repo_url = self.context.metadata.origin_url or self.context.metadata.repo_url
         repository = parse_github_repository_url(repo_url or "")
         if not token:
@@ -234,3 +230,83 @@ class Reporter:
             }
         except GitHubAPIError as exc:
             return {"posted": False, "reason": "github_api_error", "error": str(exc)}
+
+    @staticmethod
+    def github_token() -> str:
+        return (
+            os.environ.get("JAKAL_FLOW_GITHUB_TOKEN", "").strip()
+            or os.environ.get("GITHUB_TOKEN", "").strip()
+            or os.environ.get("GH_TOKEN", "").strip()
+        )
+
+    def ensure_pull_request(
+        self,
+        *,
+        head_branch: str,
+        base_branch: str = "",
+        title: str,
+        body: str = "",
+        draft: bool = False,
+    ) -> dict:
+        token = self.github_token()
+        repo_url = self.context.metadata.origin_url or self.context.metadata.repo_url
+        repository = parse_github_repository_url(repo_url or "")
+        if not token:
+            return {"created": False, "reason": "missing_github_token"}
+        if repository is None:
+            return {"created": False, "reason": "non_github_origin"}
+
+        head = head_branch.strip()
+        if not head:
+            return {"created": False, "reason": "missing_head_branch"}
+
+        owner, repo = repository
+        try:
+            client = GitHubClient(token=token)
+            resolved_base = base_branch.strip()
+            if not resolved_base or resolved_base == head:
+                repository_info = client.get_repository(owner, repo)
+                resolved_base = repository_info.default_branch.strip() or resolved_base
+            if not resolved_base:
+                return {"created": False, "reason": "missing_base_branch", "owner": owner, "repo": repo, "head": head}
+            if resolved_base == head:
+                return {
+                    "created": False,
+                    "reason": "head_matches_base",
+                    "owner": owner,
+                    "repo": repo,
+                    "head": head,
+                    "base": resolved_base,
+                }
+            existing = client.find_open_pull_request_for_branch(owner, repo, head, base=resolved_base)
+            if existing:
+                return {
+                    "created": False,
+                    "reason": "already_exists",
+                    "owner": owner,
+                    "repo": repo,
+                    "head": head,
+                    "base": resolved_base,
+                    "pull_request": int(existing.get("number", 0) or 0),
+                    "html_url": str(existing.get("html_url", "")).strip(),
+                }
+            created = client.create_pull_request(
+                owner,
+                repo,
+                title=title,
+                head=head,
+                base=resolved_base,
+                body=body,
+                draft=draft,
+            )
+            return {
+                "created": True,
+                "owner": owner,
+                "repo": repo,
+                "head": head,
+                "base": resolved_base,
+                "pull_request": int(created.get("number", 0) or 0),
+                "html_url": str(created.get("html_url", "")).strip(),
+            }
+        except GitHubAPIError as exc:
+            return {"created": False, "reason": "github_api_error", "error": str(exc)}

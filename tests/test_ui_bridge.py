@@ -22,6 +22,7 @@ from jakal_flow.models import ExecutionPlanState, ExecutionStep
 from jakal_flow.share import share_server_status_payload
 from jakal_flow.status_views import effective_project_status
 from jakal_flow.ui_bridge import default_workspace_root, progress_caption, run_command, runtime_from_payload
+from jakal_flow.step_models import GEMINI_DEFAULT_MODEL
 
 
 def local_temp_root() -> Path:
@@ -413,8 +414,8 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(runtime.provider_api_key_env, "GEMINI_API_KEY")
         self.assertEqual(runtime.provider_base_url, "")
         self.assertEqual(runtime.codex_path, "gemini.cmd" if os.name == "nt" else "gemini")
-        self.assertEqual(runtime.model, "")
-        self.assertEqual(runtime.model_slug_input, "")
+        self.assertEqual(runtime.model, GEMINI_DEFAULT_MODEL)
+        self.assertEqual(runtime.model_slug_input, GEMINI_DEFAULT_MODEL)
 
     def test_bootstrap_exposes_workspace_and_model_presets(self) -> None:
         with TemporaryTestDir() as temp_dir:
@@ -1392,6 +1393,117 @@ class UIBridgeTests(unittest.TestCase):
             expected_path = str(Path(result["files"]["project_root"]) / "reports" / "CLOSEOUT_REPORT.docx")
             self.assertEqual(result["reports"]["word_report_path"], expected_path)
             self.assertTrue(any(expected_path in line for line in result["activity"]))
+
+    def test_run_closeout_surfaces_failure_report_details_when_closeout_raises(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Closeout Failure Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+            completed_plan = {
+                "plan_title": "Closeout Failure Demo",
+                "project_prompt": "Finish the work",
+                "summary": "Everything is ready for closeout.",
+                "workflow_mode": "standard",
+                "execution_mode": "parallel",
+                "default_test_command": "python -m unittest",
+                "steps": [
+                    {
+                        "step_id": "ST1",
+                        "title": "Implement",
+                        "display_description": "Implementation finished",
+                        "codex_description": "Implementation finished",
+                        "success_criteria": "Tests pass",
+                        "test_command": "python -m unittest",
+                        "reasoning_effort": "high",
+                        "status": "completed",
+                    }
+                ],
+            }
+
+            def fake_run_execution_closeout(self, project_dir, runtime, branch="main", origin_url=""):
+                context = self.local_project(project_dir)
+                assert context is not None
+                plan_state = self.load_execution_plan_state(context)
+                plan_state.closeout_status = "failed"
+                plan_state.closeout_notes = "Closeout subprocess crashed."
+                saved = self.save_execution_plan_state(context, plan_state)
+                context.metadata.current_status = self._status_from_plan_state(saved)
+                self.workspace.save_project(context)
+                report_md = context.paths.reports_dir / "20260328000000_closeout_failed.prfail.md"
+                report_json = context.paths.reports_dir / "20260328000000_closeout_failed.prfail.json"
+                block_dir = context.paths.logs_dir / "block_0002"
+                block_dir.mkdir(parents=True, exist_ok=True)
+                (block_dir / "project-closeout-pass.prompt.md").write_text("prompt\n", encoding="utf-8")
+                report_md.write_text("failure report\n", encoding="utf-8")
+                report_json.write_text(
+                    json.dumps(
+                        {
+                            "summary": "Closeout subprocess crashed.",
+                            "block_index": 2,
+                            "selected_task": "Project closeout",
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                (context.paths.reports_dir / "latest_pr_failure_status.json").write_text(
+                    json.dumps(
+                        {
+                            "generated_at": "2026-03-28T00:00:00+00:00",
+                            "failure_type": "closeout_failed",
+                            "posted": False,
+                            "result": {"reason": "test"},
+                            "report_markdown_file": str(report_md),
+                            "report_json_file": str(report_json),
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                raise RuntimeError("closeout explosion")
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ), mock.patch(
+                "jakal_flow.orchestrator.Orchestrator.run_execution_closeout",
+                new=fake_run_execution_closeout,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "Failure report: .*closeout_failed\\.prfail\\.md"):
+                    run_command(
+                        "run-closeout",
+                        workspace_root,
+                        {
+                            **payload,
+                            "plan": completed_plan,
+                        },
+                    )
+
+            detail = run_command(
+                "load-project",
+                workspace_root,
+                {
+                    "project_dir": str(repo_dir),
+                },
+            )
+
+            self.assertEqual(detail["project"]["current_status"], "closeout_failed")
+            self.assertEqual(detail["reports"]["latest_failure"]["summary"], "Closeout subprocess crashed.")
+            self.assertTrue(detail["reports"]["latest_failure"]["report_markdown_file"].endswith("closeout_failed.prfail.md"))
+            self.assertTrue(any(path.endswith("project-closeout-pass.prompt.md") for path in detail["reports"]["latest_failure"]["artifact_files"]))
+            self.assertTrue(any("closeout-finished" in line and "Failure report:" in line for line in detail["activity"]))
 
     def test_run_plan_routes_single_hybrid_task_batches_through_lineage_execution(self) -> None:
         with TemporaryTestDir() as temp_dir:

@@ -21,3 +21,9 @@ This repository builds and maintains `jakal-flow`, a multi-repository automation
 - Keep subprocess interactions explicit and error-aware.
 - Do not claim support for Codex CLI flags that are not actually wired into the implementation.
 - Keep GUI work on background threads when invoking long-running repository operations.
+
+## Preferred Models
+
+- UI work: prefer Gemini CLI first.
+- Codex and general implementation work: prefer Codex CLI first.
+- When a step does not explicitly pin a provider or model, use these preferences to auto-select the backend.

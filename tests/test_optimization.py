@@ -347,6 +347,54 @@ class OptimizationTests(unittest.TestCase):
             saved_state = orchestrator.load_execution_plan_state(context)
             self.assertEqual(saved_state.closeout_status, "running")
 
+    def test_load_execution_plan_state_recovers_stale_closeout_before_retry(self) -> None:
+        with _TemporaryTestDir() as temp_root:
+            workspace_root = temp_root / "workspace"
+            repo_dir = temp_root / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            orchestrator = Orchestrator(workspace_root)
+            runtime = RuntimeOptions(
+                model="gpt-5.4",
+                effort="medium",
+                test_cmd="python -m pytest",
+            )
+            context = orchestrator.workspace.initialize_local_project(project_dir=repo_dir, branch="main", runtime=runtime)
+            stale_time = (datetime.now(tz=UTC) - timedelta(hours=7)).replace(microsecond=0).isoformat()
+            context.metadata.current_status = "running:closeout"
+            context.metadata.last_run_at = stale_time
+            orchestrator.workspace.save_project(context)
+            report_path = context.paths.reports_dir / "20260328000000_closeout_failed.prfail.md"
+            report_path.write_text("closeout failure details\n", encoding="utf-8")
+            (context.paths.reports_dir / "latest_pr_failure_status.json").write_text(
+                (
+                    "{"
+                    f"\"generated_at\": \"{stale_time}\", "
+                    "\"failure_type\": \"closeout_failed\", "
+                    f"\"report_markdown_file\": \"{str(report_path).replace('\\', '\\\\')}\""
+                    "}"
+                ),
+                encoding="utf-8",
+            )
+            orchestrator.save_execution_plan_state(
+                context,
+                ExecutionPlanState(
+                    plan_title="Closeout recovery demo",
+                    project_prompt="Ship the repo safely.",
+                    summary="Implementation is complete.",
+                    default_test_command="python -m pytest",
+                    closeout_status="running",
+                    closeout_started_at=stale_time,
+                    steps=[ExecutionStep(step_id="ST1", title="Finish implementation", status="completed")],
+                ),
+            )
+
+            saved_state = orchestrator.load_execution_plan_state(context)
+
+        self.assertEqual(saved_state.closeout_status, "failed")
+        self.assertIn("Closeout appears to have stopped before it finished", saved_state.closeout_notes)
+        self.assertIn(str(report_path), saved_state.closeout_notes)
+        self.assertEqual(context.metadata.current_status, "closeout_failed")
+
 
 if __name__ == "__main__":
     unittest.main()
