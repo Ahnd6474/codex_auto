@@ -1297,7 +1297,7 @@ export function parallelLimitTone(parallel = {}) {
 export function firstSelectableStepId(plan) {
   const steps = plan?.steps || [];
   const pending = steps.find((step) => step.status !== "completed");
-  return pending?.step_id || steps[0]?.step_id || "";
+  return pending?.step_id || "";
 }
 
 export const CLOSEOUT_STEP_ID = "CO1";

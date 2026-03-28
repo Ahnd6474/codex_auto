@@ -974,7 +974,7 @@ test("firstSelectableStepId prefers the first incomplete step", () => {
     }),
     "S2",
   );
-  assert.equal(firstSelectableStepId({ steps: [{ step_id: "S1", status: "completed" }] }), "S1");
+  assert.equal(firstSelectableStepId({ steps: [{ step_id: "S1", status: "completed" }] }), "");
   assert.equal(firstSelectableStepId({ steps: [] }), "");
 });
 

@@ -211,3 +211,83 @@ test("applyProjectDetailState keeps persisted project runtime instead of reapply
   assert.equal(nextSelectedStepId, "");
   assert.equal(nextPlanDirty, false);
 });
+
+test("applyProjectDetailState clears a stale selected step when the refreshed plan is already complete", () => {
+  let nextSelectedStepId = "ST1";
+  let nextPlanDraft = null;
+
+  const applied = applyProjectDetailState({
+    detail: {
+      project: {
+        repo_id: "demo",
+        repo_path: "/repo",
+        display_name: "Demo",
+        slug: "demo",
+        branch: "main",
+        origin_url: "",
+        current_status: "closed_out",
+        last_run_at: "2026-03-27T03:25:31Z",
+      },
+      runtime: {
+        model: "gpt-5.4",
+      },
+      plan: {
+        closeout_status: "completed",
+        steps: [
+          { step_id: "ST1", status: "completed", title: "Plan" },
+          { step_id: "ST2", status: "completed", title: "Ship" },
+        ],
+      },
+      codex_status: {
+        model_catalog: [],
+      },
+    },
+    options: {
+      preserveSelectedStep: true,
+    },
+    refs: {
+      lastAppliedDetailSignatureRef: {
+        current: "",
+      },
+    },
+    state: {
+      projectDetail: {
+        project: {
+          repo_id: "demo",
+        },
+        codex_status: {},
+      },
+      modelCatalog: [],
+      activeJob: null,
+      defaultRuntime: {
+        model: "gpt-5.4",
+      },
+      planDirty: false,
+    },
+    setters: {
+      transition: (callback) => callback(),
+      setProjectDetail: () => {},
+      setModelCatalog: () => {},
+      setShareSettings: () => {},
+      setLoadingProjectId: () => {},
+      setProjectForm: () => {},
+      setPlanDraft: (value) => {
+        nextPlanDraft = value;
+      },
+      setSelectedStepId: (value) => {
+        nextSelectedStepId = typeof value === "function" ? value(nextSelectedStepId) : value;
+      },
+      setPlanDirty: () => {},
+    },
+  });
+
+  assert.equal(applied, true);
+  assert.equal(nextSelectedStepId, "");
+  assert.deepEqual(nextPlanDraft, {
+    closeout_status: "completed",
+    steps: [
+      { step_id: "ST1", status: "completed", title: "Plan" },
+      { step_id: "ST2", status: "completed", title: "Ship" },
+    ],
+  });
+});

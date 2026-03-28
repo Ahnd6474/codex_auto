@@ -106,6 +106,7 @@ export function applyProjectDetailState({
     options.preserveDirtyPlan ?? state.planDirty,
   );
   refs.lastAppliedDetailSignatureRef.current = applySignature;
+  const selectableStepId = firstSelectableStepId(normalizedDetail.plan);
   setters.transition(() => {
     setters.setProjectDetail(normalizedDetail);
     setters.setModelCatalog(normalizedDetail?.codex_status?.model_catalog || state.modelCatalog);
@@ -120,9 +121,15 @@ export function applyProjectDetailState({
     if (!preserveDirtyPlan) {
       setters.setPlanDraft(cloneValue(normalizedDetail.plan));
       if (options.preserveSelectedStep) {
-        setters.setSelectedStepId((current) => current || firstSelectableStepId(normalizedDetail.plan));
+        setters.setSelectedStepId((current) => {
+          const currentStep = (normalizedDetail?.plan?.steps || []).find((step) => step?.step_id === current);
+          if (currentStep && currentStep.status !== "completed") {
+            return current;
+          }
+          return selectableStepId;
+        });
       } else {
-        setters.setSelectedStepId(firstSelectableStepId(normalizedDetail.plan));
+        setters.setSelectedStepId(selectableStepId);
       }
       setters.setPlanDirty(false);
     }
