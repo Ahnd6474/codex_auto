@@ -693,7 +693,7 @@ class Orchestrator:
         return f"LN{next_index}"
 
     def _lineage_branch_name(self, lineage_id: str) -> str:
-        return f"jakal-flow-lineage-{lineage_id.strip().lower()}"
+        return f"jakal-flow-lineage-{lineage_id.strip().lower()}-{uuid4().hex[:8]}"
 
     def _lineage_root(self, context: ProjectContext, lineage_id: str) -> Path:
         return context.paths.project_root / ".lineages" / lineage_id.strip().lower()
@@ -828,7 +828,10 @@ class Orchestrator:
             context.paths.repo_dir
         )
         if not lineage.worktree_dir.exists():
-            self.git.add_worktree(context.paths.repo_dir, lineage.worktree_dir, lineage.branch_name, source_revision)
+            if self.git.branch_exists(context.paths.repo_dir, lineage.branch_name):
+                self.git.attach_worktree(context.paths.repo_dir, lineage.worktree_dir, lineage.branch_name)
+            else:
+                self.git.add_worktree(context.paths.repo_dir, lineage.worktree_dir, lineage.branch_name, source_revision)
         lineage_paths = self._build_lineage_paths(context, lineage.lineage_id, lineage.worktree_dir)
         self._sync_lineage_support_files(context, lineage_paths)
         lineage_runtime = self._build_parallel_worker_runtime(runtime, step)
@@ -985,6 +988,35 @@ class Orchestrator:
             self._persist_context_files(lineage_context)
         return lineage_result
 
+    def _lineage_worker_failure_result(
+        self,
+        *,
+        context: ProjectContext,
+        lineages: dict[str, LineageState],
+        step: ExecutionStep,
+        error: Exception | str,
+    ) -> dict[str, object]:
+        lineage_id = str((step.metadata or {}).get("lineage_id", "")).strip()
+        lineage = lineages.get(lineage_id)
+        note = str(error).strip() or "Lineage worker failed."
+        head_commit = ""
+        if lineage is not None:
+            head_commit = str(lineage.head_commit or lineage.safe_revision or "").strip()
+        if not head_commit:
+            head_commit = str(context.metadata.current_safe_revision or "").strip()
+        return {
+            "step_id": step.step_id,
+            "status": "failed",
+            "notes": note,
+            "commit_hash": None,
+            "changed_files": [],
+            "pass_log": {},
+            "block_log": {},
+            "test_summary": "",
+            "ml_report_payload": {},
+            "head_commit": head_commit,
+        }
+
     def _cleanup_lineage_worktree(self, repo_dir: Path, lineage: LineageState) -> None:
         if lineage.worktree_dir.exists():
             self.git.remove_worktree(repo_dir, lineage.worktree_dir, force=True)
@@ -1108,20 +1140,72 @@ class Orchestrator:
 
         try:
             worker_contexts: dict[str, ProjectContext] = {}
+            worker_results_by_step: dict[str, dict[str, object]] = {}
             for step in ordered_targets:
                 lineage_id = str((step.metadata or {}).get("lineage_id", "")).strip()
                 lineage = lineages.get(lineage_id)
                 if lineage is None:
-                    raise RuntimeError(f"{step.step_id} could not resolve an active lineage.")
-                worker_contexts[step.step_id] = self._build_lineage_context(context, runtime, step, lineage)
+                    result = self._lineage_worker_failure_result(
+                        context=context,
+                        lineages=lineages,
+                        step=step,
+                        error=RuntimeError(f"{step.step_id} could not resolve an active lineage."),
+                    )
+                    worker_results_by_step[step.step_id] = result
+                    plan_state, ordered_targets = self._sync_parallel_batch_step_progress(
+                        context=context,
+                        plan_state=plan_state,
+                        ordered_targets=ordered_targets,
+                        step_id=step.step_id,
+                        worker_result=result,
+                        success_status="completed",
+                        running_status="running:lineages",
+                    )
+                    continue
+                try:
+                    worker_contexts[step.step_id] = self._build_lineage_context(context, runtime, step, lineage)
+                except Exception as exc:
+                    result = self._lineage_worker_failure_result(
+                        context=context,
+                        lineages=lineages,
+                        step=step,
+                        error=exc,
+                    )
+                    worker_results_by_step[step.step_id] = result
+                    plan_state, ordered_targets = self._sync_parallel_batch_step_progress(
+                        context=context,
+                        plan_state=plan_state,
+                        ordered_targets=ordered_targets,
+                        step_id=step.step_id,
+                        worker_result=result,
+                        success_status="completed",
+                        running_status="running:lineages",
+                    )
 
-            worker_limit = max(1, min(len(ordered_targets), self._parallel_worker_count(context.runtime)))
+            runnable_targets = [step for step in ordered_targets if step.step_id not in worker_results_by_step]
+            worker_limit = max(1, min(len(runnable_targets), self._parallel_worker_count(context.runtime))) if runnable_targets else 0
             if worker_limit == 1:
-                worker_results = [
-                    self._run_lineage_step_worker(worker_contexts[step.step_id], step)
-                    for step in ordered_targets
-                ]
-            else:
+                for step in runnable_targets:
+                    try:
+                        result = self._run_lineage_step_worker(worker_contexts[step.step_id], step)
+                    except Exception as exc:
+                        result = self._lineage_worker_failure_result(
+                            context=context,
+                            lineages=lineages,
+                            step=step,
+                            error=exc,
+                        )
+                    worker_results_by_step[step.step_id] = result
+                    plan_state, ordered_targets = self._sync_parallel_batch_step_progress(
+                        context=context,
+                        plan_state=plan_state,
+                        ordered_targets=ordered_targets,
+                        step_id=step.step_id,
+                        worker_result=result,
+                        success_status="completed",
+                        running_status="running:lineages",
+                    )
+            elif worker_limit > 1:
                 with ThreadPoolExecutor(max_workers=worker_limit) as executor:
                     future_map = {
                         executor.submit(
@@ -1129,13 +1213,23 @@ class Orchestrator:
                             worker_contexts[step.step_id],
                             step,
                         ): step.step_id
-                        for step in ordered_targets
+                        for step in runnable_targets
                     }
-                    by_step_id: dict[str, dict[str, object]] = {}
                     for future in as_completed(future_map):
-                        result = future.result()
-                        result_step_id = str(result["step_id"])
-                        by_step_id[result_step_id] = result
+                        result_step_id = str(future_map[future]).strip()
+                        step = next((item for item in ordered_targets if item.step_id == result_step_id), None)
+                        if step is None:
+                            continue
+                        try:
+                            result = future.result()
+                        except Exception as exc:
+                            result = self._lineage_worker_failure_result(
+                                context=context,
+                                lineages=lineages,
+                                step=step,
+                                error=exc,
+                            )
+                        worker_results_by_step[result_step_id] = result
                         plan_state, ordered_targets = self._sync_parallel_batch_step_progress(
                             context=context,
                             plan_state=plan_state,
@@ -1145,7 +1239,16 @@ class Orchestrator:
                             success_status="completed",
                             running_status="running:lineages",
                         )
-                    worker_results = [by_step_id[step.step_id] for step in ordered_targets]
+            worker_results = [
+                worker_results_by_step.get(step.step_id)
+                or self._lineage_worker_failure_result(
+                    context=context,
+                    lineages=lineages,
+                    step=step,
+                    error=RuntimeError(f"{step.step_id} did not produce a worker result."),
+                )
+                for step in ordered_targets
+            ]
 
             paused_worker = next((item for item in worker_results if str(item.get("status") or "").strip() == "paused"), None)
             if paused_worker is not None:

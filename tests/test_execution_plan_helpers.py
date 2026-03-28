@@ -868,6 +868,107 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(mocked_push.call_count, 2)
         self.assertEqual(mocked_pr.call_count, 2)
 
+    def test_run_parallel_execution_batch_keeps_completed_lineages_when_one_worker_errors(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_hybrid_lineage_partial_failure_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model="gpt-5.4",
+            effort="medium",
+            test_cmd="python -m pytest",
+            execution_mode="parallel",
+            parallel_workers=2,
+        )
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            context.metadata.current_safe_revision = "safe-main"
+            context.loop_state.current_safe_revision = "safe-main"
+            orchestrator.workspace.save_project(context)
+            orchestrator.save_execution_plan_state(
+                context,
+                ExecutionPlanState(
+                    plan_title="Hybrid Lineage Partial Failure Demo",
+                    execution_mode="parallel",
+                    default_test_command="python -m pytest",
+                    steps=[
+                        ExecutionStep(step_id="ST1", title="Verification slice", owned_paths=["src/lit/verification.py"]),
+                        ExecutionStep(step_id="ST2", title="Lineage slice", owned_paths=["src/lit/lineage.py"]),
+                        ExecutionStep(
+                            step_id="ST3",
+                            title="Join slices",
+                            depends_on=["ST1", "ST2"],
+                            metadata={"step_kind": "join", "merge_from": ["ST1", "ST2"], "join_policy": "all"},
+                        ),
+                    ],
+                ),
+            )
+
+            def fake_lineage_worker(_lineage_context, step):
+                if step.step_id == "ST1":
+                    return {
+                        "step_id": "ST1",
+                        "status": "completed",
+                        "notes": "verification lineage ok",
+                        "commit_hash": "ln1-step",
+                        "changed_files": ["src/lit/verification.py"],
+                        "pass_log": {"pass_type": "block-search-pass"},
+                        "block_log": {"status": "completed"},
+                        "test_summary": "verification lineage ok",
+                        "head_commit": "ln1-head",
+                        "ml_report_payload": {},
+                    }
+                raise FileNotFoundError(2, "missing lineage tool")
+
+            with mock.patch.object(orchestrator, "setup_local_project", return_value=context), mock.patch.object(
+                orchestrator.git,
+                "add_worktree",
+            ), mock.patch.object(
+                orchestrator,
+                "_parallel_worker_count",
+                return_value=2,
+            ), mock.patch.object(
+                orchestrator,
+                "_build_lineage_context",
+                side_effect=[mock.Mock(name="lineage-1"), mock.Mock(name="lineage-2")],
+            ), mock.patch.object(
+                orchestrator,
+                "_run_lineage_step_worker",
+                side_effect=fake_lineage_worker,
+            ), mock.patch.object(
+                orchestrator,
+                "_push_if_ready",
+                return_value=(False, "already_up_to_date"),
+            ):
+                context, plan_state, steps = orchestrator.run_parallel_execution_batch(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    step_ids=["ST1", "ST2"],
+                )
+                lineage_state = read_json(context.paths.lineage_state_file, default={})
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual([step.step_id for step in steps], ["ST1", "ST2"])
+        self.assertEqual([step.status for step in steps], ["completed", "failed"])
+        self.assertEqual(steps[0].commit_hash, "ln1-step")
+        self.assertIn("missing lineage tool", steps[1].notes)
+        self.assertEqual(
+            {item["lineage_id"]: item["status"] for item in lineage_state["lineages"]},
+            {"LN1": "active", "LN2": "failed"},
+        )
+        self.assertEqual(
+            {item["lineage_id"]: item["head_commit"] for item in lineage_state["lineages"]},
+            {"LN1": "ln1-head", "LN2": "safe-main"},
+        )
+
     def test_run_join_execution_step_selectively_merges_requested_lineages(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_selective_join_test"
         shutil.rmtree(temp_root, ignore_errors=True)
@@ -995,13 +1096,10 @@ class ExecutionPlanHelperTests(unittest.TestCase):
                     orchestrator.git,
                     "merge_ff_only",
                 ) as mocked_ff_merge, mock.patch.object(
-                    orchestrator.git,
-                    "remote_url",
-                    return_value="https://example.com/repo.git",
-                ) as mocked_remote_url, mock.patch.object(
-                    orchestrator.git,
-                    "push",
-                ) as mocked_push:
+                    orchestrator,
+                    "_push_if_ready",
+                    return_value=(True, "pushed"),
+                ) as mocked_push_if_ready:
                     project, saved, step = orchestrator.run_join_execution_step(
                         project_dir=repo_dir,
                         runtime=runtime,
@@ -1016,8 +1114,12 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(project.metadata.current_safe_revision, "main-integrated")
         self.assertEqual([call.args[1] for call in mocked_cherry_pick.call_args_list], ["ln1-head", "ln3-head"])
         mocked_ff_merge.assert_called_once()
-        mocked_remote_url.assert_called()
-        mocked_push.assert_called_once_with(project.paths.repo_dir, project.metadata.branch)
+        mocked_push_if_ready.assert_called_once_with(
+            project,
+            project.paths.repo_dir,
+            project.metadata.branch,
+            commit_hash="main-integrated",
+        )
         self.assertEqual(mocked_cleanup.call_count, 2)
         mocked_cleanup_integration.assert_called_once()
         self.assertEqual(

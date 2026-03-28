@@ -161,6 +161,10 @@ class GitOps:
     def push(self, repo_dir: Path, branch: str) -> None:
         self.run(["push", "origin", branch], cwd=repo_dir)
 
+    def branch_exists(self, repo_dir: Path, branch_name: str) -> bool:
+        result = self.run(["rev-parse", "--verify", f"refs/heads/{branch_name}"], cwd=repo_dir, check=False)
+        return result.returncode == 0
+
     def remote_branch_revision(self, repo_dir: Path, remote_name: str, branch: str) -> str | None:
         if not branch.strip():
             return None
@@ -183,6 +187,10 @@ class GitOps:
     def add_worktree(self, repo_dir: Path, worktree_dir: Path, branch_name: str, start_point: str) -> None:
         worktree_dir.parent.mkdir(parents=True, exist_ok=True)
         self.run(["worktree", "add", "-b", branch_name, str(worktree_dir), start_point], cwd=repo_dir)
+
+    def attach_worktree(self, repo_dir: Path, worktree_dir: Path, branch_name: str) -> None:
+        worktree_dir.parent.mkdir(parents=True, exist_ok=True)
+        self.run(["worktree", "add", str(worktree_dir), branch_name], cwd=repo_dir)
 
     def remove_worktree(self, repo_dir: Path, worktree_dir: Path, force: bool = True) -> None:
         args = ["worktree", "remove"]
