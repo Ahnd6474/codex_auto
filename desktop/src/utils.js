@@ -1008,14 +1008,22 @@ export function sanitizeProjectDetailForJobState(detail, activeJob = null, optio
     return detail;
   }
   const currentStatus = String(detail?.project?.current_status || "").trim();
-  const planHasRunningStep = (detail?.plan?.steps || []).some((step) => step.status === "running");
-  const closeoutRunning = String(detail?.plan?.closeout_status || "").trim().toLowerCase() === "running";
+  const planSteps = Array.isArray(detail?.plan?.steps) ? detail.plan.steps : [];
+  const planHasRunningStep = planSteps.some((step) => step.status === "running");
+  const closeoutStatus = String(detail?.plan?.closeout_status || "").trim().toLowerCase();
+  const closeoutRunning = closeoutStatus === "running";
+  const terminalPlanState =
+    closeoutStatus === "completed"
+    || closeoutStatus === "failed"
+    || planSteps.some((step) => String(step?.status || "").trim().toLowerCase() === "failed")
+    || (planSteps.length > 0 && planSteps.every((step) => String(step?.status || "").trim().toLowerCase() === "completed"));
   if (!currentStatus.toLowerCase().startsWith("running:") && !planHasRunningStep && !closeoutRunning) {
     return detail;
   }
   const nowMs = Number.isFinite(options?.nowMs) ? options.nowMs : Date.now();
   if (
-    shouldPreserveRecentRunningState({
+    !terminalPlanState
+    && shouldPreserveRecentRunningState({
       plan: detail?.plan,
       activity: detail?.activity,
       pendingCheckpoint:

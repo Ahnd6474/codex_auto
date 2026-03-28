@@ -1451,6 +1451,8 @@ class Orchestrator:
             lineage = lineages.get(lineage_id)
             if lineage is None:
                 raise RuntimeError(f"{step.step_id} references lineage {lineage_id}, but that lineage is unavailable.")
+            if str(lineage.status or "").strip().lower() == "merged":
+                continue
             seen_lineages.add(lineage_id)
             selected.append(lineage)
         return selected
@@ -1699,9 +1701,15 @@ class Orchestrator:
             else:
                 metadata.pop("step_kind", None)
             if step_kind == "join":
-                merge_from = self._coerce_string_list(metadata.get("merge_from", [])) or list(step.depends_on)
+                direct_dependencies = list(step.depends_on)
+                merge_from = [item for item in self._coerce_string_list(metadata.get("merge_from", [])) if item in direct_dependencies]
+                if len(merge_from) < 2:
+                    merge_from = direct_dependencies
                 metadata["merge_from"] = merge_from
                 metadata["join_policy"] = self._normalize_join_policy(metadata.get("join_policy", ""))
+            else:
+                metadata.pop("merge_from", None)
+                metadata.pop("join_policy", None)
             step.metadata = metadata
 
     def load_execution_plan_state(self, context: ProjectContext) -> ExecutionPlanState:
@@ -1715,8 +1723,12 @@ class Orchestrator:
             )
         state = ExecutionPlanState.from_dict(payload)
         state.workflow_mode = normalize_workflow_mode(state.workflow_mode or context.runtime.workflow_mode)
+        state.execution_mode = self._normalize_execution_mode(state.execution_mode or context.runtime.execution_mode)
         if not state.default_test_command:
             state.default_test_command = context.runtime.test_cmd
+        if state.execution_mode == "parallel":
+            self._reduce_redundant_parallel_dependencies(state.steps)
+            self._normalize_hybrid_step_metadata(state.steps)
         fallback_effort = normalize_reasoning_effort(context.runtime.effort, fallback="high")
         for step in state.steps:
             step.reasoning_effort = normalize_reasoning_effort(step.reasoning_effort, fallback=fallback_effort)
@@ -1874,6 +1886,7 @@ class Orchestrator:
         for raw_id, step in zip(raw_ids, steps, strict=False):
             depends_on: list[str] = []
             owned_paths: list[str] = []
+            metadata = deepcopy(step.metadata) if isinstance(step.metadata, dict) else {}
             if execution_mode == "parallel":
                 for dependency in step.depends_on:
                     ref = dependency.strip()
@@ -1893,6 +1906,7 @@ class Orchestrator:
                         continue
                     seen_paths.add(normalized_path)
                     owned_paths.append(normalized_path)
+                metadata = self._normalize_parallel_step_metadata(raw_id, metadata, id_map)
             normalized_steps.append(
                 ExecutionStep(
                     step_id=id_map[raw_id],
@@ -1912,9 +1926,11 @@ class Orchestrator:
                     completed_at=step.completed_at,
                     commit_hash=step.commit_hash,
                     notes=step.notes.strip(),
-                    metadata=deepcopy(step.metadata) if isinstance(step.metadata, dict) else {},
+                    metadata=metadata,
                 )
             )
+        if execution_mode == "parallel":
+            self._reduce_redundant_parallel_dependencies(normalized_steps)
         self._normalize_hybrid_step_metadata(normalized_steps)
         if execution_mode == "parallel":
             self._validate_hybrid_execution_steps(normalized_steps)
@@ -1922,11 +1938,78 @@ class Orchestrator:
             self._validate_parallel_execution_steps(normalized_steps)
         return normalized_steps
 
+    def _normalize_parallel_step_metadata(
+        self,
+        raw_id: str,
+        metadata: dict[str, object],
+        id_map: dict[str, str],
+    ) -> dict[str, object]:
+        normalized = deepcopy(metadata) if isinstance(metadata, dict) else {}
+        if "merge_from" not in normalized:
+            return normalized
+        mapped_merge_from: list[str] = []
+        seen_refs: set[str] = set()
+        for item in self._coerce_string_list(normalized.get("merge_from", [])):
+            ref = str(item).strip()
+            if not ref:
+                continue
+            if ref not in id_map:
+                raise ValueError(f"Unknown merge_from reference: {ref}")
+            mapped_ref = id_map[ref]
+            if mapped_ref == id_map[raw_id]:
+                raise ValueError(f"{raw_id} cannot merge from itself.")
+            if mapped_ref in seen_refs:
+                continue
+            seen_refs.add(mapped_ref)
+            mapped_merge_from.append(mapped_ref)
+        normalized["merge_from"] = mapped_merge_from
+        return normalized
+
     def _normalize_owned_path(self, value: str) -> str:
         normalized = str(value).strip().replace("\\", "/")
         while normalized.startswith("./"):
             normalized = normalized[2:]
         return normalized.rstrip("/")
+
+    def _reduce_redundant_parallel_dependencies(self, steps: list[ExecutionStep]) -> None:
+        step_by_id = {step.step_id: step for step in steps}
+        dependency_cache: dict[str, set[str]] = {}
+
+        def dependency_closure(step_id: str, visiting: set[str]) -> set[str]:
+            cached = dependency_cache.get(step_id)
+            if cached is not None:
+                return cached
+            if step_id in visiting:
+                return set()
+            step = step_by_id.get(step_id)
+            if step is None:
+                dependency_cache[step_id] = set()
+                return dependency_cache[step_id]
+            next_visiting = set(visiting)
+            next_visiting.add(step_id)
+            closure: set[str] = set()
+            for dependency in step.depends_on:
+                if dependency not in step_by_id:
+                    continue
+                closure.add(dependency)
+                closure.update(dependency_closure(dependency, next_visiting))
+            dependency_cache[step_id] = closure
+            return closure
+
+        for step in steps:
+            if len(step.depends_on) < 2:
+                continue
+            redundant_dependencies = {
+                dependency
+                for dependency in step.depends_on
+                if any(
+                    dependency in dependency_closure(other_dependency, set())
+                    for other_dependency in step.depends_on
+                    if other_dependency != dependency
+                )
+            }
+            if redundant_dependencies:
+                step.depends_on = [dependency for dependency in step.depends_on if dependency not in redundant_dependencies]
 
     def _plan_uses_dag_parallelism(self, steps: list[ExecutionStep]) -> bool:
         return any(step.depends_on or step.owned_paths for step in steps)

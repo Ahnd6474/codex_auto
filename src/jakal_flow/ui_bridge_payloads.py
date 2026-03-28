@@ -18,7 +18,7 @@ from .utils import compact_text, normalize_workflow_mode, read_json, read_jsonl_
 from .workspace import WorkspaceManager
 
 
-DETAIL_CACHE_VERSION = 6
+DETAIL_CACHE_VERSION = 7
 
 PLANNING_STAGE_DEFINITIONS = (
     {"key": "context_scan", "label": "Scan repository context"},

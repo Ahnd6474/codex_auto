@@ -705,6 +705,72 @@ test("job-aware detail sanitizer ignores a stale running bridge job when saved p
   assert.equal(sanitizedDetail.plan.closeout_status, "completed");
 });
 
+test("job-aware detail sanitizer prefers terminal plan state over recent running activity", () => {
+  const nowMs = Date.parse("2026-03-26T10:00:00Z");
+  const failedDetail = {
+    project: {
+      repo_id: "repo-a",
+      current_status: "running:block:2",
+      last_run_at: "2026-03-26T09:59:58Z",
+    },
+    activity: ["2026-03-26T09:59:59Z | step-started [ST2] | Running ST2: Build the screen"],
+    plan: {
+      closeout_status: "not_started",
+      steps: [
+        { step_id: "ST1", status: "completed" },
+        { step_id: "ST2", status: "failed" },
+      ],
+    },
+    stats: {
+      total_steps: 2,
+      completed_steps: 1,
+      failed_steps: 1,
+      running_steps: 0,
+      remaining_steps: 1,
+    },
+    bottom_panels: {
+      git_status: {
+        current_status: "running:block:2",
+      },
+    },
+  };
+  const completedDetail = {
+    project: {
+      repo_id: "repo-b",
+      current_status: "running:closeout",
+      last_run_at: "2026-03-26T09:59:58Z",
+    },
+    activity: ["2026-03-26T09:59:59Z | closeout-started | Started project closeout."],
+    plan: {
+      closeout_status: "completed",
+      steps: [
+        { step_id: "ST1", status: "completed" },
+        { step_id: "ST2", status: "completed" },
+      ],
+    },
+    stats: {
+      total_steps: 2,
+      completed_steps: 2,
+      failed_steps: 0,
+      running_steps: 0,
+      remaining_steps: 0,
+    },
+    bottom_panels: {
+      git_status: {
+        current_status: "running:closeout",
+      },
+    },
+  };
+
+  const sanitizedFailedDetail = sanitizeProjectDetailForJobState(failedDetail, null, { nowMs });
+  const sanitizedCompletedDetail = sanitizeProjectDetailForJobState(completedDetail, null, { nowMs });
+
+  assert.equal(sanitizedFailedDetail.project.current_status, "failed");
+  assert.equal(sanitizedFailedDetail.bottom_panels.git_status.current_status, "failed");
+  assert.equal(sanitizedCompletedDetail.project.current_status, "closed_out");
+  assert.equal(sanitizedCompletedDetail.bottom_panels.git_status.current_status, "closed_out");
+});
+
 test("job-aware detail sanitizer preserves a very recent active run signal while the job snapshot catches up", () => {
   const nowMs = Date.parse("2026-03-26T10:00:00Z");
   const runningDetail = {

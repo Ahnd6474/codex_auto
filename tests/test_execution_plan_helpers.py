@@ -643,6 +643,42 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(plan_state.steps[0].depends_on, ["ST2"])
         self.assertEqual(plan_state.steps[1].depends_on, [])
 
+    def test_save_execution_plan_state_prunes_transitive_dag_dependencies(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_transitive_dependency_plan_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", execution_mode="parallel")
+
+        try:
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"):
+                _context, plan_state = orchestrator.update_execution_plan(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    plan_state=ExecutionPlanState(
+                        execution_mode="parallel",
+                        default_test_command="python -m pytest",
+                        steps=[
+                            ExecutionStep(step_id="NODE-A", title="Bootstrap", owned_paths=["src/bootstrap"]),
+                            ExecutionStep(step_id="NODE-B", title="Backend", depends_on=["NODE-A"], owned_paths=["src/backend"]),
+                            ExecutionStep(step_id="NODE-C", title="API", depends_on=["NODE-B"], owned_paths=["src/api"]),
+                            ExecutionStep(
+                                step_id="NODE-D",
+                                title="Docs",
+                                depends_on=["NODE-A", "NODE-C"],
+                                owned_paths=["docs"],
+                            ),
+                        ],
+                    ),
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(plan_state.steps[3].step_id, "ST4")
+        self.assertEqual(plan_state.steps[3].depends_on, ["ST3"])
+
     def test_save_execution_plan_state_normalizes_join_metadata(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_join_plan_test"
         shutil.rmtree(temp_root, ignore_errors=True)
@@ -1165,6 +1201,68 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             {item["lineage_id"]: item["merged_by_step_id"] for item in lineage_state["lineages"]},
             {"LN1": "ST4", "LN2": None, "LN3": "ST4"},
         )
+
+    def test_lineages_for_join_step_skips_already_merged_lineages(self) -> None:
+        orchestrator = Orchestrator(Path.cwd() / ".tmp_join_lineage_filter_workspace")
+        plan_state = ExecutionPlanState(
+            execution_mode="parallel",
+            steps=[
+                ExecutionStep(step_id="ST1", title="Frontend", status="completed", metadata={"lineage_id": "LN1"}),
+                ExecutionStep(step_id="ST2", title="Backend", status="completed", metadata={"lineage_id": "LN2"}),
+                ExecutionStep(
+                    step_id="ST3",
+                    title="Join frontend and backend",
+                    status="completed",
+                    depends_on=["ST1", "ST2"],
+                    metadata={"step_kind": "join", "merge_from": ["ST1", "ST2"], "join_policy": "all"},
+                ),
+                ExecutionStep(step_id="ST4", title="Docs", status="completed", metadata={"lineage_id": "LN4"}),
+                ExecutionStep(
+                    step_id="ST5",
+                    title="Reconcile final flow",
+                    depends_on=["ST1", "ST3", "ST4"],
+                    metadata={"step_kind": "join", "merge_from": ["ST1", "ST3", "ST4"], "join_policy": "all"},
+                ),
+            ],
+        )
+        lineages = {
+            "LN1": LineageState(
+                lineage_id="LN1",
+                branch_name="jakal-flow-lineage-ln1",
+                worktree_dir=Path.cwd() / ".tmp_join_lineage_filter_workspace" / "ln1",
+                project_root=Path.cwd() / ".tmp_join_lineage_filter_workspace" / "ln1-project",
+                created_at="2026-03-27T00:00:00+00:00",
+                updated_at="2026-03-27T00:00:00+00:00",
+                head_commit="ln1-head",
+                safe_revision="ln1-head",
+                status="merged",
+                merged_by_step_id="ST3",
+            ),
+            "LN2": LineageState(
+                lineage_id="LN2",
+                branch_name="jakal-flow-lineage-ln2",
+                worktree_dir=Path.cwd() / ".tmp_join_lineage_filter_workspace" / "ln2",
+                project_root=Path.cwd() / ".tmp_join_lineage_filter_workspace" / "ln2-project",
+                created_at="2026-03-27T00:00:00+00:00",
+                updated_at="2026-03-27T00:00:00+00:00",
+                head_commit="ln2-head",
+                safe_revision="ln2-head",
+            ),
+            "LN4": LineageState(
+                lineage_id="LN4",
+                branch_name="jakal-flow-lineage-ln4",
+                worktree_dir=Path.cwd() / ".tmp_join_lineage_filter_workspace" / "ln4",
+                project_root=Path.cwd() / ".tmp_join_lineage_filter_workspace" / "ln4-project",
+                created_at="2026-03-27T00:00:00+00:00",
+                updated_at="2026-03-27T00:00:00+00:00",
+                head_commit="ln4-head",
+                safe_revision="ln4-head",
+            ),
+        }
+
+        selected = orchestrator._lineages_for_join_step(plan_state, plan_state.steps[4], lineages)
+
+        self.assertEqual([lineage.lineage_id for lineage in selected], ["LN4"])
 
     def test_run_join_execution_step_rolls_back_main_when_selective_merge_fails(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_join_merge_failure_test"
