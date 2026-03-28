@@ -102,7 +102,9 @@ def default_workspace_root() -> Path:
 def bootstrap_payload(workspace_root: Path) -> dict[str, Any]:
     codex_status = _codex_snapshot_service.get_snapshot(force_refresh=True)
     codex_status_payload = codex_status.to_dict()
-    codex_status_payload["provider_statuses"] = provider_statuses_payload()
+    codex_status_payload["provider_statuses"] = provider_statuses_payload(
+        fetch_snapshot=lambda codex_path: _codex_snapshot_service.get_snapshot(codex_path)
+    )
     return {
         "workspace_root": str(workspace_root),
         "model_presets": [

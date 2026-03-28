@@ -31,6 +31,7 @@ from jakal_flow.step_models import (
     KIMI_DEFAULT_MODEL,
     MINIMAX_DEFAULT_MODEL,
     QWEN_CODE_DEFAULT_MODEL,
+    provider_statuses_payload,
 )
 from jakal_flow.workspace import WorkspaceManager
 
@@ -415,6 +416,49 @@ class UIBridgeTests(unittest.TestCase):
 
         self.assertEqual(runtime.effort, "high")
         self.assertEqual(runtime.planning_effort, "high")
+
+    def test_provider_statuses_payload_requires_all_three_installed_backends_for_ensemble(self) -> None:
+        fake_snapshot = mock.Mock(
+            to_dict=mock.Mock(
+                return_value={
+                    "available": True,
+                    "account": {"authenticated": True},
+                    "error": "",
+                }
+            )
+        )
+        with mock.patch("jakal_flow.step_models.fetch_codex_backend_snapshot", return_value=fake_snapshot), mock.patch(
+            "jakal_flow.step_models._command_available",
+            side_effect=lambda command: str(command).strip().lower() in {"codex.cmd", "gemini.cmd"},
+        ), mock.patch("jakal_flow.step_models._openai_auth_env_configured", return_value=True), mock.patch(
+            "jakal_flow.step_models._claude_auth_env_configured",
+            return_value=False,
+        ), mock.patch("jakal_flow.step_models._gemini_auth_env_configured", return_value=True), mock.patch(
+            "jakal_flow.step_models._gemini_settings_file_configured",
+            return_value=False,
+        ), mock.patch("jakal_flow.step_models.discover_local_model_catalog", return_value=[]):
+            statuses = provider_statuses_payload()
+
+        self.assertTrue(statuses["openai"]["available"])
+        self.assertFalse(statuses["claude"]["available"])
+        self.assertTrue(statuses["gemini"]["available"])
+        self.assertFalse(statuses["ensemble"]["available"])
+        self.assertIn("missing claude", statuses["ensemble"]["reason"].lower())
+        self.assertFalse(statuses["deepseek"]["available"])
+        self.assertTrue(statuses["openrouter"]["available"])
+
+    def test_bootstrap_payload_includes_provider_statuses(self) -> None:
+        with TemporaryTestDir() as temp_dir, mock.patch(
+            "jakal_flow.ui_bridge._codex_snapshot_service",
+            new=mock.Mock(get_snapshot=mock.Mock(return_value=fake_codex_snapshot())),
+        ), mock.patch(
+            "jakal_flow.ui_bridge.provider_statuses_payload",
+            return_value={"openai": {"available": True}},
+        ):
+            payload = ui_bridge.bootstrap_payload(temp_dir / "workspace")
+
+        self.assertIn("provider_statuses", payload["codex_status"])
+        self.assertEqual(payload["codex_status"]["provider_statuses"]["openai"]["available"], True)
 
     def test_runtime_from_payload_normalizes_legacy_auto_model_presets(self) -> None:
         runtime = runtime_from_payload(
@@ -2232,8 +2276,9 @@ class UIBridgeTests(unittest.TestCase):
 
             self.assertEqual(loaded["project"]["display_name"], "Fast Load Demo")
             self.assertEqual(loaded["detail_level"], "core")
-            self.assertEqual(loaded["codex_status"], {})
-            self.assertEqual(loaded["bottom_panels"]["codex_status"], {})
+            self.assertIn("provider_statuses", loaded["codex_status"])
+            self.assertFalse(loaded["codex_status"].get("model_catalog"))
+            self.assertIn("provider_statuses", loaded["bottom_panels"]["codex_status"])
             self.assertEqual(loaded["history"]["blocks"], [])
             self.assertEqual(loaded["workspace_tree"], [])
             self.assertEqual(loaded["checkpoints"]["items"], [])

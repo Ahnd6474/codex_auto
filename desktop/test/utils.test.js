@@ -45,6 +45,8 @@ import {
   planningProgressCaptionDisplay,
   progressCaption,
   programSettingsFromRuntime,
+  providerAvailable,
+  providerStatusReason,
   providerSupportsCatalog,
   projectJobFromJobs,
   projectFormFromDetail,
@@ -407,6 +409,27 @@ test("providerSupportsCatalog enables curated catalogs for first-party provider 
   assert.equal(providerSupportsCatalog("deepseek"), true);
   assert.equal(providerSupportsCatalog("openrouter"), false);
   assert.equal(providerSupportsCatalog("local_openai"), false);
+});
+
+test("provider availability helpers read provider statuses from codex payloads", () => {
+  const codexStatus = {
+    provider_statuses: {
+      claude: {
+        available: false,
+        usable: false,
+        reason: "Claude Code is not installed.",
+      },
+      gemini: {
+        available: true,
+        usable: true,
+        reason: "Gemini CLI is available.",
+      },
+    },
+  };
+
+  assert.equal(providerAvailable("claude", codexStatus), false);
+  assert.equal(providerAvailable("gemini", codexStatus), true);
+  assert.equal(providerStatusReason("claude", codexStatus), "Claude Code is not installed.");
 });
 
 test("applyProviderDefaults drops the auto sentinel for providers without auto routing", () => {
@@ -1639,6 +1662,7 @@ test("applyConfigRuntimeModelSelection updates reasoning for models with stricte
   assert.equal(nextRuntime.model, "deepseek-reasoner");
   assert.equal(nextRuntime.model_slug_input, "deepseek-reasoner");
   assert.equal(nextRuntime.effort, "high");
+  assert.equal(nextRuntime.planning_effort, "high");
   assert.equal(nextRuntime.effort_selection_mode, "auto");
 });
 

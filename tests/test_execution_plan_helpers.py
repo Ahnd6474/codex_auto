@@ -3297,6 +3297,138 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(plan_state.plan_title, "Fast planner demo")
         self.assertEqual([step.step_id for step in plan_state.steps], ["ST1"])
 
+    def test_generate_execution_plan_uses_selected_planning_model_and_downgrades_gpt_54_effort(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_planning_model_effort_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        (repo_dir / "README.md").write_text("README summary", encoding="utf-8")
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model_provider="openai",
+            model="gpt-5.4",
+            planning_effort="high",
+            effort="high",
+            execution_mode="parallel",
+            use_fast_mode=True,
+            test_cmd="python -m pytest",
+        )
+        final_plan_json = """
+        {
+          "title": "Planner model demo",
+          "summary": "Keep the configured planner model.",
+          "tasks": [
+            {
+              "step_id": "ST1",
+              "task_title": "Implement the requested change",
+              "display_description": "Apply the change safely.",
+              "codex_description": "Use the configured planner model and preserve the runtime choice.",
+              "reasoning_effort": "medium",
+              "depends_on": [],
+              "owned_paths": ["src/demo.py"],
+              "success_criteria": "The change is saved."
+            }
+          ]
+        }
+        """
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(project_dir=repo_dir, branch="main", runtime=runtime)
+            run_result = CodexRunResult(
+                pass_type="plan-agent-b-packing",
+                prompt_file=context.paths.logs_dir / "b.prompt.md",
+                output_file=context.paths.logs_dir / "b.last_message.txt",
+                event_file=context.paths.logs_dir / "b.events.jsonl",
+                returncode=0,
+                search_enabled=False,
+                changed_files=[],
+                usage={"input_tokens": 12},
+                last_message=final_plan_json,
+            )
+
+            with mock.patch.object(orchestrator, "setup_local_project", return_value=context), mock.patch(
+                "jakal_flow.orchestrator.CodexRunner.run_pass",
+                return_value=run_result,
+            ) as mocked_run_pass:
+                orchestrator.generate_execution_plan(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    project_prompt="Use the selected planning model.",
+                    max_steps=3,
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(mocked_run_pass.call_count, 1)
+        self.assertEqual(mocked_run_pass.call_args.kwargs["context"].runtime.model, "gpt-5.4")
+        self.assertEqual(mocked_run_pass.call_args.kwargs["reasoning_effort"], "medium")
+
+    def test_generate_execution_plan_keeps_non_gpt_54_planning_effort(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_planning_model_keep_effort_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        (repo_dir / "README.md").write_text("README summary", encoding="utf-8")
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model_provider="gemini",
+            model="gemini-2.5-pro",
+            planning_effort="medium",
+            effort="medium",
+            execution_mode="parallel",
+            test_cmd="python -m pytest",
+        )
+        final_plan_json = """
+        {
+          "title": "Planner model demo",
+          "summary": "Keep the configured planner model.",
+          "tasks": [
+            {
+              "step_id": "ST1",
+              "task_title": "Implement the requested change",
+              "display_description": "Apply the change safely.",
+              "codex_description": "Use the configured planner model and preserve the runtime choice.",
+              "reasoning_effort": "medium",
+              "depends_on": [],
+              "owned_paths": ["src/demo.py"],
+              "success_criteria": "The change is saved."
+            }
+          ]
+        }
+        """
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(project_dir=repo_dir, branch="main", runtime=runtime)
+            run_result = CodexRunResult(
+                pass_type="plan-agent-b-packing",
+                prompt_file=context.paths.logs_dir / "b.prompt.md",
+                output_file=context.paths.logs_dir / "b.last_message.txt",
+                event_file=context.paths.logs_dir / "b.events.jsonl",
+                returncode=0,
+                search_enabled=False,
+                changed_files=[],
+                usage={"input_tokens": 12},
+                last_message=final_plan_json,
+            )
+
+            with mock.patch.object(orchestrator, "setup_local_project", return_value=context), mock.patch(
+                "jakal_flow.orchestrator.CodexRunner.run_pass",
+                return_value=run_result,
+            ) as mocked_run_pass:
+                orchestrator.generate_execution_plan(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    project_prompt="Use the selected planning model.",
+                    max_steps=3,
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(mocked_run_pass.call_args.kwargs["context"].runtime.model, "gemini-2.5-pro")
+        self.assertEqual(mocked_run_pass.call_args.kwargs["reasoning_effort"], "medium")
+
     def test_generate_execution_plan_materializes_ensemble_step_models(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_ensemble_planner_test"
         shutil.rmtree(temp_root, ignore_errors=True)

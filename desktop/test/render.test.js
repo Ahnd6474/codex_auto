@@ -1903,6 +1903,81 @@ test("ConfigEditorView renders provider-scoped catalog models for Gemini CLI pro
   assert.doesNotMatch(html, /GPT-5\.4/);
 });
 
+test("ConfigEditorView renders three ensemble model selectors in project settings", async () => {
+  const html = await renderBundledComponent(
+    "config-editor-ensemble-model-render",
+    "./src/components/views/ConfigEditorView.jsx",
+    "ConfigEditorView",
+    {
+      form: {
+        project_dir: "C:/demo",
+        display_name: "Demo",
+        branch: "main",
+        github_mode: "existing",
+        origin_url: "",
+        runtime: {
+          model_provider: "ensemble",
+          model: "gpt-5.4-mini",
+          model_preset: "",
+          model_slug_input: "gpt-5.4-mini",
+          ensemble_openai_model: "gpt-5.4-mini",
+          ensemble_gemini_model: "gemini-2.5-pro",
+          ensemble_claude_model: "claude-3.7-sonnet",
+          effort: "medium",
+          planning_effort: "medium",
+          workflow_mode: "standard",
+          execution_mode: "parallel",
+          parallel_worker_mode: "auto",
+          parallel_workers: 0,
+          parallel_memory_per_worker_gib: 3,
+          ml_max_cycles: 3,
+          max_blocks: 5,
+        },
+      },
+      modelPresets: [],
+      modelCatalog: [
+        {
+          model: "gpt-5.4-mini",
+          display_name: "GPT-5.4 Mini",
+          hidden: false,
+          provider: "openai",
+          default_reasoning_effort: "medium",
+          supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
+        },
+        {
+          model: "gemini-2.5-pro",
+          display_name: "Gemini 2.5 Pro",
+          hidden: false,
+          provider: "gemini",
+          default_reasoning_effort: "medium",
+          supported_reasoning_efforts: ["medium"],
+        },
+        {
+          model: "claude-3.7-sonnet",
+          display_name: "Claude 3.7 Sonnet",
+          hidden: false,
+          provider: "claude",
+          default_reasoning_effort: "medium",
+          supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
+        },
+      ],
+      busy: false,
+      onChangeForm: noop,
+      onChangeProgramSettings: noop,
+      onChooseDirectory: noop,
+      onArchiveProject: noop,
+      onDeleteProject: noop,
+    },
+  );
+
+  assert.match(html, /Codex Model/);
+  assert.match(html, /Gemini Model/);
+  assert.match(html, /Claude Model/);
+  assert.match(html, /GPT-5\.4 Mini/);
+  assert.match(html, /Gemini 2\.5 Pro/);
+  assert.match(html, /Claude 3\.7 Sonnet/);
+});
+
 test("AppSettingsView keeps direct model slug editing for OpenRouter only", async () => {
   const html = await renderBundledComponent(
     "app-settings-openrouter-model-render",
@@ -1941,6 +2016,56 @@ test("AppSettingsView keeps direct model slug editing for OpenRouter only", asyn
   );
 
   assert.match(html, /Custom Model Slug/);
+});
+
+test("AppSettingsView disables providers that are not installed in the current environment", async () => {
+  const html = await renderBundledComponent(
+    "app-settings-provider-availability-render",
+    "./src/components/views/AppSettingsView.jsx",
+    "AppSettingsView",
+    {
+      settings: {
+        model_provider: "openai",
+        provider_api_key_env: "OPENAI_API_KEY",
+        provider_base_url: "",
+        model: "gpt-5.4",
+        model_slug_input: "gpt-5.4",
+        approval_mode: "never",
+        sandbox_mode: "danger-full-access",
+        checkpoint_interval_blocks: 1,
+        workflow_mode: "standard",
+        planning_effort: "medium",
+        ml_max_cycles: 3,
+        parallel_worker_mode: "manual",
+        parallel_workers: 4,
+        parallel_memory_per_worker_gib: 3,
+        background_concurrency_limit: 2,
+        dashboard_visibility: {},
+        codex_path: "codex.cmd",
+      },
+      codexStatus: {
+        provider_statuses: {
+          ensemble: { available: false, reason: "The ensemble requires all three installed backends: missing claude." },
+          openai: { available: true, reason: "Codex CLI is available." },
+          claude: { available: false, reason: "Claude Code is not installed." },
+          gemini: { available: true, reason: "Gemini CLI is available." },
+        },
+      },
+      shareSettings: {},
+      shareDetail: {},
+      busy: false,
+      shareBusy: false,
+      onChangeSettings: noop,
+      onGenerateShareLink: noop,
+      onCopyShareLink: noop,
+      onRevokeShareLink: noop,
+      onChangeShareSettings: noop,
+    },
+  );
+
+  assert.match(html, /option value="ensemble"[^>]*disabled=""/);
+  assert.match(html, /option value="claude"[^>]*disabled=""/);
+  assert.doesNotMatch(html, /option value="gemini"[^>]*disabled=""/);
 });
 
 test("ReportsView shows the saved Word report path next to the closeout report", async () => {

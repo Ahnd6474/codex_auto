@@ -996,7 +996,7 @@ def project_detail_payload(
         else {}
     )
     if isinstance(codex_status, dict):
-        codex_status["provider_statuses"] = provider_statuses_payload()
+        codex_status["provider_statuses"] = provider_statuses_payload(fetch_snapshot=fetch_codex_status)
     return _finalize_project_detail_payload(
         base_payload,
         content_signature=content_signature,

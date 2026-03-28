@@ -98,12 +98,12 @@ def resolve_step_model_choice(step: ExecutionStep, runtime: RuntimeOptions) -> S
 def provider_statuses_payload(
     fetch_snapshot: Callable[[str], Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    fetch = fetch_snapshot or fetch_codex_backend_snapshot
+    fetch = fetch_snapshot
     snapshots = {
-        "openai": _snapshot_to_dict(fetch(default_codex_path("openai"))),
-        "claude": _snapshot_to_dict(fetch(default_codex_path("claude"))),
-        "gemini": _snapshot_to_dict(fetch(default_codex_path("gemini"))),
-        "qwen_code": _snapshot_to_dict(fetch(default_codex_path("qwen_code"))),
+        "openai": _snapshot_to_dict(fetch(default_codex_path("openai"))) if callable(fetch) else {},
+        "claude": _snapshot_to_dict(fetch(default_codex_path("claude"))) if callable(fetch) else {},
+        "gemini": _snapshot_to_dict(fetch(default_codex_path("gemini"))) if callable(fetch) else {},
+        "qwen_code": _snapshot_to_dict(fetch(default_codex_path("qwen_code"))) if callable(fetch) else {},
     }
     local_models = discover_local_model_catalog()
     openai_status = _provider_status_from_snapshot("openai", snapshots["openai"])
