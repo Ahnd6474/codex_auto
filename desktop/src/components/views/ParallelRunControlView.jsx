@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import { ExecutionFlowChart } from "../common/ExecutionFlowChart";
@@ -256,20 +257,35 @@ export function ParallelRunControlView({
   ];
 
   const livePlan = activeJob?.status === "running" && detail?.plan ? detail.plan : planDraft;
-  const steps = planStepsWithCloseout(livePlan, {
-    title: t("run.closeout"),
-    description: t("reports.closeoutReport"),
-    successCriteria: t("reports.closeoutReport"),
-  });
-  const readyNodes = readyPendingSteps(steps);
-  const selectedStep = steps.find((step) => step.step_id === selectedStepId) || null;
+  const promptValue = livePlan?.project_prompt || "";
+  const [promptDraft, setPromptDraft] = useState(promptValue);
+  const steps = useMemo(
+    () =>
+      planStepsWithCloseout(livePlan, {
+        title: t("run.closeout"),
+        description: t("reports.closeoutReport"),
+        successCriteria: t("reports.closeoutReport"),
+      }),
+    [livePlan?.closeout_status, livePlan?.steps, t],
+  );
+  const readyNodes = useMemo(() => readyPendingSteps(steps), [steps]);
+  const selectedStep = useMemo(
+    () => steps.find((step) => step.step_id === selectedStepId) || null,
+    [selectedStepId, steps],
+  );
   const runtimeInsights = detail?.runtime_insights || {};
   const executionEstimate = runtimeInsights?.execution || {};
   const costEstimate = runtimeInsights?.cost || {};
   const parallelInsight = runtimeInsights?.parallel || {};
-  const selectedStepEstimate = (executionEstimate.step_estimates || []).find((item) => item.step_id === selectedStepId) || null;
+  const selectedStepEstimate = useMemo(
+    () => (executionEstimate.step_estimates || []).find((item) => item.step_id === selectedStepId) || null,
+    [executionEstimate.step_estimates, selectedStepId],
+  );
   const editableStep = canEditStep(selectedStep, busy);
-  const completedCount = steps.filter((step) => step.status === "completed").length;
+  const completedCount = useMemo(
+    () => steps.filter((step) => step.status === "completed").length,
+    [steps],
+  );
   const selectedSystemStep = isSystemStep(selectedStep);
   const parallelLimitValue = parallelWorkerLabel(parallelInsight.recommended_workers ?? 1, language);
   const parallelLimitDetails = parallelLimitDescription(parallelInsight, language);
@@ -284,10 +300,27 @@ export function ParallelRunControlView({
       ? queuedPosition(activeJob?.queue_position)
       : 0;
   const latestFailure = detail?.reports?.latest_failure || {};
-  const failureArtifacts = Array.isArray(latestFailure?.artifact_files) ? latestFailure.artifact_files.slice(0, 8) : [];
+  const failureArtifacts = useMemo(
+    () => (Array.isArray(latestFailure?.artifact_files) ? latestFailure.artifact_files.slice(0, 8) : []),
+    [latestFailure?.artifact_files],
+  );
   const showFailureCard = Boolean(
     latestFailure?.summary || latestFailure?.report_markdown_file || latestFailure?.report_json_file || failureArtifacts.length,
   );
+
+  useEffect(() => {
+    setPromptDraft(promptValue);
+  }, [promptValue]);
+
+  useEffect(() => {
+    if (promptDraft === promptValue || typeof onPromptChange !== "function") {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      onPromptChange(promptDraft);
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [onPromptChange, promptDraft, promptValue]);
 
   return (
     <section className="workspace-view">
@@ -392,8 +425,13 @@ export function ParallelRunControlView({
           </div>
           <textarea
             className="editor-textarea editor-textarea--prompt"
-            value={livePlan?.project_prompt || ""}
-            onChange={(event) => onPromptChange(event.target.value)}
+            value={promptDraft}
+            onChange={(event) => setPromptDraft(event.target.value)}
+            onBlur={() => {
+              if (promptDraft !== promptValue) {
+                onPromptChange?.(promptDraft);
+              }
+            }}
             disabled={busy}
             placeholder={language === "ko" ? "이 프로젝트에서 AI가 수행할 작업을 설명하세요..." : "Describe what the AI should accomplish in this project…"}
           />
