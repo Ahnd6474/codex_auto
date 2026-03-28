@@ -35,6 +35,7 @@ def normalize_run_control(payload: Any) -> dict[str, Any]:
     data = payload if isinstance(payload, dict) else {}
     return {
         "stop_after_current_step": _coerce_bool(data.get("stop_after_current_step", False), False),
+        "stop_immediately": _coerce_bool(data.get("stop_immediately", False), False),
         "requested_at": _optional_text(data.get("requested_at")),
         "request_source": _optional_text(data.get("request_source")),
     }
@@ -43,6 +44,7 @@ def normalize_run_control(payload: Any) -> dict[str, Any]:
 def default_run_control() -> dict[str, Any]:
     return {
         "stop_after_current_step": False,
+        "stop_immediately": False,
         "requested_at": None,
         "request_source": None,
     }
@@ -67,6 +69,19 @@ def request_stop_after_current_step(context: ProjectContext, request_source: str
         context,
         {
             "stop_after_current_step": True,
+            "stop_immediately": False,
+            "requested_at": now_utc_iso(),
+            "request_source": request_source,
+        },
+    )
+
+
+def request_stop_immediately(context: ProjectContext, request_source: str = "desktop-ui") -> dict[str, Any]:
+    return save_run_control(
+        context,
+        {
+            "stop_after_current_step": False,
+            "stop_immediately": True,
             "requested_at": now_utc_iso(),
             "request_source": request_source,
         },
@@ -75,3 +90,7 @@ def request_stop_after_current_step(context: ProjectContext, request_source: str
 
 def stop_requested(context: ProjectContext) -> bool:
     return bool(load_run_control(context).get("stop_after_current_step"))
+
+
+def immediate_stop_requested(context: ProjectContext) -> bool:
+    return bool(load_run_control(context).get("stop_immediately"))

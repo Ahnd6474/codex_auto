@@ -2,7 +2,9 @@ import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import { ExecutionFlowChart } from "../common/ExecutionFlowChart";
 import {
+  basename,
   canEditStep,
+  commandLabel,
   effectiveStepStatus,
   formatDurationCompact,
   formatUsd,
@@ -11,6 +13,7 @@ import {
   parallelLimitTone,
   parallelWorkerLabel,
   planStepsWithCloseout,
+  projectStatusWithJob,
   REASONING_OPTIONS,
   reasoningEffortLabel,
   shouldShowEstimatedCost,
@@ -38,6 +41,14 @@ function readyPendingSteps(steps) {
   );
 }
 
+function queuedPosition(value) {
+  return Math.max(1, Number.parseInt(String(value || 0), 10) || 1);
+}
+
+function reservationProjectLabel(job, fallbackLabel) {
+  return String(job?.display_name || "").trim() || basename(job?.project_dir || "") || String(job?.repo_id || "").trim() || fallbackLabel;
+}
+
 export function ParallelRunControlView({
   detail,
   planDraft,
@@ -45,12 +56,16 @@ export function ParallelRunControlView({
   autoRunAfterPlan,
   selectedStepId,
   busy,
+  canRequestStop = false,
+  canCancelReservation = false,
+  queuedJobs = [],
   onPromptChange,
   onGeneratePlan,
   onSavePlan,
   onResetPlan,
   onRunPlan,
   onRequestStop,
+  onCancelQueuedJob,
   onAutoRunAfterPlanChange,
   onSelectStep,
   onUpdateStepField,
@@ -78,11 +93,14 @@ export function ParallelRunControlView({
   const parallelLimitValue = parallelWorkerLabel(parallelInsight.recommended_workers ?? 1, language);
   const parallelLimitDetails = parallelLimitDescription(parallelInsight, language);
   const parallelLimitCardTone = parallelLimitTone(parallelInsight);
-  const projectStatus = detail?.project?.current_status || "";
+  const projectStatus = projectStatusWithJob(detail?.project?.current_status || "", activeJob);
   const selectedStepStatus = effectiveStepStatus(selectedStep, projectStatus);
   const closeoutStatus = String(livePlan?.closeout_status || "not_started").trim().toLowerCase();
   const showCloseoutStatus = closeoutStatus && closeoutStatus !== "not_started";
   const showEstimatedCost = shouldShowEstimatedCost(detail?.runtime || {}, costEstimate);
+  const activeQueuePosition = String(activeJob?.status || "").trim().toLowerCase() === "queued"
+    ? queuedPosition(activeJob?.queue_position)
+    : 0;
 
   return (
     <section className="workspace-view">
@@ -94,9 +112,9 @@ export function ParallelRunControlView({
       </div>
 
       <div className="run-summary">
-        <div className={`metric-card metric-card--${statusTone(detail?.project?.current_status)}`}>
+        <div className={`metric-card metric-card--${statusTone(projectStatus)}`}>
           <span>{t("common.status")}</span>
-          <strong>{displayStatus(detail?.project?.current_status || "idle", language)}</strong>
+          <strong>{displayStatus(projectStatus || "idle", language)}</strong>
         </div>
         <div className="metric-card metric-card--info">
           <span>{t("run.done")}</span>
@@ -105,6 +123,15 @@ export function ParallelRunControlView({
         <div className="metric-card metric-card--info">
           <span>{t("run.parallelReady")}</span>
           <strong>{readyNodes.length}</strong>
+        </div>
+        <div className="metric-card metric-card--info">
+          <span>{t("run.reservations")}</span>
+          <strong>{queuedJobs.length}</strong>
+          {activeQueuePosition ? <span>{t("run.queuePosition", { position: activeQueuePosition })}</span> : null}
+        </div>
+        <div className={`metric-card metric-card--${detail?.run_control?.stop_immediately ? "warning" : "neutral"}`}>
+          <span>{t("run.stopAfterStep")}</span>
+          <strong>{detail?.run_control?.stop_immediately ? t("common.on") : t("common.off")}</strong>
         </div>
         <div className="metric-card metric-card--info">
           <span>{t("run.estimatedRemaining")}</span>
@@ -157,7 +184,16 @@ export function ParallelRunControlView({
             <button className="toolbar-button toolbar-button--accent" onClick={onRunPlan} type="button" disabled={busy}>
               {t("action.run")}
             </button>
-            <button className="toolbar-button toolbar-button--ghost" onClick={onRequestStop} type="button" disabled={!busy}>
+            {canCancelReservation ? (
+              <button
+                className="toolbar-button toolbar-button--ghost"
+                onClick={() => onCancelQueuedJob?.(activeJob?.id)}
+                type="button"
+              >
+                {t("action.cancelReservation")}
+              </button>
+            ) : null}
+            <button className="toolbar-button toolbar-button--ghost" onClick={onRequestStop} type="button" disabled={!canRequestStop}>
               {t("action.stop")}
             </button>
           </div>
@@ -181,6 +217,36 @@ export function ParallelRunControlView({
             <strong>{t("field.prompt")}</strong>
           </div>
           <textarea className="editor-textarea editor-textarea--prompt" value={livePlan?.project_prompt || ""} onChange={(event) => onPromptChange(event.target.value)} disabled={busy} />
+        </div>
+
+        <div className="content-card">
+          <div className="content-card__header">
+            <strong>{t("run.reservations")}</strong>
+            <span className={`status-badge status-badge--${queuedJobs.length ? "info" : "neutral"}`}>{queuedJobs.length}</span>
+          </div>
+          {queuedJobs.length ? (
+            <div className="step-editor-grid">
+              {queuedJobs.map((job) => (
+                <div className="field field--wide" key={job.id}>
+                  <span>{t("run.queuePosition", { position: queuedPosition(job?.queue_position) })}</span>
+                  <strong>{reservationProjectLabel(job, t("project.none"))}</strong>
+                  <p>{commandLabel(job?.command, language)}</p>
+                  <p>{t("run.queuePriority", { priority: Number.parseInt(String(job?.queue_priority ?? 0), 10) || 0 })}</p>
+                  <p>{String(job?.project_dir || job?.repo_id || "").trim() || t("common.unavailable")}</p>
+                  <div className="action-row">
+                    <span className={`status-badge status-badge--${statusTone(`queued:${job?.command || ""}`)}`}>
+                      {displayStatus(`queued:${job?.command || ""}`, language)}
+                    </span>
+                    <button className="toolbar-button toolbar-button--ghost" onClick={() => onCancelQueuedJob?.(job.id)} type="button">
+                      {t("action.cancelReservation")}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-block">{t("run.noReservations")}</div>
+          )}
         </div>
 
         <div className="content-card">

@@ -2,13 +2,12 @@ import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import {
   codexUsageBuckets,
-  commandLabel,
   formatDurationCompact,
   formatUsd,
-  isDebuggingStatus,
   normalizeDashboardVisibility,
   parallelLimitDescription,
   parallelWorkerLabel,
+  projectStatusWithJob,
   rateLimitRemainingLabel,
   rateLimitWindowSummary,
   runtimeSummary,
@@ -42,12 +41,10 @@ export function DashboardView({ detail, planDraft, form, busy, modelPresets, mod
   const parallelLimitValue = parallelWorkerLabel(parallelInsight.recommended_workers ?? 1, language);
   const parallelLimitDetails = parallelLimitDescription(parallelInsight, language);
   const showEstimatedCost = shouldShowEstimatedCost(detail?.runtime || {}, costEstimate);
-  const activeStatus =
-    activeJob?.status === "running" && !isDebuggingStatus(projectStatus)
-      ? displayStatus(`running:${commandLabel(activeJob.command, language)}`, language)
-      : displayStatus(projectStatus, language);
+  const activeStatusKey = projectStatusWithJob(projectStatus, activeJob) || "idle";
+  const activeStatus = displayStatus(activeStatusKey, language);
   const metricItems = [
-    { key: "status", label: t("common.status"), value: activeStatus, tone: statusTone(detail?.project?.current_status) },
+    { key: "status", label: t("common.status"), value: activeStatus, tone: statusTone(activeStatusKey) },
     { key: "remaining_steps", label: t("dashboard.remainingSteps"), value: pendingSteps.length, tone: "info" },
     {
       key: "checkpoint_pending",

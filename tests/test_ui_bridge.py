@@ -16,6 +16,7 @@ import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from jakal_flow.cli import main as cli_main
+import jakal_flow.ui_bridge as ui_bridge
 import jakal_flow.ui_bridge_payloads as ui_bridge_payloads
 from jakal_flow.models import ExecutionPlanState, ExecutionStep
 from jakal_flow.share import share_server_status_payload
@@ -96,6 +97,36 @@ def fake_codex_snapshot() -> mock.Mock:
 
 
 class UIBridgeTests(unittest.TestCase):
+    def test_start_share_server_process_replaces_stale_state_file(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            workspace_root.mkdir(parents=True, exist_ok=True)
+            stale_port = 54321
+            stale_pid = 999999
+            (workspace_root / "share_server.json").write_text(
+                json.dumps(
+                    {
+                        "host": "0.0.0.0",
+                        "port": stale_port,
+                        "pid": stale_pid,
+                        "started_at": "2026-03-28T00:00:00+00:00",
+                        "viewer_path": "/share/view",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            try:
+                status = ui_bridge.start_share_server_process(workspace_root)
+                self.assertTrue(status["running"])
+                self.assertNotEqual(status["pid"], stale_pid)
+                self.assertNotEqual(status["port"], stale_port)
+                stored_state = json.loads((workspace_root / "share_server.json").read_text(encoding="utf-8"))
+                self.assertEqual(stored_state["pid"], status["pid"])
+                self.assertEqual(stored_state["port"], status["port"])
+            finally:
+                ui_bridge.stop_share_server_process(workspace_root)
+
     def test_default_workspace_root_prefers_explicit_jakal_flow_env(self) -> None:
         with TemporaryTestDir() as temp_dir:
             explicit = temp_dir / "custom-workspace"
@@ -156,6 +187,20 @@ class UIBridgeTests(unittest.TestCase):
 
         self.assertEqual(caption, "Completed 1/3 steps, running: ST2, ST3")
 
+    def test_progress_caption_reports_integrating_nodes_for_parallel_dag(self) -> None:
+        caption = progress_caption(
+            ExecutionPlanState(
+                execution_mode="parallel",
+                steps=[
+                    ExecutionStep(step_id="ST1", title="Root", status="completed"),
+                    ExecutionStep(step_id="ST2", title="Frontend", depends_on=["ST1"], owned_paths=["desktop/src"], status="integrating"),
+                    ExecutionStep(step_id="ST3", title="Backend", depends_on=["ST1"], owned_paths=["src/jakal_flow"], status="running"),
+                ],
+            )
+        )
+
+        self.assertEqual(caption, "Completed 1/3 steps, running: ST3; integrating: ST2")
+
     def test_effective_project_status_prefers_parallel_plan_status_when_steps_are_running(self) -> None:
         status = effective_project_status(
             "running:st2",
@@ -192,6 +237,8 @@ class UIBridgeTests(unittest.TestCase):
                 "optimization_long_function_lines": "bogus",
                 "optimization_duplicate_block_lines": 1,
                 "optimization_max_files": "0",
+                "allow_background_queue": "false",
+                "background_queue_priority": "7",
             }
         )
 
@@ -213,6 +260,8 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(runtime.optimization_long_function_lines, 80)
         self.assertEqual(runtime.optimization_duplicate_block_lines, 3)
         self.assertEqual(runtime.optimization_max_files, 1)
+        self.assertFalse(runtime.allow_background_queue)
+        self.assertEqual(runtime.background_queue_priority, 7)
 
     def test_runtime_from_payload_defaults_parallel_workers_to_auto_mode(self) -> None:
         runtime = runtime_from_payload({"execution_mode": "parallel"})
@@ -353,6 +402,20 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(runtime.model, "openai/gpt-4.1-mini")
         self.assertEqual(runtime.billing_mode, "token")
 
+    def test_runtime_from_payload_applies_gemini_defaults(self) -> None:
+        runtime = runtime_from_payload(
+            {
+                "model_provider": "gemini",
+            }
+        )
+
+        self.assertEqual(runtime.model_provider, "gemini")
+        self.assertEqual(runtime.provider_api_key_env, "GEMINI_API_KEY")
+        self.assertEqual(runtime.provider_base_url, "")
+        self.assertEqual(runtime.codex_path, "gemini.cmd" if os.name == "nt" else "gemini")
+        self.assertEqual(runtime.model, "")
+        self.assertEqual(runtime.model_slug_input, "")
+
     def test_bootstrap_exposes_workspace_and_model_presets(self) -> None:
         with TemporaryTestDir() as temp_dir:
             with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
@@ -362,8 +425,9 @@ class UIBridgeTests(unittest.TestCase):
         self.assertTrue(payload["model_presets"])
         self.assertTrue(payload["model_catalog"])
         self.assertEqual(payload["codex_status"]["account"]["plan_type"], "pro")
-        self.assertEqual(payload["default_runtime"]["model"], "auto")
-        self.assertEqual(payload["default_runtime"]["model_preset"], "auto")
+        self.assertEqual(payload["default_runtime"]["model"], "gpt-5.4")
+        self.assertEqual(payload["default_runtime"]["model_preset"], "")
+        self.assertEqual(payload["default_runtime"]["model_slug_input"], "gpt-5.4")
         self.assertTrue(payload["default_runtime"]["generate_word_report"])
         self.assertEqual(payload["default_runtime"]["sandbox_mode"], "danger-full-access")
         self.assertEqual(payload["default_runtime"]["optimization_mode"], "light")
@@ -397,6 +461,7 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(detail["project"]["display_name"], "Demo Project")
             self.assertEqual(detail["runtime"]["test_cmd"], "python -m unittest")
             self.assertEqual(detail["run_control"]["stop_after_current_step"], False)
+            self.assertEqual(detail["run_control"]["stop_immediately"], False)
             self.assertIn("workspace_tree", detail)
             self.assertIn("reports", detail)
             self.assertIn("history", detail)
@@ -422,6 +487,47 @@ class UIBridgeTests(unittest.TestCase):
                 )
             self.assertIn("Demo Project", loaded["summary"])
             self.assertEqual(loaded["stats"]["total_steps"], 0)
+
+    def test_load_project_summary_includes_word_report_path_when_present(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Report Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "effort": "medium",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            word_report_path = Path(detail["files"]["project_root"]) / "reports" / "CLOSEOUT_REPORT.docx"
+            word_report_path.parent.mkdir(parents=True, exist_ok=True)
+            word_report_path.write_bytes(b"demo")
+
+            with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
+                loaded = run_command(
+                    "load-project",
+                    workspace_root,
+                    {
+                        "repo_id": detail["project"]["repo_id"],
+                    },
+                )
+
+            self.assertEqual(loaded["reports"]["word_report_path"], str(word_report_path))
+            self.assertIn(str(word_report_path), loaded["summary"])
 
     def test_archive_project_moves_managed_workspace_and_allows_same_repo_restart(self) -> None:
         with TemporaryTestDir() as temp_dir:
@@ -913,7 +1019,8 @@ class UIBridgeTests(unittest.TestCase):
                     "source": "unit-test",
                 },
             )
-            self.assertEqual(stop_payload["run_control"]["stop_after_current_step"], True)
+            self.assertEqual(stop_payload["run_control"]["stop_immediately"], True)
+            self.assertEqual(stop_payload["run_control"]["stop_after_current_step"], False)
 
             with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
                 loaded = run_command(
@@ -923,7 +1030,8 @@ class UIBridgeTests(unittest.TestCase):
                         "project_dir": str(repo_dir),
                     },
                 )
-            self.assertEqual(loaded["run_control"]["stop_after_current_step"], True)
+            self.assertEqual(loaded["run_control"]["stop_immediately"], True)
+            self.assertEqual(loaded["run_control"]["stop_after_current_step"], False)
 
             control_path = Path(loaded["files"]["ui_control_file"])
             self.assertTrue(control_path.exists())
@@ -961,6 +1069,7 @@ class UIBridgeTests(unittest.TestCase):
                 json.dumps(
                     {
                         "stop_after_current_step": "yes",
+                        "stop_immediately": "on",
                         "requested_at": 123,
                         "request_source": ["desktop"],
                     }
@@ -991,6 +1100,7 @@ class UIBridgeTests(unittest.TestCase):
                 )
 
             self.assertTrue(loaded["run_control"]["stop_after_current_step"])
+            self.assertTrue(loaded["run_control"]["stop_immediately"])
             self.assertEqual(loaded["run_control"]["requested_at"], "123")
             self.assertIsNone(loaded["run_control"]["request_source"])
             self.assertEqual(len(loaded["checkpoints"]["items"]), 1)
@@ -1206,6 +1316,82 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(result["project"]["current_status"], "closed_out")
             self.assertTrue(any("closeout-started" in line for line in result["activity"]))
             self.assertTrue(any("closeout-finished" in line for line in result["activity"]))
+
+    def test_run_closeout_reports_generated_word_report_path_in_activity(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Closeout Report Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                    "generate_word_report": True,
+                },
+            }
+            completed_plan = {
+                "plan_title": "Closeout Report Demo",
+                "project_prompt": "Finish the work",
+                "summary": "Everything is ready for closeout.",
+                "workflow_mode": "standard",
+                "execution_mode": "parallel",
+                "default_test_command": "python -m unittest",
+                "steps": [
+                    {
+                        "step_id": "ST1",
+                        "title": "Implement",
+                        "display_description": "Implementation finished",
+                        "codex_description": "Implementation finished",
+                        "success_criteria": "Tests pass",
+                        "test_command": "python -m unittest",
+                        "reasoning_effort": "high",
+                        "status": "completed",
+                    }
+                ],
+            }
+
+            def fake_run_execution_closeout(self, project_dir, runtime, branch="main", origin_url=""):
+                context = self.local_project(project_dir)
+                assert context is not None
+                plan_state = self.load_execution_plan_state(context)
+                plan_state.closeout_status = "completed"
+                plan_state.closeout_started_at = "2026-03-26T00:10:00+00:00"
+                plan_state.closeout_completed_at = "2026-03-26T00:12:00+00:00"
+                plan_state.closeout_notes = "Closeout finished successfully."
+                context.paths.closeout_report_docx_file.parent.mkdir(parents=True, exist_ok=True)
+                context.paths.closeout_report_docx_file.write_bytes(b"demo")
+                saved = self.save_execution_plan_state(context, plan_state)
+                context.metadata.current_status = self._status_from_plan_state(saved)
+                self.workspace.save_project(context)
+                return context, saved
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ), mock.patch(
+                "jakal_flow.orchestrator.Orchestrator.run_execution_closeout",
+                new=fake_run_execution_closeout,
+            ):
+                result = run_command(
+                    "run-closeout",
+                    workspace_root,
+                    {
+                        **payload,
+                        "plan": completed_plan,
+                    },
+                )
+
+            expected_path = str(Path(result["files"]["project_root"]) / "reports" / "CLOSEOUT_REPORT.docx")
+            self.assertEqual(result["reports"]["word_report_path"], expected_path)
+            self.assertTrue(any(expected_path in line for line in result["activity"]))
 
     def test_run_plan_routes_single_hybrid_task_batches_through_lineage_execution(self) -> None:
         with TemporaryTestDir() as temp_dir:
@@ -1963,6 +2149,144 @@ class UIBridgeTests(unittest.TestCase):
                     )
                 self.assertIsNone(revoked["share"]["active_session"])
                 self.assertIn("revoked_share_session", revoked)
+            finally:
+                run_command("stop_share_server", workspace_root, {})
+
+    def test_share_bridge_revoke_accepts_workspace_active_session_from_other_project(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_one = temp_dir / "repo-one"
+            repo_two = temp_dir / "repo-two"
+            repo_one.mkdir(parents=True, exist_ok=True)
+            repo_two.mkdir(parents=True, exist_ok=True)
+
+            payload_one = {
+                "project_dir": str(repo_one),
+                "display_name": "Share Bridge Demo One",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m pytest",
+                    "max_blocks": 5,
+                },
+            }
+            payload_two = {
+                "project_dir": str(repo_two),
+                "display_name": "Share Bridge Demo Two",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m pytest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_one / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                run_command("save-project-setup", workspace_root, payload_one)
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_two / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                run_command("save-project-setup", workspace_root, payload_two)
+
+            try:
+                run_command("start_share_server", workspace_root, {})
+                with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
+                    created = run_command(
+                        "create_share_session",
+                        workspace_root,
+                        {
+                            "project_dir": str(repo_one),
+                            "created_by": "unit-test",
+                            "bind_host": "0.0.0.0",
+                            "public_base_url": "https://share.example.com/base",
+                        },
+                    )
+                active_session = created["share"]["active_session"]
+                self.assertEqual(active_session["session_id"], created["created_share_session"]["session_id"])
+
+                with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
+                    revoked = run_command(
+                        "revoke_share_session",
+                        workspace_root,
+                        {
+                            "project_dir": str(repo_two),
+                            "session_id": active_session["session_id"],
+                        },
+                    )
+
+                self.assertIsNone(revoked["share"]["active_session"])
+                self.assertEqual(revoked["project"]["display_name"], "Share Bridge Demo Two")
+            finally:
+                run_command("stop_share_server", workspace_root, {})
+
+    def test_share_bridge_can_create_workspace_share_without_project(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+
+            try:
+                run_command("start_share_server", workspace_root, {})
+                created = run_command(
+                    "create_share_session",
+                    workspace_root,
+                    {
+                        "created_by": "unit-test",
+                        "bind_host": "0.0.0.0",
+                        "public_base_url": "https://share.example.com/base",
+                    },
+                )
+
+                self.assertIn("share", created)
+                self.assertTrue(created["created_share_session"]["share_url"].startswith("https://share.example.com/base/share/view?"))
+                self.assertEqual(created["share"]["active_session"]["session_id"], created["created_share_session"]["session_id"])
+                self.assertEqual(created["share"]["server"]["config"]["public_base_url"], "https://share.example.com/base")
+
+                share_payload = run_command("load-workspace-share", workspace_root, {})
+                self.assertEqual(
+                    share_payload["share"]["active_session"]["session_id"],
+                    created["created_share_session"]["session_id"],
+                )
+            finally:
+                run_command("stop_share_server", workspace_root, {})
+
+    def test_share_bridge_restarts_stale_share_server_when_new_session_validation_fails(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+
+            try:
+                with mock.patch(
+                    "jakal_flow.ui_bridge.start_share_server_process",
+                    wraps=ui_bridge.start_share_server_process,
+                ) as start_server, mock.patch(
+                    "jakal_flow.ui_bridge.stop_share_server_process",
+                    wraps=ui_bridge.stop_share_server_process,
+                ) as stop_server, mock.patch(
+                    "jakal_flow.ui_bridge_commands.share.verify_local_share_session_access",
+                    side_effect=[RuntimeError("Unknown share session."), None],
+                ) as verify_share:
+                    created = run_command(
+                        "create_share_session",
+                        workspace_root,
+                        {
+                            "created_by": "unit-test",
+                            "bind_host": "0.0.0.0",
+                            "public_base_url": "https://share.example.com/base",
+                        },
+                    )
+
+                self.assertTrue(created["created_share_session"]["share_url"].startswith("https://share.example.com/base/share/view?"))
+                self.assertEqual(verify_share.call_count, 2)
+                self.assertEqual(start_server.call_count, 2)
+                self.assertGreaterEqual(stop_server.call_count, 1)
             finally:
                 run_command("stop_share_server", workspace_root, {})
 

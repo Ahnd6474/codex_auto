@@ -118,3 +118,31 @@ test("loadInitialDesktopState overlaps bootstrap and job snapshot loading", asyn
     globalThis.__JAKAL_FLOW_TEST_LIST_BRIDGE_JOBS__ = originalListBridgeJobs;
   }
 });
+
+test("loadInitialDesktopState keeps queued jobs as the active snapshot when nothing is running", async () => {
+  const bridgeRequest = async (command, _payload, workspaceRoot) => {
+    if (command === "bootstrap") {
+      return { workspace_root: "/workspace" };
+    }
+    if (command === "list-projects") {
+      assert.equal(workspaceRoot, "/workspace");
+      return { projects: [] };
+    }
+    throw new Error(`Unexpected command: ${command}`);
+  };
+
+  const originalListBridgeJobs = globalThis.__JAKAL_FLOW_TEST_LIST_BRIDGE_JOBS__;
+  globalThis.__JAKAL_FLOW_TEST_LIST_BRIDGE_JOBS__ = async () => [
+    { id: "job-queued", status: "queued", command: "run-plan" },
+  ];
+
+  try {
+    const result = await loadInitialDesktopState(bridgeRequest, "job-queued");
+
+    assert.equal(result.jobSnapshot.activeJob?.id, "job-queued");
+    assert.equal(result.jobSnapshot.activeJobId, "job-queued");
+    assert.equal(result.jobSnapshot.runningJob, null);
+  } finally {
+    globalThis.__JAKAL_FLOW_TEST_LIST_BRIDGE_JOBS__ = originalListBridgeJobs;
+  }
+});

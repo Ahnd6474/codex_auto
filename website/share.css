@@ -42,13 +42,15 @@ body {
 
 .monitor-shell {
   position: relative;
-  width: min(1120px, calc(100% - 24px));
+  width: min(1320px, calc(100% - 24px));
   margin: 0 auto;
   padding: 24px 0 36px;
 }
 
 .hero,
-.card {
+.card,
+.project-card,
+.mini-panel {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background:
@@ -69,8 +71,10 @@ body {
 .card-label,
 h1,
 h2,
+h3,
 .big-value,
-.pill {
+.pill,
+.control-button {
   font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
 }
 
@@ -84,7 +88,8 @@ h2,
 }
 
 h1,
-h2 {
+h2,
+h3 {
   margin: 0;
   letter-spacing: -0.04em;
 }
@@ -92,6 +97,14 @@ h2 {
 h1 {
   font-size: clamp(2rem, 5vw, 3.6rem);
   line-height: 0.94;
+}
+
+h2 {
+  font-size: 1.55rem;
+}
+
+h3 {
+  font-size: 1.15rem;
 }
 
 .hero-copy,
@@ -108,7 +121,12 @@ h1 {
 
 .hero-meta,
 .meta-list,
-.section-head {
+.section-head,
+.project-card__top,
+.project-card__status-row,
+.mini-panel__head,
+.control-actions,
+.project-card__meta {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -146,14 +164,15 @@ h1 {
   background: rgba(255, 138, 128, 0.16);
 }
 
-.grid {
+.summary-grid {
   display: grid;
-  grid-template-columns: 1.1fr 1fr 1fr 1fr;
+  grid-template-columns: 1.5fr repeat(4, minmax(0, 1fr));
   gap: 14px;
   margin-top: 16px;
 }
 
-.card {
+.card,
+.project-card {
   padding: 22px;
 }
 
@@ -161,6 +180,11 @@ h1 {
   background:
     linear-gradient(135deg, rgba(123, 169, 255, 0.18), rgba(127, 231, 196, 0.12)),
     var(--panel-strong);
+}
+
+.card--projects,
+.card--error {
+  margin-top: 16px;
 }
 
 .big-value {
@@ -174,17 +198,53 @@ h1 {
   font-size: 0.92rem;
 }
 
-.card--logs,
-.card--flow,
-.card--controls,
-.card--error {
-  margin-top: 16px;
-}
-
-.section-head {
+.section-head,
+.project-card__top,
+.mini-panel__head {
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 12px;
+}
+
+.project-list {
+  display: grid;
+  gap: 16px;
+}
+
+.project-card {
+  background:
+    linear-gradient(135deg, rgba(123, 169, 255, 0.12), rgba(127, 231, 196, 0.08)),
+    var(--panel-strong);
+}
+
+.project-card__top {
+  margin-bottom: 14px;
+}
+
+.project-card__status-row {
+  margin-top: 10px;
+}
+
+.project-card__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.mini-panel {
+  padding: 18px;
+}
+
+.mini-panel--wide {
+  grid-column: span 2;
+}
+
+.mini-panel strong {
+  display: block;
+  font-size: 1rem;
+}
+
+.mini-panel__head {
+  margin-bottom: 10px;
 }
 
 pre {
@@ -201,23 +261,20 @@ pre {
   line-height: 1.6;
 }
 
-.flow-frame {
+.project-flow {
   display: grid;
   gap: 10px;
 }
 
-#flow-chart {
+.project-flow__image {
   width: 100%;
   height: auto;
   border-radius: 20px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .control-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
   margin-top: 6px;
 }
 
@@ -229,7 +286,8 @@ pre {
   color: #08140f;
   background: linear-gradient(135deg, var(--accent), #baf6df);
   box-shadow: 0 10px 28px rgba(127, 231, 196, 0.16);
-  font: 600 0.98rem "Space Grotesk", "IBM Plex Sans", sans-serif;
+  font-size: 0.98rem;
+  font-weight: 600;
   cursor: pointer;
   transition: transform 120ms ease, opacity 120ms ease, border-color 120ms ease;
 }
@@ -251,24 +309,42 @@ pre {
   box-shadow: none;
 }
 
+.empty-block {
+  margin: 0;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px dashed var(--line-strong);
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .card--error {
   border-color: rgba(255, 138, 128, 0.22);
 }
 
-@media (max-width: 980px) {
-  .grid {
+@media (max-width: 1180px) {
+  .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .project-card__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mini-panel--wide {
+    grid-column: auto;
   }
 }
 
 @media (max-width: 720px) {
   .monitor-shell {
-    width: min(100% - 18px, 1120px);
+    width: min(100% - 18px, 1320px);
     padding-top: 18px;
   }
 
   .hero,
-  .grid {
+  .summary-grid {
     grid-template-columns: 1fr;
   }
 

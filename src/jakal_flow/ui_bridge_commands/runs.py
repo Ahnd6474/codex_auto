@@ -13,17 +13,36 @@ def build_run_command_handlers(
     append_ui_event,
     save_run_control,
     default_run_control,
-    request_stop_after_current_step,
+    request_stop_immediately,
     stop_requested,
+    immediate_stop_requested,
+    execution_scope_id,
+    execution_stop_registry,
     coerce_bool,
 ) -> dict[str, BridgeCommandHandler]:
+    def closeout_finished_event_payload(project, saved) -> tuple[str, dict]:
+        details = {
+            "status": saved.closeout_status,
+            "commit_hash": saved.closeout_commit_hash,
+        }
+        word_report_path = ""
+        report_path = getattr(project.paths, "closeout_report_docx_file", None)
+        if report_path is not None and report_path.exists():
+            word_report_path = str(report_path)
+            details["word_report_path"] = word_report_path
+        message = f"Closeout finished with status {saved.closeout_status}."
+        if saved.closeout_status == "completed" and word_report_path:
+            message = f"{message} Word report: {word_report_path}"
+        return message, details
+
     def request_stop(ctx: BridgeCommandContext) -> dict:
         project = resolve_project(ctx.orchestrator, ctx.payload)
-        control = request_stop_after_current_step(
+        control = request_stop_immediately(
             project,
             request_source=str(ctx.payload.get("source", "desktop-ui")).strip() or "desktop-ui",
         )
-        append_ui_event(project, "stop-requested", "Stop requested after the current step.", control)
+        execution_stop_registry.request_stop(execution_scope_id(project))
+        append_ui_event(project, "stop-requested", "Immediate stop requested. The current step will be ignored.", control)
         return {
             "repo_id": project.metadata.repo_id,
             "project_dir": str(project.metadata.repo_path),
@@ -57,6 +76,8 @@ def build_run_command_handlers(
             branch=branch,
             origin_url=origin_url,
         )
+        scope_id = execution_scope_id(project)
+        execution_stop_registry.clear(scope_id)
         save_run_control(project, default_run_control())
         append_ui_event(project, "run-started", "Started running the remaining execution steps.")
         try:
@@ -68,11 +89,12 @@ def build_run_command_handlers(
                     branch=branch,
                     origin_url=origin_url,
                 )
+                event_message, event_details = closeout_finished_event_payload(next_project, next_saved)
                 append_ui_event(
                     next_project,
                     "closeout-finished",
-                    f"Closeout finished with status {next_saved.closeout_status}.",
-                    {"status": next_saved.closeout_status, "commit_hash": next_saved.closeout_commit_hash},
+                    event_message,
+                    event_details,
                 )
                 return next_project, next_saved
 
@@ -80,6 +102,9 @@ def build_run_command_handlers(
                 latest_project = ctx.orchestrator.local_project(project_dir)
                 if latest_project is None:
                     raise RuntimeError("The managed project could not be reloaded during execution.")
+                if immediate_stop_requested(latest_project):
+                    append_ui_event(latest_project, "run-paused", "Paused immediately because an immediate stop was requested.")
+                    break
                 current_plan = ctx.orchestrator.load_execution_plan_state(latest_project)
                 batches = ctx.orchestrator.pending_execution_batches(current_plan)
                 if not batches:
@@ -150,6 +175,8 @@ def build_run_command_handlers(
                             "step_kind": step_kind,
                         },
                     )
+                    if result_step.status == "paused":
+                        append_ui_event(project, "run-paused", "Paused immediately because an immediate stop was requested.")
                     if result_step.status != "completed":
                         break
                     continue
@@ -204,6 +231,8 @@ def build_run_command_handlers(
                                 "hybrid_lineages": True,
                             },
                         )
+                    if any(item.status == "paused" for item in result_steps):
+                        append_ui_event(project, "run-paused", "Paused immediately because an immediate stop was requested.")
                     if any(item.status != "completed" for item in result_steps):
                         break
                     continue
@@ -258,6 +287,8 @@ def build_run_command_handlers(
                             "statuses": {item.step_id: item.status for item in result_steps},
                         },
                     )
+                    if any(item.status == "paused" for item in result_steps):
+                        append_ui_event(project, "run-paused", "Paused immediately because an immediate stop was requested.")
                     if any(item.status != "completed" for item in result_steps):
                         break
                     continue
@@ -285,6 +316,8 @@ def build_run_command_handlers(
                         "commit_hash": result_step.commit_hash,
                     },
                 )
+                if result_step.status == "paused":
+                    append_ui_event(project, "run-paused", "Paused immediately because an immediate stop was requested.")
                 if result_step.status != "completed":
                     break
             latest = ctx.orchestrator.local_project(project_dir)
@@ -296,6 +329,7 @@ def build_run_command_handlers(
             latest = ctx.orchestrator.local_project(project_dir)
             if latest is not None:
                 save_run_control(latest, default_run_control())
+                execution_stop_registry.clear(execution_scope_id(latest))
 
     def run_closeout(ctx: BridgeCommandContext) -> dict:
         project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload)
@@ -310,20 +344,28 @@ def build_run_command_handlers(
             branch=branch,
             origin_url=origin_url,
         )
-        append_ui_event(project, "closeout-started", "Started project closeout.")
-        project, saved = ctx.orchestrator.run_execution_closeout(
-            project_dir=project_dir,
-            runtime=runtime,
-            branch=branch,
-            origin_url=origin_url,
-        )
-        append_ui_event(
-            project,
-            "closeout-finished",
-            f"Closeout finished with status {saved.closeout_status}.",
-            {"status": saved.closeout_status, "commit_hash": saved.closeout_commit_hash},
-        )
-        return ctx.detail_payload(project)
+        execution_stop_registry.clear(execution_scope_id(project))
+        try:
+            append_ui_event(project, "closeout-started", "Started project closeout.")
+            project, saved = ctx.orchestrator.run_execution_closeout(
+                project_dir=project_dir,
+                runtime=runtime,
+                branch=branch,
+                origin_url=origin_url,
+            )
+            event_message, event_details = closeout_finished_event_payload(project, saved)
+            append_ui_event(
+                project,
+                "closeout-finished",
+                event_message,
+                event_details,
+            )
+            return ctx.detail_payload(project)
+        finally:
+            latest = ctx.orchestrator.local_project(project_dir)
+            if latest is not None:
+                save_run_control(latest, default_run_control())
+                execution_stop_registry.clear(execution_scope_id(latest))
 
     return {
         "request-stop": request_stop,

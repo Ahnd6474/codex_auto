@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -48,7 +50,7 @@ class CodexRunnerTests(unittest.TestCase):
             runner = CodexRunner("codex.cmd")
             attempts = {"count": 0}
 
-            def fake_run(command, input, capture_output, check, env=None):
+            def fake_run(command, scope_id=None, label="", input_bytes=None, env=None, **_kwargs):
                 attempts["count"] += 1
                 output_file = Path(command[command.index("-o") + 1])
                 if attempts["count"] == 1:
@@ -66,7 +68,7 @@ class CodexRunnerTests(unittest.TestCase):
                     stderr=b"",
                 )
 
-            with mock.patch("jakal_flow.codex_runner.subprocess.run", side_effect=fake_run), mock.patch(
+            with mock.patch("jakal_flow.codex_runner.run_subprocess_capture", side_effect=fake_run), mock.patch(
                 "jakal_flow.codex_runner.time.sleep"
             ):
                 result = runner.run_pass(
@@ -96,7 +98,7 @@ class CodexRunnerTests(unittest.TestCase):
             runner = CodexRunner("codex.cmd")
             attempts = {"count": 0}
 
-            def fake_run(command, input, capture_output, check, env=None):
+            def fake_run(command, scope_id=None, label="", input_bytes=None, env=None, **_kwargs):
                 attempts["count"] += 1
                 return subprocess.CompletedProcess(
                     command,
@@ -105,7 +107,7 @@ class CodexRunnerTests(unittest.TestCase):
                     stderr=b"authentication failed",
                 )
 
-            with mock.patch("jakal_flow.codex_runner.subprocess.run", side_effect=fake_run), mock.patch(
+            with mock.patch("jakal_flow.codex_runner.run_subprocess_capture", side_effect=fake_run), mock.patch(
                 "jakal_flow.codex_runner.time.sleep"
             ) as mocked_sleep:
                 result = runner.run_pass(
@@ -135,13 +137,13 @@ class CodexRunnerTests(unittest.TestCase):
             runner = CodexRunner("codex.cmd")
             observed_commands: list[list[str]] = []
 
-            def fake_run(command, input, capture_output, check, env=None):
+            def fake_run(command, scope_id=None, label="", input_bytes=None, env=None, **_kwargs):
                 observed_commands.append(command)
                 output_file = Path(command[command.index("-o") + 1])
                 output_file.write_text("Auto response", encoding="utf-8")
                 return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
 
-            with mock.patch("jakal_flow.codex_runner.subprocess.run", side_effect=fake_run):
+            with mock.patch("jakal_flow.codex_runner.run_subprocess_capture", side_effect=fake_run):
                 runner.run_pass(
                     context=context,
                     prompt="Use the default model routing",
@@ -159,13 +161,13 @@ class CodexRunnerTests(unittest.TestCase):
             runner = CodexRunner("codex.cmd")
             observed_commands: list[list[str]] = []
 
-            def fake_run(command, input, capture_output, check, env=None):
+            def fake_run(command, scope_id=None, label="", input_bytes=None, env=None, **_kwargs):
                 observed_commands.append(command)
                 output_file = Path(command[command.index("-o") + 1])
                 output_file.write_text("Override response", encoding="utf-8")
                 return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
 
-            with mock.patch("jakal_flow.codex_runner.subprocess.run", side_effect=fake_run):
+            with mock.patch("jakal_flow.codex_runner.run_subprocess_capture", side_effect=fake_run):
                 runner.run_pass(
                     context=context,
                     prompt="Use the planning override",
@@ -191,13 +193,13 @@ class CodexRunnerTests(unittest.TestCase):
             runner = CodexRunner("codex.cmd")
             observed_inputs: list[bytes] = []
 
-            def fake_run(command, input, capture_output, check, env=None):
-                observed_inputs.append(input)
+            def fake_run(command, scope_id=None, label="", input_bytes=None, env=None, **_kwargs):
+                observed_inputs.append(input_bytes)
                 output_file = Path(command[command.index("-o") + 1])
                 output_file.write_text("Fast response", encoding="utf-8")
                 return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
 
-            with mock.patch("jakal_flow.codex_runner.subprocess.run", side_effect=fake_run):
+            with mock.patch("jakal_flow.codex_runner.run_subprocess_capture", side_effect=fake_run):
                 runner.run_pass(
                     context=context,
                     prompt="Apply the requested fix",
@@ -227,13 +229,13 @@ class CodexRunnerTests(unittest.TestCase):
             runner = CodexRunner("codex.cmd")
             observed_commands: list[list[str]] = []
 
-            def fake_run(command, input, capture_output, check, env=None):
+            def fake_run(command, scope_id=None, label="", input_bytes=None, env=None, **_kwargs):
                 observed_commands.append(command)
                 output_file = Path(command[command.index("-o") + 1])
                 output_file.write_text("OSS response", encoding="utf-8")
                 return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
 
-            with mock.patch("jakal_flow.codex_runner.subprocess.run", side_effect=fake_run):
+            with mock.patch("jakal_flow.codex_runner.run_subprocess_capture", side_effect=fake_run):
                 runner.run_pass(
                     context=context,
                     prompt="Use the local model",
@@ -268,7 +270,7 @@ class CodexRunnerTests(unittest.TestCase):
             observed_commands: list[list[str]] = []
             observed_envs: list[dict[str, str]] = []
 
-            def fake_run(command, input, capture_output, check, env=None):
+            def fake_run(command, scope_id=None, label="", input_bytes=None, env=None, **_kwargs):
                 observed_commands.append(command)
                 observed_envs.append(dict(env or {}))
                 output_file = Path(command[command.index("-o") + 1])
@@ -276,7 +278,7 @@ class CodexRunnerTests(unittest.TestCase):
                 return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
 
             with mock.patch.dict("os.environ", {"OPENROUTER_API_KEY": "router-secret"}, clear=False), mock.patch(
-                "jakal_flow.codex_runner.subprocess.run",
+                "jakal_flow.codex_runner.run_subprocess_capture",
                 side_effect=fake_run,
             ):
                 runner.run_pass(
@@ -293,6 +295,74 @@ class CodexRunnerTests(unittest.TestCase):
             self.assertEqual(observed_envs[0]["OPENAI_API_KEY"], "router-secret")
             self.assertEqual(observed_envs[0]["OPENAI_BASE_URL"], "https://openrouter.ai/api/v1")
 
+    def test_run_pass_uses_gemini_headless_mode(self) -> None:
+        with _TemporaryTestDir() as temp_root:
+            repo_dir = temp_root / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            manager = WorkspaceManager(temp_root / "workspace")
+            context = manager.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=RuntimeOptions(
+                    model_provider="gemini",
+                    provider_api_key_env="GEMINI_API_KEY",
+                    model="gemini-2.5-flash",
+                    effort="medium",
+                    codex_path="gemini.cmd",
+                ),
+            )
+            runner = CodexRunner("gemini.cmd")
+            observed_commands: list[list[str]] = []
+            observed_envs: list[dict[str, str]] = []
+
+            def fake_run(command, scope_id=None, label="", input_bytes=None, env=None, cwd=None, **_kwargs):
+                observed_commands.append(command)
+                observed_envs.append(dict(env or {}))
+                payload = {
+                    "response": "Gemini response",
+                    "stats": {
+                        "models": {
+                            "gemini-2.5-flash": {
+                                "tokens": {
+                                    "prompt": 11,
+                                    "cached": 2,
+                                    "candidates": 7,
+                                    "thoughts": 3,
+                                    "total": 23,
+                                }
+                            }
+                        }
+                    },
+                }
+                return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload).encode("utf-8"), stderr=b"")
+
+            with mock.patch.dict("os.environ", {"GEMINI_API_KEY": "gemini-secret"}, clear=False), mock.patch(
+                "jakal_flow.codex_runner.run_subprocess_capture",
+                side_effect=fake_run,
+            ):
+                result = runner.run_pass(
+                    context=context,
+                    prompt="Apply a safe fix",
+                    pass_type="demo pass",
+                    block_index=1,
+                    search_enabled=False,
+                )
+
+            self.assertEqual(len(observed_commands), 1)
+            self.assertIn("--output-format", observed_commands[0])
+            self.assertIn("json", observed_commands[0])
+            self.assertIn("--approval-mode", observed_commands[0])
+            self.assertIn("yolo", observed_commands[0])
+            self.assertIn("--include-directories", observed_commands[0])
+            self.assertIn("gemini-2.5-flash", observed_commands[0])
+            self.assertEqual(observed_envs[0]["GEMINI_API_KEY"], "gemini-secret")
+            self.assertEqual(result.last_message, "Gemini response")
+            self.assertEqual(result.usage["input_tokens"], 11)
+            self.assertEqual(result.usage["cached_input_tokens"], 2)
+            self.assertEqual(result.usage["output_tokens"], 7)
+            self.assertEqual(result.usage["reasoning_output_tokens"], 3)
+            self.assertEqual(result.usage["total_tokens"], 23)
+
     def test_run_pass_strips_inherited_pythonpath_from_child_env(self) -> None:
         with tempfile.TemporaryDirectory() as raw_temp:
             temp_root = Path(raw_temp)
@@ -300,14 +370,14 @@ class CodexRunnerTests(unittest.TestCase):
             runner = CodexRunner("codex.cmd")
             observed_envs: list[dict[str, str]] = []
 
-            def fake_run(command, input, capture_output, check, env=None):
+            def fake_run(command, scope_id=None, label="", input_bytes=None, env=None, **_kwargs):
                 observed_envs.append(dict(env or {}))
                 output_file = Path(command[command.index("-o") + 1])
                 output_file.write_text("Sanitized response", encoding="utf-8")
                 return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
 
             with mock.patch.dict("os.environ", {"PYTHONPATH": r"C:\leaked\src"}, clear=False), mock.patch(
-                "jakal_flow.codex_runner.subprocess.run",
+                "jakal_flow.codex_runner.run_subprocess_capture",
                 side_effect=fake_run,
             ):
                 runner.run_pass(

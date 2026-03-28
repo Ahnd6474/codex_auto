@@ -15,7 +15,16 @@ from .models import ExecutionPlanState, ProjectContext
 from .planning import execution_plan_svg
 from .run_control import load_run_control
 from .status_views import effective_project_status
-from .utils import compact_text, decode_process_output, now_utc_iso, read_json, read_jsonl_tail, read_last_jsonl, write_json
+from .utils import (
+    append_jsonl,
+    compact_text,
+    decode_process_output,
+    now_utc_iso,
+    read_json,
+    read_jsonl_tail,
+    read_last_jsonl,
+    write_json,
+)
 from .workspace import WorkspaceManager
 
 UTC = getattr(datetime, "UTC", timezone.utc)
@@ -86,6 +95,10 @@ def share_sessions_file(context: ProjectContext) -> Path:
     return context.paths.state_dir / "share_sessions.json"
 
 
+def workspace_share_sessions_file(workspace_root: Path) -> Path:
+    return workspace_root / "share_sessions.json"
+
+
 def share_server_status_file(workspace_root: Path) -> Path:
     return workspace_root / "share_server.json"
 
@@ -96,6 +109,10 @@ def share_server_log_file(workspace_root: Path) -> Path:
 
 def share_server_config_file(workspace_root: Path) -> Path:
     return workspace_root / "share_server_config.json"
+
+
+def share_audit_log_file(workspace_root: Path) -> Path:
+    return workspace_root / "share_session_events.jsonl"
 
 
 @dataclass(slots=True)
@@ -231,6 +248,13 @@ def load_share_server_state(workspace_root: Path) -> ShareServerState | None:
         return None
 
 
+def clear_share_server_state(workspace_root: Path) -> None:
+    try:
+        share_server_status_file(workspace_root).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def load_share_server_config(workspace_root: Path) -> ShareServerConfig:
     raw = read_json(share_server_config_file(workspace_root), default={})
     if not isinstance(raw, dict):
@@ -282,10 +306,12 @@ def share_server_status_payload(workspace_root: Path) -> dict[str, Any]:
         if config.public_base_url
         else ("quick_tunnel" if tunnel_matches_server else ("local" if running else None))
     )
+    if not running:
+        clear_share_server_state(workspace_root)
     payload = {
         "running": running,
         "host": state.host,
-        "port": state.port,
+        "port": state.port if running else None,
         "pid": state.pid if running else None,
         "started_at": state.started_at if running else None,
         "base_url": state.base_url if running else None,
@@ -298,8 +324,8 @@ def share_server_status_payload(workspace_root: Path) -> dict[str, Any]:
     return payload
 
 
-def load_share_sessions(context: ProjectContext) -> list[ShareSession]:
-    raw = read_json(share_sessions_file(context), default={"sessions": []})
+def _load_share_sessions_from_file(path: Path) -> list[ShareSession]:
+    raw = read_json(path, default={"sessions": []})
     items = raw.get("sessions", []) if isinstance(raw, dict) else []
     sessions: list[ShareSession] = []
     for item in items:
@@ -311,10 +337,37 @@ def load_share_sessions(context: ProjectContext) -> list[ShareSession]:
     return sessions
 
 
-def save_share_sessions(context: ProjectContext, sessions: list[ShareSession]) -> None:
+def _save_share_sessions_to_file(path: Path, sessions: list[ShareSession]) -> None:
     write_json(
-        share_sessions_file(context),
+        path,
         {"sessions": [session.to_dict() for session in sessions]},
+    )
+
+
+def load_share_sessions(context: ProjectContext) -> list[ShareSession]:
+    return _load_share_sessions_from_file(share_sessions_file(context))
+
+
+def save_share_sessions(context: ProjectContext, sessions: list[ShareSession]) -> None:
+    _save_share_sessions_to_file(share_sessions_file(context), sessions)
+
+
+def load_workspace_share_sessions(workspace_root: Path) -> list[ShareSession]:
+    return _load_share_sessions_from_file(workspace_share_sessions_file(workspace_root))
+
+
+def save_workspace_share_sessions(workspace_root: Path, sessions: list[ShareSession]) -> None:
+    _save_share_sessions_to_file(workspace_share_sessions_file(workspace_root), sessions)
+
+
+def append_share_audit_event(workspace_root: Path, event_type: str, details: dict[str, Any] | None = None) -> None:
+    append_jsonl(
+        share_audit_log_file(workspace_root),
+        {
+            "timestamp": now_utc_iso(),
+            "event_type": str(event_type or "").strip() or "share-session-event",
+            "details": _normalize(details or {}),
+        },
     )
 
 
@@ -337,6 +390,122 @@ def create_share_session(
     sessions.append(session)
     save_share_sessions(context, sessions)
     return session
+
+
+def iter_workspace_share_sessions(workspace_root: Path) -> list[tuple[ProjectContext, ShareSession]]:
+    manager = WorkspaceManager(workspace_root)
+    items: list[tuple[ProjectContext, ShareSession]] = []
+    for project in manager.list_projects():
+        for session in load_share_sessions(project):
+            items.append((project, session))
+    return items
+
+
+def revoke_workspace_active_share_sessions(workspace_root: Path) -> list[ShareSession]:
+    revoked: list[ShareSession] = []
+    for project, session in iter_workspace_share_sessions(workspace_root):
+        if not session.is_active():
+            continue
+        session.revoked_at = now_utc_iso()
+        sessions = load_share_sessions(project)
+        changed = False
+        for candidate in sessions:
+            if candidate.session_id == session.session_id and candidate.is_active():
+                candidate.revoked_at = session.revoked_at
+                changed = True
+        if changed:
+            save_share_sessions(project, sessions)
+            revoked.append(session)
+    return revoked
+
+
+def create_workspace_share_session(
+    workspace_root: Path,
+    context: ProjectContext | None = None,
+    expires_in_minutes: int = DEFAULT_SHARE_TTL_MINUTES,
+    created_by: str = "desktop-ui",
+) -> ShareSession:
+    legacy_revoked_sessions = revoke_workspace_active_share_sessions(workspace_root)
+    sessions = load_workspace_share_sessions(workspace_root)
+    revoked_session_ids: list[str] = []
+    for existing in sessions:
+        if existing.is_active():
+            existing.revoked_at = now_utc_iso()
+            revoked_session_ids.append(existing.session_id)
+    session = ShareSession(
+        session_id=secrets.token_hex(16),
+        viewer_token=secrets.token_urlsafe(24),
+        created_at=now_utc_iso(),
+        expires_at=iso_after_minutes(expires_in_minutes),
+        created_by=created_by,
+    )
+    sessions.append(session)
+    save_workspace_share_sessions(workspace_root, sessions)
+    append_share_audit_event(
+        workspace_root,
+        "share-session-created",
+        {
+            "session_id": session.session_id,
+            "created_by": session.created_by,
+            "expires_at": session.expires_at,
+            "revoked_session_ids": revoked_session_ids + [item.session_id for item in legacy_revoked_sessions],
+            "project": (
+                {
+                    "repo_id": context.metadata.repo_id,
+                    "display_name": context.metadata.display_name or context.metadata.slug,
+                    "project_dir": str(context.metadata.repo_path),
+                }
+                if context is not None
+                else None
+            ),
+        },
+    )
+    return session
+
+
+def revoke_workspace_share_session(workspace_root: Path, session_id: str) -> ShareSession:
+    target = session_id.strip()
+    if not target:
+        raise ValueError("session_id is required.")
+    sessions = load_workspace_share_sessions(workspace_root)
+    for session in sessions:
+        if session.session_id == target:
+            session.revoked_at = now_utc_iso()
+            save_workspace_share_sessions(workspace_root, sessions)
+            append_share_audit_event(
+                workspace_root,
+                "share-session-revoked",
+                {
+                    "session_id": session.session_id,
+                    "revoked_at": session.revoked_at,
+                },
+            )
+            return session
+    raise KeyError(f"Unknown share session: {target}")
+
+
+def find_workspace_share_session(workspace_root: Path, session_id: str) -> ShareSession | None:
+    target = session_id.strip()
+    if not target:
+        return None
+    for session in load_workspace_share_sessions(workspace_root):
+        if session.session_id == target:
+            return session
+    return None
+
+
+def create_legacy_workspace_share_session(
+    workspace_root: Path,
+    context: ProjectContext,
+    expires_in_minutes: int = DEFAULT_SHARE_TTL_MINUTES,
+    created_by: str = "desktop-ui",
+) -> ShareSession:
+    revoke_workspace_active_share_sessions(workspace_root)
+    return create_share_session(
+        context,
+        expires_in_minutes=expires_in_minutes,
+        created_by=created_by,
+    )
 
 
 def revoke_share_session(context: ProjectContext, session_id: str) -> ShareSession:
@@ -372,13 +541,90 @@ def validate_share_session(session: ShareSession, viewer_token: str) -> None:
         raise PermissionError("This share session has expired.")
 
 
-def resolve_shared_session(workspace_root: Path, session_id: str) -> tuple[ProjectContext, ShareSession]:
+def resolve_shared_session(workspace_root: Path, session_id: str) -> tuple[ProjectContext | None, ShareSession]:
+    workspace_session = find_workspace_share_session(workspace_root, session_id)
+    if workspace_session is not None:
+        return None, workspace_session
     manager = WorkspaceManager(workspace_root)
     for project in manager.list_projects():
         session = find_share_session(project, session_id)
         if session is not None:
             return project, session
     raise KeyError(f"Unknown share session: {session_id}")
+
+
+def _legacy_workspace_active_share_session(
+    workspace_root: Path,
+    *,
+    server: dict[str, Any] | None = None,
+    state: ShareServerState | None | object = _UNSET,
+) -> dict[str, Any] | None:
+    if state is _UNSET:
+        state = load_share_server_state(workspace_root)
+    if server is None:
+        server = share_server_status_payload(workspace_root)
+    active_sessions = [
+        (project, session)
+        for project, session in iter_workspace_share_sessions(workspace_root)
+        if session.is_active()
+    ]
+    if not active_sessions:
+        return None
+
+    def sort_key(item: tuple[ProjectContext, ShareSession]) -> tuple[datetime, str]:
+        _project, session = item
+        created_at = parse_iso_datetime(session.created_at) or datetime.min.replace(tzinfo=UTC)
+        return created_at, session.session_id
+
+    project, session = max(active_sessions, key=sort_key)
+    payload = public_session_summary(
+        workspace_root,
+        project,
+        session,
+        include_token=False,
+        server=server,
+        state=state,
+    )
+    payload["project"] = {
+        "repo_id": project.metadata.repo_id,
+        "display_name": project.metadata.display_name or project.metadata.slug,
+        "slug": project.metadata.slug,
+    }
+    return payload
+
+
+def workspace_active_share_session(
+    workspace_root: Path,
+    *,
+    server: dict[str, Any] | None = None,
+    state: ShareServerState | None | object = _UNSET,
+) -> dict[str, Any] | None:
+    if state is _UNSET:
+        state = load_share_server_state(workspace_root)
+    if server is None:
+        server = share_server_status_payload(workspace_root)
+    active_sessions = [session for session in load_workspace_share_sessions(workspace_root) if session.is_active()]
+    if active_sessions:
+        session = max(
+            active_sessions,
+            key=lambda item: (
+                parse_iso_datetime(item.created_at) or datetime.min.replace(tzinfo=UTC),
+                item.session_id,
+            ),
+        )
+        return public_session_summary(
+            workspace_root,
+            None,
+            session,
+            include_token=False,
+            server=server,
+            state=state,
+        )
+    return _legacy_workspace_active_share_session(
+        workspace_root,
+        server=server,
+        state=state,
+    )
 
 
 def mask_public_text(value: str, max_chars: int = MAX_PUBLIC_LOG_LINE_CHARS) -> str:
@@ -443,10 +689,10 @@ def project_monitor_lines(context: ProjectContext, plan_state: ExecutionPlanStat
 
 
 def current_step_summary(plan_state: ExecutionPlanState) -> dict[str, Any] | None:
-    running_steps = [step for step in plan_state.steps if step.status == "running"]
-    if len(running_steps) > 1:
-        step_ids = ", ".join(step.step_id for step in running_steps)
-        step_titles = ", ".join(step.title for step in running_steps if step.title)
+    active_steps = [step for step in plan_state.steps if step.status in {"running", "integrating"}]
+    if len(active_steps) > 1:
+        step_ids = ", ".join(step.step_id for step in active_steps)
+        step_titles = ", ".join(step.title for step in active_steps if step.title)
         summary = step_titles or f"Parallel batch running: {step_ids}"
         return {
             "step_id": step_ids,
@@ -454,7 +700,7 @@ def current_step_summary(plan_state: ExecutionPlanState) -> dict[str, Any] | Non
             "summary": mask_public_text(summary, max_chars=180),
             "status": "running",
         }
-    current = running_steps[0] if running_steps else None
+    current = active_steps[0] if active_steps else None
     if current is None:
         current = next((step for step in plan_state.steps if step.status != "completed"), None)
     if current is None:
@@ -508,6 +754,7 @@ def public_run_control(context: ProjectContext) -> dict[str, Any]:
     control = load_run_control(context)
     return {
         "stop_after_current_step": bool(control.get("stop_after_current_step")),
+        "stop_immediately": bool(control.get("stop_immediately")),
         "requested_at": str(control.get("requested_at") or "").strip() or None,
         "request_source": str(control.get("request_source") or "").strip() or None,
     }
@@ -577,6 +824,7 @@ def public_monitor_status(context: ProjectContext, plan_state: ExecutionPlanStat
     status = effective_project_status(context.metadata.current_status, plan_state, context.loop_state)
     return {
         "project": {
+            "repo_id": context.metadata.repo_id,
             "display_name": mask_public_text(context.metadata.display_name or context.metadata.slug, max_chars=80),
             "slug": context.metadata.slug,
         },
@@ -599,6 +847,85 @@ def public_monitor_status(context: ProjectContext, plan_state: ExecutionPlanStat
     }
 
 
+def _workspace_monitor_visibility(
+    context: ProjectContext,
+    plan_state: ExecutionPlanState,
+    *,
+    include_repo_ids: set[str] | None = None,
+) -> bool:
+    if include_repo_ids and context.metadata.repo_id in include_repo_ids:
+        return True
+    remote = public_remote_control_state(context, plan_state)
+    status = effective_project_status(context.metadata.current_status, plan_state, context.loop_state)
+    if context.loop_state.pending_checkpoint_approval:
+        return True
+    if remote["can_pause"] or remote["can_resume"] or remote["pause_requested"]:
+        return True
+    return status.startswith("running:")
+
+
+def _workspace_monitor_sort_key(item: dict[str, Any]) -> tuple[int, float, str]:
+    project = item.get("project", {}) if isinstance(item, dict) else {}
+    remote = item.get("remote_control", {}) if isinstance(item, dict) else {}
+    status = str(item.get("overall_run_status", "")).strip().lower()
+    last_updated = parse_iso_datetime(str(item.get("last_updated_at", "")).strip())
+    timestamp = last_updated.timestamp() if last_updated is not None else 0.0
+    if status.startswith("running:"):
+        priority = 0
+    elif bool(remote.get("pause_requested")):
+        priority = 1
+    elif bool(remote.get("can_resume")):
+        priority = 2
+    elif bool(item.get("checkpoint_pending")):
+        priority = 3
+    else:
+        priority = 4
+    display_name = str(project.get("display_name", "")).strip().lower()
+    return (priority, -timestamp, display_name)
+
+
+def public_workspace_monitor_status(
+    workspace_root: Path,
+    *,
+    orchestrator: Any | None = None,
+    log_limit: int = 8,
+    include_repo_ids: set[str] | None = None,
+) -> dict[str, Any]:
+    from .orchestrator import Orchestrator
+
+    orchestrator = orchestrator or Orchestrator(workspace_root)
+    projects: list[dict[str, Any]] = []
+    last_updated_candidates: list[datetime] = []
+    for project in orchestrator.list_projects():
+        plan_state = orchestrator.load_execution_plan_state(project)
+        if not _workspace_monitor_visibility(project, plan_state, include_repo_ids=include_repo_ids):
+            continue
+        payload = public_monitor_status(project, plan_state, log_limit=log_limit)
+        payload["checkpoint_pending"] = bool(project.loop_state.pending_checkpoint_approval)
+        projects.append(payload)
+        parsed_last_updated = parse_iso_datetime(str(payload.get("last_updated_at", "")).strip())
+        if parsed_last_updated is not None:
+            last_updated_candidates.append(parsed_last_updated)
+
+    projects.sort(key=_workspace_monitor_sort_key)
+    running_count = sum(1 for item in projects if str(item.get("overall_run_status", "")).strip().lower().startswith("running:"))
+    resume_ready_count = sum(1 for item in projects if bool(item.get("remote_control", {}).get("can_resume")))
+    pause_requested_count = sum(1 for item in projects if bool(item.get("remote_control", {}).get("pause_requested")))
+    checkpoint_pending_count = sum(1 for item in projects if bool(item.get("checkpoint_pending")))
+    last_updated_at = max(last_updated_candidates).replace(microsecond=0).isoformat() if last_updated_candidates else None
+    return {
+        "workspace": {
+            "project_count": len(projects),
+            "running_count": running_count,
+            "resume_ready_count": resume_ready_count,
+            "pause_requested_count": pause_requested_count,
+            "checkpoint_pending_count": checkpoint_pending_count,
+        },
+        "projects": projects,
+        "last_updated_at": last_updated_at,
+    }
+
+
 def viewer_link(base_url: str, session: ShareSession, viewer_path: str = DEFAULT_VIEWER_PATH) -> str:
     normalized_base = base_url.rstrip("/")
     normalized_path = viewer_path if viewer_path.startswith("/") else f"/{viewer_path}"
@@ -610,7 +937,7 @@ def viewer_link(base_url: str, session: ShareSession, viewer_path: str = DEFAULT
 
 def public_session_summary(
     workspace_root: Path,
-    context: ProjectContext,
+    context: ProjectContext | None,
     session: ShareSession,
     include_token: bool = False,
     *,
@@ -623,8 +950,12 @@ def public_session_summary(
         server = share_server_status_payload(workspace_root)
     viewer_path = str(server.get("viewer_path") or (state.viewer_path if state is not None else DEFAULT_VIEWER_PATH))
     local_url = None
-    local_base = str(server.get("base_url") or (state.base_url if state is not None else "")).strip()
-    local_host = str(server.get("host") or (state.host if state is not None else "")).strip()
+    local_base = str(server.get("base_url") or "").strip()
+    if not local_base and bool(server.get("running")) and state is not None:
+        local_base = state.base_url
+    local_host = str(server.get("host") or "").strip()
+    if not local_host and bool(server.get("running")) and state is not None:
+        local_host = state.host
     if local_base:
         if local_host == "0.0.0.0":
             local_base = local_base.replace("http://0.0.0.0:", "http://127.0.0.1:", 1)
@@ -647,8 +978,8 @@ def public_session_summary(
     return payload
 
 
-def project_share_payload(workspace_root: Path, context: ProjectContext) -> dict[str, Any]:
-    sessions = load_share_sessions(context)
+def workspace_share_payload(workspace_root: Path, context: ProjectContext | None = None) -> dict[str, Any]:
+    sessions = load_workspace_share_sessions(workspace_root)
     state = load_share_server_state(workspace_root)
     server = share_server_status_payload(workspace_root)
     public_sessions = [
@@ -662,9 +993,29 @@ def project_share_payload(workspace_root: Path, context: ProjectContext) -> dict
         )
         for session in sorted(sessions, key=lambda item: item.created_at, reverse=True)
     ]
-    active = next((item for item in public_sessions if item.get("active")), None)
+    project_active = next(
+        (
+            item
+            for item in public_sessions
+            if item.get("active")
+            and context is not None
+            and isinstance(item.get("project"), dict)
+            and str(item["project"].get("repo_id", "")).strip() == context.metadata.repo_id
+        ),
+        None,
+    )
+    active = workspace_active_share_session(
+        workspace_root,
+        server=server,
+        state=state,
+    )
     return {
         "server": server,
         "sessions": public_sessions,
+        "project_active_session": project_active,
         "active_session": active,
     }
+
+
+def project_share_payload(workspace_root: Path, context: ProjectContext) -> dict[str, Any]:
+    return workspace_share_payload(workspace_root, context)

@@ -7,6 +7,7 @@ import {
   applyProgramSettings,
   applyProgramSettingsToForm,
   autoRoutingPresetLabel,
+  backgroundJobProjectKey,
   configReasoningOptions,
   basename,
   blankProjectForm,
@@ -28,12 +29,15 @@ import {
   executionProgressCaptionDisplay,
   firstSelectableStepId,
   inheritProjectIdentityForm,
+  isDuplicateProjectJobError,
   mergeProjectDetailCodexStatus,
   normalizeMemoryBudgetGiB,
   normalizeInterruptedPlan,
   progressCaption,
   programSettingsFromRuntime,
+  projectJobFromJobs,
   projectFormFromDetail,
+  projectStatusWithJob,
   runtimeSummary,
   sanitizeProjectDetailForJobState,
   sanitizeProjectListForJobState,
@@ -89,6 +93,87 @@ test("detailApplySignature tracks payload identity and running job state", () =>
   );
 });
 
+test("project job helpers match jobs by repo id or project path and derive display status", () => {
+  const jobs = [
+    {
+      id: "job-queued",
+      status: "queued",
+      command: "run-plan",
+      project_dir: "C:\\Work\\Repo",
+      updated_at_ms: 20,
+    },
+    {
+      id: "job-running",
+      status: "running",
+      command: "generate-plan",
+      repo_id: "repo-1",
+      updated_at_ms: 10,
+    },
+  ];
+
+  assert.equal(projectJobFromJobs(jobs, { repo_id: "repo-1" })?.id, "job-running");
+  assert.equal(projectJobFromJobs(jobs, { repo_path: "c:/work/repo" })?.id, "job-queued");
+  assert.equal(projectStatusWithJob("plan_ready", jobs[0]), "queued:run-plan");
+  assert.equal(projectStatusWithJob("setup_ready", jobs[1]), "running:generate-plan");
+});
+
+test("backgroundJobProjectKey normalizes workspace and project paths for deduping", () => {
+  assert.equal(
+    backgroundJobProjectKey(
+      {
+        project_dir: "C:\\Work\\Repo",
+      },
+      "C:\\Users\\alber\\Workspace",
+    ),
+    "c:/users/alber/workspace||c:/work/repo",
+  );
+  assert.equal(
+    backgroundJobProjectKey(
+      {
+        repo_id: "repo-1",
+      },
+      "/tmp/workspace",
+    ),
+    "/tmp/workspace|repo-1|",
+  );
+  assert.equal(backgroundJobProjectKey({}, "/tmp/workspace"), "");
+});
+
+test("isDuplicateProjectJobError detects bridge rejections for already-active jobs", () => {
+  assert.equal(isDuplicateProjectJobError("Another background task is already active for this project."), true);
+  assert.equal(isDuplicateProjectJobError(new Error("another background task is already active for this project.")), true);
+  assert.equal(isDuplicateProjectJobError("The requested background job was not found."), false);
+});
+
+test("project job helpers ignore stale running jobs when the project has a newer saved state", () => {
+  const jobs = [
+    {
+      id: "job-running",
+      status: "running",
+      command: "run-plan",
+      repo_id: "repo-1",
+      updated_at_ms: Date.parse("2026-03-27T03:00:00Z"),
+    },
+  ];
+
+  assert.equal(
+    projectJobFromJobs(jobs, {
+      repo_id: "repo-1",
+      current_status: "closed_out",
+      last_run_at: "2026-03-27T03:25:31Z",
+    }),
+    null,
+  );
+  assert.equal(
+    projectJobFromJobs(jobs, {
+      repo_id: "repo-1",
+      current_status: "plan_ready",
+      last_run_at: "2026-03-27T02:59:59Z",
+    })?.id,
+    "job-running",
+  );
+});
+
 test("deriveGithubMode distinguishes manual and existing projects", () => {
   assert.equal(deriveGithubMode("https://github.com/openai/jakal-flow"), "manual");
   assert.equal(deriveGithubMode(""), "existing");
@@ -97,6 +182,7 @@ test("deriveGithubMode distinguishes manual and existing projects", () => {
 
 test("defaultCodexPath follows the current platform", () => {
   assert.equal(defaultCodexPath(), process.platform === "win32" ? "codex.cmd" : "codex");
+  assert.equal(defaultCodexPath("gemini"), process.platform === "win32" ? "gemini.cmd" : "gemini");
 });
 
 test("program settings helpers keep global runtime controls separate from project-specific values", () => {
@@ -111,11 +197,11 @@ test("program settings helpers keep global runtime controls separate from projec
     local_model_provider: "ollama",
     provider_base_url: "",
     provider_api_key_env: "OPENAI_API_KEY",
-    model: "auto",
+    model: "gpt-5.4",
     planning_effort: "medium",
-    model_preset: "auto",
+    model_preset: "",
     model_selection_mode: "slug",
-    model_slug_input: "auto",
+    model_slug_input: "gpt-5.4",
     approval_mode: "untrusted",
     sandbox_mode: "workspace-write",
     checkpoint_interval_blocks: 1,
@@ -147,6 +233,7 @@ test("program settings helpers keep global runtime controls separate from projec
       codex_usage_card: false,
       word_report_card: true,
     },
+    background_concurrency_limit: 2,
   });
 
   assert.deepEqual(
@@ -157,17 +244,16 @@ test("program settings helpers keep global runtime controls separate from projec
       settings,
     ),
     {
-      model: "gpt-5.4",
       test_cmd: "pytest -q",
       model_provider: "openai",
       local_model_provider: "ollama",
       provider_base_url: "",
       provider_api_key_env: "OPENAI_API_KEY",
-      model: "auto",
+      model: "gpt-5.4",
       planning_effort: "medium",
-      model_preset: "auto",
+      model_preset: "",
       model_selection_mode: "slug",
-      model_slug_input: "auto",
+      model_slug_input: "gpt-5.4",
       approval_mode: "untrusted",
       sandbox_mode: "workspace-write",
       checkpoint_interval_blocks: 1,
@@ -198,10 +284,10 @@ test("program settings helpers keep global runtime controls separate from projec
     {
       project_dir: "demo",
       runtime: {
-        model: "auto",
-        model_preset: "auto",
+        model: "gpt-5.4",
+        model_preset: "",
         model_selection_mode: "slug",
-        model_slug_input: "auto",
+        model_slug_input: "gpt-5.4",
         test_cmd: "pytest -q",
         model_provider: "openai",
         local_model_provider: "ollama",
@@ -244,17 +330,25 @@ test("blankProjectForm seeds runtime defaults without mutating the source runtim
   });
   assert.equal(form.branch, "main");
   assert.equal(form.github_mode, "existing");
+  assert.equal(form.runtime.model, "gpt-5.4");
   assert.equal(form.runtime.max_blocks, 9);
   assert.equal(form.runtime.generate_word_report, false);
+  assert.equal(form.runtime.allow_background_queue, true);
+  assert.equal(form.runtime.background_queue_priority, 0);
 });
 
 test("blankProjectForm falls back to repository defaults when runtime is missing", () => {
   const form = blankProjectForm(null);
 
+  assert.equal(form.runtime.model, "gpt-5.4");
+  assert.equal(form.runtime.model_preset, "");
+  assert.equal(form.runtime.model_slug_input, "gpt-5.4");
   assert.equal(form.runtime.generate_word_report, true);
   assert.equal(form.runtime.max_blocks, 5);
   assert.equal(form.runtime.optimization_mode, "light");
   assert.equal(form.runtime.test_cmd, "python -m pytest");
+  assert.equal(form.runtime.allow_background_queue, true);
+  assert.equal(form.runtime.background_queue_priority, 0);
 });
 
 test("applyProviderDefaults drops the auto sentinel for providers without auto routing", () => {
@@ -272,6 +366,24 @@ test("applyProviderDefaults drops the auto sentinel for providers without auto r
   assert.equal(runtime.model, "");
   assert.equal(runtime.model_slug_input, "");
   assert.equal(runtime.model_preset, "");
+});
+
+test("applyProviderDefaults switches the runtime path for Gemini CLI and clears OpenAI-only defaults", () => {
+  const runtime = applyProviderDefaults(
+    {
+      model_provider: "openai",
+      model: "gpt-5.4",
+      model_slug_input: "gpt-5.4",
+      codex_path: defaultCodexPath(),
+    },
+    "gemini",
+  );
+
+  assert.equal(runtime.model_provider, "gemini");
+  assert.equal(runtime.codex_path, defaultCodexPath("gemini"));
+  assert.equal(runtime.model, "");
+  assert.equal(runtime.model_slug_input, "");
+  assert.equal(runtime.provider_api_key_env, "GEMINI_API_KEY");
 });
 
 test("normalizeMemoryBudgetGiB keeps one decimal place for UI memory budgets", () => {
@@ -314,6 +426,8 @@ test("projectFormFromDetail merges persisted runtime and derives GitHub mode", (
       effort: "high",
       optimization_mode: "refactor",
       execution_mode: "parallel",
+      allow_background_queue: true,
+      background_queue_priority: 0,
       test_cmd: "npm run check",
       model: "gpt-5.4",
     },
@@ -344,23 +458,48 @@ test("inheritProjectIdentityForm keeps project links but resets runtime to app d
     },
   );
 
-  assert.deepEqual(form, {
-    project_dir: "C:/work/demo",
-    display_name: "Demo App",
-    branch: "release",
-    origin_url: "https://github.com/openai/demo-app",
-    github_mode: "manual",
-    runtime: {
-      model: "auto",
-      effort: "medium",
-      parallel_memory_per_worker_gib: 3,
-      test_cmd: "python -m pytest",
-      optimization_mode: "light",
-      generate_word_report: true,
-      max_blocks: 5,
-      execution_mode: "parallel",
+  assert.deepEqual(
+    {
+      project_dir: form.project_dir,
+      display_name: form.display_name,
+      branch: form.branch,
+      origin_url: form.origin_url,
+      github_mode: form.github_mode,
     },
-  });
+    {
+      project_dir: "C:/work/demo",
+      display_name: "Demo App",
+      branch: "release",
+      origin_url: "https://github.com/openai/demo-app",
+      github_mode: "manual",
+    },
+  );
+  assert.equal(form.runtime.model, "auto");
+  assert.equal(form.runtime.effort, "medium");
+  assert.equal(form.runtime.parallel_memory_per_worker_gib, 3);
+  assert.equal(form.runtime.test_cmd, "python -m pytest");
+  assert.equal(form.runtime.optimization_mode, "light");
+  assert.equal(form.runtime.generate_word_report, true);
+  assert.equal(form.runtime.max_blocks, 5);
+  assert.equal(form.runtime.execution_mode, "parallel");
+  assert.equal(form.runtime.model_slug_input, "auto");
+  assert.equal(form.runtime.model_provider, "openai");
+  assert.equal(form.runtime.local_model_provider, "ollama");
+  assert.equal(form.runtime.approval_mode, "never");
+  assert.equal(form.runtime.sandbox_mode, "danger-full-access");
+  assert.equal(form.runtime.allow_push, true);
+  assert.equal(form.runtime.workflow_mode, "standard");
+  assert.equal(form.runtime.parallel_worker_mode, "auto");
+  assert.equal(form.runtime.parallel_workers, 0);
+  assert.equal(form.runtime.ml_max_cycles, 3);
+  assert.equal(form.runtime.checkpoint_interval_blocks, 1);
+  assert.equal(form.runtime.require_checkpoint_approval, false);
+  assert.equal(form.runtime.model_preset, "auto");
+  assert.equal(form.runtime.model_selection_mode, "slug");
+  assert.equal(form.runtime.planning_effort, "medium");
+  assert.equal(form.runtime.provider_base_url, "");
+  assert.equal(form.runtime.provider_api_key_env, "OPENAI_API_KEY");
+  assert.equal(form.runtime.codex_path, defaultCodexPath());
 });
 
 test("mergeProjectDetailCodexStatus preserves the last known catalog when a lightweight detail omits it", () => {
@@ -498,6 +637,39 @@ test("job-aware sanitizers clear stale running status without touching active jo
   assert.equal(sanitizedList[0].status, "plan_ready");
 });
 
+test("job-aware detail sanitizer ignores a stale running bridge job when saved project state is newer", () => {
+  const detail = {
+    project: {
+      repo_id: "repo-a",
+      current_status: "closed_out",
+      last_run_at: "2026-03-27T03:25:31Z",
+    },
+    plan: {
+      closeout_status: "completed",
+      steps: [
+        { step_id: "ST1", status: "completed" },
+      ],
+    },
+    stats: {
+      total_steps: 1,
+      completed_steps: 1,
+      failed_steps: 0,
+      running_steps: 0,
+      remaining_steps: 0,
+    },
+  };
+
+  const sanitizedDetail = sanitizeProjectDetailForJobState(detail, {
+    id: "job-1",
+    status: "running",
+    repo_id: "repo-a",
+    updated_at_ms: Date.parse("2026-03-27T03:00:00Z"),
+  });
+
+  assert.equal(sanitizedDetail.project.current_status, "closed_out");
+  assert.equal(sanitizedDetail.plan.closeout_status, "completed");
+});
+
 test("job-aware sanitizers preserve recent running state while bridge tracking catches up", () => {
   const nowMs = Date.parse("2026-03-26T10:00:00Z");
   const runningDetail = {
@@ -537,6 +709,50 @@ test("job-aware sanitizers preserve recent running state while bridge tracking c
   assert.equal(preservedDetail.project.current_status, "running:block:2");
   assert.equal(preservedDetail.plan.steps[1].status, "running");
   assert.equal(preservedList[0].status, "running:block:2");
+});
+
+test("job-aware sanitizers overlay queued and running status from multiple active jobs", () => {
+  const projects = [
+    {
+      repo_id: "repo-a",
+      repo_path: "C:/work/repo-a",
+      status: "plan_ready",
+      stats: { total_steps: 1, completed_steps: 0, failed_steps: 0, running_steps: 0, remaining_steps: 1 },
+      closeout_status: "not_started",
+    },
+    {
+      repo_id: "repo-b",
+      repo_path: "C:/work/repo-b",
+      status: "setup_ready",
+      stats: { total_steps: 0, completed_steps: 0, failed_steps: 0, running_steps: 0, remaining_steps: 0 },
+      closeout_status: "not_started",
+    },
+  ];
+  const jobs = [
+    { id: "job-1", status: "queued", command: "run-plan", project_dir: "C:\\work\\repo-a", updated_at_ms: 20 },
+    { id: "job-2", status: "running", command: "generate-plan", repo_id: "repo-b", updated_at_ms: 10 },
+  ];
+
+  const nextProjects = sanitizeProjectListForJobState(projects, jobs);
+
+  assert.equal(nextProjects[0].status, "queued:run-plan");
+  assert.equal(nextProjects[1].status, "running:generate-plan");
+});
+
+test("job-aware sanitizers clear stale queued overlays when reservations disappear", () => {
+  const projects = [
+    {
+      repo_id: "repo-a",
+      repo_path: "C:/work/repo-a",
+      status: "queued:run-plan",
+      stats: { total_steps: 1, completed_steps: 0, failed_steps: 0, running_steps: 0, remaining_steps: 1 },
+      closeout_status: "not_started",
+    },
+  ];
+
+  const nextProjects = sanitizeProjectListForJobState(projects, []);
+
+  assert.equal(nextProjects[0].status, "plan_ready");
 });
 
 test("activityLineSummary strips the timestamp and event prefix", () => {
@@ -790,6 +1006,8 @@ test("buildRunPlanPayloadFromDetail reuses the generated plan and persisted runt
       max_blocks: 7,
       effort: "high",
       execution_mode: "parallel",
+      allow_background_queue: true,
+      background_queue_priority: 0,
       model: "gpt-5.4",
       test_cmd: "npm run check",
     },
@@ -814,7 +1032,7 @@ test("firstSelectableStepId prefers the first incomplete step", () => {
     }),
     "S2",
   );
-  assert.equal(firstSelectableStepId({ steps: [{ step_id: "S1", status: "completed" }] }), "S1");
+  assert.equal(firstSelectableStepId({ steps: [{ step_id: "S1", status: "completed" }] }), "");
   assert.equal(firstSelectableStepId({ steps: [] }), "");
 });
 
@@ -896,6 +1114,20 @@ test("runtimeSummary includes the selected local provider for OSS models", () =>
       [],
     ),
     "Local/Ollama | Standard Mode | qwen2.5-coder:0.5b | reasoning Medium | parallel auto",
+  );
+});
+
+test("runtimeSummary shows Gemini CLI as a first-class backend", () => {
+  assert.equal(
+    runtimeSummary(
+      {
+        model_provider: "gemini",
+        model: "gemini-2.5-flash",
+        effort: "medium",
+      },
+      [],
+    ),
+    "Gemini CLI | Standard Mode | gemini-2.5-flash | reasoning Medium | parallel auto",
   );
 });
 
@@ -1000,6 +1232,7 @@ test("statusTone maps operational states to UI tones", () => {
   assert.equal(statusTone("running"), "info");
   assert.equal(statusTone("running:debugging"), "warning");
   assert.equal(statusTone("running:parallel-debugging"), "warning");
+  assert.equal(statusTone("cancelled"), "neutral");
   assert.equal(statusTone("completed"), "success");
   assert.equal(statusTone("paused_for_review"), "warning");
   assert.equal(statusTone("pending"), "neutral");

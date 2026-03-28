@@ -8,6 +8,7 @@ _SPECIAL_RUNNING_STATUSES = {
     "running:debugging",
     "running:parallel-debugging",
 }
+_ACTIVE_STEP_STATUSES = {"running", "integrating"}
 _READY_LIKE_STATUSES = {
     "initialized",
     "ready",
@@ -22,10 +23,10 @@ _READY_LIKE_STATUSES = {
 def status_from_plan_state(plan_state: ExecutionPlanState) -> str:
     if not plan_state.steps:
         return "setup_ready"
-    running_steps = [step for step in plan_state.steps if step.status == "running"]
-    if running_steps:
-        if len(running_steps) == 1:
-            return f"running:{running_steps[0].step_id.lower()}"
+    active_steps = [step for step in plan_state.steps if step.status in _ACTIVE_STEP_STATUSES]
+    if active_steps:
+        if len(active_steps) == 1 and active_steps[0].status == "running":
+            return f"running:{active_steps[0].step_id.lower()}"
         return "running:parallel"
     if any(step.status != "completed" for step in plan_state.steps):
         return "plan_ready"

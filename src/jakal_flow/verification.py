@@ -7,8 +7,9 @@ import sys
 from pathlib import Path
 from time import monotonic
 
+from .execution_control import execution_scope_id, run_subprocess_capture
 from .models import ProjectContext, TestRunResult
-from .utils import decode_process_output, ensure_dir, now_utc_iso, read_json, read_text, sanitized_subprocess_env, write_json, write_text
+from .utils import compact_text, decode_process_output, ensure_dir, now_utc_iso, read_json, read_text, sanitized_subprocess_env, write_json, write_text
 
 RELEVANT_ENV_FILES = (
     "pyproject.toml",
@@ -29,6 +30,23 @@ RELEVANT_ENV_FILES = (
 
 
 class VerificationRunner:
+    def _failure_reason(self, stdout: str, stderr: str, max_chars: int = 280) -> str:
+        source = stderr if str(stderr).strip() else stdout
+        lines = [line.strip() for line in str(source).splitlines() if line.strip()]
+        if not lines:
+            return ""
+        excerpt = " | ".join(lines[-4:])
+        return compact_text(excerpt, max_chars=max_chars)
+
+    def _summary(self, command: str, returncode: int, *, stdout: str, stderr: str, cached: bool = False) -> tuple[str, str]:
+        failure_reason = self._failure_reason(stdout, stderr) if returncode != 0 else ""
+        summary = f"{command} exited with {returncode}"
+        if cached:
+            summary = f"{summary} (cached)"
+        if failure_reason:
+            summary = f"{summary}: {failure_reason}"
+        return summary, failure_reason
+
     def run(
         self,
         context: ProjectContext,
@@ -59,19 +77,20 @@ class VerificationRunner:
                 return cached_result
 
         start = monotonic()
-        completed = subprocess.run(
+        completed = run_subprocess_capture(
             verify_command,
+            scope_id=execution_scope_id(context),
+            label=f"verification {label}",
             cwd=context.paths.repo_dir,
-            shell=True,
-            capture_output=True,
-            check=False,
             env=sanitized_subprocess_env(),
+            shell=True,
         )
         duration_seconds = round(max(0.0, monotonic() - start), 3)
         stdout = decode_process_output(completed.stdout)
         stderr = decode_process_output(completed.stderr)
         write_text(stdout_file, stdout)
         write_text(stderr_file, stderr)
+        summary, failure_reason = self._summary(verify_command, completed.returncode, stdout=stdout, stderr=stderr)
 
         cache_stdout_file = cache_root / f"{cache_key}.stdout.log"
         cache_stderr_file = cache_root / f"{cache_key}.stderr.log"
@@ -84,7 +103,8 @@ class VerificationRunner:
                 "created_at": now_utc_iso(),
                 "command": verify_command,
                 "returncode": completed.returncode,
-                "summary": f"{verify_command} exited with {completed.returncode}",
+                "summary": summary,
+                "failure_reason": failure_reason,
                 "state_fingerprint": state_fingerprint,
                 "environment_fingerprint": environment_fingerprint,
                 "duration_seconds": duration_seconds,
@@ -97,7 +117,8 @@ class VerificationRunner:
             returncode=completed.returncode,
             stdout_file=stdout_file,
             stderr_file=stderr_file,
-            summary=f"{verify_command} exited with {completed.returncode}",
+            summary=summary,
+            failure_reason=failure_reason,
             duration_seconds=duration_seconds,
             source_duration_seconds=duration_seconds,
             cache_hit=False,
@@ -124,13 +145,24 @@ class VerificationRunner:
         write_text(stdout_file, stdout)
         write_text(stderr_file, stderr)
         returncode = int(cached.get("returncode", 1))
+        cached_failure_reason = str(cached.get("failure_reason", "")).strip()
+        cached_summary, computed_failure_reason = self._summary(
+            verify_command,
+            returncode,
+            stdout=stdout,
+            stderr=stderr,
+            cached=True,
+        )
+        if not cached_failure_reason:
+            cached_failure_reason = computed_failure_reason
         source_duration_seconds = round(float(cached.get("duration_seconds", 0.0) or 0.0), 3)
         return TestRunResult(
             command=verify_command,
             returncode=returncode,
             stdout_file=stdout_file,
             stderr_file=stderr_file,
-            summary=f"{verify_command} exited with {returncode} (cached)",
+            summary=cached_summary,
+            failure_reason=cached_failure_reason,
             duration_seconds=0.0,
             source_duration_seconds=source_duration_seconds,
             cache_hit=True,

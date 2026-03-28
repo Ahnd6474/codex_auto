@@ -3,12 +3,12 @@
     "C:\\Users\\alber\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Cloudflare.cloudflared_Microsoft.Winget.Source_8wekyb3d8bbwe\\cloudflared.EXE",
     "tunnel",
     "--url",
-    "http://127.0.0.1:56871",
+    "http://127.0.0.1:50132",
     "--no-autoupdate"
   ],
-  "pid": 26748,
+  "pid": 8832,
   "provider": "cloudflare-quick-tunnel",
-  "public_url": "https://walter-hobbies-laser-classical.trycloudflare.com",
-  "started_at": "2026-03-26T23:42:26+00:00",
-  "target_url": "http://127.0.0.1:56871"
+  "public_url": "https://contractors-sentences-peers-intelligence.trycloudflare.com",
+  "started_at": "2026-03-28T03:58:22+00:00",
+  "target_url": "http://127.0.0.1:50132"
 }

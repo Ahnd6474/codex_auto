@@ -76,6 +76,7 @@ export function CenterWorkspace({
   activeTab,
   onChangeTab,
   detail,
+  workspaceShareDetail,
   historyDetail,
   selectedHistoryId,
   form,
@@ -87,7 +88,10 @@ export function CenterWorkspace({
   modelPresets,
   modelCatalog,
   busy,
+  canRequestStop,
+  canCancelReservation,
   shareBusy,
+  queuedJobs,
   onChangeForm,
   onChangeProgramSettings,
   onChooseDirectory,
@@ -105,6 +109,7 @@ export function CenterWorkspace({
   onResetPlan,
   onRunPlan,
   onRequestStop,
+  onCancelQueuedJob,
   onSelectStep,
   onUpdateStepField,
   onSaveStepLocal,
@@ -196,12 +201,16 @@ export function CenterWorkspace({
             autoRunAfterPlan={autoRunAfterPlan}
             selectedStepId={selectedStepId}
             busy={busy}
+            canRequestStop={canRequestStop}
+            canCancelReservation={canCancelReservation}
+            queuedJobs={queuedJobs}
             onPromptChange={onPromptChange}
             onGeneratePlan={onGeneratePlan}
             onSavePlan={onSavePlan}
             onResetPlan={onResetPlan}
             onRunPlan={onRunPlan}
             onRequestStop={onRequestStop}
+            onCancelQueuedJob={onCancelQueuedJob}
             onGenerateShareLink={onGenerateShareLink}
             onCopyShareLink={onCopyShareLink}
             onRevokeShareLink={onRevokeShareLink}
@@ -245,7 +254,7 @@ export function CenterWorkspace({
           <AppSettingsView
             settings={programSettings}
             shareSettings={shareSettings}
-            shareDetail={detail?.share}
+            shareDetail={workspaceShareDetail}
             busy={busy}
             shareBusy={shareBusy}
             onChangeSettings={onChangeProgramSettings}

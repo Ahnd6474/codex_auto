@@ -14,6 +14,7 @@ from typing import Any
 from .bridge_events import emit_bridge_event
 from .codex_app_server import fetch_codex_backend_snapshot
 from .model_constants import AUTO_MODEL_SLUG, DEFAULT_LOCAL_MODEL_PROVIDER, DEFAULT_MODEL_PROVIDER
+from .execution_control import EXECUTION_STOP_REGISTRY, execution_scope_id
 from .optimization import normalize_optimization_mode
 from .model_selection import (
     DEFAULT_MODEL_PRESET_ID,
@@ -38,8 +39,10 @@ from .public_tunnel import public_tunnel_status_payload, start_cloudflare_quick_
 from .run_control import (
     clear_stop_request,
     default_run_control,
+    immediate_stop_requested,
     load_run_control,
     normalize_run_control,
+    request_stop_immediately,
     request_stop_after_current_step,
     save_run_control,
     stop_requested,
@@ -54,6 +57,7 @@ from .share import (
     save_share_server_config,
     share_server_status_payload,
 )
+from .step_models import GEMINI_DEFAULT_MODEL
 from .ui_bridge_commands import (
     BridgeCommandContext,
     build_project_command_handlers,
@@ -290,6 +294,13 @@ def coerce_nonnegative_int(value: Any, default: int = 0) -> int:
     return max(0, parsed)
 
 
+def coerce_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+
+
 def coerce_nonnegative_float(value: Any, default: float = 0.0) -> float:
     try:
         parsed = float(str(value).strip())
@@ -348,6 +359,9 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
         max_blocks=5,
         workflow_mode="standard",
         ml_max_cycles=3,
+        model="gpt-5.4",
+        model_preset="",
+        model_slug_input="gpt-5.4",
     ).to_dict()
     merged = {**base, **payload}
     merged["max_blocks"] = coerce_positive_int(merged.get("max_blocks", 5), default=5)
@@ -397,6 +411,8 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
         default=3,
     )
     merged["allow_push"] = coerce_bool(merged.get("allow_push", True), True)
+    merged["allow_background_queue"] = coerce_bool(merged.get("allow_background_queue", True), True)
+    merged["background_queue_priority"] = coerce_int(merged.get("background_queue_priority", 0), default=0)
     merged["require_checkpoint_approval"] = coerce_bool(
         merged.get("require_checkpoint_approval", False),
         False,
@@ -436,7 +452,7 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
         merged.get("reasoning_output_cost_per_million_usd", 0.0)
     )
     merged["per_pass_cost_usd"] = coerce_nonnegative_float(merged.get("per_pass_cost_usd", 0.0))
-    merged["codex_path"] = str(merged.get("codex_path", "")).strip() or default_codex_path()
+    merged["codex_path"] = str(merged.get("codex_path", "")).strip() or default_codex_path(merged["model_provider"])
     merged["model"] = str(merged.get("model", "")).strip().lower()
     merged["model_preset"] = normalize_model_preset_id(str(merged.get("model_preset", "")), fallback="")
     merged["effort_selection_mode"] = str(merged.get("effort_selection_mode", "")).strip().lower()
@@ -446,6 +462,10 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
     merged["generate_word_report"] = coerce_bool(merged.get("generate_word_report", True), True)
     raw_effort = str(merged.get("effort", "")).strip()
     merged["effort"] = raw_effort.lower()
+
+    if merged["model_provider"] == "gemini" and "model" not in payload and "model_slug_input" not in payload:
+        merged["model"] = GEMINI_DEFAULT_MODEL
+        merged["model_slug_input"] = GEMINI_DEFAULT_MODEL
 
     if not merged["model"]:
         preset = model_preset_by_id(merged["model_preset"] or DEFAULT_MODEL_PRESET_ID)
@@ -473,6 +493,8 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
         merged["model_preset"] = ""
     merged["model_selection_mode"] = str(merged.get("model_selection_mode", "slug")).strip() or "slug"
     merged["model_slug_input"] = str(merged.get("model_slug_input", merged["model"])).strip().lower() or merged["model"]
+    if "model" not in payload and str(payload.get("model_slug_input", "")).strip():
+        merged["model"] = merged["model_slug_input"]
     if not merged["model"] and merged["model_slug_input"]:
         merged["model"] = merged["model_slug_input"]
     return RuntimeOptions(**merged)
@@ -583,8 +605,11 @@ def bridge_command_handlers() -> dict[str, Any]:
             append_ui_event=append_ui_event,
             save_run_control=save_run_control,
             default_run_control=default_run_control,
-            request_stop_after_current_step=request_stop_after_current_step,
+            request_stop_immediately=request_stop_immediately,
             stop_requested=stop_requested,
+            immediate_stop_requested=immediate_stop_requested,
+            execution_scope_id=execution_scope_id,
+            execution_stop_registry=EXECUTION_STOP_REGISTRY,
             coerce_bool=coerce_bool,
         ),
     }

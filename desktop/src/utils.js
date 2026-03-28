@@ -1,6 +1,18 @@
 import { normalizeLanguage, translate } from "./locale.js";
 
-export function defaultCodexPath() {
+export function defaultCodexPath(provider = "openai") {
+  const normalizedProvider = String(provider || "").trim().toLowerCase();
+  if (normalizedProvider === "gemini") {
+    const platform = String(globalThis.process?.platform || "").trim().toLowerCase();
+    if (platform === "win32") {
+      return "gemini.cmd";
+    }
+    const userAgent = String(globalThis.navigator?.userAgent || "").toLowerCase();
+    if (userAgent.includes("windows")) {
+      return "gemini.cmd";
+    }
+    return "gemini";
+  }
   const platform = String(globalThis.process?.platform || "").trim().toLowerCase();
   if (platform === "win32") {
     return "codex.cmd";
@@ -22,6 +34,83 @@ export function cloneValue(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+export function normalizeProjectPath(value = "") {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+  const normalized = text.replace(/\\/g, "/").replace(/\/+/g, "/");
+  return normalized.toLowerCase();
+}
+
+export function backgroundJobProjectKey(payload = null, workspaceRoot = "") {
+  const repoId = String(payload?.repo_id || "").trim();
+  const projectDir = normalizeProjectPath(payload?.project_dir || "");
+  if (!repoId && !projectDir) {
+    return "";
+  }
+  return [
+    normalizeProjectPath(workspaceRoot),
+    repoId,
+    projectDir,
+  ].join("|");
+}
+
+export function isDuplicateProjectJobError(error = null) {
+  return String(error || "").trim().toLowerCase().includes("already active for this project");
+}
+
+export function jobMatchesProject(job = null, project = {}) {
+  if (!job || !project) {
+    return false;
+  }
+  const jobRepoId = String(job?.repo_id || "").trim();
+  const projectRepoId = String(project?.repo_id || "").trim();
+  if (jobRepoId && projectRepoId && jobRepoId === projectRepoId) {
+    return true;
+  }
+  const jobProjectDir = normalizeProjectPath(job?.project_dir || "");
+  const projectDir = normalizeProjectPath(project?.project_dir || project?.repo_path || "");
+  return Boolean(jobProjectDir) && Boolean(projectDir) && jobProjectDir === projectDir;
+}
+
+export function projectJobFromJobs(jobs = [], project = {}) {
+  const jobItems = Array.isArray(jobs) ? jobs.filter(Boolean) : [];
+  const statusRank = {
+    running: 0,
+    queued: 1,
+  };
+  const matches = jobItems.filter((job) => jobMatchesProject(job, project));
+  if (!matches.length) {
+    return null;
+  }
+  const candidates = matches.filter((job) => !jobIsSupersededByProject(job, project));
+  if (!candidates.length) {
+    return null;
+  }
+  return [...candidates].sort((left, right) => {
+    const leftRank = statusRank[String(left?.status || "").trim().toLowerCase()] ?? 9;
+    const rightRank = statusRank[String(right?.status || "").trim().toLowerCase()] ?? 9;
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
+    }
+    return (Number(right?.updated_at_ms || 0) || 0) - (Number(left?.updated_at_ms || 0) || 0);
+  })[0] || null;
+}
+
+export function projectStatusWithJob(status = "", activeJob = null) {
+  const currentStatus = String(status || "").trim();
+  const jobStatus = String(activeJob?.status || "").trim().toLowerCase();
+  const command = String(activeJob?.command || "").trim() || "background-job";
+  if (jobStatus === "queued") {
+    return `queued:${command}`;
+  }
+  if (jobStatus === "running" && !currentStatus.toLowerCase().startsWith("running:")) {
+    return `running:${command}`;
+  }
+  return currentStatus;
+}
+
 export function detailApplySignature(detail = null, runningJob = null) {
   return [
     String(detail?.project?.repo_id || "").trim(),
@@ -36,7 +125,7 @@ export function detailApplySignature(detail = null, runningJob = null) {
 export const AUTO_REASONING_OPTION = "auto";
 export const REASONING_OPTIONS = ["low", "medium", "high", "xhigh"];
 export const MODEL_REASONING_OPTIONS = [AUTO_REASONING_OPTION, ...REASONING_OPTIONS];
-export const MODEL_PROVIDER_OPTIONS = ["openai", "openrouter", "opencdk", "local_openai", "oss"];
+export const MODEL_PROVIDER_OPTIONS = ["openai", "gemini", "openrouter", "opencdk", "local_openai", "oss"];
 export const PROGRAM_RUNTIME_KEYS = [
   "model_provider",
   "local_model_provider",
@@ -77,7 +166,7 @@ export const DEFAULT_DASHBOARD_VISIBILITY = Object.freeze({
   codex_usage_card: false,
   word_report_card: true,
 });
-export const PROGRAM_UI_KEYS = ["ui_theme", "developer_mode", "dashboard_visibility"];
+export const PROGRAM_UI_KEYS = ["ui_theme", "developer_mode", "dashboard_visibility", "background_concurrency_limit"];
 
 const LEGACY_DASHBOARD_VISIBILITY_ALIASES = Object.freeze({
   rate_limit_window_5h: "rate_limits",
@@ -90,11 +179,11 @@ const DEFAULT_PROGRAM_RUNTIME = {
   local_model_provider: "ollama",
   provider_base_url: "",
   provider_api_key_env: "OPENAI_API_KEY",
-  model: "auto",
+  model: "gpt-5.4",
   planning_effort: "medium",
-  model_preset: "auto",
+  model_preset: "",
   model_selection_mode: "slug",
-  model_slug_input: "auto",
+  model_slug_input: "gpt-5.4",
   approval_mode: "never",
   sandbox_mode: "danger-full-access",
   checkpoint_interval_blocks: 1,
@@ -112,6 +201,7 @@ const DEFAULT_PROGRAM_UI = {
   ui_theme: "dark",
   developer_mode: false,
   dashboard_visibility: DEFAULT_DASHBOARD_VISIBILITY,
+  background_concurrency_limit: 2,
 };
 
 export function normalizeDashboardVisibility(value) {
@@ -181,6 +271,7 @@ export function programSettingsFromRuntime(runtime) {
   });
   settings.execution_mode = "parallel";
   settings.dashboard_visibility = normalizeDashboardVisibility(settings.dashboard_visibility);
+  settings.background_concurrency_limit = Math.max(1, Number.parseInt(String(settings.background_concurrency_limit || 2), 10) || 2);
   return settings;
 }
 
@@ -224,7 +315,13 @@ export function applyProviderDefaults(runtime = {}, nextProvider = "openai", nex
   const localProvider = provider === "oss" ? (String(nextLocalProvider || runtime?.local_model_provider || "ollama").trim().toLowerCase() === "lmstudio" ? "lmstudio" : "ollama") : "";
   const supportsAuto = providerSupportsAutoModel(provider);
   const currentModel = String(runtime?.model_slug_input || runtime?.model || "").trim().toLowerCase();
-  const nextModel = supportsAuto ? (currentModel || "auto") : currentModel === "auto" ? "" : currentModel;
+  const nextModel = supportsAuto
+    ? (currentModel || "auto")
+    : provider === "gemini" && previousProvider !== "gemini" && !currentModel.startsWith("gemini")
+      ? ""
+      : currentModel === "auto"
+        ? ""
+        : currentModel;
   return {
     ...(cloneValue(runtime) || {}),
     model_provider: provider,
@@ -245,10 +342,27 @@ export function applyProviderDefaults(runtime = {}, nextProvider = "openai", nex
     model_preset: nextModel === "auto" && supportsAuto ? String(runtime?.model_preset || "auto").trim().toLowerCase() || "auto" : "",
     model_selection_mode: "slug",
     model_slug_input: nextModel,
+    codex_path:
+      previousProvider === provider
+        ? String(runtime?.codex_path || "").trim() || defaultCodexPath(provider)
+        : defaultCodexPath(provider),
   };
 }
 
 export function blankProjectForm(defaultRuntime) {
+  const runtimeSource = cloneValue(defaultRuntime) || {};
+  const runtimeDefaults = {
+    ...DEFAULT_PROGRAM_RUNTIME,
+    ...runtimeSource,
+  };
+  const defaultModel = String(runtimeSource.model ?? runtimeDefaults.model ?? "gpt-5.4").trim().toLowerCase() || "gpt-5.4";
+  const defaultModelSlugInput = String(runtimeSource.model_slug_input ?? defaultModel).trim().toLowerCase() || defaultModel;
+  const defaultModelPreset =
+    runtimeSource.model_preset !== undefined
+      ? String(runtimeSource.model_preset || "").trim().toLowerCase()
+      : defaultModel === "auto"
+        ? "auto"
+        : "";
   return {
     project_dir: "",
     display_name: "",
@@ -256,12 +370,17 @@ export function blankProjectForm(defaultRuntime) {
     origin_url: "",
     github_mode: "existing",
     runtime: {
-      ...(cloneValue(defaultRuntime) || {}),
-      generate_word_report: defaultRuntime?.generate_word_report ?? true,
-      max_blocks: defaultRuntime?.max_blocks || 5,
-      optimization_mode: defaultRuntime?.optimization_mode || "light",
-      test_cmd: defaultRuntime?.test_cmd || "python -m pytest",
+      ...runtimeDefaults,
+      model: defaultModel,
+      model_preset: defaultModelPreset,
+      model_slug_input: defaultModelSlugInput,
+      generate_word_report: runtimeDefaults.generate_word_report ?? true,
+      max_blocks: runtimeDefaults.max_blocks || 5,
+      optimization_mode: runtimeDefaults.optimization_mode || "light",
+      test_cmd: runtimeDefaults.test_cmd || "python -m pytest",
       execution_mode: "parallel",
+      allow_background_queue: runtimeDefaults.allow_background_queue ?? true,
+      background_queue_priority: Number.parseInt(String(runtimeDefaults.background_queue_priority ?? 0), 10) || 0,
     },
   };
 }
@@ -277,6 +396,13 @@ export function projectFormFromDetail(detail, defaultRuntime) {
       ...(cloneValue(defaultRuntime) || {}),
       ...(cloneValue(detail?.runtime) || {}),
       execution_mode: "parallel",
+      allow_background_queue:
+        detail?.runtime?.allow_background_queue ?? defaultRuntime?.allow_background_queue ?? true,
+      background_queue_priority:
+        Number.parseInt(
+          String(detail?.runtime?.background_queue_priority ?? defaultRuntime?.background_queue_priority ?? 0),
+          10,
+        ) || 0,
     },
   };
 }
@@ -375,6 +501,23 @@ function parseTimestampMs(value) {
   }
   const parsed = Date.parse(String(value).trim());
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function jobIsSupersededByProject(job = null, project = null) {
+  const jobStatus = String(job?.status || "").trim().toLowerCase();
+  if (!["queued", "running"].includes(jobStatus)) {
+    return false;
+  }
+  const currentStatus = String(project?.current_status || project?.status || "").trim().toLowerCase();
+  if (!currentStatus || currentStatus.startsWith("running:") || currentStatus === "queued" || currentStatus.startsWith("queued:")) {
+    return false;
+  }
+  const projectLastRunAtMs = parseTimestampMs(project?.last_run_at);
+  const jobUpdatedAtMs = Number.isFinite(Number(job?.updated_at_ms)) ? Number(job.updated_at_ms) : null;
+  if (projectLastRunAtMs !== null && jobUpdatedAtMs !== null && projectLastRunAtMs > jobUpdatedAtMs) {
+    return true;
+  }
+  return false;
 }
 
 function latestRunningSignalMs({
@@ -697,13 +840,28 @@ export function normalizeInterruptedPlan(plan = null) {
 }
 
 export function sanitizeProjectListForJobState(projects = [], activeJob = null, options = {}) {
-  if (activeJob?.status === "running") {
+  if (
+    activeJob &&
+    !Array.isArray(activeJob) &&
+    ["queued", "running"].includes(String(activeJob?.status || "").trim().toLowerCase()) &&
+    !String(activeJob?.repo_id || "").trim() &&
+    !String(activeJob?.project_dir || "").trim()
+  ) {
     return projects;
   }
+  const jobItems = Array.isArray(activeJob) ? activeJob.filter(Boolean) : activeJob ? [activeJob] : [];
   const nowMs = Number.isFinite(options?.nowMs) ? options.nowMs : Date.now();
   return (projects || []).map((project) => {
+    const matchedJob = projectJobFromJobs(jobItems, project);
+    if (matchedJob && ["queued", "running"].includes(String(matchedJob?.status || "").trim().toLowerCase())) {
+      return {
+        ...project,
+        status: projectStatusWithJob(project?.status, matchedJob),
+      };
+    }
     const currentStatus = String(project?.status || "").trim();
-    if (!currentStatus.toLowerCase().startsWith("running:")) {
+    const normalizedStatus = currentStatus.toLowerCase();
+    if (!normalizedStatus.startsWith("running:") && normalizedStatus !== "queued" && !normalizedStatus.startsWith("queued:")) {
       return project;
     }
     if (
@@ -727,7 +885,13 @@ export function sanitizeProjectListForJobState(projects = [], activeJob = null, 
 }
 
 export function sanitizeProjectDetailForJobState(detail, activeJob = null, options = {}) {
-  if (!detail || activeJob?.status === "running") {
+  let matchedJob = Array.isArray(activeJob)
+    ? projectJobFromJobs(activeJob, detail?.project || {})
+    : activeJob;
+  if (jobIsSupersededByProject(matchedJob, detail?.project || {})) {
+    matchedJob = null;
+  }
+  if (!detail || ["queued", "running"].includes(String(matchedJob?.status || "").trim().toLowerCase())) {
     return detail;
   }
   const currentStatus = String(detail?.project?.current_status || "").trim();
@@ -843,6 +1007,8 @@ export function defaultProviderBaseUrl(provider = "openai") {
 
 export function defaultProviderApiKeyEnv(provider = "openai") {
   switch (String(provider || "").trim().toLowerCase()) {
+    case "gemini":
+      return "GEMINI_API_KEY";
     case "openrouter":
       return "OPENROUTER_API_KEY";
     case "opencdk":
@@ -877,6 +1043,9 @@ export function providerSupportsCatalog(provider = "openai") {
 
 export function providerDisplayName(provider = "openai", localProvider = "") {
   const normalized = String(provider || "").trim().toLowerCase();
+  if (normalized === "gemini") {
+    return "Gemini CLI";
+  }
   if (normalized === "oss") {
     const local = String(localProvider || "").trim().toLowerCase();
     if (local === "lmstudio") {
@@ -1183,7 +1352,7 @@ export function parallelLimitTone(parallel = {}) {
 export function firstSelectableStepId(plan) {
   const steps = plan?.steps || [];
   const pending = steps.find((step) => step.status !== "completed");
-  return pending?.step_id || steps[0]?.step_id || "";
+  return pending?.step_id || "";
 }
 
 export const CLOSEOUT_STEP_ID = "CO1";
@@ -1457,19 +1626,26 @@ export function commandLabel(command, language = "en") {
 }
 
 export function statusTone(status) {
+  const normalized = String(status || "").trim().toLowerCase();
   if (isDebuggingStatus(status)) {
     return "warning";
   }
-  if (String(status || "").includes("failed")) {
-    return "danger";
-  }
-  if (String(status || "").includes("running")) {
+  if (normalized.startsWith("queued")) {
     return "info";
   }
-  if (String(status || "") === "completed") {
+  if (normalized.includes("cancelled")) {
+    return "neutral";
+  }
+  if (normalized.includes("failed")) {
+    return "danger";
+  }
+  if (normalized.includes("running")) {
+    return "info";
+  }
+  if (normalized === "completed") {
     return "success";
   }
-  if (String(status || "").includes("paused")) {
+  if (normalized.includes("paused")) {
     return "warning";
   }
   return "neutral";

@@ -24,6 +24,22 @@ export function emptyPlanDraft() {
   };
 }
 
+export function planGenerationValidation({ projectDir, prompt, plan }) {
+  const normalizedProjectDir = String(projectDir || "").trim();
+  if (!normalizedProjectDir) {
+    return "prepareProjectFirst";
+  }
+  const normalizedPrompt = String(prompt || "").trim();
+  if (!normalizedPrompt) {
+    return "promptRequired";
+  }
+  const normalizedPlan = plan && typeof plan === "object" ? plan : {};
+  return {
+    canGenerate: true,
+    requiresReplacementConfirmation: Array.isArray(normalizedPlan.steps) && normalizedPlan.steps.length > 0,
+  };
+}
+
 export function shouldPreserveProjectPrompt(plan) {
   const prompt = String(plan?.project_prompt || "").trim();
   if (!prompt) {

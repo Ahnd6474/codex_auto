@@ -1,6 +1,6 @@
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { canEditStep, effectiveStepStatus, formatDurationCompact, formatUsd, isSystemStep, planStepsWithCloseout, REASONING_OPTIONS, reasoningEffortLabel, shouldShowEstimatedCost, statusTone } from "../../utils";
+import { canEditStep, effectiveStepStatus, formatDurationCompact, formatUsd, isSystemStep, planStepsWithCloseout, projectStatusWithJob, REASONING_OPTIONS, reasoningEffortLabel, shouldShowEstimatedCost, statusTone } from "../../utils";
 
 function FlowNode({ step, projectStatus, selected, onSelect, language, t }) {
   const stepStatus = effectiveStepStatus(step, projectStatus);
@@ -21,8 +21,10 @@ function FlowNode({ step, projectStatus, selected, onSelect, language, t }) {
 export function RunControlView({
   detail,
   planDraft,
+  activeJob,
   selectedStepId,
   busy,
+  canRequestStop = false,
   onPromptChange,
   onGeneratePlan,
   onSavePlan,
@@ -52,7 +54,7 @@ export function RunControlView({
   const executionMode = "parallel";
   const flowColumns = 3;
   const selectedSystemStep = isSystemStep(selectedStep);
-  const projectStatus = detail?.project?.current_status || "";
+  const projectStatus = projectStatusWithJob(detail?.project?.current_status || "", activeJob);
   const selectedStepStatus = effectiveStepStatus(selectedStep, projectStatus);
   const closeoutStatus = String(planDraft?.closeout_status || "not_started").trim().toLowerCase();
   const showCloseoutStatus = closeoutStatus && closeoutStatus !== "not_started";
@@ -68,17 +70,17 @@ export function RunControlView({
       </div>
 
       <div className="run-summary">
-        <div className={`metric-card metric-card--${statusTone(detail?.project?.current_status)}`}>
+        <div className={`metric-card metric-card--${statusTone(projectStatus)}`}>
           <span>{t("common.status")}</span>
-          <strong>{displayStatus(detail?.project?.current_status || "idle", language)}</strong>
+          <strong>{displayStatus(projectStatus || "idle", language)}</strong>
         </div>
         <div className="metric-card metric-card--info">
           <span>{t("run.done")}</span>
           <strong>{completedCount}/{steps.length || 0}</strong>
         </div>
-        <div className={`metric-card metric-card--${detail?.run_control?.stop_after_current_step ? "warning" : "neutral"}`}>
+        <div className={`metric-card metric-card--${detail?.run_control?.stop_immediately ? "warning" : "neutral"}`}>
           <span>{t("run.stopAfterStep")}</span>
-          <strong>{detail?.run_control?.stop_after_current_step ? t("common.on") : t("common.off")}</strong>
+          <strong>{detail?.run_control?.stop_immediately ? t("common.on") : t("common.off")}</strong>
         </div>
         <div className="metric-card metric-card--info">
           <span>{t("run.estimatedRemaining")}</span>
@@ -118,7 +120,7 @@ export function RunControlView({
             <button className="toolbar-button toolbar-button--accent" onClick={onRunPlan} type="button" disabled={busy}>
               {t("action.run")}
             </button>
-            <button className="toolbar-button toolbar-button--ghost" onClick={onRequestStop} type="button" disabled={!busy}>
+            <button className="toolbar-button toolbar-button--ghost" onClick={onRequestStop} type="button" disabled={!canRequestStop}>
               {t("action.stop")}
             </button>
           </div>

@@ -12,6 +12,9 @@ class GitCommandError(RuntimeError):
     pass
 
 
+UNTRACKED_OVERWRITE_MARKER = "The following untracked working tree files would be overwritten by merge:"
+
+
 class GitOps:
     def _safe_directory_args(self, cwd: Path) -> list[str]:
         resolved = cwd.resolve()
@@ -158,17 +161,28 @@ class GitOps:
     def push(self, repo_dir: Path, branch: str) -> None:
         self.run(["push", "origin", branch], cwd=repo_dir)
 
-    def branch_exists(self, repo_dir: Path, branch_name: str) -> bool:
-        result = self.run(["rev-parse", "--verify", f"refs/heads/{branch_name}"], cwd=repo_dir, check=False)
+    def remote_branch_revision(self, repo_dir: Path, remote_name: str, branch: str) -> str | None:
+        if not branch.strip():
+            return None
+        result = self.run(["ls-remote", "--heads", remote_name, branch], cwd=repo_dir, check=False)
+        if result.returncode != 0:
+            return None
+        line = next((item.strip() for item in result.stdout.splitlines() if item.strip()), "")
+        if not line:
+            return None
+        return line.split()[0].strip() or None
+
+    def is_ancestor(self, repo_dir: Path, older_revision: str, newer_revision: str) -> bool:
+        older = older_revision.strip()
+        newer = newer_revision.strip()
+        if not older or not newer:
+            return False
+        result = self.run(["merge-base", "--is-ancestor", older, newer], cwd=repo_dir, check=False)
         return result.returncode == 0
 
     def add_worktree(self, repo_dir: Path, worktree_dir: Path, branch_name: str, start_point: str) -> None:
         worktree_dir.parent.mkdir(parents=True, exist_ok=True)
         self.run(["worktree", "add", "-b", branch_name, str(worktree_dir), start_point], cwd=repo_dir)
-
-    def attach_worktree(self, repo_dir: Path, worktree_dir: Path, branch_name: str) -> None:
-        worktree_dir.parent.mkdir(parents=True, exist_ok=True)
-        self.run(["worktree", "add", str(worktree_dir), branch_name], cwd=repo_dir)
 
     def remove_worktree(self, repo_dir: Path, worktree_dir: Path, force: bool = True) -> None:
         args = ["worktree", "remove"]
@@ -198,8 +212,97 @@ class GitOps:
         result = self.run(["rev-parse", "-q", "--verify", "CHERRY_PICK_HEAD"], cwd=repo_dir, check=False)
         return result.returncode == 0
 
+    def _parse_untracked_overwrite_paths(self, stderr: str) -> list[str]:
+        lines = stderr.splitlines()
+        collecting = False
+        paths: list[str] = []
+        for raw_line in lines:
+            line = raw_line.rstrip()
+            if not collecting:
+                if UNTRACKED_OVERWRITE_MARKER in line:
+                    collecting = True
+                continue
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("Please move or remove them before you merge.") or stripped == "Aborting":
+                break
+            paths.append(stripped)
+        return paths
+
+    def _resolve_merge_blocker_path(self, repo_dir: Path, relative_path: str) -> Path | None:
+        candidate = Path(relative_path)
+        if candidate.is_absolute():
+            return None
+        resolved_repo_dir = repo_dir.resolve()
+        resolved_path = (repo_dir / candidate).resolve(strict=False)
+        if resolved_path != resolved_repo_dir and resolved_repo_dir not in resolved_path.parents:
+            return None
+        return resolved_path
+
+    def _read_revision_file_bytes(self, repo_dir: Path, revision: str, relative_path: str) -> bytes | None:
+        command = [
+            "git",
+            *self._safe_directory_args(repo_dir),
+            "show",
+            f"{revision}:{relative_path}",
+        ]
+        completed = subprocess.run(
+            command,
+            cwd=repo_dir,
+            capture_output=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            return None
+        return completed.stdout
+
+    def _matches_merge_target_contents(self, local_bytes: bytes, expected_bytes: bytes) -> bool:
+        if local_bytes == expected_bytes:
+            return True
+        if b"\0" in local_bytes or b"\0" in expected_bytes:
+            return False
+        return local_bytes.replace(b"\r\n", b"\n") == expected_bytes.replace(b"\r\n", b"\n")
+
+    def _remove_identical_untracked_merge_blockers(self, repo_dir: Path, revision: str, stderr: str) -> bool:
+        removed_any = False
+        resolved_repo_dir = repo_dir.resolve()
+        for relative_path in self._parse_untracked_overwrite_paths(stderr):
+            resolved_path = self._resolve_merge_blocker_path(repo_dir, relative_path)
+            if resolved_path is None or not resolved_path.is_file():
+                continue
+            normalized_relative_path = resolved_path.relative_to(resolved_repo_dir).as_posix()
+            untracked_result = self.run(
+                ["ls-files", "--others", "--exclude-standard", "--", normalized_relative_path],
+                cwd=repo_dir,
+                check=False,
+            )
+            untracked_paths = {line.strip() for line in untracked_result.stdout.splitlines() if line.strip()}
+            if normalized_relative_path not in untracked_paths:
+                continue
+            expected_bytes = self._read_revision_file_bytes(repo_dir, revision, normalized_relative_path)
+            if expected_bytes is None:
+                continue
+            if not self._matches_merge_target_contents(resolved_path.read_bytes(), expected_bytes):
+                continue
+            resolved_path.unlink()
+            removed_any = True
+        return removed_any
+
     def merge_ff_only(self, repo_dir: Path, revision: str) -> None:
-        self.run(["merge", "--ff-only", revision], cwd=repo_dir)
+        args = ["merge", "--ff-only", revision]
+        result = self.run(args, cwd=repo_dir, check=False)
+        if result.returncode == 0:
+            return
+        if self._remove_identical_untracked_merge_blockers(repo_dir, revision, result.stderr):
+            retry_result = self.run(args, cwd=repo_dir, check=False)
+            if retry_result.returncode == 0:
+                return
+            result = retry_result
+        error_text = result.stderr.strip() or result.stdout.strip()
+        raise GitCommandError(
+            f"git {' '.join(args)} failed with code {result.returncode}: {error_text}"
+        )
 
     def conflicted_files(self, repo_dir: Path) -> list[str]:
         result = self.run(["diff", "--name-only", "--diff-filter=U"], cwd=repo_dir, check=False)

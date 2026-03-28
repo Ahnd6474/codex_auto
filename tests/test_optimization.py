@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import shutil
 import sys
@@ -13,6 +14,8 @@ from jakal_flow.models import CodexRunResult, ExecutionPlanState, ExecutionStep,
 from jakal_flow.optimization import scan_optimization_candidates
 from jakal_flow.orchestrator import Orchestrator
 from jakal_flow.utils import read_jsonl_tail
+
+UTC = getattr(datetime, "UTC", timezone.utc)
 
 
 def _local_temp_root() -> Path:
@@ -248,6 +251,101 @@ class OptimizationTests(unittest.TestCase):
         self.assertEqual(pass_entries[0]["pass_type"], "project-optimization-pass")
         self.assertEqual(pass_entries[0]["rollback_status"], "rolled_back_to_safe_revision")
         self.assertEqual(pass_entries[1]["pass_type"], "project-closeout-pass")
+
+    def test_run_execution_closeout_recovers_stale_running_state(self) -> None:
+        with _TemporaryTestDir() as temp_root:
+            workspace_root = temp_root / "workspace"
+            repo_dir = temp_root / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            (repo_dir / "README.md").write_text("demo\n", encoding="utf-8")
+            orchestrator = Orchestrator(workspace_root)
+            runtime = RuntimeOptions(
+                model="gpt-5.4",
+                effort="medium",
+                test_cmd="python -m pytest",
+            )
+            context = orchestrator.workspace.initialize_local_project(project_dir=repo_dir, branch="main", runtime=runtime)
+            stale_time = (datetime.now(tz=UTC) - timedelta(hours=7)).replace(microsecond=0).isoformat()
+            context.metadata.current_status = "running:closeout"
+            context.metadata.last_run_at = stale_time
+            context.metadata.current_safe_revision = "safe-revision"
+            context.loop_state.current_safe_revision = "safe-revision"
+            orchestrator.workspace.save_project(context)
+            orchestrator.save_execution_plan_state(
+                context,
+                ExecutionPlanState(
+                    plan_title="Closeout recovery demo",
+                    project_prompt="Ship the repo safely.",
+                    summary="Implementation is complete.",
+                    default_test_command="python -m pytest",
+                    closeout_status="running",
+                    closeout_started_at=stale_time,
+                    closeout_notes="Original closeout never finished.",
+                    steps=[ExecutionStep(step_id="ST1", title="Finish implementation", status="completed")],
+                ),
+            )
+
+            with mock.patch.object(orchestrator, "setup_local_project", return_value=context), mock.patch(
+                "jakal_flow.orchestrator.CodexRunner.run_pass",
+                return_value=_run_result(workspace_root, "project-closeout-pass"),
+            ), mock.patch.object(
+                orchestrator,
+                "_run_test_command",
+                return_value=_test_result(workspace_root, "project-closeout-pass"),
+            ), mock.patch.object(
+                orchestrator.git,
+                "changed_files",
+                return_value=[],
+            ), mock.patch.object(
+                orchestrator.git,
+                "has_changes",
+                return_value=False,
+            ), mock.patch.object(
+                orchestrator.git,
+                "remote_url",
+                return_value=None,
+            ):
+                _, plan_state = orchestrator.run_execution_closeout(repo_dir, runtime)
+
+        self.assertEqual(plan_state.closeout_status, "completed")
+        self.assertNotEqual(plan_state.closeout_started_at, stale_time)
+        self.assertEqual(context.metadata.current_status, "closed_out")
+
+    def test_run_execution_closeout_rejects_recent_running_state(self) -> None:
+        with _TemporaryTestDir() as temp_root:
+            workspace_root = temp_root / "workspace"
+            repo_dir = temp_root / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            (repo_dir / "README.md").write_text("demo\n", encoding="utf-8")
+            orchestrator = Orchestrator(workspace_root)
+            runtime = RuntimeOptions(
+                model="gpt-5.4",
+                effort="medium",
+                test_cmd="python -m pytest",
+            )
+            context = orchestrator.workspace.initialize_local_project(project_dir=repo_dir, branch="main", runtime=runtime)
+            recent_time = datetime.now(tz=UTC).replace(microsecond=0).isoformat()
+            context.metadata.current_status = "running:closeout"
+            context.metadata.last_run_at = recent_time
+            orchestrator.workspace.save_project(context)
+            orchestrator.save_execution_plan_state(
+                context,
+                ExecutionPlanState(
+                    plan_title="Closeout recovery demo",
+                    project_prompt="Ship the repo safely.",
+                    summary="Implementation is complete.",
+                    default_test_command="python -m pytest",
+                    closeout_status="running",
+                    closeout_started_at=recent_time,
+                    steps=[ExecutionStep(step_id="ST1", title="Finish implementation", status="completed")],
+                ),
+            )
+
+            with mock.patch.object(orchestrator, "setup_local_project", return_value=context):
+                with self.assertRaisesRegex(RuntimeError, "Closeout is already running."):
+                    orchestrator.run_execution_closeout(repo_dir, runtime)
+            saved_state = orchestrator.load_execution_plan_state(context)
+            self.assertEqual(saved_state.closeout_status, "running")
 
 
 if __name__ == "__main__":

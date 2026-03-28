@@ -92,6 +92,8 @@ class RuntimeOptions:
     workflow_mode: str = "standard"
     ml_max_cycles: int = 3
     execution_mode: str = "parallel"
+    allow_background_queue: bool = True
+    background_queue_priority: int = 0
     parallel_worker_mode: str = "auto"
     parallel_workers: int = 0
     parallel_memory_per_worker_gib: float = 3.0
@@ -115,6 +117,14 @@ class RuntimeOptions:
     optimization_long_function_lines: int = 80
     optimization_duplicate_block_lines: int = 4
     optimization_max_files: int = 3
+
+    def __post_init__(self) -> None:
+        normalized_provider = str(self.model_provider or "").strip().lower()
+        current_path = str(self.codex_path or "").strip()
+        legacy_default_path = default_codex_path()
+        provider_default_path = default_codex_path(normalized_provider)
+        if not current_path or (normalized_provider == "gemini" and current_path == legacy_default_path):
+            self.codex_path = provider_default_path
 
     def to_dict(self) -> dict[str, Any]:
         return _normalize(self)
@@ -326,6 +336,7 @@ class TestRunResult:
     stdout_file: Path
     stderr_file: Path
     summary: str
+    failure_reason: str = ""
     duration_seconds: float = 0.0
     source_duration_seconds: float = 0.0
     cache_hit: bool = False
@@ -360,6 +371,8 @@ class ExecutionStep:
     title: str
     display_description: str = ""
     codex_description: str = ""
+    model_provider: str = ""
+    model: str = ""
     test_command: str = ""
     success_criteria: str = ""
     reasoning_effort: str = ""
@@ -386,6 +399,8 @@ class ExecutionStep:
             title=str(data.get("title", data.get("task_title", ""))).strip(),
             display_description=display_description,
             codex_description=codex_description,
+            model_provider=str(data.get("model_provider", "")).strip().lower(),
+            model=str(data.get("model", data.get("model_slug_input", ""))).strip().lower(),
             test_command=str(data.get("test_command", "")).strip(),
             success_criteria=str(data.get("success_criteria", "")).strip(),
             reasoning_effort=str(data.get("reasoning_effort", data.get("effort", ""))).strip().lower(),

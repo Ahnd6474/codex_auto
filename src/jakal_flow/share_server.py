@@ -25,6 +25,7 @@ from .share import (
     mask_public_text,
     public_execution_flow_svg,
     public_monitor_status,
+    public_workspace_monitor_status,
     resolve_shared_session,
     share_server_log_file,
     share_server_status_file,
@@ -47,6 +48,10 @@ class ShareRemoteControlManager:
     def is_resume_starting(self, repo_id: str) -> bool:
         with self._lock:
             return repo_id in self._resume_starting_repo_ids
+
+    def resume_starting_repo_ids(self) -> set[str]:
+        with self._lock:
+            return set(self._resume_starting_repo_ids)
 
     def _set_resume_starting(self, repo_id: str, active: bool) -> None:
         with self._lock:
@@ -221,7 +226,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             return ""
         return str(values[0]).strip()
 
-    def _validated_project(self, query: str):
+    def _validated_session(self, query: str):
         session_id = self._query_arg(query, "session")
         token = self._query_arg(query, "token")
         if not session_id or not token:
@@ -229,6 +234,13 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         project, session = resolve_shared_session(self.server.workspace_root, session_id)  # type: ignore[attr-defined]
         validate_share_session(session, token)
         return project, session
+
+    def _workspace_project(self, repo_id: str):
+        target = str(repo_id or "").strip()
+        if not target:
+            raise ValueError("repo_id is required.")
+        orchestrator = Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
+        return orchestrator.workspace.load_project_by_id(target)
 
     def _read_json_body(self) -> dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", "0") or "0")
@@ -244,9 +256,9 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
 
     def _serve_status(self, query: str) -> None:
         try:
-            project, session = self._validated_project(query)
+            _owner_project, session = self._validated_session(query)
             orchestrator = Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
-            self._write_json(HTTPStatus.OK, self._status_payload(project, session, orchestrator=orchestrator))
+            self._write_json(HTTPStatus.OK, self._workspace_status_payload(session, orchestrator=orchestrator))
         except ValueError as exc:
             self._write_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
         except KeyError:
@@ -256,9 +268,13 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
 
     def _serve_logs(self, query: str) -> None:
         try:
-            project, _session = self._validated_project(query)
+            owner_project, _session = self._validated_session(query)
             limit = min(50, max(1, int(self._query_arg(query, "limit") or "20")))
             offset = max(0, int(self._query_arg(query, "offset") or "0"))
+            repo_id = self._query_arg(query, "repo_id")
+            project = self._workspace_project(repo_id) if repo_id else owner_project
+            if project is None:
+                raise ValueError("repo_id is required for workspace share sessions.")
             orchestrator = Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
             plan_state = orchestrator.load_execution_plan_state(project)
             status_payload = public_monitor_status(project, plan_state, log_limit=50)
@@ -283,7 +299,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
 
     def _serve_events(self, query: str) -> None:
         try:
-            project, session = self._validated_project(query)
+            _owner_project, session = self._validated_session(query)
         except ValueError as exc:
             self._write_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
             return
@@ -307,9 +323,9 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             self._write_sse_comment("connected")
             self._write_sse_event("ready", {"ok": True})
             while True:
-                project, session = resolve_shared_session(self.server.workspace_root, session.session_id)  # type: ignore[attr-defined]
+                _owner_project, session = resolve_shared_session(self.server.workspace_root, session.session_id)  # type: ignore[attr-defined]
                 validate_share_session(session, self._query_arg(query, "token"))
-                payload = self._status_payload(project, session, orchestrator=orchestrator)
+                payload = self._workspace_status_payload(session, orchestrator=orchestrator)
                 serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
                 if serialized != last_payload:
                     self._write_sse_event("status", payload)
@@ -328,36 +344,34 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
 
     def _serve_control(self, query: str) -> None:
         try:
-            project, session = self._validated_project(query)
+            owner_project, session = self._validated_session(query)
             body = self._read_json_body()
             action = str(body.get("action", "")).strip().lower()
             if not action:
                 raise ValueError("action is required.")
+            repo_id = str(body.get("repo_id", "")).strip()
+            project = self._workspace_project(repo_id) if repo_id else owner_project
+            if project is None:
+                raise ValueError("repo_id is required for workspace share sessions.")
             orchestrator = Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
             if action == "pause":
                 control = self.server.remote_control_manager.request_pause(project)  # type: ignore[attr-defined]
-                try:
-                    latest = orchestrator.workspace.load_project_by_id(project.metadata.repo_id)
-                except Exception:
-                    latest = project
-                payload = self._status_payload(latest, session, orchestrator=orchestrator)
+                payload = self._workspace_status_payload(session, orchestrator=orchestrator)
                 payload["control_result"] = {
                     "action": action,
                     "accepted": True,
+                    "repo_id": project.metadata.repo_id,
                     "run_control": control,
                 }
                 self._write_json(HTTPStatus.OK, payload)
                 return
             if action == "resume":
                 result = self.server.remote_control_manager.queue_resume(project, orchestrator)  # type: ignore[attr-defined]
-                try:
-                    latest = orchestrator.workspace.load_project_by_id(project.metadata.repo_id)
-                except Exception:
-                    latest = project
-                payload = self._status_payload(latest, session, orchestrator=orchestrator)
+                payload = self._workspace_status_payload(session, orchestrator=orchestrator)
                 payload["control_result"] = {
                     "action": action,
                     "accepted": True,
+                    "repo_id": project.metadata.repo_id,
                     **result,
                 }
                 self._write_json(HTTPStatus.ACCEPTED, payload)
@@ -374,7 +388,11 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
 
     def _serve_flow_svg(self, query: str) -> None:
         try:
-            project, _session = self._validated_project(query)
+            owner_project, _session = self._validated_session(query)
+            repo_id = self._query_arg(query, "repo_id")
+            project = self._workspace_project(repo_id) if repo_id else owner_project
+            if project is None:
+                raise ValueError("repo_id is required for workspace share sessions.")
             orchestrator = Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
             plan_state = orchestrator.load_execution_plan_state(project)
             raw = public_execution_flow_svg(project, plan_state).encode("utf-8")
@@ -391,13 +409,26 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         except PermissionError as exc:
             self._write_json(HTTPStatus.FORBIDDEN, {"error": str(exc)})
 
-    def _status_payload(self, project, session, *, orchestrator: Orchestrator | None = None) -> dict[str, Any]:
+    def _workspace_status_payload(self, session, *, orchestrator: Orchestrator | None = None) -> dict[str, Any]:
         orchestrator = orchestrator or Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
-        plan_state = orchestrator.load_execution_plan_state(project)
-        payload = public_monitor_status(project, plan_state, log_limit=8)
-        remote_control = payload.get("remote_control")
-        if isinstance(remote_control, dict):
-            resume_starting = self.server.remote_control_manager.is_resume_starting(project.metadata.repo_id)  # type: ignore[attr-defined]
+        include_repo_ids = self.server.remote_control_manager.resume_starting_repo_ids()  # type: ignore[attr-defined]
+        payload = public_workspace_monitor_status(
+            self.server.workspace_root,  # type: ignore[attr-defined]
+            orchestrator=orchestrator,
+            log_limit=8,
+            include_repo_ids=include_repo_ids,
+        )
+        for item in payload.get("projects", []):
+            if not isinstance(item, dict):
+                continue
+            project = item.get("project", {})
+            if not isinstance(project, dict):
+                continue
+            repo_id = str(project.get("repo_id", "")).strip()
+            remote_control = item.get("remote_control")
+            if not isinstance(remote_control, dict) or not repo_id:
+                continue
+            resume_starting = self.server.remote_control_manager.is_resume_starting(repo_id)  # type: ignore[attr-defined]
             remote_control["resume_starting"] = resume_starting
             if resume_starting:
                 remote_control["can_resume"] = False

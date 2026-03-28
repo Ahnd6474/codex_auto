@@ -114,6 +114,7 @@ function baseWorkspaceProps(overrides = {}) {
       },
       run_control: {
         stop_after_current_step: false,
+        stop_immediately: false,
       },
     },
     form: {
@@ -251,6 +252,97 @@ test("ParallelRunControlView shows the auto-run toggle as off by default", async
   assert.match(html, /Auto-run After Plan/);
   assert.match(html, /Auto-run After Plan[\s\S]*Off/);
   assert.match(html, /type="checkbox"/);
+});
+
+test("ParallelRunControlView renders queued reservations with cancellation controls", async () => {
+  const html = await renderBundledComponent(
+    "parallel-run-control-reservations-render",
+    "./src/components/views/ParallelRunControlView.jsx",
+    "ParallelRunControlView",
+    {
+      detail: {
+        project: {
+          current_status: "plan_ready",
+        },
+        runtime: {
+          execution_mode: "parallel",
+          effort: "medium",
+        },
+        runtime_insights: {
+          execution: {
+            remaining_seconds: 120,
+          },
+          parallel: {
+            recommended_workers: 1,
+            cpu_parallel_limit: 4,
+            cpu_logical_count: 16,
+            memory_parallel_limit: 4,
+            memory_available_bytes: 8589934592,
+          },
+        },
+      },
+      planDraft: {
+        project_prompt: "Ship the UI",
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [
+          {
+            step_id: "ST1",
+            title: "Build",
+            display_description: "Build the screen",
+            codex_description: "Build the screen",
+            success_criteria: "Screen renders",
+            reasoning_effort: "high",
+            status: "pending",
+          },
+        ],
+      },
+      activeJob: {
+        id: "job-1",
+        status: "queued",
+        command: "run-plan",
+        queue_position: 1,
+      },
+      queuedJobs: [
+        {
+          id: "job-1",
+          status: "queued",
+          command: "run-plan",
+          queue_position: 1,
+          project_dir: "C:/work/repo-a",
+        },
+        {
+          id: "job-2",
+          status: "queued",
+          command: "generate-plan",
+          queue_position: 2,
+          project_dir: "C:/work/repo-b",
+        },
+      ],
+      autoRunAfterPlan: false,
+      selectedStepId: "ST1",
+      busy: true,
+      canCancelReservation: true,
+      onPromptChange: noop,
+      onGeneratePlan: noop,
+      onSavePlan: noop,
+      onResetPlan: noop,
+      onRunPlan: noop,
+      onRequestStop: noop,
+      onCancelQueuedJob: noop,
+      onAutoRunAfterPlanChange: noop,
+      onSelectStep: noop,
+      onUpdateStepField: noop,
+      onSaveStepLocal: noop,
+      onAddStep: noop,
+      onDeleteStep: noop,
+    },
+  );
+
+  assert.match(html, /Reservations/);
+  assert.match(html, /Queue #1/);
+  assert.match(html, /repo-a/);
+  assert.match(html, /Cancel Reservation/);
 });
 
 test("CenterWorkspace upgrades legacy serial plans into the parallel execution tree view", async () => {
@@ -1371,6 +1463,7 @@ test("AppSettingsView exposes dashboard visibility controls", async () => {
         sandbox_mode: "danger-full-access",
         checkpoint_interval_blocks: 1,
         execution_mode: "serial",
+        background_concurrency_limit: 3,
         parallel_workers: 2,
         parallel_memory_per_worker_gib: 3,
         codex_path: "codex.cmd",
@@ -1403,6 +1496,7 @@ test("AppSettingsView exposes dashboard visibility controls", async () => {
   assert.match(html, /Codex Spark/);
   assert.match(html, /Custom Model Slug/);
   assert.match(html, /Planning Reasoning/);
+  assert.match(html, /Concurrent Background Jobs/);
   assert.match(html, /Memory \/ Worker \(GiB\)/);
   assert.match(html, /Codex Usage/);
   assert.doesNotMatch(html, /Billing Mode/);
@@ -1567,6 +1661,75 @@ test("ConfigEditorView no longer renders the advanced settings section", async (
   assert.doesNotMatch(html, /Extra Prompt/);
   assert.match(html, />Archive Project<\/button>/);
   assert.match(html, />Delete Project<\/button>/);
+});
+
+test("ConfigEditorView keeps a selected model visible even when the catalog omits it", async () => {
+  const html = await renderBundledComponent(
+    "config-editor-selected-model-render",
+    "./src/components/views/ConfigEditorView.jsx",
+    "ConfigEditorView",
+    {
+      form: {
+        project_dir: "C:/demo",
+        display_name: "Demo",
+        branch: "main",
+        github_mode: "existing",
+        origin_url: "",
+        runtime: {
+          model_provider: "openai",
+          model: "gpt-5.4",
+          model_preset: "",
+          model_slug_input: "gpt-5.4",
+          effort: "medium",
+          workflow_mode: "standard",
+          execution_mode: "serial",
+          parallel_workers: 2,
+          parallel_memory_per_worker_gib: 3,
+          ml_max_cycles: 3,
+          max_blocks: 5,
+        },
+      },
+      modelPresets: [],
+      modelCatalog: [
+        {
+          model: "gpt-5.3-codex-spark",
+          display_name: "GPT-5.3-Codex-Spark",
+          hidden: false,
+          default_reasoning_effort: "high",
+          supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
+        },
+      ],
+      busy: false,
+      onChangeForm: noop,
+      onChooseDirectory: noop,
+      onArchiveProject: noop,
+      onDeleteProject: noop,
+    },
+  );
+
+  assert.match(html, /gpt-5\.4/);
+  assert.match(html, /GPT-5\.3-Codex-Spark/);
+});
+
+test("ReportsView shows the saved Word report path next to the closeout report", async () => {
+  const html = await renderBundledComponent(
+    "reports-view-word-path-render",
+    "./src/components/views/ReportsView.jsx",
+    "ReportsView",
+    {
+      reports: {
+        closeout_report_text: "# Closeout Report\n\nDone.",
+        ml_experiment_report_text: "No ML experiment report yet.",
+        attempt_history_text: "Attempt 1",
+        word_report_enabled: true,
+        word_report_path: "C:/workspace/reports/CLOSEOUT_REPORT.docx",
+      },
+    },
+  );
+
+  assert.match(html, /Closeout Report/);
+  assert.match(html, /Word report saved at C:\/workspace\/reports\/CLOSEOUT_REPORT\.docx/);
+  assert.match(html, /Attempt 1/);
 });
 
 test("HistoryView exposes a delete action for archived runs", async () => {

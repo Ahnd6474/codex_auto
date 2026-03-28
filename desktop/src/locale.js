@@ -172,6 +172,7 @@ const STRINGS = {
     "action.archiveProject": "Archive Project",
     "action.approveCheckpoint": "Approve Checkpoint",
     "action.browse": "Browse",
+    "action.cancelReservation": "Cancel Reservation",
     "action.closeout": "Closeout",
     "action.copyLink": "Copy Link",
     "action.delete": "Delete",
@@ -262,6 +263,8 @@ const STRINGS = {
     "field.providerBaseUrl": "Provider Base URL",
     "field.providerApiKeyEnv": "Provider API Key Env",
     "field.billingMode": "Billing Mode",
+    "field.allowBackgroundQueue": "Allow Reservations",
+    "field.backgroundQueuePriority": "Reservation Priority",
     "field.inputTokenRate": "Input $ / 1M",
     "field.outputTokenRate": "Output $ / 1M",
     "field.reasoningTokenRate": "Reasoning $ / 1M",
@@ -288,8 +291,10 @@ const STRINGS = {
     "history.archivedAt": "Archived: {timestamp}",
     "message.checkpointApproved": "Checkpoint approved.",
     "message.closeoutAfterAllSteps": "Closeout can run only after all steps are completed.",
+    "message.commandCancelled": "{command} cancelled.",
     "message.commandCompleted": "{command} completed.",
     "message.commandFailed": "{command} failed.",
+    "message.commandQueued": "{command} queued. Position {position}.",
     "message.commandStarted": "{command} started.",
     "message.createPlanBeforeCloseout": "Create and complete the execution plan before running closeout.",
     "message.createStepBeforeRun": "Create or add at least one planned step first.",
@@ -323,7 +328,7 @@ const STRINGS = {
     "message.shareLinkReady": "Read-only share link generated.",
     "message.shareLinkRevoked": "Share link revoked.",
     "message.stepUpdatedLocally": "Step updated locally. Save Plan to persist the change.",
-    "message.stopRequested": "Stop requested after the current step.",
+    "message.stopRequested": "Immediate stop requested. The current step will be ignored.",
     "message.noShareLinkAvailable": "No active share link is available for this project.",
     "option.allowPushAfterSafeRuns": "Allow push after safe runs",
     "option.executionParallel": "Parallel",
@@ -350,6 +355,7 @@ const STRINGS = {
     "prompt.confirmCloseout": "Run final closeout now? This will do final cleanup, verification, smoke checks when possible, and handoff work.",
     "prompt.confirmArchiveProject": "Move this project to history? The managed docs, logs, and state will be preserved under history, and you can start a fresh run for the same directory.",
     "prompt.confirmArchiveAllProjects": "Move all active projects to history? The managed docs, logs, and state will be preserved under history.",
+    "prompt.confirmCancelReservation": "Cancel this queued reservation? The project will stay unchanged and you can queue it again later.",
     "prompt.confirmDeleteHistoryEntry": "Delete this archived run permanently? Its managed docs, logs, reports, and state will be removed from history.",
     "prompt.confirmRegeneratePlan": "Replace the current unstarted plan with a new Codex-generated plan?",
     "prompt.confirmResetPlan": "Reset the saved prompt and remove all execution steps for this project?",
@@ -384,11 +390,15 @@ const STRINGS = {
     "run.flowChart": "Flow Chart",
     "run.newPendingStep": "New pending step",
     "run.noShareSession": "No active share session.",
+    "run.noReservations": "No queued runs.",
     "run.noSteps": "No steps yet. Generate a plan or add one.",
     "run.noSummary": "No summary",
     "run.parallelReady": "Ready Nodes",
+    "run.queuePriority": "Priority {priority}",
+    "run.queuePosition": "Queue #{position}",
     "run.remoteMonitor": "Remote Monitor",
     "run.reasoning": "Reasoning {effort}",
+    "run.reservations": "Reservations",
     "run.selectStep": "Select a step.",
     "run.selectedStep": "Selected Step",
     "run.shareBindHost": "Server Bind Host",
@@ -402,7 +412,7 @@ const STRINGS = {
     "run.sharePoll": "The remote viewer streams live updates and falls back to 5-second polling if needed.",
     "run.sharePublicBaseUrl": "Public Share Base URL",
     "run.shareServerAddress": "Local server: {address}",
-    "run.stopAfterStep": "Stop After Step",
+    "run.stopAfterStep": "Ignore Current Step And Stop",
     "run.stepCheckpointDescription": "Describe the checkpoint for the user.",
     "run.stepCodexDescription": "Describe the implementation work Codex should perform for this checkpoint.",
     "run.stepSuccessCriteria": "Run the configured verification command successfully.",
@@ -442,6 +452,7 @@ const STRINGS = {
     "sidebar.selectedSummary": "Selected summary",
     "sidebar.targetBlock": "Target block {block}",
     "status.awaiting_review": "Awaiting review",
+    "status.cancelled": "Cancelled",
     "status.closeout_failed": "Closeout failed",
     "status.closed_out": "Closed out",
     "status.completed": "Completed",
@@ -452,6 +463,8 @@ const STRINGS = {
     "status.pending": "Pending",
     "status.plan_completed": "Plan completed",
     "status.plan_ready": "Plan ready",
+    "status.queued": "Queued",
+    "status.queuedWithDetail": "Queued: {detail}",
     "status.ready": "Ready",
     "status.running": "Running",
     "status.runningWithDetail": "Running: {detail}",
@@ -484,6 +497,7 @@ const STRINGS = {
     "action.add": "추가",
     "action.approveCheckpoint": "체크포인트 승인",
     "action.browse": "찾아보기",
+    "action.cancelReservation": "예약 취소",
     "action.closeout": "마감",
     "action.delete": "삭제",
     "action.dismiss": "닫기",
@@ -586,6 +600,7 @@ const STRINGS = {
     "history.recentBlocks": "최근 블록",
     "message.checkpointApproved": "체크포인트를 승인했습니다.",
     "message.closeoutAfterAllSteps": "모든 단계가 완료된 뒤에만 마감을 실행할 수 있습니다.",
+    "message.commandCancelled": "{command} 작업을 취소했습니다.",
     "message.commandCompleted": "{command} 작업이 완료되었습니다.",
     "message.commandFailed": "{command} 작업이 실패했습니다.",
     "message.commandStarted": "{command} 작업을 시작했습니다.",
@@ -613,7 +628,7 @@ const STRINGS = {
     "message.selectPendingStepFirst": "먼저 대기 중인 단계를 선택하세요.",
     "message.selectStepFirst": "먼저 단계를 선택하세요.",
     "message.stepUpdatedLocally": "단계를 로컬에서 업데이트했습니다. 변경 사항을 유지하려면 계획을 저장하세요.",
-    "message.stopRequested": "현재 단계가 끝나면 중지하도록 요청했습니다.",
+    "message.stopRequested": "현 단계를 무시하고 중지하도록 요청했습니다.",
     "option.allowPushAfterSafeRuns": "안전 실행 후 push 허용",
     "option.executionParallel": "병렬",
     "option.executionSerial": "직렬",
@@ -631,6 +646,7 @@ const STRINGS = {
     "option.useFastMode": "/fast 사용",
     "project.none": "프로젝트 없음",
     "prompt.confirmCloseout": "지금 최종 마감을 실행할까요? 가능한 경우 최종 정리, 검증, 스모크 체크, 인수인계를 수행합니다.",
+    "prompt.confirmCancelReservation": "대기열에 있는 이 예약을 취소할까요? 프로젝트 상태는 그대로 유지되고 나중에 다시 예약할 수 있습니다.",
     "prompt.confirmRegeneratePlan": "현재 시작 전 계획을 Codex가 새로 생성한 계획으로 바꿀까요?",
     "prompt.confirmResetPlan": "저장된 프롬프트를 초기화하고 이 프로젝트의 모든 실행 단계를 제거할까요?",
     "prompt.confirmDeleteProject": "이 프로젝트를 jakal-flow에서 제거할까요? 관리 중인 문서, 로그, 상태만 삭제되고 원본 저장소 폴더는 그대로 둡니다.",
@@ -660,13 +676,16 @@ const STRINGS = {
     "run.flow": "흐름",
     "run.flowChart": "흐름도",
     "run.newPendingStep": "새 대기 단계",
+    "run.noReservations": "예약된 실행이 없습니다.",
     "run.noSteps": "아직 단계가 없습니다. 계획을 생성하거나 직접 추가하세요.",
     "run.noSummary": "요약 없음",
     "run.parallelReady": "실행 가능 노드",
+    "run.queuePosition": "대기 순번 #{position}",
     "run.reasoning": "추론 {effort}",
+    "run.reservations": "예약",
     "run.selectStep": "단계를 선택하세요.",
     "run.selectedStep": "선택된 단계",
-    "run.stopAfterStep": "단계 후 중지",
+    "run.stopAfterStep": "현 단계를 무시하고 중지",
     "run.stepCheckpointDescription": "사용자에게 보여줄 체크포인트를 설명하세요.",
     "run.stepCodexDescription": "이 체크포인트에서 Codex가 수행할 구현 작업을 설명하세요.",
     "run.stepSuccessCriteria": "설정된 검증 명령어가 성공적으로 실행되어야 합니다.",
@@ -705,6 +724,7 @@ const STRINGS = {
     "sidebar.selectedSummary": "선택된 요약",
     "sidebar.targetBlock": "대상 블록 {block}",
     "status.awaiting_review": "검토 대기",
+    "status.cancelled": "취소됨",
     "status.closeout_failed": "마감 실패",
     "status.closed_out": "마감 완료",
     "status.completed": "완료",
@@ -784,6 +804,10 @@ STRINGS.en["run.parallelLimitMemoryCap"] = "Memory cap {memoryCap}, CPU cap {cpu
 STRINGS.en["run.parallelLimitCpuCap"] = "CPU cap {cpuCap}, logical CPUs {logicalCpuCount}";
 STRINGS.en["run.parallelLimitRequestedCap"] = "Requested {requested}, capped to {recommended} by CPU {cpuCap} and memory {memoryCap}";
 STRINGS.en["run.parallelLimitAutoCap"] = "CPU cap {cpuCap}, memory cap {memoryCap}";
+STRINGS.en["field.backgroundConcurrencyLimit"] = "Concurrent Background Jobs";
+STRINGS.en["reports.wordReportReady"] = "Word report saved at {path}";
+STRINGS.en["reports.wordReportDisabled"] = "Word report generation is disabled for this project.";
+STRINGS.en["message.commandCompletedWithWordReport"] = "{command} completed. Word report: {path}";
 STRINGS.en["prompt.confirmDeleteAllProjects"] =
   "Remove all projects from jakal-flow? The managed docs, logs, and state will be deleted, but the original repository folders will stay in place.";
 STRINGS.en["sidebar.projectContextDelete"] = "Right-click to open project actions";
@@ -807,10 +831,17 @@ STRINGS.ko["progress.closeoutCompleted"] = "{completed}/{total}단계 완료, �
 STRINGS.ko["progress.closeoutRunning"] = "{completed}/{total}단계 완료, 마감 진행 중";
 STRINGS.ko["progress.closeoutFailed"] = "{completed}/{total}단계 완료, 마감 실패";
 STRINGS.ko["progress.closeoutPending"] = "{completed}/{total}단계 완료, 마감 대기";
+STRINGS.ko["field.backgroundConcurrencyLimit"] = "동시 백그라운드 작업 수";
+STRINGS.ko["field.allowBackgroundQueue"] = "이 프로젝트에서 예약 허용";
+STRINGS.ko["field.backgroundQueuePriority"] = "예약 우선순위";
 STRINGS.ko["action.backgroundJob"] = "백그라운드 작업";
 STRINGS.ko["prompt.confirmDeleteAllProjects"] =
   "모든 프로젝트를 삭제할까요? 관리 중인 문서, 로그, 상태만 삭제되고 원본 저장소 폴더는 그대로 유지됩니다.";
 STRINGS.ko["sidebar.projectContextDelete"] = "우클릭으로 프로젝트 메뉴 열기";
+
+STRINGS.ko["reports.wordReportReady"] = "Word 보고서가 {path}에 저장되었습니다.";
+STRINGS.ko["reports.wordReportDisabled"] = "이 프로젝트에서는 Word 보고서 생성을 사용하지 않습니다.";
+STRINGS.ko["message.commandCompletedWithWordReport"] = "{command} 작업이 완료되었습니다. Word 보고서: {path}";
 
 const KO_HIGH_QUALITY_OVERRIDES = {
   "action.add": "추가",
@@ -937,7 +968,7 @@ const KO_HIGH_QUALITY_OVERRIDES = {
   "run.parallelLimitCpuCap": "CPU 한도 {cpuCap}, 논리 프로세서 {logicalCpuCount}",
   "run.parallelLimitRequestedCap": "요청 {requested}, CPU {cpuCap} 및 메모리 {memoryCap} 한도로 {recommended}까지 제한",
   "run.parallelLimitAutoCap": "CPU 한도 {cpuCap}, 메모리 한도 {memoryCap}",
-  "run.stopAfterStep": "이 단계 후 중지",
+  "run.stopAfterStep": "현 단계를 무시하고 중지",
   "runtime.modelSummary": "{model} | 추론 {effort}",
   "runtime.modelSummaryGeneric": "{model} | 추론 {effort}",
   "settings.application": "프로그램",
@@ -1004,6 +1035,10 @@ KO_HIGH_QUALITY_OVERRIDES["run.stepProgress"] = "단계 진행도";
 KO_HIGH_QUALITY_OVERRIDES["run.debugging"] = "디버깅";
 KO_HIGH_QUALITY_OVERRIDES["run.workingOnStep"] = "{step} 작업 중";
 KO_HIGH_QUALITY_OVERRIDES["run.workingOnSteps"] = "{steps} 작업 중";
+KO_HIGH_QUALITY_OVERRIDES["field.backgroundConcurrencyLimit"] = "동시 백그라운드 작업 수";
+KO_HIGH_QUALITY_OVERRIDES["field.allowBackgroundQueue"] = "이 프로젝트에서 예약 허용";
+KO_HIGH_QUALITY_OVERRIDES["field.backgroundQueuePriority"] = "예약 우선순위";
+KO_HIGH_QUALITY_OVERRIDES["run.queuePriority"] = "우선순위 {priority}";
 
 KO_HIGH_QUALITY_OVERRIDES["progress.runningIds"] = "{completed}/{total}\ub2e8\uacc4 \uc644\ub8cc, \uc2e4\ud589 \uc911: {ids}";
 KO_HIGH_QUALITY_OVERRIDES["progress.readyIds"] = "{completed}/{total}\ub2e8\uacc4 \uc644\ub8cc, \uc2e4\ud589 \uac00\ub2a5: {ids}";
@@ -1026,6 +1061,11 @@ KO_HIGH_QUALITY_OVERRIDES["action.deleteProject"] = "프로젝트 삭제";
 KO_HIGH_QUALITY_OVERRIDES["message.historyEntryDeleted"] = "보관된 실행 기록을 삭제했습니다.";
 KO_HIGH_QUALITY_OVERRIDES["prompt.confirmDeleteHistoryEntry"] =
   "이 보관된 실행 기록을 완전히 삭제할까요? history 아래의 관리 문서, 로그, 리포트, 상태가 모두 제거됩니다.";
+
+KO_HIGH_QUALITY_OVERRIDES["message.commandQueued"] = "{command} 작업을 대기열에 추가했습니다. {position}번째로 실행됩니다.";
+KO_HIGH_QUALITY_OVERRIDES["message.commandCancelled"] = "{command} 예약을 취소했습니다.";
+KO_HIGH_QUALITY_OVERRIDES["status.queued"] = "대기열에 있음";
+KO_HIGH_QUALITY_OVERRIDES["status.queuedWithDetail"] = "대기열에 있음: {detail}";
 
 const STATIC_LANGUAGE_PACKS = new Map(
   ["en", "ko"].map((language) => [
@@ -1186,6 +1226,15 @@ export function displayStatus(status, language) {
   }
   if (normalized === "debugging" || normalized === "running:debugging" || normalized === "running:parallel-debugging") {
     return translate(normalizedLanguage, "run.debugging");
+  }
+  if (normalized === "queued") {
+    return translate(normalizedLanguage, "status.queued");
+  }
+  if (normalized.startsWith("queued:")) {
+    const detail = humanizeToken(raw.slice(raw.indexOf(":") + 1));
+    return translate(normalizedLanguage, "status.queuedWithDetail", {
+      detail: normalizedLanguage === "ko" ? detail : titleCase(detail),
+    });
   }
   if (normalized.startsWith("running:")) {
     const detail = humanizeToken(raw.slice(raw.indexOf(":") + 1));

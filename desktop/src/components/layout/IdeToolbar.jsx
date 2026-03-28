@@ -1,6 +1,6 @@
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { commandLabel, isDebuggingStatus, statusTone, toolbarProgressCaptionDisplay } from "../../utils";
+import { commandLabel, isDebuggingStatus, projectStatusWithJob, statusTone, toolbarProgressCaptionDisplay } from "../../utils";
 
 export function IdeToolbar({
   projectDetail,
@@ -15,15 +15,15 @@ export function IdeToolbar({
   onRunPlan,
   onApproveCheckpoint,
 }) {
-  const projectStatus = projectDetail?.project?.current_status || "idle";
-  const status = activeJob?.status === "running" && !isDebuggingStatus(projectStatus) ? "running" : projectStatus;
-  const livePlan = activeJob?.status === "running" && projectDetail?.plan ? projectDetail.plan : planDraft;
+  const projectStatus = projectStatusWithJob(projectDetail?.project?.current_status || "idle", activeJob) || "idle";
+  const livePlan = String(activeJob?.status || "").trim().toLowerCase() === "running" && projectDetail?.plan ? projectDetail.plan : planDraft;
   const projectName = projectDetail?.project?.display_name || projectDetail?.project?.slug || null;
   const { language, t } = useI18n();
   const statusLabel =
-    activeJob?.status === "running" && !isDebuggingStatus(projectStatus)
+    String(activeJob?.status || "").trim().toLowerCase() === "running"
+    && !isDebuggingStatus(projectDetail?.project?.current_status || "")
       ? commandLabel(activeJob.command, language)
-      : displayStatus(status, language);
+      : displayStatus(projectStatus, language);
 
   return (
     <header className="ide-toolbar">
@@ -38,7 +38,7 @@ export function IdeToolbar({
           <span>{t("common.project")}</span>
           <strong>{projectName || t("project.none")}</strong>
         </div>
-        <div className={`toolbar-status toolbar-status--${statusTone(status)}`}>
+        <div className={`toolbar-status toolbar-status--${statusTone(projectStatus)}`}>
           <span>{t("common.status")}</span>
           <strong>{statusLabel}</strong>
         </div>

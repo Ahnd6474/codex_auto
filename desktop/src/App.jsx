@@ -112,6 +112,7 @@ export default function App() {
             activeTab={controller.centerTab}
             onChangeTab={controller.setCenterTab}
             detail={detail}
+            workspaceShareDetail={controller.workspaceShareDetail}
             form={controller.projectForm}
             programSettings={controller.programSettings}
             planDraft={controller.planDraft}
@@ -123,7 +124,10 @@ export default function App() {
             modelPresets={controller.modelPresets}
             modelCatalog={controller.modelCatalog}
             busy={controller.busy}
+            canRequestStop={controller.canRequestStop}
+            canCancelReservation={controller.canCancelReservation}
             shareBusy={controller.shareBusy}
+            queuedJobs={controller.queuedJobs}
             onChangeForm={controller.setProjectForm}
             onChangeProgramSettings={controller.setProgramSettings}
             onChooseDirectory={controller.chooseDirectory}
@@ -146,6 +150,7 @@ export default function App() {
             onResetPlan={controller.resetPlan}
             onRunPlan={controller.runPlan}
             onRequestStop={controller.requestStop}
+            onCancelQueuedJob={controller.cancelQueuedReservation}
             onSelectStep={controller.setSelectedStepId}
             onUpdateStepField={controller.updateSelectedStep}
             onSaveStepLocal={controller.saveStepLocal}

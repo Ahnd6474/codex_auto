@@ -140,6 +140,7 @@ export function AppSettingsView({
                   disabled={runtimeBusy}
                 >
                   <option value="openai">{t("option.providerOpenAI")}</option>
+                  <option value="gemini">Gemini CLI</option>
                   <option value="openrouter">{t("option.providerOpenRouter")}</option>
                   <option value="opencdk">{t("option.providerOpenCDK")}</option>
                   <option value="local_openai">{t("option.providerLocalCompatible")}</option>
@@ -297,6 +298,21 @@ export function AppSettingsView({
                 />
               </label>
               <label className="field">
+                <span>{t("field.backgroundConcurrencyLimit")}</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={settings.background_concurrency_limit || 2}
+                  onChange={(event) =>
+                    onChangeSettings((current) => ({
+                      ...current,
+                      background_concurrency_limit: Math.max(1, Number.parseInt(event.target.value || "1", 10) || 1),
+                    }))
+                  }
+                  disabled={interfaceBusy}
+                />
+              </label>
+              <label className="field">
                 <span>{t("field.parallelMemoryPerWorkerGiB")}</span>
                 <input
                   type="number"
@@ -335,7 +351,7 @@ export function AppSettingsView({
               <label className="field">
                 <span>{t("field.codexPath")}</span>
                 <input
-                  value={settings.codex_path || defaultCodexPath()}
+                  value={settings.codex_path || defaultCodexPath(settings.model_provider)}
                   onChange={(event) => onChangeSettings((current) => ({ ...current, codex_path: event.target.value }))}
                   disabled={runtimeBusy}
                 />

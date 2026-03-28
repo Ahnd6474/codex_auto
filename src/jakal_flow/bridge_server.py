@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from threading import Lock, Thread
 import sys
@@ -10,12 +11,49 @@ from typing import Any
 
 from .bridge_contract import BRIDGE_PROTOCOL_VERSION, BridgeEnvelope, BridgeEvent, BridgeJobSnapshot
 from .bridge_events import BridgeEventSink, bridge_event_context
-from .ui_bridge import configure_stdio, default_workspace_root, run_command
+from .job_scheduler import (
+    DEFAULT_MAX_CONCURRENT_JOBS,
+    append_scheduler_event,
+    normalize_max_concurrent_jobs,
+    write_scheduler_state,
+)
+from .ui_bridge import configure_stdio, default_workspace_root, run_command, runtime_from_payload
 from .utils import now_utc_iso, parse_json_text
 
 
 def now_ms() -> int:
     return int(time.time() * 1000)
+
+
+def _normalized_project_path(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        resolved = Path(text).expanduser().resolve()
+    except OSError:
+        resolved = Path(text).expanduser()
+    normalized = str(resolved)
+    return normalized.lower() if os.name == "nt" else normalized
+
+
+def _job_queue_sort_key(snapshot: BridgeJobSnapshot) -> tuple[int, int, int, str]:
+    return (
+        -int(getattr(snapshot, "queue_priority", 0) or 0),
+        int(snapshot.updated_at_ms or 0),
+        int(snapshot.queue_position or 0),
+        snapshot.id,
+    )
+
+
+def _job_queue_settings(payload: dict[str, Any]) -> tuple[bool, int, str]:
+    request_payload = payload if isinstance(payload, dict) else {}
+    runtime_payload = request_payload.get("runtime", {})
+    if not isinstance(runtime_payload, dict):
+        runtime_payload = {}
+    runtime = runtime_from_payload(runtime_payload)
+    display_name = str(request_payload.get("display_name", "")).strip()
+    return bool(runtime.allow_background_queue), int(runtime.background_queue_priority), display_name
 
 
 class _StreamBridgeEventSink(BridgeEventSink):
@@ -34,10 +72,20 @@ class _StreamBridgeEventSink(BridgeEventSink):
 
 
 class BridgeJobStore:
-    def __init__(self, send_message) -> None:
+    def __init__(self, send_message, *, max_running_jobs: int | None = None) -> None:
         self._jobs: dict[str, BridgeJobSnapshot] = {}
+        self._requests: dict[str, tuple[str, Path, dict[str, Any]]] = {}
         self._lock = Lock()
         self._send_message = send_message
+        self._job_sequence = 0
+        raw_limit = max_running_jobs
+        if raw_limit is None:
+            raw_limit = os.environ.get("JAKAL_FLOW_MAX_CONCURRENT_JOBS", DEFAULT_MAX_CONCURRENT_JOBS)
+        self._max_running_jobs = normalize_max_concurrent_jobs(raw_limit)
+
+    def _next_job_id_unlocked(self, command: str) -> str:
+        self._job_sequence += 1
+        return f"job-{command}-{now_ms()}-{self._job_sequence}"
 
     def _publish(self, snapshot: BridgeJobSnapshot) -> None:
         self._send_message(
@@ -48,56 +96,318 @@ class BridgeJobStore:
             )
         )
 
+    def _publish_many(self, snapshots: list[BridgeJobSnapshot]) -> None:
+        seen: set[str] = set()
+        for snapshot in snapshots:
+            if snapshot.id in seen:
+                continue
+            seen.add(snapshot.id)
+            self._publish(snapshot)
+
+    def _list_jobs_unlocked(self) -> list[BridgeJobSnapshot]:
+        status_rank = {"running": 0, "queued": 1, "failed": 2, "cancelled": 3, "completed": 4}
+        return sorted(
+            self._jobs.values(),
+            key=lambda item: (
+                status_rank.get(str(item.status).strip().lower(), 9),
+                item.queue_position if str(item.status).strip().lower() == "queued" else 0,
+                -int(item.updated_at_ms or 0),
+                item.id,
+            ),
+        )
+
+    def _active_jobs_for_workspace_unlocked(self, workspace_root: Path) -> list[BridgeJobSnapshot]:
+        workspace_key = str(workspace_root)
+        return [
+            job
+            for job in self._jobs.values()
+            if job.workspace_root == workspace_key and str(job.status).strip().lower() in {"queued", "running"}
+        ]
+
+    def _running_count_unlocked(self, workspace_root: Path) -> int:
+        workspace_key = str(workspace_root)
+        return sum(
+            1
+            for job in self._jobs.values()
+            if job.workspace_root == workspace_key and str(job.status).strip().lower() == "running"
+        )
+
+    def _refresh_queue_positions_unlocked(self, workspace_root: Path, *, touch_timestamp: bool) -> list[BridgeJobSnapshot]:
+        workspace_key = str(workspace_root)
+        queued_jobs = sorted(
+            [
+                job
+                for job in self._jobs.values()
+                if job.workspace_root == workspace_key and str(job.status).strip().lower() == "queued"
+            ],
+            key=_job_queue_sort_key,
+        )
+        changed: list[BridgeJobSnapshot] = []
+        for index, job in enumerate(queued_jobs, start=1):
+            if job.queue_position == index:
+                continue
+            job.queue_position = index
+            if touch_timestamp:
+                job.updated_at_ms = now_ms()
+            changed.append(job)
+        return changed
+
+    def _persist_workspace_state_unlocked(self, workspace_root: Path) -> None:
+        active_jobs = [
+            job.to_dict()
+            for job in self._list_jobs_unlocked()
+            if job.workspace_root == str(workspace_root) and str(job.status).strip().lower() in {"queued", "running"}
+        ]
+        write_scheduler_state(
+            workspace_root,
+            max_concurrent_jobs=self._max_running_jobs,
+            jobs=active_jobs,
+        )
+
+    def _scheduler_snapshot_unlocked(self, workspace_root: Path) -> dict[str, Any]:
+        workspace_key = str(workspace_root)
+        active_jobs = [
+            job.to_dict()
+            for job in self._list_jobs_unlocked()
+            if job.workspace_root == workspace_key and str(job.status).strip().lower() in {"queued", "running"}
+        ]
+        running_jobs = [job for job in active_jobs if str(job.get("status", "")).strip().lower() == "running"]
+        queued_jobs = [job for job in active_jobs if str(job.get("status", "")).strip().lower() == "queued"]
+        return {
+            "workspace_root": workspace_key,
+            "max_concurrent_jobs": self._max_running_jobs,
+            "running_jobs": running_jobs,
+            "queued_jobs": queued_jobs,
+            "jobs": active_jobs,
+        }
+
+    def _matching_active_job_unlocked(self, *, repo_id: str, project_dir: str, workspace_root: Path) -> BridgeJobSnapshot | None:
+        normalized_project_dir = _normalized_project_path(project_dir)
+        workspace_key = str(workspace_root)
+        for job in self._jobs.values():
+            if job.workspace_root != workspace_key:
+                continue
+            if str(job.status).strip().lower() not in {"queued", "running"}:
+                continue
+            if repo_id and job.repo_id and job.repo_id == repo_id:
+                return job
+            if normalized_project_dir and _normalized_project_path(job.project_dir) == normalized_project_dir:
+                return job
+        return None
+
+    def _prune_terminal_jobs_unlocked(self, maximum: int = 40) -> None:
+        terminal_jobs = sorted(
+            [
+                job
+                for job in self._jobs.values()
+                if str(job.status).strip().lower() in {"completed", "failed", "cancelled"}
+            ],
+            key=lambda item: (int(item.updated_at_ms or 0), item.id),
+            reverse=True,
+        )
+        for job in terminal_jobs[maximum:]:
+            self._jobs.pop(job.id, None)
+
     def list_jobs(self) -> list[dict[str, Any]]:
         with self._lock:
-            jobs = sorted(
-                self._jobs.values(),
-                key=lambda item: (item.updated_at_ms, item.id),
-                reverse=True,
-            )
+            jobs = self._list_jobs_unlocked()
             return [job.to_dict() for job in jobs]
+
+    def scheduler_snapshot(self, workspace_root: Path) -> dict[str, Any]:
+        with self._lock:
+            return self._scheduler_snapshot_unlocked(workspace_root)
 
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         with self._lock:
             snapshot = self._jobs.get(job_id)
             return None if snapshot is None else snapshot.to_dict()
 
-    def any_running(self) -> bool:
+    def set_max_running_jobs(self, workspace_root: Path, max_running_jobs: Any) -> tuple[dict[str, Any], list[BridgeJobSnapshot]]:
+        publish_updates: list[BridgeJobSnapshot] = []
+        impacted_workspaces: list[Path] = []
         with self._lock:
-            return any(job.status == "running" for job in self._jobs.values())
+            self._max_running_jobs = normalize_max_concurrent_jobs(max_running_jobs)
+            impacted_keys = {
+                str(key).strip()
+                for key in [workspace_root, *[job.workspace_root for job in self._jobs.values()]]
+                if str(key).strip()
+            }
+            impacted_workspaces = [Path(key) for key in sorted(impacted_keys)]
+            for item in impacted_workspaces:
+                publish_updates.extend(self._refresh_queue_positions_unlocked(item, touch_timestamp=False))
+                self._persist_workspace_state_unlocked(item)
+        self._publish_many(publish_updates)
+        promoted: list[BridgeJobSnapshot] = []
+        for item in impacted_workspaces:
+            promoted.extend(self.dequeue_startable_jobs(item))
+        return self.scheduler_snapshot(workspace_root), promoted
 
-    def create(self, command: str, payload: dict[str, Any] | None = None) -> BridgeJobSnapshot:
-        if self.any_running():
-            raise RuntimeError("Another background task is already running.")
-        job_id = f"job-{command}-{now_ms()}"
+    def create(self, command: str, workspace_root: Path, payload: dict[str, Any] | None = None) -> BridgeJobSnapshot:
         repo_id = ""
         project_dir = ""
-        if isinstance(payload, dict):
-            repo_id = str(payload.get("repo_id", "")).strip()
-            project_dir = str(payload.get("project_dir", "")).strip()
-        snapshot = BridgeJobSnapshot(
-            id=job_id,
-            command=command,
-            status="running",
-            updated_at_ms=now_ms(),
-            repo_id=repo_id,
-            project_dir=project_dir,
-        )
+        request_payload = payload if isinstance(payload, dict) else {}
+        repo_id = str(request_payload.get("repo_id", "")).strip()
+        project_dir = _normalized_project_path(str(request_payload.get("project_dir", "")).strip())
+        allow_background_queue, queue_priority, display_name = _job_queue_settings(request_payload)
+        timestamp_ms = now_ms()
+        created_at = now_utc_iso()
+        publish_updates: list[BridgeJobSnapshot] = []
+        event_type = "job-started"
+        event_details: dict[str, Any] = {}
         with self._lock:
+            job_id = self._next_job_id_unlocked(command)
+            existing = self._matching_active_job_unlocked(
+                repo_id=repo_id,
+                project_dir=project_dir,
+                workspace_root=workspace_root,
+            )
+            if existing is not None:
+                raise RuntimeError("Another background task is already active for this project.")
+            running_count = self._running_count_unlocked(workspace_root)
+            if running_count >= self._max_running_jobs and not allow_background_queue:
+                raise RuntimeError("Reservations are disabled for this project, so this run must wait for a free slot.")
+            status = "running" if running_count < self._max_running_jobs else "queued"
+            snapshot = BridgeJobSnapshot(
+                id=job_id,
+                command=command,
+                status=status,
+                updated_at_ms=timestamp_ms,
+                repo_id=repo_id,
+                project_dir=project_dir,
+                workspace_root=str(workspace_root),
+                display_name=display_name,
+                allow_background_queue=allow_background_queue,
+                queue_priority=queue_priority,
+                created_at=created_at,
+                started_at=created_at if status == "running" else None,
+                queue_position=0,
+            )
             self._jobs[job_id] = snapshot
-        self._publish(snapshot)
+            self._requests[job_id] = (command, workspace_root, request_payload)
+            queue_updates = self._refresh_queue_positions_unlocked(workspace_root, touch_timestamp=False)
+            publish_updates = [snapshot, *queue_updates]
+            self._persist_workspace_state_unlocked(workspace_root)
+            if status == "queued":
+                event_type = "job-queued"
+                event_details = {"queue_position": snapshot.queue_position}
+        self._publish_many(publish_updates)
+        append_scheduler_event(
+            workspace_root,
+            event_type,
+            job=snapshot.to_dict(),
+            details=event_details,
+        )
         return snapshot
 
     def update(self, job_id: str, **changes: Any) -> BridgeJobSnapshot | None:
+        publish_updates: list[BridgeJobSnapshot] = []
+        workspace_root = Path()
+        event_type = ""
+        event_details: dict[str, Any] = {}
         with self._lock:
             snapshot = self._jobs.get(job_id)
             if snapshot is None:
                 return None
+            previous_status = str(snapshot.status).strip().lower()
             for key, value in changes.items():
                 setattr(snapshot, key, value)
             snapshot.updated_at_ms = now_ms()
-        self._publish(snapshot)
+            current_status = str(snapshot.status).strip().lower()
+            if current_status in {"completed", "failed", "cancelled"} and not snapshot.completed_at:
+                snapshot.completed_at = now_utc_iso()
+                self._requests.pop(job_id, None)
+            queue_updates = self._refresh_queue_positions_unlocked(Path(snapshot.workspace_root), touch_timestamp=False)
+            self._persist_workspace_state_unlocked(Path(snapshot.workspace_root))
+            self._prune_terminal_jobs_unlocked()
+            publish_updates = [snapshot, *queue_updates]
+            workspace_root = Path(snapshot.workspace_root)
+            if previous_status != current_status:
+                event_type = f"job-{current_status}"
+                if current_status == "queued":
+                    event_details = {"queue_position": snapshot.queue_position}
+        self._publish_many(publish_updates)
+        if event_type:
+            append_scheduler_event(
+                workspace_root,
+                event_type,
+                job=snapshot.to_dict(),
+                details=event_details,
+            )
         return snapshot
+
+    def cancel(self, job_id: str) -> BridgeJobSnapshot | None:
+        publish_updates: list[BridgeJobSnapshot] = []
+        workspace_root = Path()
+        with self._lock:
+            snapshot = self._jobs.get(job_id)
+            if snapshot is None:
+                return None
+            current_status = str(snapshot.status).strip().lower()
+            if current_status != "queued":
+                raise RuntimeError("Only queued jobs can be cancelled.")
+            snapshot.status = "cancelled"
+            snapshot.error = "Cancelled before execution."
+            snapshot.queue_position = 0
+            snapshot.result = None
+            snapshot.completed_at = now_utc_iso()
+            snapshot.updated_at_ms = now_ms()
+            self._requests.pop(job_id, None)
+            workspace_root = Path(snapshot.workspace_root)
+            queue_updates = self._refresh_queue_positions_unlocked(workspace_root, touch_timestamp=False)
+            self._persist_workspace_state_unlocked(workspace_root)
+            self._prune_terminal_jobs_unlocked()
+            publish_updates = [snapshot, *queue_updates]
+        self._publish_many(publish_updates)
+        append_scheduler_event(
+            workspace_root,
+            "job-cancelled",
+            job=snapshot.to_dict(),
+            details={},
+        )
+        return snapshot
+
+    def request_for(self, job_id: str) -> tuple[str, Path, dict[str, Any]] | None:
+        with self._lock:
+            request = self._requests.get(job_id)
+            if request is None:
+                return None
+            command, workspace_root, payload = request
+            return command, workspace_root, dict(payload)
+
+    def dequeue_startable_jobs(self, workspace_root: Path) -> list[BridgeJobSnapshot]:
+        publish_updates: list[BridgeJobSnapshot] = []
+        started_jobs: list[BridgeJobSnapshot] = []
+        with self._lock:
+            while self._running_count_unlocked(workspace_root) < self._max_running_jobs:
+                queued_jobs = sorted(
+                    [
+                        job
+                        for job in self._jobs.values()
+                        if job.workspace_root == str(workspace_root) and str(job.status).strip().lower() == "queued"
+                    ],
+                    key=lambda item: (item.queue_position or 9999, *_job_queue_sort_key(item)),
+                )
+                if not queued_jobs:
+                    break
+                snapshot = queued_jobs[0]
+                snapshot.status = "running"
+                snapshot.queue_position = 0
+                snapshot.started_at = now_utc_iso()
+                snapshot.updated_at_ms = now_ms()
+                started_jobs.append(snapshot)
+            queue_updates = self._refresh_queue_positions_unlocked(workspace_root, touch_timestamp=False)
+            if started_jobs or queue_updates:
+                self._persist_workspace_state_unlocked(workspace_root)
+            publish_updates = [*started_jobs, *queue_updates]
+        self._publish_many(publish_updates)
+        for snapshot in started_jobs:
+            append_scheduler_event(
+                workspace_root,
+                "job-started",
+                job=snapshot.to_dict(),
+                details={},
+            )
+        return started_jobs
 
 
 class BridgeServer:
@@ -158,6 +468,18 @@ class BridgeServer:
             }
         return event_payload
 
+    def _start_job_thread(self, job_id: str) -> None:
+        request = self._jobs.request_for(job_id)
+        if request is None:
+            return
+        command, workspace_root, payload = request
+        thread = Thread(
+            target=self._run_job,
+            args=(job_id, command, workspace_root, payload),
+            daemon=True,
+        )
+        thread.start()
+
     def _run_job(self, job_id: str, command: str, workspace_root: Path, payload: dict[str, Any] | None) -> None:
         try:
             with bridge_event_context(self._event_sink):
@@ -172,6 +494,9 @@ class BridgeServer:
             )
         except Exception as exc:
             self._jobs.update(job_id, status="failed", error=str(exc).strip() or str(exc), result=None)
+        finally:
+            for snapshot in self._jobs.dequeue_startable_jobs(workspace_root):
+                self._start_job_thread(snapshot.id)
 
     def _resolve_workspace_root(self, raw_value: Any) -> Path:
         if isinstance(raw_value, Path):
@@ -204,13 +529,9 @@ class BridgeServer:
             return
 
         if method == "start_job":
-            snapshot = self._jobs.create(command, payload)
-            thread = Thread(
-                target=self._run_job,
-                args=(snapshot.id, command, workspace_root, payload),
-                daemon=True,
-            )
-            thread.start()
+            snapshot = self._jobs.create(command, workspace_root, payload)
+            if snapshot.status == "running":
+                self._start_job_thread(snapshot.id)
             self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=snapshot.to_dict()))
             return
 
@@ -221,6 +542,26 @@ class BridgeServer:
 
         if method == "list_jobs":
             self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=self._jobs.list_jobs()))
+            return
+
+        if method == "get_scheduler":
+            self._send_envelope(
+                BridgeEnvelope(kind="response", id=request_id, ok=True, result=self._jobs.scheduler_snapshot(workspace_root))
+            )
+            return
+
+        if method == "configure_scheduler":
+            result, promoted = self._jobs.set_max_running_jobs(workspace_root, params.get("max_concurrent_jobs"))
+            for snapshot in promoted:
+                self._start_job_thread(snapshot.id)
+            self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=result))
+            return
+
+        if method == "cancel_job":
+            result = self._jobs.cancel(str(params.get("job_id", "")).strip())
+            if result is None:
+                raise RuntimeError("The requested background job was not found.")
+            self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=result.to_dict()))
             return
 
         if method == "ping":

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 import sys
 import unittest
 from unittest import mock
@@ -145,6 +146,19 @@ class CodexAppServerTests(unittest.TestCase):
         self.assertTrue(snapshot.available)
         self.assertEqual(snapshot.model_catalog[1]["model"], "qwen2.5-coder:0.5b")
         self.assertIn("boom", snapshot.error)
+
+    def test_fetch_codex_backend_snapshot_supports_gemini_cli(self) -> None:
+        with mock.patch(
+            "jakal_flow.codex_app_server.subprocess.run",
+            return_value=subprocess.CompletedProcess(["gemini", "--version"], 0, stdout="0.1.0\n", stderr=""),
+        ):
+            snapshot = fetch_codex_backend_snapshot("gemini")
+
+        self.assertTrue(snapshot.available)
+        self.assertEqual(snapshot.account["type"], "gemini-cli")
+        self.assertEqual(snapshot.account["version"], "0.1.0")
+        self.assertEqual(snapshot.model_catalog, [])
+        self.assertEqual(snapshot.error, "")
 
 
 if __name__ == "__main__":

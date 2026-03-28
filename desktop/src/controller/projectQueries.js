@@ -56,11 +56,12 @@ export async function syncRunningJobSnapshot(preferredJobId = "") {
   const jobs = await listBridgeJobsRequest();
   const preferredJob = preferredJobId ? jobs.find((job) => job.id === preferredJobId) || null : null;
   const runningJob = preferredJob?.status === "running" ? preferredJob : jobs.find((job) => job.status === "running") || null;
+  const queuedJob = preferredJob?.status === "queued" ? preferredJob : jobs.find((job) => job.status === "queued") || null;
   return {
     jobs,
     runningJob,
-    activeJob: runningJob || (preferredJob && preferredJob.status !== "running" ? preferredJob : null),
-    activeJobId: runningJob?.id || "",
+    activeJob: runningJob || queuedJob || (preferredJob && !["running", "queued"].includes(preferredJob.status) ? preferredJob : null),
+    activeJobId: (runningJob || queuedJob)?.id || "",
   };
 }
 

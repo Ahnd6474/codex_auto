@@ -19,82 +19,55 @@
       <div>
         <p class="eyebrow" id="hero-eyebrow">jakal-flow remote monitor</p>
         <h1 id="hero-title">Remote monitor and control</h1>
-        <p class="hero-copy" id="hero-copy">This page streams masked progress updates in near real time and can request a pause after the current step or resume the saved plan.</p>
+        <p class="hero-copy" id="hero-copy">One signed link shows every in-progress project in this workspace and lets you pause after the current step or resume remaining work.</p>
       </div>
       <div class="hero-meta">
         <span class="pill pill--neutral" id="poll-state">Waiting</span>
-        <span class="pill" id="read-only-pill">Signed control link</span>
+        <span class="pill" id="read-only-pill">Signed workspace control link</span>
       </div>
     </header>
 
-    <section class="grid">
+    <section class="summary-grid">
       <article class="card card--highlight">
-        <p class="card-label" id="project-label">Project</p>
-        <h2 id="project-name">Loading...</h2>
+        <p class="card-label" id="workspace-label">Workspace</p>
+        <strong class="big-value" id="workspace-title">In-progress projects</strong>
         <div class="meta-list">
-          <span id="project-slug">-</span>
-          <span id="last-updated">-</span>
+          <span id="workspace-last-updated">-</span>
           <span id="expires-at">-</span>
         </div>
       </article>
 
       <article class="card">
-        <p class="card-label" id="run-status-label">Run status</p>
-        <strong class="big-value" id="run-status">-</strong>
-        <p class="muted" id="current-phase">-</p>
+        <p class="card-label" id="projects-visible-label">Projects visible</p>
+        <strong class="big-value" id="projects-visible-count">0</strong>
       </article>
 
       <article class="card">
-        <p class="card-label" id="current-task-label">Current task</p>
-        <strong id="task-title">-</strong>
-        <p class="muted" id="task-summary">-</p>
+        <p class="card-label" id="running-now-label">Running now</p>
+        <strong class="big-value" id="running-now-count">0</strong>
       </article>
 
       <article class="card">
-        <p class="card-label" id="latest-test-label">Latest test</p>
-        <strong id="test-status">-</strong>
-        <p class="muted" id="test-summary">-</p>
+        <p class="card-label" id="resume-ready-label">Resume ready</p>
+        <strong class="big-value" id="resume-ready-count">0</strong>
+      </article>
+
+      <article class="card">
+        <p class="card-label" id="pause-queued-label">Pause queued</p>
+        <strong class="big-value" id="pause-queued-count">0</strong>
       </article>
     </section>
 
-    <section class="card card--flow">
+    <section class="card card--projects">
       <div class="section-head">
         <div>
-          <p class="card-label" id="flow-label">Execution flow</p>
-          <strong id="flow-title">Live execution map</strong>
-        </div>
-        <span class="pill pill--neutral" id="flow-state">Loading flow</span>
-      </div>
-      <div class="flow-frame">
-        <img id="flow-chart" alt="Execution flow chart" hidden>
-        <p class="muted" id="flow-empty">Waiting for the latest flow chart...</p>
-      </div>
-    </section>
-
-    <section class="card card--logs">
-      <div class="section-head">
-        <div>
-          <p class="card-label" id="recent-logs-label">Recent logs</p>
-          <strong id="masked-activity-tail">Masked activity tail</strong>
+          <p class="card-label" id="projects-label">Projects</p>
+          <strong id="projects-title">Active remote control surface</strong>
         </div>
         <span class="pill pill--neutral" id="refresh-note">Connecting live stream</span>
       </div>
-      <pre id="log-tail">Waiting for status...</pre>
-    </section>
-
-    <section class="card card--controls">
-      <div class="section-head">
-        <div>
-          <p class="card-label" id="control-label">Remote control</p>
-          <strong id="control-title">Pause after the current step or resume the remaining work.</strong>
-        </div>
-        <span class="pill pill--neutral" id="control-state">Control idle</span>
-      </div>
-      <div class="control-actions">
-        <button class="control-button" id="pause-button" type="button">Pause after step</button>
-        <button class="control-button control-button--secondary" id="resume-button" type="button">Resume run</button>
-      </div>
-      <p class="muted" id="control-help">Controls become available when the shared project is running or can resume.</p>
+      <p class="muted" id="projects-empty">Loading projects...</p>
+      <div class="project-list" id="projects-list"></div>
     </section>
 
     <section class="card card--error" id="error-card" hidden>
