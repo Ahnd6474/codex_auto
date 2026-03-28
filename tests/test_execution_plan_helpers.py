@@ -687,7 +687,11 @@ class ExecutionPlanHelperTests(unittest.TestCase):
                 orchestrator,
                 "_run_lineage_step_worker",
                 side_effect=worker_results,
-            ):
+            ), mock.patch.object(
+                orchestrator,
+                "_push_if_ready",
+                return_value=(True, "pushed"),
+            ) as mocked_push:
                 context, plan_state, steps = orchestrator.run_parallel_execution_batch(
                     project_dir=repo_dir,
                     runtime=runtime,
@@ -712,6 +716,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             {item["lineage_id"]: item["head_commit"] for item in lineage_state["lineages"]},
             {"LN1": "ln1-head", "LN2": "ln2-head"},
         )
+        self.assertEqual(mocked_push.call_count, 2)
 
     def test_run_join_execution_step_selectively_merges_requested_lineages(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_selective_join_test"

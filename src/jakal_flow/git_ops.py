@@ -158,6 +158,25 @@ class GitOps:
     def push(self, repo_dir: Path, branch: str) -> None:
         self.run(["push", "origin", branch], cwd=repo_dir)
 
+    def remote_branch_revision(self, repo_dir: Path, remote_name: str, branch: str) -> str | None:
+        if not branch.strip():
+            return None
+        result = self.run(["ls-remote", "--heads", remote_name, branch], cwd=repo_dir, check=False)
+        if result.returncode != 0:
+            return None
+        line = next((item.strip() for item in result.stdout.splitlines() if item.strip()), "")
+        if not line:
+            return None
+        return line.split()[0].strip() or None
+
+    def is_ancestor(self, repo_dir: Path, older_revision: str, newer_revision: str) -> bool:
+        older = older_revision.strip()
+        newer = newer_revision.strip()
+        if not older or not newer:
+            return False
+        result = self.run(["merge-base", "--is-ancestor", older, newer], cwd=repo_dir, check=False)
+        return result.returncode == 0
+
     def add_worktree(self, repo_dir: Path, worktree_dir: Path, branch_name: str, start_point: str) -> None:
         worktree_dir.parent.mkdir(parents=True, exist_ok=True)
         self.run(["worktree", "add", "-b", branch_name, str(worktree_dir), start_point], cwd=repo_dir)

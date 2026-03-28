@@ -935,6 +935,60 @@ class Orchestrator:
         if lineage.branch_name:
             self.git.delete_branch(repo_dir, lineage.branch_name, force=True)
 
+    def _evaluate_push_readiness(
+        self,
+        context: ProjectContext,
+        repo_dir: Path,
+        branch: str,
+        commit_hash: str = "",
+    ) -> tuple[bool, str]:
+        target_branch = branch.strip()
+        target_commit = commit_hash.strip()
+        if not context.runtime.allow_push:
+            return False, "push_disabled"
+        if not repo_dir.exists():
+            return False, "missing_repo_dir"
+        if not target_branch:
+            return False, "missing_branch"
+        remote_url = self.git.remote_url(repo_dir, "origin")
+        if not remote_url:
+            return False, "missing_remote"
+        local_head_result = self.git.run(["rev-parse", "--verify", target_branch], cwd=repo_dir, check=False)
+        if local_head_result.returncode != 0:
+            return False, "missing_local_branch"
+        local_head = local_head_result.stdout.strip()
+        if not local_head:
+            return False, "missing_local_head"
+        if target_commit:
+            commit_result = self.git.run(["rev-parse", "--verify", target_commit], cwd=repo_dir, check=False)
+            if commit_result.returncode != 0:
+                return False, "missing_commit"
+            if not self.git.is_ancestor(repo_dir, target_commit, local_head):
+                return False, "commit_not_on_branch"
+        remote_head = self.git.remote_branch_revision(repo_dir, "origin", target_branch)
+        if remote_head and remote_head == local_head:
+            return False, "already_up_to_date"
+        if remote_head and not self.git.is_ancestor(repo_dir, remote_head, local_head):
+            return False, "non_fast_forward"
+        return True, "push_ready"
+
+    def _push_if_ready(
+        self,
+        context: ProjectContext,
+        repo_dir: Path,
+        branch: str,
+        commit_hash: str = "",
+    ) -> tuple[bool, str]:
+        ready, reason = self._evaluate_push_readiness(context, repo_dir, branch, commit_hash=commit_hash)
+        if not ready:
+            return False, reason
+        try:
+            self.git.push(repo_dir, branch)
+            return True, "pushed"
+        except Exception as exc:
+            detail = str(exc).strip().splitlines()[0] if str(exc).strip() else "unknown_error"
+            return False, f"push_failed:{detail}"
+
     def _run_lineage_execution_batch(
         self,
         context: ProjectContext,
@@ -1054,6 +1108,19 @@ class Orchestrator:
                     lineage.status = "active"
                     lineage.notes = str(worker_result.get("test_summary") or worker_result.get("notes") or "").strip()
 
+                    push_result = {"pushed": False, "reason": "missing_head_commit"}
+                    if lineage.head_commit:
+                        pushed, push_reason = self._push_if_ready(
+                            context,
+                            lineage.worktree_dir,
+                            lineage.branch_name,
+                            commit_hash=lineage.head_commit,
+                        )
+                        push_result = {"pushed": pushed, "reason": push_reason}
+                    worker_result["lineage_push"] = push_result
+                    if push_result["pushed"]:
+                        lineage.notes = (lineage.notes + " | Pushed lineage branch to origin.").strip(" |")
+
                     step.status = "completed"
                     step.completed_at = completion_time
                     step.commit_hash = str(worker_result.get("commit_hash") or "").strip() or (lineage.head_commit or None)
@@ -1097,6 +1164,7 @@ class Orchestrator:
                         "rollback_status": rollback_status,
                         "changed_files": changed_files,
                         "test_results": pass_entry.get("test_results"),
+                        "lineage_push": worker_result.get("lineage_push"),
                     }
                 )
                 block_entry.update(
@@ -1110,6 +1178,7 @@ class Orchestrator:
                         "test_summary": step.notes or batch_summary,
                         "commit_hashes": [step.commit_hash] if step.commit_hash else [],
                         "rollback_status": rollback_status,
+                        "lineage_push": worker_result.get("lineage_push"),
                     }
                 )
                 reporter.log_pass(pass_entry)
@@ -2193,8 +2262,14 @@ class Orchestrator:
                             context.metadata.current_safe_revision = last_commit
                             context.loop_state.current_safe_revision = last_commit
                             context.loop_state.last_commit_hash = last_commit
-                            if context.runtime.allow_push and self.git.remote_url(context.paths.repo_dir, "origin"):
-                                self.git.push(context.paths.repo_dir, context.metadata.branch)
+                            pushed, push_reason = self._push_if_ready(
+                                context,
+                                context.paths.repo_dir,
+                                context.metadata.branch,
+                                commit_hash=last_commit,
+                            )
+                            if not pushed and push_reason not in {"already_up_to_date"}:
+                                batch_summary = (batch_summary + f" | push skipped: {push_reason}").strip(" |")
                         context.metadata.current_status = self._status_from_plan_state(plan_state)
 
             next_block_index = context.loop_state.block_index
@@ -2476,6 +2551,12 @@ class Orchestrator:
         context.metadata.current_safe_revision = integrated_revision
         context.loop_state.current_safe_revision = integrated_revision
         context.loop_state.last_commit_hash = integrated_revision
+        pushed, push_reason = self._push_if_ready(
+            context,
+            context.paths.repo_dir,
+            context.metadata.branch,
+            commit_hash=integrated_revision,
+        )
 
         refreshed = self.load_execution_plan_state(context)
         refreshed_step = next((step for step in refreshed.steps if step.step_id == result_step.step_id), target_step)
@@ -2483,6 +2564,8 @@ class Orchestrator:
         refreshed_step.completed_at = result_step.completed_at or now_utc_iso()
         refreshed_step.commit_hash = integrated_revision
         refreshed_step.notes = result_step.notes or "Join step completed successfully."
+        if not pushed and push_reason not in {"already_up_to_date"}:
+            refreshed_step.notes = f"{refreshed_step.notes} (push skipped: {push_reason})"
         saved = self.save_execution_plan_state(context, refreshed)
         context.metadata.current_status = self._status_from_plan_state(saved)
 
@@ -2803,8 +2886,14 @@ class Orchestrator:
                 if commit_hash:
                     context.metadata.current_safe_revision = commit_hash
                     context.loop_state.current_safe_revision = commit_hash
-                    if context.runtime.allow_push and self.git.remote_url(context.paths.repo_dir, "origin"):
-                        self.git.push(context.paths.repo_dir, context.metadata.branch)
+                    pushed, push_reason = self._push_if_ready(
+                        context,
+                        context.paths.repo_dir,
+                        context.metadata.branch,
+                        commit_hash=commit_hash,
+                    )
+                    if not pushed and push_reason not in {"already_up_to_date"}:
+                        notes = (notes + f" Push skipped: {push_reason}.").strip()
                 success = True
                 notes = test_result.summary
 
@@ -3340,18 +3429,19 @@ class Orchestrator:
         target["status"] = "approved"
         target["approved_at"] = now_utc_iso()
         target["review_notes"] = review_notes.strip()
-        remote_url = self.git.remote_url(context.paths.repo_dir, "origin")
-        if push and context.runtime.allow_push and remote_url:
-            self.git.push(context.paths.repo_dir, context.metadata.branch)
-            target["pushed"] = True
+        if push:
+            pushed, push_reason = self._push_if_ready(
+                context,
+                context.paths.repo_dir,
+                context.metadata.branch,
+                commit_hash=context.metadata.current_safe_revision or "",
+            )
+            target["pushed"] = pushed
+            if not pushed:
+                target["push_skipped_reason"] = push_reason
         else:
             target["pushed"] = False
-            if not push:
-                target["push_skipped_reason"] = "not_requested"
-            elif not context.runtime.allow_push:
-                target["push_skipped_reason"] = "push_disabled"
-            elif not remote_url:
-                target["push_skipped_reason"] = "missing_remote"
+            target["push_skipped_reason"] = "not_requested"
         write_json(context.paths.checkpoint_state_file, data)
         plan_state = self.load_execution_plan_state(context)
         context.loop_state.current_checkpoint_id = None
@@ -3874,8 +3964,16 @@ class Orchestrator:
             context.metadata.current_safe_revision = search_commit
             context.loop_state.current_safe_revision = search_commit
 
-        if context.runtime.allow_push and block_commit_hashes and self.git.remote_url(context.paths.repo_dir, "origin"):
-            self.git.push(context.paths.repo_dir, context.metadata.branch)
+        test_summary = search_tests.summary if search_tests else "No search-enabled test run."
+        if block_commit_hashes:
+            pushed, push_reason = self._push_if_ready(
+                context,
+                context.paths.repo_dir,
+                context.metadata.branch,
+                commit_hash=block_commit_hashes[-1],
+            )
+            if not pushed and push_reason not in {"already_up_to_date"}:
+                test_summary = f"{test_summary}\n\nPush skipped: {push_reason}"
 
         made_progress = bool(block_commit_hashes)
         if made_progress:
@@ -3885,7 +3983,6 @@ class Orchestrator:
             context.loop_state.counters.no_progress_blocks += 1
             context.loop_state.counters.empty_cycles += 1
 
-        test_summary = search_tests.summary if search_tests else "No search-enabled test run."
         reporter.write_block_review(
             reflection_markdown(selected_task, test_summary, sorted(set(block_changed_files)), block_commit_hashes)
         )
