@@ -282,7 +282,7 @@ export function useDesktopController() {
   }
 
   function applyProjectDetail(detail, options = {}) {
-    const applied = applyProjectDetailState({
+    const normalizedDetail = applyProjectDetailState({
       detail,
       options,
       refs: {
@@ -310,10 +310,10 @@ export function useDesktopController() {
     if (detail?.share) {
       setWorkspaceShareDetail(detail.share);
     }
-    if (applied) {
+    if (normalizedDetail) {
       const nextProjects = applyProjectDetailListingState({
         projects: projectsRef.current,
-        detail,
+        detail: normalizedDetail,
         runningJob: options.runningJob ?? jobsRef.current,
         setProjects,
         setWorkspaceStats,
@@ -322,7 +322,7 @@ export function useDesktopController() {
         projectsRef.current = nextProjects;
       }
     }
-    return applied;
+    return normalizedDetail;
   }
 
   useEffect(() => {

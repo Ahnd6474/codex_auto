@@ -32,6 +32,9 @@ function autoModelHint(language) {
 
 function modelPlaceholder(step, runtime) {
   const provider = String(step?.model_provider || "").trim().toLowerCase();
+  if (provider === "claude") {
+    return "sonnet";
+  }
   if (provider === "gemini") {
     return "gemini-3-flash";
   }
@@ -377,6 +380,7 @@ export function ParallelRunControlView({
                   <select value={selectedStep.model_provider || ""} onChange={(event) => onUpdateStepField("model_provider", event.target.value)} disabled={!editableStep}>
                     <option value="">{autoProviderLabel(language)}</option>
                     <option value="openai">Codex CLI</option>
+                    <option value="claude">Claude Code</option>
                     <option value="gemini">Gemini CLI</option>
                     <option value="openrouter">OpenRouter</option>
                     <option value="opencdk">OpenCDK</option>

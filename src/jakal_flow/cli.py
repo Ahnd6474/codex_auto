@@ -12,7 +12,7 @@ from .status_views import effective_project_status
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Multi-repository Codex CLI orchestrator")
+    parser = argparse.ArgumentParser(description="Multi-repository AI CLI orchestrator")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     def add_shared_arguments(target: argparse.ArgumentParser, include_repo: bool = True) -> None:
@@ -28,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
             "--model-provider",
             default=DEFAULT_MODEL_PROVIDER,
             choices=sorted(VALID_MODEL_PROVIDERS),
-            help="Codex/OpenAI-compatible provider preset to use for this project",
+            help="Provider preset to use for this project",
         )
         target.add_argument(
             "--local-model-provider",
@@ -36,8 +36,8 @@ def build_parser() -> argparse.ArgumentParser:
             choices=[DEFAULT_LOCAL_MODEL_PROVIDER, "lmstudio"],
             help="Local provider to use when --model-provider oss is selected",
         )
-        target.add_argument("--model", default="auto", help="Model slug passed to Codex CLI, or auto to use Codex defaults")
-        target.add_argument("--provider-base-url", default="", help="Override the OpenAI-compatible base URL used for non-default providers")
+        target.add_argument("--model", default="auto", help="Model slug passed to the selected CLI, or auto when the provider supports it")
+        target.add_argument("--provider-base-url", default="", help="Override the provider base URL used for compatible non-default providers")
         target.add_argument("--provider-api-key-env", default="", help="Environment variable name that stores the provider API key")
         target.add_argument("--billing-mode", default="", help="Cost estimate mode: included, token, or per_pass")
         target.add_argument("--input-cost-per-million-usd", type=float, default=0.0, help="Estimated USD per 1M input tokens")

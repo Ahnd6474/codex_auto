@@ -8,6 +8,7 @@ import re
 from .model_constants import VALID_MODEL_PROVIDERS
 from .models import ExecutionStep, RuntimeOptions
 
+CLAUDE_DEFAULT_MODEL = "sonnet"
 GEMINI_DEFAULT_MODEL = "gemini-3-flash"
 _GEMINI_AUTH_ENV_VARS = (
     "GEMINI_API_KEY",
@@ -84,6 +85,10 @@ def _default_model_for_provider(provider: str, runtime: RuntimeOptions) -> str:
         if runtime_provider == "gemini" and runtime_model:
             return runtime_model
         return GEMINI_DEFAULT_MODEL
+    if normalized_provider == "claude":
+        if runtime_provider == "claude" and runtime_model:
+            return runtime_model
+        return CLAUDE_DEFAULT_MODEL
     if normalized_provider == "openai":
         return runtime_model or "auto"
     if runtime_provider == normalized_provider and runtime_model:

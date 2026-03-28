@@ -712,6 +712,84 @@ test("IdeToolbar prefers the live plan progress while a run is active", async ()
   assert.match(html, /Completed 1\/4 steps, running: ST2, ST3/);
 });
 
+test("IdeToolbar shows planning progress while plan generation is active", async () => {
+  const html = await renderBundledComponent(
+    "ide-toolbar-planning-progress-render",
+    "./src/components/layout/IdeToolbar.jsx",
+    "IdeToolbar",
+    {
+      projectDetail: {
+        project: {
+          display_name: "Demo",
+          current_status: "setup_ready",
+        },
+        planning_progress: {
+          stage_count: 4,
+          current_stage_index: 2,
+          current_stage_status: "running",
+        },
+      },
+      planDraft: {
+        execution_mode: "serial",
+        closeout_status: "not_started",
+        steps: [],
+      },
+      busy: true,
+      activeJob: {
+        status: "running",
+        command: "generate-plan",
+      },
+      activeCenterTab: "run",
+      onRefresh: noop,
+      onOpenSettings: noop,
+      onGeneratePlan: noop,
+      onRunPlan: noop,
+      onRunCloseout: noop,
+      onApproveCheckpoint: noop,
+    },
+  );
+
+  assert.match(html, /Planning stage 2\/4, Running/);
+  assert.doesNotMatch(html, /No plan yet/);
+});
+
+test("IdeToolbar still shows planning progress when planning events exist before the active job snapshot arrives", async () => {
+  const html = await renderBundledComponent(
+    "ide-toolbar-planning-progress-without-job-render",
+    "./src/components/layout/IdeToolbar.jsx",
+    "IdeToolbar",
+    {
+      projectDetail: {
+        project: {
+          display_name: "Demo",
+          current_status: "setup_ready",
+        },
+        planning_progress: {
+          stage_count: 4,
+          current_stage_index: 2,
+          current_stage_status: "running",
+        },
+      },
+      planDraft: {
+        execution_mode: "serial",
+        closeout_status: "not_started",
+        steps: [],
+      },
+      busy: false,
+      activeJob: null,
+      activeCenterTab: "run",
+      onRefresh: noop,
+      onOpenSettings: noop,
+      onGeneratePlan: noop,
+      onRunPlan: noop,
+      onRunCloseout: noop,
+      onApproveCheckpoint: noop,
+    },
+  );
+
+  assert.match(html, /Planning stage 2\/4, Running/);
+});
+
 test("IdeToolbar exposes checkpoint approval when a checkpoint is waiting for review", async () => {
   const html = await renderBundledComponent(
     "ide-toolbar-pending-checkpoint-render",
@@ -981,10 +1059,57 @@ test("RunProgressPanel renders structured planning progress and stage chips", as
   );
 
   assert.match(html, /Planner Agent A/);
-  assert.match(html, /Planning stage 2\/4/);
+  assert.match(html, /Planning stage 2\/4, Running/);
   assert.match(html, /38% complete/);
   assert.match(html, /Scan repository context/);
   assert.match(html, /Validate and save plan/);
+  assert.match(html, /Running/);
+});
+
+test("RunProgressPanel keeps planning progress visible when the bridge job snapshot is temporarily absent", async () => {
+  const html = await renderBundledComponent(
+    "run-progress-panel-planning-without-job-render",
+    "./src/components/layout/RunProgressPanel.jsx",
+    "RunProgressPanel",
+    {
+      detail: {
+        project: {
+          current_status: "setup_ready",
+        },
+        planning_progress: {
+          stage_count: 4,
+          completed_stages: 1,
+          percent: 38,
+          current_stage_key: "planner_a",
+          current_stage_index: 2,
+          current_stage_label: "Planner Agent A",
+          current_stage_status: "running",
+          current_agent_label: "Planner Agent A",
+          message: "Planner Agent A is decomposing the work into implementation blocks.",
+          stages: [
+            { key: "context_scan", index: 1, label: "Scan repository context", status: "completed" },
+            { key: "planner_a", index: 2, label: "Planner Agent A", status: "running", agent_label: "Planner Agent A" },
+            { key: "planner_b", index: 3, label: "Planner Agent B", status: "pending" },
+            { key: "finalize", index: 4, label: "Validate and save plan", status: "pending" },
+          ],
+        },
+        plan: {
+          execution_mode: "serial",
+          closeout_status: "not_started",
+          steps: [],
+        },
+      },
+      planDraft: {
+        execution_mode: "serial",
+        closeout_status: "not_started",
+        steps: [],
+      },
+      activeJob: null,
+    },
+  );
+
+  assert.match(html, /Planning stage 2\/4, Running/);
+  assert.match(html, /Planner Agent A/);
 });
 
 test("SidebarPane renders a filtered workspace tree without unrelated nodes", async () => {

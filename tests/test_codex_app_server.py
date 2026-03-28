@@ -160,6 +160,31 @@ class CodexAppServerTests(unittest.TestCase):
         self.assertEqual(snapshot.model_catalog, [])
         self.assertEqual(snapshot.error, "")
 
+    def test_fetch_codex_backend_snapshot_supports_claude_code(self) -> None:
+        def fake_run(command, **_kwargs):
+            if command[-1] == "--version":
+                return subprocess.CompletedProcess(command, 0, stdout="1.2.3\n", stderr="")
+            if command[-2:] == ["auth", "status"]:
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout='{"authenticated": true, "email": "demo@example.com", "planType": "pro"}',
+                    stderr="",
+                )
+            raise AssertionError(f"Unexpected command: {command}")
+
+        with mock.patch("jakal_flow.codex_app_server.subprocess.run", side_effect=fake_run):
+            snapshot = fetch_codex_backend_snapshot("claude")
+
+        self.assertTrue(snapshot.available)
+        self.assertEqual(snapshot.account["authenticated"], True)
+        self.assertEqual(snapshot.account["email"], "demo@example.com")
+        self.assertEqual(snapshot.account["plan_type"], "pro")
+        self.assertEqual(snapshot.account["type"], "claude-code")
+        self.assertEqual(snapshot.account["version"], "1.2.3")
+        self.assertEqual(snapshot.model_catalog, [])
+        self.assertEqual(snapshot.error, "")
+
 
 if __name__ == "__main__":
     unittest.main()

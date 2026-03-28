@@ -193,7 +193,7 @@ test("applyProjectDetailState keeps persisted project runtime instead of reapply
     },
   });
 
-  assert.equal(applied, true);
+  assert.equal(applied.project.repo_id, "demo");
   assert.equal(nextProjectDetail.project.repo_id, "demo");
   assert.deepEqual(nextModelCatalog, []);
   assert.deepEqual(nextShareSettings, {
@@ -281,7 +281,7 @@ test("applyProjectDetailState clears a stale selected step when the refreshed pl
     },
   });
 
-  assert.equal(applied, true);
+  assert.equal(applied.project.repo_id, "demo");
   assert.equal(nextSelectedStepId, "");
   assert.deepEqual(nextPlanDraft, {
     closeout_status: "completed",

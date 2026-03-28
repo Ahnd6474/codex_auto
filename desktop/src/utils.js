@@ -1,7 +1,18 @@
-import { normalizeLanguage, translate } from "./locale.js";
+import { displayStatus, normalizeLanguage, translate } from "./locale.js";
 
 export function defaultCodexPath(provider = "openai") {
   const normalizedProvider = String(provider || "").trim().toLowerCase();
+  if (normalizedProvider === "claude") {
+    const platform = String(globalThis.process?.platform || "").trim().toLowerCase();
+    if (platform === "win32") {
+      return "claude.cmd";
+    }
+    const userAgent = String(globalThis.navigator?.userAgent || "").toLowerCase();
+    if (userAgent.includes("windows")) {
+      return "claude.cmd";
+    }
+    return "claude";
+  }
   if (normalizedProvider === "gemini") {
     const platform = String(globalThis.process?.platform || "").trim().toLowerCase();
     if (platform === "win32") {
@@ -125,7 +136,7 @@ export function detailApplySignature(detail = null, runningJob = null) {
 export const AUTO_REASONING_OPTION = "auto";
 export const REASONING_OPTIONS = ["low", "medium", "high", "xhigh"];
 export const MODEL_REASONING_OPTIONS = [AUTO_REASONING_OPTION, ...REASONING_OPTIONS];
-export const MODEL_PROVIDER_OPTIONS = ["openai", "gemini", "openrouter", "opencdk", "local_openai", "oss"];
+export const MODEL_PROVIDER_OPTIONS = ["openai", "claude", "gemini", "openrouter", "opencdk", "local_openai", "oss"];
 export const PROGRAM_RUNTIME_KEYS = [
   "model_provider",
   "local_model_provider",
@@ -168,6 +179,7 @@ export const DEFAULT_DASHBOARD_VISIBILITY = Object.freeze({
   word_report_card: true,
 });
 export const PROGRAM_UI_KEYS = ["ui_theme", "developer_mode", "dashboard_visibility", "background_concurrency_limit"];
+export const CLAUDE_DEFAULT_MODEL = "sonnet";
 export const GEMINI_DEFAULT_MODEL = "gemini-3-flash";
 
 const LEGACY_DASHBOARD_VISIBILITY_ALIASES = Object.freeze({
@@ -317,9 +329,17 @@ export function normalizeMemoryBudgetGiB(value, fallback = 3) {
   return Math.max(0.1, Math.round(parsed * 10) / 10);
 }
 
+function looksLikeClaudeModel(model = "") {
+  const normalized = String(model || "").trim().toLowerCase();
+  return normalized === "sonnet" || normalized === "opus" || normalized === "haiku" || normalized.startsWith("claude");
+}
+
 export function defaultModelForProvider(provider = "openai", runtime = {}) {
   const normalizedProvider = String(provider || "").trim().toLowerCase();
   const currentModel = String(runtime?.model || runtime?.model_slug_input || "").trim().toLowerCase();
+  if (normalizedProvider === "claude") {
+    return looksLikeClaudeModel(currentModel) ? currentModel : CLAUDE_DEFAULT_MODEL;
+  }
   if (normalizedProvider === "gemini") {
     return currentModel.startsWith("gemini") ? currentModel : GEMINI_DEFAULT_MODEL;
   }
@@ -342,6 +362,8 @@ export function applyProviderDefaults(runtime = {}, nextProvider = "openai", nex
   const currentModel = String(runtime?.model_slug_input || runtime?.model || "").trim().toLowerCase();
   const nextModel = supportsAuto
     ? (currentModel || "auto")
+    : provider === "claude" && !looksLikeClaudeModel(currentModel)
+      ? CLAUDE_DEFAULT_MODEL
     : provider === "gemini" && !currentModel.startsWith("gemini")
       ? GEMINI_DEFAULT_MODEL
       : currentModel === "auto"
@@ -835,6 +857,70 @@ function normalizePlanningProgress(raw = null) {
   };
 }
 
+function planningProgressStatusValue(progress = null) {
+  if (!progress || typeof progress !== "object") {
+    return "";
+  }
+  return String(progress?.currentStageStatus ?? progress?.current_stage_status ?? "").trim().toLowerCase();
+}
+
+export function isPlanningProgressRunning(progress = null) {
+  return planningProgressStatusValue(progress) === "running";
+}
+
+function planningProgressSummary(progress = null) {
+  if (!progress || typeof progress !== "object") {
+    return {
+      currentStageIndex: 0,
+      currentStageStatus: "",
+      stageCount: 0,
+    };
+  }
+  const currentStage = progress?.planningCurrentStage && typeof progress.planningCurrentStage === "object"
+    ? progress.planningCurrentStage
+    : null;
+  return {
+    currentStageIndex: Math.max(
+      0,
+      Number.parseInt(
+        String(currentStage?.index ?? progress?.currentStageIndex ?? progress?.current_stage_index ?? 0),
+        10,
+      ) || 0,
+    ),
+    currentStageStatus: String(
+      currentStage?.status ?? progress?.currentStageStatus ?? progress?.current_stage_status ?? "",
+    )
+      .trim()
+      .toLowerCase(),
+    stageCount: Math.max(
+      0,
+      Number.parseInt(
+        String(progress?.planningStageCount ?? progress?.stageCount ?? progress?.stage_count ?? 0),
+        10,
+      ) || 0,
+    ),
+  };
+}
+
+export function planningProgressCaptionDisplay(progress = null, language = "en") {
+  const locale = normalizeLanguage(language);
+  const summary = planningProgressSummary(progress);
+  if (summary.currentStageIndex && summary.stageCount) {
+    if (summary.currentStageStatus) {
+      return translate(locale, "run.planningStageWithStatus", {
+        current: summary.currentStageIndex,
+        status: displayStatus(summary.currentStageStatus, locale),
+        total: summary.stageCount,
+      });
+    }
+    return translate(locale, "run.planningStage", {
+      current: summary.currentStageIndex,
+      total: summary.stageCount,
+    });
+  }
+  return translate(locale, "run.planGeneration");
+}
+
 export function deriveExecutionProgress(detail = null, planDraft = null, activeJob = null) {
   const detailPlan = detail?.plan && typeof detail.plan === "object" ? detail.plan : null;
   const fallbackPlan = planDraft && typeof planDraft === "object" ? planDraft : {};
@@ -851,6 +937,7 @@ export function deriveExecutionProgress(detail = null, planDraft = null, activeJ
   const status = currentStatus.toLowerCase();
   const debugging = isDebuggingStatus(currentStatus);
   const planningProgress = normalizePlanningProgress(detail?.planning_progress);
+  const planningRunning = isPlanningProgressRunning(planningProgress);
   const recentActivity = (Array.isArray(detail?.activity) ? detail.activity : [])
     .map((line) => activityLineSummary(line))
     .filter(Boolean)
@@ -859,10 +946,11 @@ export function deriveExecutionProgress(detail = null, planDraft = null, activeJ
     activeJob?.status === "running" ||
     runningStepList.length > 0 ||
     closeoutRunning ||
-    status.startsWith("running:");
+    status.startsWith("running:") ||
+    planningRunning;
 
   let phase = "idle";
-  if (command === "generate-plan") {
+  if (command === "generate-plan" || planningRunning) {
     phase = "planning";
   } else if (command === "run-closeout" || closeoutRunning) {
     phase = "closeout";
@@ -1050,6 +1138,40 @@ export function sanitizeProjectDetailForJobState(detail, activeJob = null, optio
     return detail;
   }
   const currentStatus = String(detail?.project?.current_status || "").trim();
+  if (isPlanningProgressRunning(detail?.planning_progress) && !currentStatus.toLowerCase().startsWith("running:")) {
+    const nextStatus = "running:generate-plan";
+    return {
+      ...detail,
+      project: detail?.project
+        ? {
+            ...detail.project,
+            current_status: nextStatus,
+          }
+        : detail?.project,
+      snapshot: detail?.snapshot
+        ? {
+            ...detail.snapshot,
+            project: detail.snapshot.project
+              ? {
+                  ...detail.snapshot.project,
+                  current_status: nextStatus,
+                }
+              : detail.snapshot.project,
+          }
+        : detail?.snapshot,
+      bottom_panels: detail?.bottom_panels
+        ? {
+            ...detail.bottom_panels,
+            git_status: detail.bottom_panels.git_status
+              ? {
+                  ...detail.bottom_panels.git_status,
+                  current_status: nextStatus,
+                }
+              : detail.bottom_panels.git_status,
+          }
+        : detail?.bottom_panels,
+    };
+  }
   const planSteps = Array.isArray(detail?.plan?.steps) ? detail.plan.steps : [];
   const planHasRunningStep = planSteps.some((step) => step.status === "running");
   const closeoutStatus = String(detail?.plan?.closeout_status || "").trim().toLowerCase();
@@ -1169,6 +1291,8 @@ export function defaultProviderBaseUrl(provider = "openai") {
 
 export function defaultProviderApiKeyEnv(provider = "openai") {
   switch (String(provider || "").trim().toLowerCase()) {
+    case "claude":
+      return "ANTHROPIC_API_KEY";
     case "gemini":
       return "GEMINI_API_KEY";
     case "openrouter":
@@ -1205,6 +1329,9 @@ export function providerSupportsCatalog(provider = "openai") {
 
 export function providerDisplayName(provider = "openai", localProvider = "") {
   const normalized = String(provider || "").trim().toLowerCase();
+  if (normalized === "claude") {
+    return "Claude Code";
+  }
   if (normalized === "gemini") {
     return "Gemini CLI";
   }
@@ -1765,7 +1892,12 @@ export function executionProgressCaptionDisplay(plan, language = "en") {
   return progressDisplayCaption(plan, language, true);
 }
 
-export function toolbarProgressCaptionDisplay(plan, language = "en") {
+export function toolbarProgressCaptionDisplay(plan, language = "en", options = {}) {
+  const command = String(options?.activeJob?.command || "").trim().toLowerCase();
+  const jobStatus = String(options?.activeJob?.status || "").trim().toLowerCase();
+  if ((jobStatus === "running" && command === "generate-plan") || isPlanningProgressRunning(options?.planningProgress)) {
+    return planningProgressCaptionDisplay(options?.planningProgress, language);
+  }
   return progressDisplayCaption(plan, language, true);
 }
 

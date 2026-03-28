@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { commandLabel, deriveExecutionProgress, executionProgressCaptionDisplay, formatDurationCompact, formatUsd, shouldShowEstimatedCost } from "../../utils";
+import {
+  commandLabel,
+  deriveExecutionProgress,
+  executionProgressCaptionDisplay,
+  formatDurationCompact,
+  formatUsd,
+  planningProgressCaptionDisplay,
+  shouldShowEstimatedCost,
+} from "../../utils";
 
 function stepLabel(step) {
   return [step?.step_id, step?.title].filter(Boolean).join(" - ");
@@ -18,15 +26,6 @@ function runningStepLabels(steps = [], maxVisible = 3) {
     return labels.join(", ");
   }
   return `${labels.slice(0, maxVisible).join(", ")} +${labels.length - maxVisible}`;
-}
-
-function planningStageSummary(progress) {
-  const currentIndex = progress?.planningCurrentStage?.index || 0;
-  const total = progress?.planningStageCount || 0;
-  if (!currentIndex || !total) {
-    return "";
-  }
-  return `Planning stage ${currentIndex}/${total}`;
 }
 
 export function RunProgressPanel({ detail, planDraft, activeJob }) {
@@ -71,7 +70,7 @@ export function RunProgressPanel({ detail, planDraft, activeJob }) {
 
   const progressSummary =
     progress.phase === "planning" && progress.planningStageCount
-      ? planningStageSummary(progress)
+      ? planningProgressCaptionDisplay(progress, language)
       : executionProgressCaptionDisplay(progress.plan, language);
   const percentLabel = progress.indeterminate ? t("status.running") : t("run.progressPercent", { percent: progress.percent ?? 0 });
   const runningStartTimes = (progress.runningStepList || [])
@@ -81,7 +80,9 @@ export function RunProgressPanel({ detail, planDraft, activeJob }) {
     ? Math.max(0, Math.round((nowTick - Math.min(...runningStartTimes)) / 1000))
     : 0;
   const badgeLabel =
-    progress.phase === "debugging"
+    progress.phase === "planning"
+      ? displayStatus(progress.planningCurrentStage?.status || "running", language)
+      : progress.phase === "debugging"
       ? displayStatus(progress.status || "running:debugging", language)
       : String(progress.status || "").trim().toLowerCase() === "running:merging"
         ? displayStatus(progress.status, language)
@@ -137,6 +138,7 @@ export function RunProgressPanel({ detail, planDraft, activeJob }) {
               className={`run-progress-stage run-progress-stage--${stage.status || "pending"}`}
             >
               <strong>{stage.index}.</strong> {stage.label || stage.key}
+              <span className="run-progress-stage__status">{displayStatus(stage.status || "pending", language)}</span>
             </span>
           ))}
         </div>

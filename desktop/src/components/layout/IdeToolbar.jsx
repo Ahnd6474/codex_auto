@@ -1,6 +1,6 @@
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { commandLabel, isDebuggingStatus, projectStatusWithJob, statusTone, toolbarProgressCaptionDisplay } from "../../utils";
+import { commandLabel, isDebuggingStatus, isPlanningProgressRunning, projectStatusWithJob, statusTone, toolbarProgressCaptionDisplay } from "../../utils";
 
 export function IdeToolbar({
   projectDetail,
@@ -15,7 +15,12 @@ export function IdeToolbar({
   onRunPlan,
   onApproveCheckpoint,
 }) {
-  const projectStatus = projectStatusWithJob(projectDetail?.project?.current_status || "idle", activeJob) || "idle";
+  const planningRunning = isPlanningProgressRunning(projectDetail?.planning_progress);
+  const projectStatusWithActiveJob = projectStatusWithJob(projectDetail?.project?.current_status || "idle", activeJob) || "idle";
+  const projectStatus =
+    String(activeJob?.status || "").trim().toLowerCase() === "running" || !planningRunning
+      ? projectStatusWithActiveJob
+      : "running:generate-plan";
   const livePlan = String(activeJob?.status || "").trim().toLowerCase() === "running" && projectDetail?.plan ? projectDetail.plan : planDraft;
   const projectName = projectDetail?.project?.display_name || projectDetail?.project?.slug || null;
   const { language, t } = useI18n();
@@ -25,7 +30,13 @@ export function IdeToolbar({
     && !isDebuggingStatus(projectDetail?.project?.current_status || "")
     && normalizedProjectStatus !== "running:merging"
       ? commandLabel(activeJob.command, language)
+      : planningRunning && !isDebuggingStatus(projectDetail?.project?.current_status || "") && normalizedProjectStatus !== "running:merging"
+        ? displayStatus("running:generate-plan", language)
       : displayStatus(projectStatus, language);
+  const planStatusLabel = toolbarProgressCaptionDisplay(livePlan, language, {
+    activeJob,
+    planningProgress: projectDetail?.planning_progress,
+  });
 
   return (
     <header className="ide-toolbar">
@@ -52,7 +63,7 @@ export function IdeToolbar({
         ) : null}
         <div className="toolbar-status toolbar-status--neutral">
           <span>{t("toolbar.plan")}</span>
-          <strong>{toolbarProgressCaptionDisplay(livePlan, language)}</strong>
+          <strong>{planStatusLabel}</strong>
         </div>
       </div>
 

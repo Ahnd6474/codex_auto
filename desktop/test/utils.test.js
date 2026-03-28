@@ -19,6 +19,7 @@ import {
   commandLabel,
   detailApplySignature,
   computePlanStats,
+  CLAUDE_DEFAULT_MODEL,
   defaultCodexPath,
   planStepsWithCloseout,
   deriveExecutionProgress,
@@ -31,10 +32,12 @@ import {
   GEMINI_DEFAULT_MODEL,
   inheritProjectIdentityForm,
   isDuplicateProjectJobError,
+  isPlanningProgressRunning,
   mergeProjectDetailCodexStatus,
   normalizeMemoryBudgetGiB,
   normalizeInterruptedPlan,
   planDependencyValidationMessage,
+  planningProgressCaptionDisplay,
   progressCaption,
   programSettingsFromRuntime,
   projectJobFromJobs,
@@ -205,6 +208,7 @@ test("deriveGithubMode distinguishes manual and existing projects", () => {
 
 test("defaultCodexPath follows the current platform", () => {
   assert.equal(defaultCodexPath(), process.platform === "win32" ? "codex.cmd" : "codex");
+  assert.equal(defaultCodexPath("claude"), process.platform === "win32" ? "claude.cmd" : "claude");
   assert.equal(defaultCodexPath("gemini"), process.platform === "win32" ? "gemini.cmd" : "gemini");
 });
 
@@ -412,6 +416,24 @@ test("applyProviderDefaults switches the runtime path for Gemini CLI and clears 
   assert.equal(runtime.provider_api_key_env, "GEMINI_API_KEY");
 });
 
+test("applyProviderDefaults switches the runtime path for Claude Code and applies Anthropic defaults", () => {
+  const runtime = applyProviderDefaults(
+    {
+      model_provider: "openai",
+      model: "gpt-5.4",
+      model_slug_input: "gpt-5.4",
+      codex_path: defaultCodexPath(),
+    },
+    "claude",
+  );
+
+  assert.equal(runtime.model_provider, "claude");
+  assert.equal(runtime.codex_path, defaultCodexPath("claude"));
+  assert.equal(runtime.model, CLAUDE_DEFAULT_MODEL);
+  assert.equal(runtime.model_slug_input, CLAUDE_DEFAULT_MODEL);
+  assert.equal(runtime.provider_api_key_env, "ANTHROPIC_API_KEY");
+});
+
 test("blankProjectForm keeps Gemini CLI projects on the Gemini default model", () => {
   const form = blankProjectForm({
     model_provider: "gemini",
@@ -422,6 +444,18 @@ test("blankProjectForm keeps Gemini CLI projects on the Gemini default model", (
   assert.equal(form.runtime.model_provider, "gemini");
   assert.equal(form.runtime.model, GEMINI_DEFAULT_MODEL);
   assert.equal(form.runtime.model_slug_input, GEMINI_DEFAULT_MODEL);
+});
+
+test("blankProjectForm keeps Claude Code projects on the Claude default model", () => {
+  const form = blankProjectForm({
+    model_provider: "claude",
+    provider_api_key_env: "ANTHROPIC_API_KEY",
+    codex_path: defaultCodexPath("claude"),
+  });
+
+  assert.equal(form.runtime.model_provider, "claude");
+  assert.equal(form.runtime.model, CLAUDE_DEFAULT_MODEL);
+  assert.equal(form.runtime.model_slug_input, CLAUDE_DEFAULT_MODEL);
 });
 
 test("normalizeMemoryBudgetGiB keeps one decimal place for UI memory budgets", () => {
@@ -774,6 +808,30 @@ test("job-aware detail sanitizer prefers terminal plan state over recent running
   assert.equal(sanitizedCompletedDetail.bottom_panels.git_status.current_status, "closed_out");
 });
 
+test("job-aware detail sanitizer marks planning progress as generate-plan when the job snapshot is missing", () => {
+  const detail = {
+    project: {
+      repo_id: "repo-plan",
+      current_status: "setup_ready",
+    },
+    planning_progress: {
+      stage_count: 4,
+      current_stage_index: 2,
+      current_stage_status: "running",
+    },
+    bottom_panels: {
+      git_status: {
+        current_status: "setup_ready",
+      },
+    },
+  };
+
+  const sanitizedDetail = sanitizeProjectDetailForJobState(detail, null);
+
+  assert.equal(sanitizedDetail.project.current_status, "running:generate-plan");
+  assert.equal(sanitizedDetail.bottom_panels.git_status.current_status, "running:generate-plan");
+});
+
 test("job-aware detail sanitizer preserves a very recent active run signal while the job snapshot catches up", () => {
   const nowMs = Date.parse("2026-03-26T10:00:00Z");
   const runningDetail = {
@@ -985,6 +1043,51 @@ test("deriveExecutionProgress uses structured planning progress when available",
   assert.equal(progress.planningCurrentStage.label, "Planner Agent A");
   assert.equal(progress.planningCurrentAgentLabel, "Planner Agent A");
   assert.equal(progress.headlineActivity, "Planner Agent A is decomposing the work into implementation blocks.");
+});
+
+test("deriveExecutionProgress treats running planning progress as active even without a bridge job", () => {
+  const progress = deriveExecutionProgress(
+    {
+      project: {
+        current_status: "setup_ready",
+      },
+      planning_progress: {
+        stage_count: 4,
+        current_stage_index: 2,
+        current_stage_status: "running",
+        current_stage_label: "Planner Agent A",
+      },
+      plan: {
+        execution_mode: "serial",
+        closeout_status: "not_started",
+        steps: [],
+      },
+    },
+    null,
+    null,
+  );
+
+  assert.equal(progress.isActive, true);
+  assert.equal(progress.phase, "planning");
+  assert.equal(progress.indeterminate, false);
+  assert.equal(progress.planningCurrentStage.label, "Planner Agent A");
+});
+
+test("planningProgressCaptionDisplay reports the active planning stage and status", () => {
+  assert.equal(isPlanningProgressRunning({ current_stage_status: "running" }), true);
+  assert.equal(isPlanningProgressRunning({ currentStageStatus: "completed" }), false);
+  assert.equal(
+    planningProgressCaptionDisplay({
+      stage_count: 4,
+      current_stage_index: 2,
+      current_stage_status: "running",
+    }),
+    "Planning stage 2/4, Running",
+  );
+  assert.equal(
+    planningProgressCaptionDisplay(null),
+    "Generating execution plan",
+  );
 });
 
 test("deriveExecutionProgress marks debugger recovery as an active debugging phase", () => {
@@ -1273,6 +1376,20 @@ test("runtimeSummary shows Gemini CLI as a first-class backend", () => {
   );
 });
 
+test("runtimeSummary shows Claude Code as a first-class backend", () => {
+  assert.equal(
+    runtimeSummary(
+      {
+        model_provider: "claude",
+        model: CLAUDE_DEFAULT_MODEL,
+        effort: "medium",
+      },
+      [],
+    ),
+    "Claude Code | Standard Mode | sonnet | reasoning Medium | parallel auto",
+  );
+});
+
 test("config reasoning helpers keep auto separate from explicit efforts", () => {
   const modelCatalog = [
     {
@@ -1350,6 +1467,36 @@ test("progressCaption summarizes empty, partial, and completed plans", () => {
       closeout_status: "failed",
     }),
     "Completed 1/1 steps, closeout failed",
+  );
+});
+
+test("toolbarProgressCaptionDisplay shows planning progress while plan generation is active", () => {
+  assert.equal(
+    toolbarProgressCaptionDisplay(
+      { steps: [] },
+      "en",
+      {
+        planningProgress: {
+          stage_count: 4,
+          current_stage_index: 2,
+          current_stage_status: "running",
+        },
+      },
+    ),
+    "Planning stage 2/4, Running",
+  );
+  assert.equal(
+    toolbarProgressCaptionDisplay(
+      { steps: [] },
+      "en",
+      {
+        activeJob: {
+          status: "running",
+          command: "generate-plan",
+        },
+      },
+    ),
+    "Generating execution plan",
   );
 });
 

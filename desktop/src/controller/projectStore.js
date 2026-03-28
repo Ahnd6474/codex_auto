@@ -98,7 +98,7 @@ export function applyProjectDetailState({
     normalizedDetail?.project?.repo_id === state.projectDetail?.project?.repo_id
   ) {
     setters.setLoadingProjectId("");
-    return false;
+    return null;
   }
   const preserveDirtyPlan = shouldKeepUnsavedPlan(
     state.projectDetail?.project?.repo_id,
@@ -134,7 +134,7 @@ export function applyProjectDetailState({
       setters.setPlanDirty(false);
     }
   });
-  return true;
+  return normalizedDetail;
 }
 
 export function clearSelectedProjectState({

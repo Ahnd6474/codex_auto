@@ -353,6 +353,11 @@ pre {
   color: var(--text-primary);
 }
 
+.run-progress-stage__status {
+  color: inherit;
+  opacity: 0.82;
+}
+
 .run-progress-stage--completed {
   border-color: rgba(107, 201, 147, 0.35);
   background: rgba(107, 201, 147, 0.14);

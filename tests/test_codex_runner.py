@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from jakal_flow.codex_runner import CodexRunner
 from jakal_flow.models import RuntimeOptions
+from jakal_flow.step_models import CLAUDE_DEFAULT_MODEL
 from jakal_flow.workspace import WorkspaceManager
 
 
@@ -362,6 +363,75 @@ class CodexRunnerTests(unittest.TestCase):
             self.assertEqual(result.usage["output_tokens"], 7)
             self.assertEqual(result.usage["reasoning_output_tokens"], 3)
             self.assertEqual(result.usage["total_tokens"], 23)
+
+    def test_run_pass_uses_claude_print_mode(self) -> None:
+        with _TemporaryTestDir() as temp_root:
+            repo_dir = temp_root / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            manager = WorkspaceManager(temp_root / "workspace")
+            context = manager.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=RuntimeOptions(
+                    model_provider="claude",
+                    provider_api_key_env="ANTHROPIC_API_KEY",
+                    provider_base_url="https://anthropic.example.test",
+                    model=CLAUDE_DEFAULT_MODEL,
+                    effort="medium",
+                    codex_path="claude.cmd",
+                ),
+            )
+            runner = CodexRunner("claude.cmd")
+            observed_commands: list[list[str]] = []
+            observed_envs: list[dict[str, str]] = []
+            observed_inputs: list[bytes | None] = []
+
+            def fake_run(command, scope_id=None, label="", input_bytes=None, env=None, cwd=None, **_kwargs):
+                observed_commands.append(command)
+                observed_envs.append(dict(env or {}))
+                observed_inputs.append(input_bytes)
+                payload = {
+                    "result": "Claude response",
+                    "usage": {
+                        "input_tokens": 17,
+                        "cache_read_input_tokens": 5,
+                        "output_tokens": 8,
+                        "total_tokens": 25,
+                    },
+                }
+                return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload).encode("utf-8"), stderr=b"")
+
+            with mock.patch.dict("os.environ", {"ANTHROPIC_API_KEY": "claude-secret"}, clear=False), mock.patch(
+                "jakal_flow.codex_runner.run_subprocess_capture",
+                side_effect=fake_run,
+            ):
+                result = runner.run_pass(
+                    context=context,
+                    prompt="Apply a safe fix",
+                    pass_type="demo pass",
+                    block_index=1,
+                    search_enabled=False,
+                    reasoning_effort="xhigh",
+                )
+
+            self.assertEqual(len(observed_commands), 1)
+            self.assertIn("--print", observed_commands[0])
+            self.assertIn("--output-format", observed_commands[0])
+            self.assertIn("json", observed_commands[0])
+            self.assertIn("--bare", observed_commands[0])
+            self.assertIn("--dangerously-skip-permissions", observed_commands[0])
+            self.assertIn("--model", observed_commands[0])
+            self.assertIn(CLAUDE_DEFAULT_MODEL, observed_commands[0])
+            self.assertIn("--effort", observed_commands[0])
+            self.assertIn("max", observed_commands[0])
+            self.assertIsNone(observed_inputs[0])
+            self.assertEqual(observed_envs[0]["ANTHROPIC_API_KEY"], "claude-secret")
+            self.assertEqual(observed_envs[0]["ANTHROPIC_BASE_URL"], "https://anthropic.example.test")
+            self.assertEqual(result.last_message, "Claude response")
+            self.assertEqual(result.usage["input_tokens"], 17)
+            self.assertEqual(result.usage["cached_input_tokens"], 5)
+            self.assertEqual(result.usage["output_tokens"], 8)
+            self.assertEqual(result.usage["total_tokens"], 25)
 
     def test_run_pass_strips_inherited_pythonpath_from_child_env(self) -> None:
         with tempfile.TemporaryDirectory() as raw_temp:

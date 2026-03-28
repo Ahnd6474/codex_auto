@@ -124,7 +124,7 @@ class RuntimeOptions:
         current_path = str(self.codex_path or "").strip()
         legacy_default_path = default_codex_path()
         provider_default_path = default_codex_path(normalized_provider)
-        if not current_path or (normalized_provider == "gemini" and current_path == legacy_default_path):
+        if not current_path or (provider_default_path != legacy_default_path and current_path == legacy_default_path):
             self.codex_path = provider_default_path
 
     def to_dict(self) -> dict[str, Any]:

@@ -22,7 +22,7 @@ from jakal_flow.models import ExecutionPlanState, ExecutionStep
 from jakal_flow.share import share_server_status_payload
 from jakal_flow.status_views import effective_project_status
 from jakal_flow.ui_bridge import default_workspace_root, progress_caption, run_command, runtime_from_payload
-from jakal_flow.step_models import GEMINI_DEFAULT_MODEL
+from jakal_flow.step_models import CLAUDE_DEFAULT_MODEL, GEMINI_DEFAULT_MODEL
 
 
 def local_temp_root() -> Path:
@@ -458,6 +458,20 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(runtime.codex_path, "gemini.cmd" if os.name == "nt" else "gemini")
         self.assertEqual(runtime.model, GEMINI_DEFAULT_MODEL)
         self.assertEqual(runtime.model_slug_input, GEMINI_DEFAULT_MODEL)
+
+    def test_runtime_from_payload_applies_claude_defaults(self) -> None:
+        runtime = runtime_from_payload(
+            {
+                "model_provider": "claude",
+            }
+        )
+
+        self.assertEqual(runtime.model_provider, "claude")
+        self.assertEqual(runtime.provider_api_key_env, "ANTHROPIC_API_KEY")
+        self.assertEqual(runtime.provider_base_url, "")
+        self.assertEqual(runtime.codex_path, "claude.cmd" if os.name == "nt" else "claude")
+        self.assertEqual(runtime.model, CLAUDE_DEFAULT_MODEL)
+        self.assertEqual(runtime.model_slug_input, CLAUDE_DEFAULT_MODEL)
 
     def test_bootstrap_exposes_workspace_and_model_presets(self) -> None:
         with TemporaryTestDir() as temp_dir:

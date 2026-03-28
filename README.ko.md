@@ -18,7 +18,7 @@
 
 - `projects/<repo_slug>/` 단위의 다중 저장소 워크스페이스 관리
 - Python 오케스트레이터 위에 React + Tauri 데스크톱 셸 제공
-- OpenAI / Codex 클라우드, Gemini CLI, OpenRouter, OpenCDK, 로컬 OpenAI 호환 서버, Codex OSS 로컬 실행 지원
+- OpenAI / Codex 클라우드, Claude Code, Gemini CLI, OpenRouter, OpenCDK, 로컬 OpenAI 호환 서버, Codex OSS 로컬 실행 지원
 - 표준 소프트웨어 워크플로와 ML 실험 워크플로 지원
 - owned path 기반 안전 조건을 둔 병렬 DAG 실행
 - 계획, 체크포인트, 로그, 메모리, 리포트, SVG, UI 이벤트 히스토리를 프로젝트별로 분리 저장
@@ -215,6 +215,21 @@ python -m jakal_flow run \
   --max-blocks 1
 ```
 
+Claude Code 실행:
+
+```bash
+python -m jakal_flow run \
+  --repo-url https://github.com/Ahnd6474/lit.git \
+  --branch main \
+  --workspace-root .jakal-flow-workspace \
+  --model-provider claude \
+  --model sonnet \
+  --approval-mode never \
+  --sandbox-mode workspace-write \
+  --test-cmd "python -m pytest" \
+  --max-blocks 1
+```
+
 로컬 OpenAI 호환 서버 실행:
 
 ```bash
@@ -389,6 +404,8 @@ jakal-flow run \
 ## 참고
 
 - `codex exec`는 비대화형으로 호출되며 JSON 이벤트 스트림은 `logs/block_*/` 아래에 저장됩니다.
+- Gemini CLI 실행도 headless JSON 출력으로 기록되며 같은 `logs/block_*/` 추적 파일 구조를 사용합니다.
+- Claude Code 실행도 print-mode JSON 출력으로 기록되며 같은 `logs/block_*/` 추적 파일 구조를 사용합니다.
 - Gemini CLI 실행도 headless JSON 출력으로 기록되며 같은 `logs/block_*/` 추적 파일 구조를 사용합니다.
 - 로컬 OSS 실행도 Codex CLI를 통해 수행됩니다.
 - 데스크톱 브리지는 Windows에서 UTF-8 stdio를 강제해 JSON과 한글 텍스트가 깨지지 않도록 처리합니다.

@@ -40,6 +40,15 @@ PROVIDER_PRESETS: dict[str, ProviderPreset] = {
         supports_auto_model=True,
         supports_catalog=True,
     ),
+    "claude": ProviderPreset(
+        provider="claude",
+        display_name="Claude Code",
+        description="Use the installed Claude Code CLI in print mode with Anthropic authentication or API key credentials.",
+        default_api_key_env="ANTHROPIC_API_KEY",
+        default_billing_mode=BILLING_MODE_INCLUDED,
+        supports_auto_model=False,
+        supports_catalog=False,
+    ),
     "gemini": ProviderPreset(
         provider="gemini",
         display_name="Gemini CLI",

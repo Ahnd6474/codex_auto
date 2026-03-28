@@ -57,7 +57,7 @@ from .share import (
     save_share_server_config,
     share_server_status_payload,
 )
-from .step_models import GEMINI_DEFAULT_MODEL
+from .step_models import CLAUDE_DEFAULT_MODEL, GEMINI_DEFAULT_MODEL
 from .ui_bridge_commands import (
     BridgeCommandContext,
     build_project_command_handlers,
@@ -465,9 +465,14 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
     raw_effort = str(merged.get("effort", "")).strip()
     merged["effort"] = raw_effort.lower()
 
-    if merged["model_provider"] == "gemini" and "model" not in payload and "model_slug_input" not in payload:
-        merged["model"] = GEMINI_DEFAULT_MODEL
-        merged["model_slug_input"] = GEMINI_DEFAULT_MODEL
+    provider_default_model = ""
+    if merged["model_provider"] == "gemini":
+        provider_default_model = GEMINI_DEFAULT_MODEL
+    elif merged["model_provider"] == "claude":
+        provider_default_model = CLAUDE_DEFAULT_MODEL
+    if provider_default_model and "model" not in payload and "model_slug_input" not in payload:
+        merged["model"] = provider_default_model
+        merged["model_slug_input"] = provider_default_model
 
     if not merged["model"]:
         preset = model_preset_by_id(merged["model_preset"] or DEFAULT_MODEL_PRESET_ID)

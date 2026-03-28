@@ -157,6 +157,7 @@ export function AppSettingsView({
                   disabled={runtimeBusy}
                 >
                   <option value="openai">{t("option.providerOpenAI")}</option>
+                  <option value="claude">Claude Code</option>
                   <option value="gemini">Gemini CLI</option>
                   <option value="openrouter">{t("option.providerOpenRouter")}</option>
                   <option value="opencdk">{t("option.providerOpenCDK")}</option>

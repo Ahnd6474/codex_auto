@@ -52,6 +52,7 @@ class CodexRunner:
             output_file=output_file,
             search_enabled=search_enabled,
             reasoning_effort=reasoning_effort,
+            prompt_text=formatted_prompt,
         )
         stdout = ""
         stderr = ""
@@ -70,13 +71,15 @@ class CodexRunner:
                 scope_id=scope_id,
                 label=f"{backend.title()} {pass_type}",
                 cwd=context.paths.repo_dir,
-                input_bytes=formatted_prompt.encode("utf-8"),
+                input_bytes=None if backend == "claude" else formatted_prompt.encode("utf-8"),
                 env=child_env,
             )
             stdout = decode_process_output(completed.stdout)
             stderr = decode_process_output(completed.stderr)
             if backend == "gemini":
                 self._write_gemini_output_file(output_file, stdout)
+            elif backend == "claude":
+                self._write_claude_output_file(output_file, stdout)
             attempt_last_message = read_text(output_file).strip()
             unexpected_token_detected = self._is_unexpected_token_failure(
                 completed.returncode,
@@ -167,8 +170,7 @@ class CodexRunner:
             if not isinstance(payload, dict):
                 continue
             if payload.get("type") != "turn.completed":
-                if isinstance(payload, dict):
-                    self._accumulate_gemini_usage(payload, usage)
+                if isinstance(payload, dict) and self._accumulate_gemini_usage(payload, usage):
                     gemini_usage_detected = True
                 continue
             turn_usage = payload.get("usage", {})
@@ -183,6 +185,7 @@ class CodexRunner:
                 payload = None
             if isinstance(payload, dict):
                 self._accumulate_gemini_usage(payload, usage)
+                self._accumulate_claude_usage(payload, usage)
         if usage["total_tokens"] <= 0:
             usage["total_tokens"] = (
                 usage["input_tokens"] + usage["output_tokens"] + usage["reasoning_output_tokens"]
@@ -230,6 +233,19 @@ class CodexRunner:
 
     def _provider_environment(self, context: ProjectContext, *, backend: str) -> dict[str, str]:
         provider = normalize_model_provider(getattr(context.runtime, "model_provider", ""))
+        if backend == "claude" or provider == "claude":
+            preset = provider_preset("claude")
+            provider_base_url = str(getattr(context.runtime, "provider_base_url", "") or "").strip() or preset.default_base_url
+            api_key_env_name = str(getattr(context.runtime, "provider_api_key_env", "") or "").strip() or preset.default_api_key_env
+            dotenv_path = context.paths.repo_dir / ".env"
+            env_updates: dict[str, str] = {}
+            if provider_base_url:
+                env_updates["ANTHROPIC_BASE_URL"] = provider_base_url
+            if api_key_env_name:
+                api_key = get_env_or_dotenv(api_key_env_name, dotenv_path).strip()
+                if api_key:
+                    env_updates["ANTHROPIC_API_KEY"] = api_key
+            return env_updates
         if backend == "gemini" or provider == "gemini":
             api_key_env_name = str(getattr(context.runtime, "provider_api_key_env", "") or "").strip() or "GEMINI_API_KEY"
             if not api_key_env_name:
@@ -259,6 +275,8 @@ class CodexRunner:
         return f'"{escaped}"'
 
     def _backend_kind(self, provider: str) -> str:
+        if provider == "claude" or cli_backend_kind(self.codex_path) == "claude":
+            return "claude"
         if provider == "gemini" or cli_backend_kind(self.codex_path) == "gemini":
             return "gemini"
         return "codex"
@@ -271,8 +289,15 @@ class CodexRunner:
         output_file: Path,
         search_enabled: bool,
         reasoning_effort: str | None,
+        prompt_text: str,
     ) -> list[str]:
         provider = normalize_model_provider(getattr(context.runtime, "model_provider", ""))
+        if backend == "claude":
+            return self._build_claude_command(
+                context,
+                prompt_text=prompt_text,
+                reasoning_effort=reasoning_effort,
+            )
         if backend == "gemini":
             return self._build_gemini_command(context)
         command = [self.codex_path]
@@ -315,6 +340,33 @@ class CodexRunner:
         )
         return command
 
+    def _build_claude_command(
+        self,
+        context: ProjectContext,
+        *,
+        prompt_text: str,
+        reasoning_effort: str | None,
+    ) -> list[str]:
+        command = [
+            self.codex_path,
+            "--print",
+            "--output-format",
+            "json",
+            "--bare",
+            "--dangerously-skip-permissions",
+        ]
+        effort = self._claude_reasoning_effort(
+            normalize_reasoning_effort(str(reasoning_effort or getattr(context.runtime, "effort", "")), fallback="medium")
+        )
+        if effort:
+            command.extend(["--effort", effort])
+        if not is_auto_model(context.runtime.model):
+            command.extend(["--model", context.runtime.model])
+        for directory in (context.paths.docs_dir, context.paths.memory_dir, context.paths.state_dir):
+            command.extend(["--add-dir", str(directory)])
+        command.append(prompt_text)
+        return command
+
     def _build_gemini_command(
         self,
         context: ProjectContext,
@@ -354,19 +406,35 @@ class CodexRunner:
         if response_text:
             write_text(output_file, response_text)
 
-    def _accumulate_gemini_usage(self, payload: dict[str, object], usage: dict[str, int]) -> None:
+    def _write_claude_output_file(self, output_file: Path, stdout: str) -> None:
+        response_text = stdout.strip()
+        if response_text:
+            try:
+                payload = parse_json_text(response_text)
+            except json.JSONDecodeError:
+                payload = None
+            if isinstance(payload, dict):
+                candidate = payload.get("result", payload.get("response", ""))
+                if isinstance(candidate, str) and candidate.strip():
+                    response_text = candidate.strip()
+        if response_text:
+            write_text(output_file, response_text)
+
+    def _accumulate_gemini_usage(self, payload: dict[str, object], usage: dict[str, int]) -> bool:
         stats = payload.get("stats")
         if not isinstance(stats, dict):
-            return
+            return False
         models = stats.get("models")
         if not isinstance(models, dict):
-            return
+            return False
+        detected = False
         for details in models.values():
             if not isinstance(details, dict):
                 continue
             tokens = details.get("tokens")
             if not isinstance(tokens, dict):
                 continue
+            detected = True
             prompt_tokens = tokens.get("prompt")
             cached_tokens = tokens.get("cached")
             candidate_tokens = tokens.get("candidates")
@@ -382,3 +450,34 @@ class CodexRunner:
                 usage["reasoning_output_tokens"] += thought_tokens
             if isinstance(total_tokens, int):
                 usage["total_tokens"] += total_tokens
+        return detected
+
+    def _accumulate_claude_usage(self, payload: dict[str, object], usage: dict[str, int]) -> None:
+        if "result" not in payload and str(payload.get("subtype", "")).strip().lower() != "result":
+            return
+        raw_usage = payload.get("usage")
+        if not isinstance(raw_usage, dict):
+            return
+        input_tokens = raw_usage.get("input_tokens")
+        cached_tokens = raw_usage.get("cache_read_input_tokens", raw_usage.get("cached_input_tokens"))
+        output_tokens = raw_usage.get("output_tokens")
+        reasoning_tokens = raw_usage.get("reasoning_output_tokens", raw_usage.get("thinking_tokens"))
+        total_tokens = raw_usage.get("total_tokens")
+        if isinstance(input_tokens, int):
+            usage["input_tokens"] += input_tokens
+        if isinstance(cached_tokens, int):
+            usage["cached_input_tokens"] += cached_tokens
+        if isinstance(output_tokens, int):
+            usage["output_tokens"] += output_tokens
+        if isinstance(reasoning_tokens, int):
+            usage["reasoning_output_tokens"] += reasoning_tokens
+        if isinstance(total_tokens, int):
+            usage["total_tokens"] += total_tokens
+
+    def _claude_reasoning_effort(self, effort: str) -> str:
+        normalized = str(effort or "").strip().lower()
+        if normalized == "xhigh":
+            return "max"
+        if normalized in {"low", "medium", "high"}:
+            return normalized
+        return "medium"

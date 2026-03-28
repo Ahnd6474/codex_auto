@@ -24,10 +24,10 @@ MODEL_PAGE_LIMIT = 100
 
 def resolve_codex_path(codex_path: str) -> str:
     codex_path = str(codex_path or "").strip() or default_codex_path()
-    if codex_path.lower() == "codex.cmd":
+    if codex_path.lower() in {"codex.cmd", "claude.cmd"}:
         appdata = os.environ.get("APPDATA")
         if appdata:
-            candidate = Path(appdata) / "npm" / "codex.cmd"
+            candidate = Path(appdata) / "npm" / codex_path
             if candidate.exists():
                 return str(candidate)
     return codex_path
@@ -36,6 +36,8 @@ def resolve_codex_path(codex_path: str) -> str:
 def cli_backend_kind(codex_path: str) -> str:
     resolved = str(codex_path or "").strip() or default_codex_path()
     command_name = Path(resolved).name.strip().lower()
+    if command_name.startswith("claude"):
+        return "claude"
     if command_name.startswith("gemini"):
         return "gemini"
     return "codex"
@@ -189,8 +191,11 @@ class _CodexAppServerSession:
 
 
 def fetch_codex_backend_snapshot(codex_path: str = "") -> CodexBackendSnapshot:
-    if cli_backend_kind(codex_path) == "gemini":
+    backend = cli_backend_kind(codex_path)
+    if backend == "gemini":
         return _fetch_gemini_backend_snapshot(codex_path)
+    if backend == "claude":
+        return _fetch_claude_backend_snapshot(codex_path)
     checked_at = now_utc_iso()
     try:
         with _CodexAppServerSession(codex_path) as session:
@@ -270,6 +275,85 @@ def _fetch_gemini_backend_snapshot(codex_path: str) -> CodexBackendSnapshot:
     )
 
 
+def _fetch_claude_backend_snapshot(codex_path: str) -> CodexBackendSnapshot:
+    checked_at = now_utc_iso()
+    resolved_path = resolve_codex_path(codex_path or default_codex_path("claude"))
+    try:
+        version_completed = subprocess.run(
+            [resolved_path, "--version"],
+            capture_output=True,
+            check=False,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=4,
+        )
+    except (FileNotFoundError, OSError, subprocess.SubprocessError) as exc:
+        return CodexBackendSnapshot(
+            checked_at=checked_at,
+            available=False,
+            model_catalog=[],
+            account={
+                "authenticated": False,
+                "requires_openai_auth": False,
+                "type": "claude-code",
+                "email": "",
+                "plan_type": "unknown",
+            },
+            rate_limits={"default_limit_id": "", "items": []},
+            error=str(exc),
+        )
+
+    version_text = (version_completed.stdout or version_completed.stderr or "").strip()
+    available = version_completed.returncode == 0
+    account = {
+        "authenticated": False,
+        "requires_openai_auth": False,
+        "type": "claude-code",
+        "email": "",
+        "plan_type": "unknown",
+        "version": version_text,
+    }
+    error = "" if available else (version_text or f"Claude Code CLI exited with {version_completed.returncode}.")
+
+    if not available:
+        return CodexBackendSnapshot(
+            checked_at=checked_at,
+            available=False,
+            model_catalog=[],
+            account=account,
+            rate_limits={"default_limit_id": "", "items": []},
+            error=error,
+        )
+
+    try:
+        auth_completed = subprocess.run(
+            [resolved_path, "auth", "status"],
+            capture_output=True,
+            check=False,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=4,
+        )
+        auth_payload = _parse_json_output(auth_completed.stdout)
+        account.update(_format_claude_account_snapshot(auth_completed.returncode, auth_payload))
+        if auth_completed.returncode not in {0, 1}:
+            auth_text = (auth_completed.stdout or auth_completed.stderr or "").strip()
+            error = auth_text or f"Claude auth status exited with {auth_completed.returncode}."
+    except (FileNotFoundError, OSError, subprocess.SubprocessError) as exc:
+        error = str(exc)
+
+    return CodexBackendSnapshot(
+        checked_at=checked_at,
+        available=True,
+        model_catalog=[],
+        account=account,
+        rate_limits={"default_limit_id": "", "items": []},
+        error=error,
+    )
+
+
 def _read_model_catalog(session: _CodexAppServerSession) -> list[dict[str, Any]]:
     models = [_auto_model_entry()]
     cursor: str | None = None
@@ -344,6 +428,17 @@ def _format_model_entry(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _parse_json_output(raw: str) -> dict[str, Any]:
+    text = str(raw or "").strip()
+    if not text:
+        return {}
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def _merge_model_catalogs(*catalogs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     merged: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
@@ -362,6 +457,20 @@ def _merge_model_catalogs(*catalogs: list[dict[str, Any]]) -> list[dict[str, Any
             seen.add(key)
             merged.append(item)
     return merged
+
+
+def _format_claude_account_snapshot(returncode: int, payload: dict[str, Any]) -> dict[str, Any]:
+    authenticated = bool(payload.get("authenticated")) if "authenticated" in payload else returncode == 0
+    return {
+        "authenticated": authenticated,
+        "requires_openai_auth": False,
+        "type": str(payload.get("type", payload.get("authType", "claude-code"))).strip() or "claude-code",
+        "email": str(payload.get("email", "")).strip(),
+        "plan_type": str(
+            payload.get("planType", payload.get("plan_type", payload.get("subscriptionPlan", "unknown")))
+        ).strip()
+        or "unknown",
+    }
 
 
 def _format_account_snapshot(result: dict[str, Any]) -> dict[str, Any]:

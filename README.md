@@ -114,7 +114,7 @@ npm.cmd run tauri:dev
 - Traceability first: plans, checkpoints, UI events, test runs, block logs, reports, SVG summaries, and memory files are persisted.
 - Safe execution: safe revisions, rollback, checkpoint review, and verified-only commit flow stay in the core loop.
 - One backend, two surfaces: use the CLI directly or supervise the same Python backend through the desktop shell.
-- Flexible model routing: run the workflow through OpenAI/Codex cloud, Gemini CLI, OpenAI-compatible providers, or local OSS backends.
+- Flexible model routing: run the workflow through OpenAI/Codex cloud, Claude Code, Gemini CLI, OpenAI-compatible providers, or local OSS backends.
 
 ## What It Supports
 
@@ -142,6 +142,7 @@ npm.cmd run tauri:dev
 | Provider preset | Supported | Notes |
 | --- | --- | --- |
 | `openai` | Yes | OpenAI / Codex cloud flow |
+| `claude` | Yes | Claude Code print-mode flow |
 | `gemini` | Yes | Gemini CLI headless flow |
 | `openrouter` | Yes | OpenAI-compatible endpoint |
 | `opencdk` | Yes | OpenAI-compatible endpoint |
@@ -323,6 +324,21 @@ python -m jakal_flow run \
   --max-blocks 1
 ```
 
+Claude Code:
+
+```bash
+python -m jakal_flow run \
+  --repo-url https://github.com/Ahnd6474/lit.git \
+  --branch main \
+  --workspace-root .jakal-flow-workspace \
+  --model-provider claude \
+  --model sonnet \
+  --approval-mode never \
+  --sandbox-mode workspace-write \
+  --test-cmd "python -m pytest" \
+  --max-blocks 1
+```
+
 Local OSS via Ollama:
 
 ```bash
@@ -472,6 +488,7 @@ Key generated artifacts can include:
 ## Notes
 
 - `codex exec` is invoked non-interactively and JSON event streams are saved under `logs/block_*/`.
+- Claude Code runs use print-mode JSON output and the same per-block trace files under `logs/block_*/`.
 - Gemini CLI runs use headless JSON output and the same per-block trace files under `logs/block_*/`.
 - Local OSS runs still go through Codex CLI rather than bypassing it.
 - The desktop bridge forces UTF-8 stdio on Windows so JSON payloads and Korean text survive the bridge boundary.
