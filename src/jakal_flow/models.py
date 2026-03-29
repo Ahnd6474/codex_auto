@@ -233,9 +233,12 @@ class ProjectPaths:
     checkpoint_state_file: Path
     execution_plan_file: Path
     lineage_state_file: Path
+    spine_file: Path
+    common_requirements_file: Path
     ml_mode_state_file: Path
     ml_step_report_file: Path
     ml_experiment_reports_dir: Path
+    lineage_manifests_dir: Path
     ui_control_file: Path
     ui_event_log_file: Path
     execution_flow_svg_file: Path
@@ -244,6 +247,7 @@ class ProjectPaths:
     closeout_report_pptx_file: Path
     ml_experiment_report_file: Path
     ml_experiment_results_svg_file: Path
+    shared_contracts_file: Path
 
     def to_dict(self) -> dict[str, Any]:
         return _normalize(self)
@@ -274,6 +278,9 @@ class LineageState:
     merged_by_step_id: str | None = None
     step_ids: list[str] = field(default_factory=list)
     notes: str = ""
+    manifest_files: list[str] = field(default_factory=list)
+    latest_promotion_class: str = ""
+    latest_spine_version: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return _normalize(self)
@@ -296,6 +303,9 @@ class LineageState:
             merged_by_step_id=_optional_str(data.get("merged_by_step_id")),
             step_ids=_string_list(data.get("step_ids", [])),
             notes=str(data.get("notes", "")).strip(),
+            manifest_files=_string_list(data.get("manifest_files", [])),
+            latest_promotion_class=str(data.get("latest_promotion_class", "")).strip().lower(),
+            latest_spine_version=str(data.get("latest_spine_version", "")).strip(),
         )
 
 
@@ -399,6 +409,15 @@ class ExecutionStep:
     model: str = ""
     test_command: str = ""
     success_criteria: str = ""
+    step_type: str = ""
+    scope_class: str = ""
+    spine_version: str = ""
+    shared_contracts: list[str] = field(default_factory=list)
+    verification_profile: str = ""
+    promotion_class: str = ""
+    primary_scope_paths: list[str] = field(default_factory=list)
+    shared_reviewed_paths: list[str] = field(default_factory=list)
+    forbidden_core_paths: list[str] = field(default_factory=list)
     reasoning_effort: str = ""
     parallel_group: str = ""
     depends_on: list[str] = field(default_factory=list)
@@ -418,6 +437,7 @@ class ExecutionStep:
         legacy_description = str(data.get("description", "")).strip()
         display_description = str(data.get("display_description", "")).strip() or legacy_description
         codex_description = str(data.get("codex_description", "")).strip() or legacy_description or display_description
+        metadata = data.get("metadata", {}) if isinstance(data.get("metadata", {}), dict) else {}
         return cls(
             step_id=str(data.get("step_id", "")).strip() or "ST1",
             title=str(data.get("title", data.get("task_title", ""))).strip(),
@@ -431,16 +451,25 @@ class ExecutionStep:
             ),
             test_command=str(data.get("test_command", "")).strip(),
             success_criteria=str(data.get("success_criteria", "")).strip(),
+            step_type=str(data.get("step_type", metadata.get("step_type", ""))).strip().lower(),
+            scope_class=str(data.get("scope_class", metadata.get("scope_class", ""))).strip().lower(),
+            spine_version=str(data.get("spine_version", metadata.get("spine_version", ""))).strip(),
+            shared_contracts=_string_list(data.get("shared_contracts", metadata.get("shared_contracts", []))),
+            verification_profile=str(data.get("verification_profile", metadata.get("verification_profile", ""))).strip().lower(),
+            promotion_class=str(data.get("promotion_class", metadata.get("promotion_class", ""))).strip().lower(),
+            primary_scope_paths=_string_list(data.get("primary_scope_paths", metadata.get("primary_scope_paths", []))),
+            shared_reviewed_paths=_string_list(data.get("shared_reviewed_paths", metadata.get("shared_reviewed_paths", []))),
+            forbidden_core_paths=_string_list(data.get("forbidden_core_paths", metadata.get("forbidden_core_paths", []))),
             reasoning_effort=str(data.get("reasoning_effort", data.get("effort", ""))).strip().lower(),
             parallel_group=str(data.get("parallel_group", "")).strip(),
             depends_on=_string_list(data.get("depends_on", [])),
-            owned_paths=_string_list(data.get("owned_paths", [])),
+            owned_paths=_string_list(data.get("owned_paths", metadata.get("owned_paths", []))),
             status=str(data.get("status", "pending")).strip() or "pending",
             started_at=data.get("started_at"),
             completed_at=data.get("completed_at"),
             commit_hash=data.get("commit_hash"),
             notes=str(data.get("notes", "")).strip(),
-            metadata=data.get("metadata", {}) if isinstance(data.get("metadata", {}), dict) else {},
+            metadata=metadata,
         )
 
 
