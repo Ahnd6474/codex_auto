@@ -351,8 +351,8 @@ export function ParallelRunControlView({
         || failureArtifacts.length
       ),
   );
-  const manualDebuggerLabel = language === "ko" ? "수동 디버거 호출" : "Run Debugger";
-  const manualMergerLabel = language === "ko" ? "수동 머저 호출" : "Run Merger";
+  const manualDebuggerLabel = language === "ko" ? "디버거 호출" : "Run Debugger";
+  const manualMergerLabel = language === "ko" ? "머저 호출" : "Run Merger";
   const manualRecoveryHint = language === "ko"
     ? "자동 복구가 실패했을 때 최근 실패 로그로 debugger를 다시 실행하거나, 현재 git 충돌 상태를 merger에 넘길 수 있습니다."
     : "When automatic recovery falls short, rerun the debugger against the latest failure logs or hand the current git conflict to the merger.";
@@ -461,42 +461,6 @@ export function ParallelRunControlView({
           <p style={{ marginTop: "10px", fontSize: "12px", color: "var(--text-dim)" }}>{manualRecoveryHint}</p>
         </div>
       ) : null}
-
-      {/* ── Prompt ── */}
-      <div className="run-prompt-strip">
-        <div className="run-prompt-strip__label">
-          <span>{language === "ko" ? "프롬프트" : "Prompt"}</span>
-          <div className="run-prompt-strip__label-right">
-            <span className="run-prompt-strip__count">{livePlan?.project_prompt?.length || 0} {language === "ko" ? "자" : "chars"}</span>
-            {/* Effort pill */}
-            <select
-              className="run-effort-pill"
-              value={form?.runtime?.effort || detail?.runtime?.effort || "high"}
-              onChange={(event) =>
-                onChangeForm?.((current) => ({
-                  ...current,
-                  runtime: { ...current.runtime, effort: event.target.value },
-                }))
-              }
-              disabled={busy}
-              title={language === "ko" ? "모델 추론 강도" : "Reasoning strength"}
-            >
-              {REASONING_OPTIONS.map((opt) => (
-                <option key={opt} value={opt}>{reasoningEffortLabel(opt, language)}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <textarea
-          ref={promptRef}
-          className="run-prompt-strip__input"
-          value={promptDraft}
-          onChange={(event) => setPromptDraft(event.target.value)}
-          onBlur={() => { if (promptDraft !== promptValue) onPromptChange?.(promptDraft); }}
-          disabled={busy}
-          placeholder={language === "ko" ? "프로젝트 프롬프트를 입력하세요..." : "Enter your project prompt…"}
-        />
-      </div>
 
       {/* ── Flow chart (main area) ── */}
       <div className="run-flow-area">
@@ -628,6 +592,39 @@ export function ParallelRunControlView({
           )}
         </div>
       ) : null}
+      {/* ── Prompt (bottom, ChatGPT-style) ── */}
+      <div className="run-prompt-strip run-prompt-strip--bottom">
+        <div className="run-prompt-strip__inner">
+          <div className="run-prompt-strip__label-right">
+            <span className="run-prompt-strip__count">{livePlan?.project_prompt?.length || 0} {language === "ko" ? "자" : "chars"}</span>
+            <select
+              className="run-effort-pill"
+              value={form?.runtime?.effort || detail?.runtime?.effort || "high"}
+              onChange={(event) =>
+                onChangeForm?.((current) => ({
+                  ...current,
+                  runtime: { ...current.runtime, effort: event.target.value },
+                }))
+              }
+              disabled={busy}
+              title={language === "ko" ? "모델 추론 강도" : "Reasoning strength"}
+            >
+              {REASONING_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>{reasoningEffortLabel(opt, language)}</option>
+              ))}
+            </select>
+          </div>
+          <textarea
+            ref={promptRef}
+            className="run-prompt-strip__input"
+            value={promptDraft}
+            onChange={(event) => setPromptDraft(event.target.value)}
+            onBlur={() => { if (promptDraft !== promptValue) onPromptChange?.(promptDraft); }}
+            disabled={busy}
+            placeholder={language === "ko" ? "프로젝트 프롬프트를 입력하세요..." : "Enter your project prompt…"}
+          />
+        </div>
+      </div>
     </section>
   );
 }

@@ -2964,6 +2964,51 @@ select:focus {
   flex-shrink: 0;
 }
 
+.run-prompt-strip--bottom {
+  border-bottom: none;
+  border-top: 1px solid var(--border);
+  padding: 12px 16px 16px;
+  background: var(--bg-panel);
+}
+
+.run-prompt-strip--bottom .run-prompt-strip__inner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.run-prompt-strip--bottom .run-prompt-strip__inner:focus-within {
+  border-color: var(--bg-accent-strong);
+  box-shadow: 0 2px 12px rgba(95, 151, 214, 0.2);
+}
+
+.run-prompt-strip--bottom .run-prompt-strip__label-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.run-prompt-strip--bottom .run-prompt-strip__input {
+  border: none;
+  background: transparent;
+  padding: 2px 0;
+  min-height: 40px;
+  box-shadow: none;
+}
+
+.run-prompt-strip--bottom .run-prompt-strip__input:focus {
+  border-color: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
 .run-prompt-strip__label {
   display: flex;
   align-items: center;
