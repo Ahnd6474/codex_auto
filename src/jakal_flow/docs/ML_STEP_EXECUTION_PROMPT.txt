@@ -3,6 +3,9 @@ Follow any AGENTS.md rules in the repository.
 Treat the saved execution plan as the current scope boundary unless the user explicitly updates it.
 Managed planning documents live outside the repo at {docs_dir}.
 
+Repository AGENTS.md summary:
+{agents_summary}
+
 Workflow mode:
 {workflow_mode}
 
@@ -77,6 +80,8 @@ ML workflow requirements:
 9. Keep concise implementation notes in {research_notes_file} when they materially improve traceability.
 10. If the experiment cannot be completed safely, say so clearly in the JSON report and explain the blocker instead of fabricating results.
 11. Do not edit README.md during normal execution steps. Reserve README updates for planning artifacts outside the repo or the final closeout pass unless the user explicitly says otherwise.
+12. Use shell syntax that matches the active environment. On Windows PowerShell, do not emit bash heredocs like `python - <<'PY'`; use PowerShell-compatible here-strings, `python -c`, or temp files instead.
+13. Use the AGENTS.md summary above as the repository constraint source. Do not probe parent directories outside the managed repo just to look for another AGENTS.md file.
 
 Execution rules:
 - Never optimize directly on held-out test results unless the repository already defines that as the correct protocol.

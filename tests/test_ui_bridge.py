@@ -15,8 +15,9 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from jakal_flow.cli import main as cli_main
+from jakal_flow.cli import build_parser, main as cli_main, runtime_from_args
 from jakal_flow.bridge_events import bridge_event_context
+from jakal_flow.errors import RuntimeConfigError
 from jakal_flow.execution_control import ImmediateStopRequested
 import jakal_flow.ui_bridge as ui_bridge
 import jakal_flow.ui_bridge_payloads as ui_bridge_payloads
@@ -518,6 +519,64 @@ class UIBridgeTests(unittest.TestCase):
 
         self.assertEqual(runtime.effort, "high")
         self.assertEqual(runtime.planning_effort, "high")
+
+    def test_cli_runtime_from_args_loads_toml_config_and_set_overrides(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            config_path = temp_dir / "runtime.toml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "[runtime]",
+                        'model_provider = "gemini"',
+                        'model = "gemini-3-flash-preview"',
+                        "max_blocks = 7",
+                        "allow_push = true",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            args = build_parser().parse_args(
+                [
+                    "run",
+                    "--repo-url",
+                    "https://example.com/demo.git",
+                    "--branch",
+                    "main",
+                    "--config",
+                    str(config_path),
+                    "--set",
+                    "max_blocks=2",
+                    "--set",
+                    "allow_push=false",
+                ]
+            )
+
+            runtime = runtime_from_args(args)
+
+        self.assertEqual(runtime.model_provider, "gemini")
+        self.assertEqual(runtime.model, "gemini-3-flash-preview")
+        self.assertEqual(runtime.max_blocks, 2)
+        self.assertFalse(runtime.allow_push)
+
+    def test_cli_runtime_from_args_rejects_invalid_config_file(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            config_path = temp_dir / "runtime.json"
+            config_path.write_text("{not-json", encoding="utf-8")
+            args = build_parser().parse_args(
+                [
+                    "run",
+                    "--repo-url",
+                    "https://example.com/demo.git",
+                    "--branch",
+                    "main",
+                    "--config",
+                    str(config_path),
+                ]
+            )
+
+            with self.assertRaises(RuntimeConfigError):
+                runtime_from_args(args)
 
     def test_provider_statuses_payload_requires_all_three_installed_backends_for_ensemble(self) -> None:
         fake_snapshot = mock.Mock(

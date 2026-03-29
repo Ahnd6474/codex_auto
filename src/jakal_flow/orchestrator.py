@@ -2682,7 +2682,7 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
             worker_result.update(
                 {
                     "status": "completed" if latest_block.get("status") == "completed" else "failed",
-                    "notes": str(latest_block.get("test_summary") or "").strip() or "Parallel worker finished.",
+                    "notes": self._parallel_worker_summary(latest_block, latest_pass),
                     "commit_hash": commit_hash,
                     "changed_files": [
                         str(item).strip()
@@ -2704,6 +2704,59 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
             worker_result["status"] = "failed"
             worker_result["notes"] = str(exc).strip() or "Parallel worker failed."
         return worker_result
+
+    def _parallel_worker_summary(
+        self,
+        latest_block: dict[str, object],
+        latest_pass: dict[str, object],
+    ) -> str:
+        block_summary = str(latest_block.get("test_summary") or "").strip()
+        if block_summary:
+            return block_summary
+        if str(latest_block.get("status") or "").strip().lower() == "completed":
+            return "Parallel worker finished."
+        failure_detail = self._logged_pass_failure_detail(latest_pass)
+        if failure_detail:
+            return f"Parallel worker failed. Cause: {failure_detail}"
+        rollback_status = str(latest_block.get("rollback_status") or latest_pass.get("rollback_status") or "").strip()
+        if rollback_status and rollback_status != "not_needed":
+            return f"Parallel worker failed and was {rollback_status.replace('_', ' ')}."
+        return "Parallel worker failed."
+
+    def _logged_pass_failure_detail(self, pass_entry: dict[str, object]) -> str:
+        if not isinstance(pass_entry, dict):
+            return ""
+        test_results = pass_entry.get("test_results")
+        if isinstance(test_results, dict):
+            for key in ("failure_reason", "summary"):
+                detail = compact_text(str(test_results.get(key) or "").strip(), max_chars=280)
+                if detail:
+                    return detail
+        diagnostics = pass_entry.get("codex_diagnostics")
+        attempts = diagnostics.get("attempts", []) if isinstance(diagnostics, dict) else []
+        for attempt in reversed(attempts if isinstance(attempts, list) else []):
+            if not isinstance(attempt, dict):
+                continue
+            for key in ("stderr_excerpt", "last_message_excerpt", "stdout_excerpt"):
+                detail = self._clean_logged_failure_detail(str(attempt.get(key) or ""))
+                if detail:
+                    return detail
+        return ""
+
+    def _clean_logged_failure_detail(self, detail: str) -> str:
+        kept_lines: list[str] = []
+        for raw_line in str(detail or "").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            lowered = line.lower()
+            if lowered in {
+                "yolo mode is enabled. all tool calls will be automatically approved.",
+                "loaded cached credentials.",
+            }:
+                continue
+            kept_lines.append(line)
+        return compact_text(" ".join(kept_lines), max_chars=280) if kept_lines else ""
 
     def _cleanup_parallel_worker(self, repo_dir: Path, worker_result: dict[str, object]) -> None:
         worktree_dir = worker_result.get("worktree_dir")

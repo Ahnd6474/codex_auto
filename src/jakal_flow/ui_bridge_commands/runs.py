@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from ..chat_sessions import (
+    chat_payload,
+    execute_conversation_turn,
+    rebuild_chat_session_files,
+    resolve_chat_session,
+    save_chat_message,
+)
 from ..parallel_resources import build_parallel_resource_plan
 from ..utils import normalize_workflow_mode, read_json
 from .context import BridgeCommandContext, BridgeCommandHandler
@@ -20,6 +27,13 @@ def build_run_command_handlers(
     execution_stop_registry,
     coerce_bool,
 ) -> dict[str, BridgeCommandHandler]:
+    def chat_project_payload(project) -> dict:
+        return {
+            "repo_id": project.metadata.repo_id,
+            "repo_path": str(project.metadata.repo_path),
+            "current_status": str(project.metadata.current_status or "").strip(),
+        }
+
     def closeout_finished_event_payload(project, saved) -> tuple[str, dict]:
         details = {
             "status": saved.closeout_status,
@@ -485,6 +499,169 @@ def build_run_command_handlers(
         )
         return ctx.detail_payload(project)
 
+    def send_chat_message(ctx: BridgeCommandContext) -> dict:
+        project = resolve_project(ctx.orchestrator, ctx.payload)
+        message = str(ctx.payload.get("message", "")).strip()
+        if not message:
+            raise ValueError("message is required.")
+        chat_mode = str(ctx.payload.get("chat_mode", "conversation")).strip().lower()
+        if chat_mode not in {"conversation", "debugger", "merger"}:
+            chat_mode = "conversation"
+        session_id = str(ctx.payload.get("session_id", "")).strip()
+        create_new_session = coerce_bool(ctx.payload.get("create_new_session", False), False)
+
+        if chat_mode == "conversation":
+            plan_state = ctx.orchestrator.load_execution_plan_state(project)
+            result = execute_conversation_turn(
+                project,
+                plan_state=plan_state,
+                user_message=message,
+                session_id=session_id,
+                create_new_session=create_new_session,
+            )
+            return {
+                **result,
+                "chat_mode": chat_mode,
+                "project": chat_project_payload(project),
+                "emit_project_changed": False,
+            }
+
+        runtime_payload = ctx.payload.get("runtime", {})
+        runtime_payload = runtime_payload if isinstance(runtime_payload, dict) else {}
+        payload_with_prompt = {
+            **ctx.payload,
+            "runtime": {
+                **runtime_payload,
+                "extra_prompt": message,
+            },
+        }
+        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(payload_with_prompt, ctx.orchestrator)
+        raw_plan = ctx.payload.get("plan", {})
+        if not isinstance(raw_plan, dict):
+            raise ValueError("plan payload must be an object.")
+        plan_state = parse_plan_state(raw_plan)
+        project, _saved = ctx.orchestrator.update_execution_plan(
+            project_dir=project_dir,
+            runtime=runtime,
+            plan_state=plan_state,
+            branch=branch,
+            origin_url=origin_url,
+        )
+        session = resolve_chat_session(
+            project,
+            session_id=session_id,
+            create_new=create_new_session,
+            title_hint=message,
+        )
+        save_chat_message(
+            project,
+            session.session_id,
+            role="user",
+            text=message,
+            mode=chat_mode,
+        )
+
+        error = ""
+        detail = None
+        assistant_text = ""
+        metadata: dict[str, object] = {
+            "command": "run-manual-debugger" if chat_mode == "debugger" else "run-manual-merger",
+        }
+
+        if chat_mode == "debugger":
+            append_ui_event(project, "manual-debugger-started", "Started manual debugger recovery from chat.")
+            try:
+                project, _saved, result = ctx.orchestrator.run_manual_debugger_recovery(
+                    project_dir=project_dir,
+                    runtime=runtime,
+                    branch=branch,
+                    origin_url=origin_url,
+                )
+                assistant_text = f"Manual debugger finished. {str(result.get('summary', '')).strip()}".strip()
+                metadata.update(
+                    {
+                        "pass_name": str(result.get("pass_name", "")).strip(),
+                        "commit_hash": str(result.get("commit_hash", "")).strip(),
+                    }
+                )
+                append_ui_event(
+                    project,
+                    "manual-debugger-finished",
+                    assistant_text,
+                    {
+                        "status": "completed",
+                        "pass_name": metadata.get("pass_name", ""),
+                        "commit_hash": metadata.get("commit_hash", ""),
+                        "source": "chat",
+                    },
+                )
+                detail = ctx.detail_payload(project)
+            except Exception as exc:
+                error = str(exc).strip() or "Manual debugger recovery failed."
+                assistant_text = error
+                append_ui_event(
+                    project,
+                    "manual-debugger-finished",
+                    f"Manual debugger failed: {assistant_text}",
+                    {"status": "failed", "source": "chat"},
+                )
+        else:
+            append_ui_event(project, "manual-merger-started", "Started manual merger recovery from chat.")
+            try:
+                project, _saved, result = ctx.orchestrator.run_manual_merger_recovery(
+                    project_dir=project_dir,
+                    runtime=runtime,
+                    branch=branch,
+                    origin_url=origin_url,
+                )
+                assistant_text = f"Manual merger finished. {str(result.get('summary', '')).strip()}".strip()
+                metadata.update(
+                    {
+                        "pass_name": str(result.get("pass_name", "")).strip(),
+                        "commit_hash": str(result.get("commit_hash", "")).strip(),
+                    }
+                )
+                append_ui_event(
+                    project,
+                    "manual-merger-finished",
+                    assistant_text,
+                    {
+                        "status": "completed",
+                        "pass_name": metadata.get("pass_name", ""),
+                        "commit_hash": metadata.get("commit_hash", ""),
+                        "source": "chat",
+                    },
+                )
+                detail = ctx.detail_payload(project)
+            except Exception as exc:
+                error = str(exc).strip() or "Manual merger recovery failed."
+                assistant_text = error
+                append_ui_event(
+                    project,
+                    "manual-merger-finished",
+                    f"Manual merger failed: {assistant_text}",
+                    {"status": "failed", "source": "chat"},
+                )
+
+        save_chat_message(
+            project,
+            session.session_id,
+            role="system" if error else "assistant",
+            text=assistant_text or ("Recovery finished." if not error else error),
+            mode=chat_mode,
+            status="failed" if error else "completed",
+            metadata=metadata,
+        )
+        rebuild_chat_session_files(project, session.session_id)
+        return {
+            "chat": chat_payload(project, session_id=session.session_id, activate=True),
+            "chat_mode": chat_mode,
+            "project": chat_project_payload(project),
+            "detail": detail,
+            "error": error,
+            "emit_project_changed": not bool(error),
+        }
+
     return {
         "request-stop": request_stop,
         "approve-checkpoint": approve_checkpoint,
@@ -492,4 +669,5 @@ def build_run_command_handlers(
         "run-closeout": run_closeout,
         "run-manual-debugger": run_manual_debugger,
         "run-manual-merger": run_manual_merger,
+        "send-chat-message": send_chat_message,
     }

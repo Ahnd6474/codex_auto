@@ -49,7 +49,7 @@ def _atomic_write_bytes(path: Path, content: bytes) -> None:
             mode="wb",
             delete=False,
             dir=str(path.parent),
-            prefix=f".{path.name}.",
+            prefix=".tmp-",
             suffix=".tmp",
         ) as handle:
             handle.write(content)

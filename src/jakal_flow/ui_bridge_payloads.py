@@ -8,6 +8,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Callable
 
+from .chat_sessions import chat_active_session_file, chat_payload, chat_sessions_registry_file
 from .codex_app_server import fetch_codex_backend_snapshot
 from .model_constants import DEFAULT_LOCAL_MODEL_PROVIDER
 from .model_providers import normalize_local_model_provider, normalize_model_provider, provider_preset
@@ -21,7 +22,7 @@ from .utils import append_jsonl, compact_text, normalize_workflow_mode, now_utc_
 from .workspace import WorkspaceManager
 
 
-DETAIL_CACHE_VERSION = 9
+DETAIL_CACHE_VERSION = 10
 
 PLANNING_STAGE_DEFINITIONS = (
     {"key": "context_scan", "label": "Scan repository context"},
@@ -112,6 +113,8 @@ def project_detail_content_signature(project: ProjectContext, detail_level: str)
         project.paths.checkpoint_state_file,
         project.paths.ml_mode_state_file,
         project.paths.execution_flow_svg_file,
+        chat_sessions_registry_file(project),
+        chat_active_session_file(project),
     ]
     if normalized_detail_level == "full":
         tracked_files.extend(
@@ -898,6 +901,7 @@ def _build_project_detail_base_payload(
         history = history_payload_from_snapshot(project, log_snapshot)
         checkpoints = checkpoint_payload(project)
         config = config_payload_from_snapshot(project, log_snapshot)
+        chat = chat_payload(project, message_limit=120)
         workspace_tree = managed_workspace_tree(project)
         activity = build_activity_lines(
             project,
@@ -936,6 +940,7 @@ def _build_project_detail_base_payload(
             "timeline_markdown": "",
         }
         config = {}
+        chat = chat_payload(project, message_limit=40)
         workspace_tree = []
         activity = build_activity_lines(project, plan_state, ui_events=ui_events)[:8]
         planning_progress = build_planning_progress(ui_events)
@@ -1001,12 +1006,15 @@ def _build_project_detail_base_payload(
         "history": history,
         "checkpoints": checkpoints,
         "config": config,
+        "chat": chat,
         "files": {
             "project_root": str(project.paths.project_root),
             "repo_dir": str(project.paths.repo_dir),
             "execution_plan_file": str(project.paths.execution_plan_file),
             "ui_control_file": str(project.paths.ui_control_file),
             "ui_event_log_file": str(project.paths.ui_event_log_file),
+            "chat_sessions_file": str(chat_sessions_registry_file(project)),
+            "chat_active_session_file": str(chat_active_session_file(project)),
             "closeout_report_file": str(project.paths.closeout_report_file),
             "word_report_file": str(project.paths.closeout_report_docx_file),
             "powerpoint_report_file": str(project.paths.closeout_report_pptx_file),

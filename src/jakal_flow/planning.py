@@ -243,13 +243,18 @@ def _summarize_docs_inventory(
 
 def scan_repository_inputs(repo_dir: Path) -> dict[str, str]:
     readme = read_text(repo_dir / "README.md")
-    agents = read_text(repo_dir / "AGENTS.md")
+    agents = repository_agents_summary(repo_dir)
     return {
         "readme": compact_text(readme, 2000) or "README.md not found.",
-        "agents": compact_text(agents, 1500) or "AGENTS.md not found.",
+        "agents": agents,
         "docs": _summarize_docs_inventory(repo_dir),
         "source": _summarize_source_inventory(repo_dir),
     }
+
+
+def repository_agents_summary(repo_dir: Path, *, max_chars: int = 1500) -> str:
+    agents = read_text(repo_dir / "AGENTS.md")
+    return compact_text(agents, max_chars) or "AGENTS.md not found."
 
 
 def compact_repository_inputs(
@@ -887,6 +892,7 @@ def implementation_prompt(
     depends_on = ", ".join(execution_step.depends_on) if execution_step and execution_step.depends_on else "none"
     owned_paths = "\n".join(f"- {path}" for path in execution_step.owned_paths) if execution_step and execution_step.owned_paths else "- none declared"
     step_metadata = execution_step.metadata if execution_step and execution_step.metadata else {}
+    agents_summary = repository_agents_summary(context.paths.repo_dir, max_chars=1200)
     try:
         return template.format(
             repo_dir=context.paths.repo_dir,
@@ -900,6 +906,7 @@ def implementation_prompt(
             success_criteria=success_criteria,
             depends_on=depends_on,
             owned_paths=owned_paths,
+            agents_summary=agents_summary,
             step_metadata=json.dumps(step_metadata, indent=2, sort_keys=True) if step_metadata else "{}",
             candidate_rationale=candidate.rationale,
             memory_context=memory_context,
@@ -951,6 +958,7 @@ def debugger_prompt(
     depends_on = ", ".join(execution_step.depends_on) if execution_step and execution_step.depends_on else "none"
     owned_paths = "\n".join(f"- {path}" for path in execution_step.owned_paths) if execution_step and execution_step.owned_paths else "- none declared"
     step_metadata = execution_step.metadata if execution_step and execution_step.metadata else {}
+    agents_summary = repository_agents_summary(context.paths.repo_dir, max_chars=1200)
     try:
         return template.format(
             repo_dir=context.paths.repo_dir,
@@ -964,6 +972,7 @@ def debugger_prompt(
             success_criteria=success_criteria,
             depends_on=depends_on,
             owned_paths=owned_paths,
+            agents_summary=agents_summary,
             step_metadata=json.dumps(step_metadata, indent=2, sort_keys=True) if step_metadata else "{}",
             candidate_rationale=candidate.rationale,
             memory_context=memory_context,
