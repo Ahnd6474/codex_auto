@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import { commandLabel, isDebuggingStatus, isPlanningProgressRunning, projectStatusWithJob, statusTone, toolbarProgressCaptionDisplay } from "../../utils";
@@ -139,7 +139,6 @@ function ProjectSelector({ projects, selectedProjectId, onSelectProject = () => 
   const searchProjectsPlaceholder = language === "ko" ? "프로젝트 검색..." : "Search projects...";
   const noProjectsLabel = language === "ko" ? "프로젝트 없음" : "No projects yet";
   const selectedProjectName = selectedProject?.display_name || selectProjectPlaceholder;
-  const selectedTone = selectedProject ? statusTone(selectedProject.status) : "neutral";
 
   function handleNewProject() {
     setOpen(false);
@@ -167,7 +166,6 @@ function ProjectSelector({ projects, selectedProjectId, onSelectProject = () => 
           </span>
         </span>
         <span className="project-selector__btn-trailing">
-          <span className={`chip-dot chip-dot--${selectedTone}`} />
           {open ? <ChevronDown /> : <ChevronRight />}
         </span>
       </button>
@@ -206,6 +204,29 @@ function ProjectSelector({ projects, selectedProjectId, onSelectProject = () => 
     </div>
   );
 }
+
+const MemoProjectSelector = memo(ProjectSelector, (prevProps, nextProps) => {
+  if (prevProps.selectedProjectId !== nextProps.selectedProjectId) {
+    return false;
+  }
+  const prevProjects = Array.isArray(prevProps.projects) ? prevProps.projects : [];
+  const nextProjects = Array.isArray(nextProps.projects) ? nextProps.projects : [];
+  if (prevProjects.length !== nextProjects.length) {
+    return false;
+  }
+  for (let index = 0; index < prevProjects.length; index += 1) {
+    const prevProject = prevProjects[index];
+    const nextProject = nextProjects[index];
+    if (
+      prevProject?.repo_id !== nextProject?.repo_id
+      || prevProject?.display_name !== nextProject?.display_name
+      || prevProject?.status !== nextProject?.status
+    ) {
+      return false;
+    }
+  }
+  return true;
+});
 
 function RemoteLinkIcon() {
   return (
@@ -311,7 +332,7 @@ export function IdeToolbar({
         </button>
       </div>
 
-      <ProjectSelector
+      <MemoProjectSelector
         projects={projects}
         selectedProjectId={selectedProjectId}
         onSelectProject={onSelectProject}
