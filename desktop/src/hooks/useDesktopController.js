@@ -191,8 +191,8 @@ export function useDesktopController() {
   }, [centerTab, setCenterTab]);
 
   useEffect(() => {
-    if (sidebarTab === "github") {
-      setSidebarTab("projects");
+    if (["github", "projects", "history"].includes(sidebarTab)) {
+      setSidebarTab("workspace");
     }
   }, [sidebarTab, setSidebarTab]);
 
@@ -1050,7 +1050,7 @@ export function useDesktopController() {
     setMessage(null);
     clearSelectedProjectState(defaultRuntime);
     setCenterTab("config");
-    setSidebarTab("projects");
+    setSidebarTab("workspace");
   }
 
   function applyProgramSettingsNow(nextSettings) {

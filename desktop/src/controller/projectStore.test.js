@@ -146,3 +146,115 @@ test("applyProjectDetailState preserves the current project_dir when a sparse de
   assert.equal(capturedProjectForm.display_name, "Existing Repo");
   assert.equal(capturedProjectForm.runtime.model_provider, "gemini");
 });
+
+test("applyProjectDetailState preserves a manually cleared step selection on same-project refresh", () => {
+  let capturedSelectedStepId = "__unset__";
+
+  applyProjectDetailState({
+    detail: {
+      project: {
+        repo_id: "repo-1",
+        repo_path: "C:/repo",
+      },
+      runtime: {
+        model_provider: "openai",
+      },
+      plan: {
+        steps: [
+          { step_id: "ST1", status: "pending" },
+          { step_id: "ST2", status: "pending" },
+        ],
+      },
+      codex_status: {
+        model_catalog: [],
+      },
+    },
+    refs: {
+      lastAppliedDetailSignatureRef: { current: "" },
+    },
+    state: {
+      projectDetail: {
+        project: {
+          repo_id: "repo-1",
+        },
+      },
+      modelCatalog: [],
+      activeJob: null,
+      defaultRuntime: {
+        model_provider: "openai",
+      },
+      planDirty: false,
+    },
+    setters: {
+      transition: (callback) => callback(),
+      setProjectDetail: () => {},
+      setModelCatalog: () => {},
+      setShareSettings: () => {},
+      setLoadingProjectId: () => {},
+      setProjectForm: () => {},
+      setPlanDraft: () => {},
+      setSelectedStepId: (updater) => {
+        capturedSelectedStepId = typeof updater === "function" ? updater("") : updater;
+      },
+      setPlanDirty: () => {},
+    },
+  });
+
+  assert.equal(capturedSelectedStepId, "");
+});
+
+test("applyProjectDetailState selects the first pending step when switching to a different project", () => {
+  let capturedSelectedStepId = "__unset__";
+
+  applyProjectDetailState({
+    detail: {
+      project: {
+        repo_id: "repo-2",
+        repo_path: "C:/repo-2",
+      },
+      runtime: {
+        model_provider: "openai",
+      },
+      plan: {
+        steps: [
+          { step_id: "ST9", status: "completed" },
+          { step_id: "ST10", status: "pending" },
+        ],
+      },
+      codex_status: {
+        model_catalog: [],
+      },
+    },
+    refs: {
+      lastAppliedDetailSignatureRef: { current: "" },
+    },
+    state: {
+      projectDetail: {
+        project: {
+          repo_id: "repo-1",
+        },
+      },
+      modelCatalog: [],
+      activeJob: null,
+      defaultRuntime: {
+        model_provider: "openai",
+      },
+      planDirty: false,
+    },
+    setters: {
+      transition: (callback) => callback(),
+      setProjectDetail: () => {},
+      setModelCatalog: () => {},
+      setShareSettings: () => {},
+      setLoadingProjectId: () => {},
+      setProjectForm: () => {},
+      setPlanDraft: () => {},
+      setSelectedStepId: (updater) => {
+        capturedSelectedStepId = typeof updater === "function" ? updater("") : updater;
+      },
+      setPlanDirty: () => {},
+    },
+  });
+
+  assert.equal(capturedSelectedStepId, "ST10");
+});

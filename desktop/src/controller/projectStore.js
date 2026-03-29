@@ -389,6 +389,7 @@ export function applyProjectDetailState({
     normalizedDetail?.project?.repo_id,
     options.preserveDirtyPlan ?? state.planDirty,
   );
+  const sameProject = sameProjectDetail(normalizedDetail, state.projectDetail);
   refs.lastAppliedDetailSignatureRef.current = applySignature;
   const selectableStepId = firstSelectableStepId(normalizedDetail.plan);
   setters.transition(() => {
@@ -407,17 +408,17 @@ export function applyProjectDetailState({
     });
     if (!preserveDirtyPlan) {
       setters.setPlanDraft(cloneValue(normalizedDetail.plan));
-      if (options.preserveSelectedStep) {
-        setters.setSelectedStepId((current) => {
-          const currentStep = (normalizedDetail?.plan?.steps || []).find((step) => step?.step_id === current);
-          if (currentStep && currentStep.status !== "completed") {
-            return current;
-          }
-          return selectableStepId;
-        });
-      } else {
-        setters.setSelectedStepId(selectableStepId);
-      }
+      setters.setSelectedStepId((current) => {
+        const currentStepId = String(current || "").trim();
+        const currentStep = (normalizedDetail?.plan?.steps || []).find((step) => step?.step_id === currentStepId);
+        if (currentStep && currentStep.status !== "completed") {
+          return currentStepId;
+        }
+        if (sameProject && !currentStepId) {
+          return "";
+        }
+        return selectableStepId;
+      });
       setters.setPlanDirty(false);
     }
   });

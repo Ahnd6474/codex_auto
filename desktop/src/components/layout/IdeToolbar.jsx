@@ -318,13 +318,14 @@ export function IdeToolbar({
       {/* Quick actions */}
       <div className="ide-toolbar__group">
         <button
-          className={`toolbar-btn ${activeCenterTab === "config" ? "toolbar-btn--active" : ""}`}
+          className={`toolbar-btn ${activeCenterTab === "app-settings" ? "toolbar-btn--active" : ""}`}
           onClick={onOpenSettings}
-          title={t("tab.config")}
+          title={t("toolbar.programSettings")}
           type="button"
-          aria-label={t("tab.config")}
+          aria-label={t("toolbar.programSettings")}
         >
           <SettingsIcon />
+          <span>{t("toolbar.programSettings")}</span>
         </button>
 
         <div className="toolbar-divider" />

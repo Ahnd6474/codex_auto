@@ -2425,3 +2425,44 @@ test("HistoryView exposes a delete action for archived runs", async () => {
 
   assert.match(html, />Delete Archived Run<\/button>/);
 });
+
+test("IdeToolbar labels the top settings action as Program Settings", async () => {
+  const html = await renderBundledComponent(
+    "ide-toolbar-program-settings-render",
+    "./src/components/layout/IdeToolbar.jsx",
+    "IdeToolbar",
+    {
+      projects: [],
+      selectedProjectId: "",
+      onSelectProject: noop,
+      onNewProject: noop,
+      projectDetail: {
+        project: {
+          current_status: "idle",
+        },
+      },
+      planDraft: {
+        steps: [],
+      },
+      pendingCheckpoint: null,
+      busy: false,
+      activeJob: null,
+      activeCenterTab: "app-settings",
+      projectPath: "",
+      githubUrl: "",
+      shareUrl: "",
+      shareBusy: false,
+      onRefresh: noop,
+      onOpenSettings: noop,
+      onGeneratePlan: noop,
+      onRunPlan: noop,
+      onApproveCheckpoint: noop,
+      onSmartShareLink: noop,
+      onOpenFolder: noop,
+      onOpenVsCode: noop,
+      onOpenGithub: noop,
+    },
+  );
+
+  assert.match(html, /Program Settings/);
+});
