@@ -142,6 +142,33 @@ pre {
   gap: 0;
   padding: 0;
   overflow: hidden;
+  position: relative;
+}
+
+.floating-right-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 24;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--toolbar-pill-border);
+  border-radius: 6px;
+  background: var(--toolbar-pill-bg);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.floating-right-toggle:hover {
+  background: var(--bg-panel-hover);
+  border-color: var(--border-strong);
+}
+
+.floating-right-toggle--active {
+  color: var(--info);
 }
 
 .content-card,
@@ -154,7 +181,7 @@ pre {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 10px;
+  padding: 6px 24px 6px 10px;
   background: var(--toolbar-surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
@@ -172,6 +199,21 @@ pre {
 
 .ide-toolbar__group--utility {
   flex-shrink: 0;
+}
+
+.ide-toolbar__group--utility .toolbar-btn--icon {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--toolbar-pill-border);
+  border-radius: 5px;
+  background: var(--toolbar-pill-bg);
+  color: var(--text);
+}
+
+.ide-toolbar__group--utility .toolbar-btn--icon:hover:not(:disabled) {
+  background: var(--bg-panel-hover);
+  border-color: var(--border-strong);
 }
 
 .ide-toolbar__group--actions {
@@ -1198,7 +1240,7 @@ pre {
   border-radius: 999px;
   background: linear-gradient(90deg, rgba(95, 151, 214, 0.2), rgba(95, 151, 214, 0.95), rgba(95, 151, 214, 0.2));
   transform-origin: center;
-  animation: sidebar-project-loading 1.1s ease-in-out infinite;
+  opacity: 0.8;
 }
 
 .status-dot {
@@ -1808,14 +1850,15 @@ pre {
 /* ── Project selector (toolbar) ── */
 .project-selector {
   position: relative;
-  flex: 1 1 280px;
-  min-width: 0;
-  max-width: 360px;
+  flex: 0 0 clamp(220px, 24vw, 300px);
+  width: clamp(220px, 24vw, 300px);
+  min-width: 220px;
+  max-width: 300px;
 }
 
 .project-selector--primary {
   min-width: 220px;
-  max-width: 360px;
+  max-width: 300px;
 }
 
 .project-selector__btn {
@@ -1840,8 +1883,9 @@ pre {
 .project-selector__btn--primary {
   width: 100%;
   max-width: none;
-  height: 34px;
-  padding: 0 10px;
+  min-height: 36px;
+  height: auto;
+  padding: 4px 10px;
   gap: 8px;
   justify-content: space-between;
   background: linear-gradient(180deg, var(--bg-panel), var(--bg-panel-alt));
@@ -1859,6 +1903,14 @@ pre {
 .project-selector__btn-main {
   gap: 8px;
   flex: 1;
+  overflow: hidden;
+}
+
+.project-selector__btn-main > svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  display: block;
 }
 
 .project-selector__btn-trailing {
@@ -1877,17 +1929,23 @@ pre {
   min-width: 0;
   flex-direction: column;
   align-items: flex-start;
+  justify-content: center;
   gap: 1px;
+  overflow: hidden;
 }
 
 .project-selector__btn-label {
+  display: block;
+  width: 100%;
   font-size: 10px;
   line-height: 1;
   color: var(--text-dim);
 }
 
 .project-selector__btn-name {
+  display: block;
   max-width: 100%;
+  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3208,7 +3266,6 @@ select:focus {
   pointer-events: none;
   border-radius: inherit;
   opacity: 0.13;
-  transition: width 600ms cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 0;
 }
 
@@ -3232,7 +3289,7 @@ select:focus {
   top: 0; right: 0; bottom: 0;
   width: 24px;
   background: linear-gradient(to right, transparent, rgba(95,151,214,0.45));
-  animation: fill-shimmer 1.8s ease-in-out infinite;
+  opacity: 0.65;
 }
 
 @keyframes fill-shimmer {

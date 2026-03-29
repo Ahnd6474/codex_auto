@@ -352,7 +352,7 @@ export function useDesktopController() {
       },
     });
     if (detail?.share) {
-      setWorkspaceShareDetail(detail.share);
+      setWorkspaceShareDetail(normalizeWorkspaceShareDetail(detail.share));
     }
     if (normalizedDetail) {
       const nextProjects = applyProjectDetailListingState({
@@ -387,6 +387,22 @@ export function useDesktopController() {
     return Boolean(projectDetail?.loaded_sections?.[sectionKey]);
   }
 
+  function normalizeWorkspaceShareDetail(shareDetail, fallbackSession = null) {
+    if (!shareDetail || typeof shareDetail !== "object") {
+      return null;
+    }
+    const resolvedSession =
+      shareDetail.active_session
+      || shareDetail.project_active_session
+      || fallbackSession
+      || null;
+    return {
+      ...shareDetail,
+      active_session: resolvedSession,
+      project_active_session: shareDetail.project_active_session || resolvedSession,
+    };
+  }
+
   async function ensureWorkspaceShareLoaded(options = {}) {
     const force = options.force === true;
     if (!workspaceRoot) {
@@ -396,8 +412,9 @@ export function useDesktopController() {
       return workspaceShareDetail;
     }
     const shareDetail = await loadWorkspaceShareDetail(bridgeRequest, workspaceRoot);
-    setWorkspaceShareDetail(shareDetail?.share || null);
-    return shareDetail?.share || null;
+    const normalizedShareDetail = normalizeWorkspaceShareDetail(shareDetail?.share || null);
+    setWorkspaceShareDetail(normalizedShareDetail);
+    return normalizedShareDetail;
   }
 
   useEffect(() => {
@@ -495,7 +512,6 @@ export function useDesktopController() {
 
     async function loadSelectedProject() {
       try {
-        setLoadingProjectId(selectedProjectId);
         const detail = await fetchProjectDetail(bridgeRequest, selectedProjectId, workspaceRoot, {
           refreshCodexStatus: false,
           detailLevel: wantsExpandedDetail ? "full" : "core",
@@ -505,9 +521,6 @@ export function useDesktopController() {
         }
         applyProjectDetail(detail);
       } catch (error) {
-        if (!cancelled) {
-          setLoadingProjectId("");
-        }
         if (!cancelled && !pendingAction) {
           setMessage(messagePayload("error", String(error)));
         }
@@ -1703,8 +1716,8 @@ export function useDesktopController() {
   }
 
   async function copyShareLink() {
-    const detail = workspaceShareDetail || (await ensureWorkspaceShareLoaded());
-    const shareUrl = detail?.active_session?.share_url || "";
+    const detail = await ensureWorkspaceShareLoaded({ force: true });
+    const shareUrl = detail?.active_session?.share_url || detail?.project_active_session?.share_url || "";
     if (!shareUrl) {
       setMessage(messagePayload("error", translate(language, "message.noShareLinkAvailable")));
       return;
@@ -1731,9 +1744,22 @@ export function useDesktopController() {
         },
         workspaceRoot || null,
       );
-      setWorkspaceShareDetail(shareResult?.share || null);
+      const normalizedShareDetail = normalizeWorkspaceShareDetail(
+        shareResult?.share || null,
+        shareResult?.created_share_session || null,
+      );
+      setWorkspaceShareDetail(normalizedShareDetail);
       setShareSettings(shareSettingsFromDetail(shareResult));
-      const shareUrl = shareResult?.created_share_session?.share_url || shareResult?.share?.active_session?.share_url || "";
+      const refreshedShareDetail = await ensureWorkspaceShareLoaded({ force: true }).catch(() => normalizedShareDetail);
+      if (refreshedShareDetail) {
+        setWorkspaceShareDetail(refreshedShareDetail);
+      }
+      const shareUrl =
+        shareResult?.created_share_session?.share_url
+        || refreshedShareDetail?.active_session?.share_url
+        || refreshedShareDetail?.project_active_session?.share_url
+        || normalizedShareDetail?.active_session?.share_url
+        || "";
       if (shareUrl && navigator?.clipboard?.writeText) {
         try {
           await navigator.clipboard.writeText(shareUrl);
@@ -1746,8 +1772,8 @@ export function useDesktopController() {
   }
 
   async function revokeShareLink() {
-    const detail = workspaceShareDetail || (await ensureWorkspaceShareLoaded());
-    const sessionId = detail?.active_session?.session_id || "";
+    const detail = await ensureWorkspaceShareLoaded({ force: true });
+    const sessionId = detail?.active_session?.session_id || detail?.project_active_session?.session_id || "";
     if (!sessionId) {
       setMessage(messagePayload("error", translate(language, "message.noShareLinkAvailable")));
       return;
@@ -1760,7 +1786,7 @@ export function useDesktopController() {
         },
         workspaceRoot || null,
       );
-      setWorkspaceShareDetail(shareResult?.share || null);
+      setWorkspaceShareDetail(normalizeWorkspaceShareDetail(shareResult?.share || null));
       setShareSettings(shareSettingsFromDetail(shareResult));
       setMessage(messagePayload("success", translate(language, "message.shareLinkRevoked")));
     });
@@ -2009,11 +2035,15 @@ export function useDesktopController() {
       openInSystem(normalizedUrl).catch(() => {});
     },
     smartShareLink: async () => {
-      const existingUrl = workspaceShareDetail?.active_session?.share_url || "";
+      const currentShareDetail = await ensureWorkspaceShareLoaded({ force: true }).catch(() => workspaceShareDetail);
+      const existingUrl =
+        currentShareDetail?.active_session?.share_url
+        || currentShareDetail?.project_active_session?.share_url
+        || "";
       if (existingUrl) {
-        copyShareLink();
+        await copyShareLink();
       } else {
-        generateShareLink();
+        await generateShareLink();
       }
     },
   };

@@ -25,10 +25,21 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+function FloatingInspectorIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 17l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function App() {
   const controller = useDesktopController();
   const { t } = useI18n();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [rightTab, setRightTab] = useState("chat");
   const lastShiftRef = useRef(0);
 
   const keybindingActionsRef = useRef({
@@ -160,8 +171,23 @@ export default function App() {
 
   const detail = controller.projectDetail;
   const sidebarOpen = Boolean(controller.sidebarTab);
+  const rightOpen = !controller.rightCollapsed;
   const sidebarStyle = sidebarOpen ? { width: controller.sidebarWidth, flex: `0 0 ${controller.sidebarWidth}px` } : undefined;
   const compact = Boolean(controller.programSettings?.compact_mode);
+  const handleRightTabChange = useCallback((nextTab) => {
+    const requestedTab = String(nextTab || "").trim();
+    if (!requestedTab) {
+      return;
+    }
+    setRightTab((currentTab) => {
+      if (currentTab === requestedTab) {
+        controller.setRightCollapsed(true);
+        return currentTab;
+      }
+      controller.setRightCollapsed(false);
+      return requestedTab;
+    });
+  }, [controller.setRightCollapsed]);
   const handleSelectStep = useCallback(
     (stepId) => {
       controller.setSelectedStepId((current) => toggleStepSelection(current, stepId));
@@ -188,6 +214,15 @@ export default function App() {
 
   return (
     <main className={`ide-shell ${compact ? "ide-shell--compact" : ""}`.trim()}>
+      <button
+        className={`floating-right-toggle ${rightOpen ? "floating-right-toggle--active" : ""}`.trim()}
+        onClick={() => controller.setRightCollapsed((v) => !v)}
+        type="button"
+        title="Toggle right sidebar"
+        aria-label="Toggle right sidebar"
+      >
+        <FloatingInspectorIcon />
+      </button>
       {/* ── Top toolbar ── */}
       <IdeToolbar
         projects={controller.filteredProjects}
@@ -202,10 +237,16 @@ export default function App() {
         activeCenterTab={controller.centerTab}
         projectPath={detail?.project?.repo_path || controller.projectForm?.project_dir || ""}
         githubUrl={detail?.github?.origin_url || detail?.github?.repo_url || controller.projectForm?.origin_url || ""}
-        shareUrl={controller.workspaceShareDetail?.active_session?.share_url || ""}
+        shareUrl={
+          controller.workspaceShareDetail?.active_session?.share_url
+          || controller.workspaceShareDetail?.project_active_session?.share_url
+          || ""
+        }
         shareBusy={controller.shareBusy}
         onRefresh={controller.forceRefresh}
         onOpenSettings={() => controller.setCenterTab("app-settings")}
+        rightCollapsed={controller.rightCollapsed}
+        onToggleRight={() => controller.setRightCollapsed((v) => !v)}
         onGeneratePlan={controller.generatePlan}
         onRunPlan={controller.runPlan}
         onApproveCheckpoint={controller.approveCheckpoint}
@@ -269,7 +310,9 @@ export default function App() {
         </div>
 
         {/* Left splitter */}
-        <Splitter axis="vertical" onResize={sidebarSplitter.onResize} onDragEnd={sidebarSplitter.onDragEnd} title="Resize sidebar" />
+        {sidebarOpen ? (
+          <Splitter axis="vertical" onResize={sidebarSplitter.onResize} onDragEnd={sidebarSplitter.onDragEnd} title="Resize sidebar" />
+        ) : null}
 
         {/* Center column: workspace + bottom tool panel */}
         <div className="ide-center-column">
@@ -349,31 +392,34 @@ export default function App() {
         </div>
 
         {/* Right splitter + sidebar */}
-        <Splitter axis="vertical" onResize={rightSplitter.onResize} onDragEnd={rightSplitter.onDragEnd} title="Resize right sidebar" />
-        <div
-          className="ide-pane ide-pane--details"
-          style={{ width: controller.rightWidth, flex: `0 0 ${controller.rightWidth}px` }}
-        >
-          <RightSidebarPane
-            detail={detail}
-            planDraft={controller.planDraft}
-            selectedStepId={controller.selectedStepId}
-            modelPresets={controller.modelPresets}
-            form={controller.projectForm}
-            activeJob={controller.activeJob}
-            busy={controller.busy}
-            onChangeForm={controller.setProjectForm}
-            chat={detail?.chat}
-            selectedChatSessionId={controller.selectedChatSessionId}
-            chatDraftSession={controller.chatDraftSession}
-            onSelectChatSession={controller.loadChatSession}
-            onStartNewChatSession={controller.startNewChatSession}
-            onSendChatMessage={controller.sendChatMessage}
-            chatSettings={controller.programSettings}
-            modelCatalog={controller.modelCatalog}
-            onChangeChatModelSelection={controller.setChatModelSelection}
-          />
-        </div>
+        {rightOpen ? (
+          <>
+            <Splitter axis="vertical" onResize={rightSplitter.onResize} onDragEnd={rightSplitter.onDragEnd} title="Resize right sidebar" />
+            <div
+              className="ide-pane ide-pane--details"
+              style={{ width: controller.rightWidth, flex: `0 0 ${controller.rightWidth}px` }}
+            >
+              <RightSidebarPane
+                activeTab={rightTab}
+                onChangeTab={handleRightTabChange}
+                detail={detail}
+                planDraft={controller.planDraft}
+                selectedStepId={controller.selectedStepId}
+                modelPresets={controller.modelPresets}
+                form={controller.projectForm}
+                activeJob={controller.activeJob}
+                busy={controller.busy}
+                onChangeForm={controller.setProjectForm}
+                chat={detail?.chat}
+                selectedChatSessionId={controller.selectedChatSessionId}
+                chatDraftSession={controller.chatDraftSession}
+                onSelectChatSession={controller.loadChatSession}
+                onStartNewChatSession={controller.startNewChatSession}
+                onSendChatMessage={controller.sendChatMessage}
+              />
+            </div>
+          </>
+        ) : null}
       </div>
 
       {/* ── Status bar ── */}
@@ -383,9 +429,9 @@ export default function App() {
         queuedJobs={controller.queuedJobs}
         modelPresets={controller.modelPresets}
         bottomCollapsed={controller.bottomCollapsed}
-        rightCollapsed={false}
+        rightCollapsed={controller.rightCollapsed}
         onToggleBottom={() => controller.setBottomCollapsed((v) => !v)}
-        onToggleRight={() => {}}
+        onToggleRight={() => controller.setRightCollapsed((v) => !v)}
       />
 
       {/* ── Command palette (Double Shift / Ctrl+Shift+A) ── */}

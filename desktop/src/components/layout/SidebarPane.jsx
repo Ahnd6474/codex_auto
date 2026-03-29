@@ -803,7 +803,7 @@ export function SidebarPane({
                     return (
                       <button
                         key={project.repo_id || project.display_name}
-                        className={`sidebar-project sidebar-project--${tone} ${project.repo_id === selectedProjectId ? "selected" : ""} ${project.repo_id === loadingProjectId ? "loading" : ""}`.trim()}
+                        className={`sidebar-project sidebar-project--${tone} ${project.repo_id === selectedProjectId ? "selected" : ""}`.trim()}
                         onClick={() => onSelectProject(project.repo_id)}
                         type="button"
                       >

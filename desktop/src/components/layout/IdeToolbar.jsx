@@ -1,17 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import { commandLabel, isDebuggingStatus, isPlanningProgressRunning, projectStatusWithJob, statusTone, toolbarProgressCaptionDisplay } from "../../utils";
 
 function AppLogo() {
   return (
-    <div className="toolbar-logo">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M2 17l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </div>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 17l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -141,7 +139,6 @@ function ProjectSelector({ projects, selectedProjectId, onSelectProject = () => 
   const searchProjectsPlaceholder = language === "ko" ? "프로젝트 검색..." : "Search projects...";
   const noProjectsLabel = language === "ko" ? "프로젝트 없음" : "No projects yet";
   const selectedProjectName = selectedProject?.display_name || selectProjectPlaceholder;
-  const selectedTone = selectedProject ? statusTone(selectedProject.status) : "neutral";
 
   function handleNewProject() {
     setOpen(false);
@@ -169,7 +166,6 @@ function ProjectSelector({ projects, selectedProjectId, onSelectProject = () => 
           </span>
         </span>
         <span className="project-selector__btn-trailing">
-          <span className={`chip-dot chip-dot--${selectedTone}`} />
           {open ? <ChevronDown /> : <ChevronRight />}
         </span>
       </button>
@@ -208,6 +204,29 @@ function ProjectSelector({ projects, selectedProjectId, onSelectProject = () => 
     </div>
   );
 }
+
+const MemoProjectSelector = memo(ProjectSelector, (prevProps, nextProps) => {
+  if (prevProps.selectedProjectId !== nextProps.selectedProjectId) {
+    return false;
+  }
+  const prevProjects = Array.isArray(prevProps.projects) ? prevProps.projects : [];
+  const nextProjects = Array.isArray(nextProps.projects) ? nextProps.projects : [];
+  if (prevProjects.length !== nextProjects.length) {
+    return false;
+  }
+  for (let index = 0; index < prevProjects.length; index += 1) {
+    const prevProject = prevProjects[index];
+    const nextProject = nextProjects[index];
+    if (
+      prevProject?.repo_id !== nextProject?.repo_id
+      || prevProject?.display_name !== nextProject?.display_name
+      || prevProject?.status !== nextProject?.status
+    ) {
+      return false;
+    }
+  }
+  return true;
+});
 
 function RemoteLinkIcon() {
   return (
@@ -252,6 +271,8 @@ export function IdeToolbar({
   shareBusy,
   onRefresh,
   onOpenSettings,
+  rightCollapsed = false,
+  onToggleRight = () => {},
   onGeneratePlan,
   onRunPlan,
   onApproveCheckpoint,
@@ -290,15 +311,16 @@ export function IdeToolbar({
 
   return (
     <header className="ide-toolbar">
-      <ProjectSelector
-        projects={projects}
-        selectedProjectId={selectedProjectId}
-        onSelectProject={onSelectProject}
-        onNewProject={onNewProject}
-      />
-
       <div className="ide-toolbar__group ide-toolbar__group--utility">
-        <AppLogo />
+        <button
+          className={`toolbar-btn toolbar-btn--icon ${!rightCollapsed ? "toolbar-btn--active" : ""}`.trim()}
+          onClick={onToggleRight}
+          title={language === "ko" ? "오른쪽 사이드바" : "Toggle right sidebar"}
+          type="button"
+          aria-label={language === "ko" ? "오른쪽 사이드바" : "Toggle right sidebar"}
+        >
+          <AppLogo />
+        </button>
         <button
           className="toolbar-btn toolbar-btn--icon"
           onClick={onRefresh}
@@ -309,6 +331,13 @@ export function IdeToolbar({
           <RefreshIcon />
         </button>
       </div>
+
+      <MemoProjectSelector
+        projects={projects}
+        selectedProjectId={selectedProjectId}
+        onSelectProject={onSelectProject}
+        onNewProject={onNewProject}
+      />
 
       <nav className="ide-toolbar__breadcrumb" aria-label="Navigation">
         <span className={`breadcrumb-segment breadcrumb-segment--${tone}`}>
@@ -333,6 +362,18 @@ export function IdeToolbar({
       </nav>
 
       <div className="ide-toolbar__group ide-toolbar__group--actions">
+        <button
+          className={`toolbar-btn toolbar-btn--icon ${!rightCollapsed ? "toolbar-btn--active" : ""}`.trim()}
+          onClick={onToggleRight}
+          title={language === "ko" ? "오른쪽 사이드바" : "Toggle right sidebar"}
+          type="button"
+          aria-label={language === "ko" ? "오른쪽 사이드바" : "Toggle right sidebar"}
+        >
+          <AppLogo />
+        </button>
+
+        <div className="toolbar-divider" />
+
         <button
           className={`toolbar-btn ${activeCenterTab === "app-settings" ? "toolbar-btn--active" : ""}`}
           onClick={onOpenSettings}
@@ -380,7 +421,7 @@ export function IdeToolbar({
           className={`toolbar-btn toolbar-btn--icon toolbar-btn--remote${shareUrl ? " toolbar-btn--active" : ""}`}
           onClick={onSmartShareLink}
           type="button"
-          disabled={shareBusy || !projectDetail?.project}
+          disabled={shareBusy}
           title={shareUrl ? `Copy share link: ${shareUrl}` : "Generate Remote Control link"}
           aria-label={shareUrl ? "Copy share link" : "Remote Control"}
         >
