@@ -85,13 +85,7 @@ function mergeReportsSection(primary = null, fallback = null, preserveSparse = f
     nextReports.latest_failure = fallbackReports?.latest_failure || {};
   } else {
     const primaryFailure = primaryReports?.latest_failure;
-    const fallbackFailure = fallbackReports?.latest_failure;
-    const primaryHasContent =
-      primaryFailure && typeof primaryFailure === "object" && Object.keys(primaryFailure).length > 0;
-    nextReports.latest_failure =
-      preserveSparse && !primaryHasContent && fallbackFailure && typeof fallbackFailure === "object"
-        ? fallbackFailure
-        : cloneValue(primaryFailure || {});
+    nextReports.latest_failure = cloneValue(primaryFailure || {});
   }
   return nextReports;
 }

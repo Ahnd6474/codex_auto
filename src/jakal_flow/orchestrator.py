@@ -18,7 +18,7 @@ from .git_ops import GitOps
 from .memory import MemoryStore
 from .model_providers import normalize_billing_mode, provider_preset, provider_supports_auto_model
 from .model_selection import normalize_reasoning_effort
-from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, LineageState, LoopState, MLExperimentRecord, MLModeState, ProjectContext, ProjectPaths, RepoMetadata, RuntimeOptions, TestRunResult
+from .models import CandidateTask, Checkpoint, CodexRunResult, ExecutionPlanState, ExecutionStep, LineageState, LoopState, MLExperimentRecord, MLModeState, ProjectContext, ProjectPaths, RepoMetadata, RuntimeOptions, TestRunResult
 from .optimization import scan_optimization_candidates
 from .parallel_resources import build_parallel_resource_plan, normalize_parallel_worker_mode
 from .platform_defaults import default_codex_path
@@ -2979,15 +2979,82 @@ class Orchestrator:
             detail = compact_text(str(run_result.last_message).strip(), max_chars=280)
             if detail:
                 return detail
+        event_detail = self._event_file_failure_detail(run_result)
+        if event_detail:
+            return event_detail
         attempts = run_result.diagnostics.get("attempts", []) if isinstance(run_result.diagnostics, dict) else []
+        generic_detail = ""
         for attempt in reversed(attempts if isinstance(attempts, list) else []):
             if not isinstance(attempt, dict):
                 continue
-            for key in ("stderr_excerpt", "last_message_excerpt", "stdout_excerpt"):
+            values = {
+                "stderr_excerpt": str(attempt.get("stderr_excerpt") or "").strip(),
+                "last_message_excerpt": str(attempt.get("last_message_excerpt") or "").strip(),
+                "stdout_excerpt": str(attempt.get("stdout_excerpt") or "").strip(),
+            }
+            keys = ("stderr_excerpt", "last_message_excerpt", "stdout_excerpt")
+            if self._is_generic_empty_output_warning(values["stderr_excerpt"]) and values["stdout_excerpt"]:
+                keys = ("stdout_excerpt", "last_message_excerpt", "stderr_excerpt")
+            for key in keys:
                 detail = compact_text(str(attempt.get(key) or "").strip(), max_chars=280)
+                if detail:
+                    if self._is_generic_empty_output_warning(detail):
+                        generic_detail = generic_detail or detail
+                        continue
+                    return detail
+        return generic_detail
+
+    def _is_generic_empty_output_warning(self, detail: str) -> bool:
+        lowered = str(detail or "").strip().lower()
+        return "no last agent message" in lowered and "wrote empty content to" in lowered
+
+    def _event_file_failure_detail(self, run_result: CodexRunResult) -> str:
+        event_file = getattr(run_result, "event_file", None)
+        if not isinstance(event_file, Path) or not event_file.exists():
+            return ""
+        detail = self._event_log_error_detail(read_text(event_file))
+        return compact_text(detail, max_chars=280) if detail else ""
+
+    def _event_log_error_detail(self, event_text: str) -> str:
+        for raw_line in reversed(str(event_text or "").splitlines()):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            payload_type = str(payload.get("type", "")).strip().lower()
+            if payload_type == "error":
+                detail = self._error_message_from_payload_value(payload.get("message"))
+                if detail:
+                    return detail
+            item = payload.get("item")
+            if isinstance(item, dict) and str(item.get("type", "")).strip().lower() == "error":
+                detail = self._error_message_from_payload_value(item.get("message"))
                 if detail:
                     return detail
         return ""
+
+    def _error_message_from_payload_value(self, value: object) -> str:
+        message = str(value or "").strip()
+        if not message:
+            return ""
+        try:
+            payload = json.loads(message)
+        except json.JSONDecodeError:
+            return message
+        if not isinstance(payload, dict):
+            return message
+        error = payload.get("error")
+        if isinstance(error, dict):
+            nested = str(error.get("message", "")).strip()
+            if nested:
+                return nested
+        nested = str(payload.get("message", "")).strip()
+        return nested or message
 
     def _is_auto_provider_fallback_error(self, detail: str) -> bool:
         lowered = str(detail or "").strip().lower()
@@ -3645,25 +3712,7 @@ class Orchestrator:
         return max(1, context.loop_state.block_index + 1, latest_logged_block_index + 1)
 
     def _codex_failure_note(self, task_name: str, run_result: CodexRunResult) -> str:
-        detail = ""
-        if run_result.last_message:
-            detail = compact_text(str(run_result.last_message).strip(), max_chars=280)
-        if not detail:
-            attempts = run_result.diagnostics.get("attempts", []) if isinstance(run_result.diagnostics, dict) else []
-            for attempt in reversed(attempts if isinstance(attempts, list) else []):
-                if not isinstance(attempt, dict):
-                    continue
-                detail = compact_text(
-                    str(
-                        attempt.get("stderr_excerpt")
-                        or attempt.get("last_message_excerpt")
-                        or attempt.get("stdout_excerpt")
-                        or ""
-                    ).strip(),
-                    max_chars=280,
-                )
-                if detail:
-                    break
+        detail = self._run_result_failure_detail(run_result)
         summary = f"{task_name} Codex pass failed and changes were rolled back."
         if detail:
             return f"{summary} Cause: {detail}"
@@ -5269,6 +5318,110 @@ class Orchestrator:
             cache_key=str(entry.get("cache_key", "")).strip() or None,
         )
 
+    def _latest_failed_pass_entry(
+        self,
+        context: ProjectContext,
+        bundle_json: dict[str, object],
+    ) -> dict[str, object] | None:
+        recent_passes = bundle_json.get("recent_passes", []) if isinstance(bundle_json, dict) else []
+        for entry in reversed(recent_passes if isinstance(recent_passes, list) else []):
+            if not isinstance(entry, dict):
+                continue
+            try:
+                returncode = int(entry.get("codex_return_code", entry.get("returncode", 0)))
+            except (TypeError, ValueError):
+                continue
+            if returncode != 0:
+                return entry
+        for entry in reversed(read_jsonl_tail(context.paths.pass_log_file, 40)):
+            if not isinstance(entry, dict):
+                continue
+            try:
+                returncode = int(entry.get("codex_return_code", entry.get("returncode", 0)))
+            except (TypeError, ValueError):
+                continue
+            if returncode != 0:
+                return entry
+        return None
+
+    def _pass_artifact_path(self, block_dir: Path, pass_name: str, suffix: str) -> Path | None:
+        direct = block_dir / f"{pass_name}{suffix}"
+        if direct.exists():
+            return direct
+        matches = sorted(block_dir.glob(f"{pass_name}.attempt_*{suffix}"))
+        return matches[-1] if matches else None
+
+    def _test_run_result_from_pass_entry(
+        self,
+        context: ProjectContext,
+        bundle_json: dict[str, object],
+        entry: dict[str, object],
+    ) -> tuple[TestRunResult, str]:
+        pass_name = str(entry.get("pass_type", entry.get("label", ""))).strip() or "manual-debugger"
+        block_index = self._manual_recovery_block_index(context, bundle_json=bundle_json, test_entry=entry)
+        block_dir = ensure_dir(context.paths.logs_dir / f"block_{block_index:04d}")
+        event_file = self._pass_artifact_path(block_dir, pass_name, ".events.jsonl")
+        stderr_file = self._pass_artifact_path(block_dir, pass_name, ".stderr.log")
+        output_file = self._pass_artifact_path(block_dir, pass_name, ".last_message.txt")
+        try:
+            returncode = int(entry.get("codex_return_code", entry.get("returncode", 1)))
+        except (TypeError, ValueError):
+            returncode = 1
+        diagnostics = entry.get("codex_diagnostics", {})
+        synthetic_run_result = CodexRunResult(
+            pass_type=pass_name,
+            prompt_file=block_dir / f"{pass_name}.prompt.md",
+            output_file=output_file or (block_dir / f"{pass_name}.last_message.txt"),
+            event_file=event_file or (block_dir / f"{pass_name}.events.jsonl"),
+            returncode=returncode,
+            search_enabled=bool(entry.get("search_enabled")),
+            changed_files=[],
+            usage=entry.get("usage", {}) if isinstance(entry.get("usage", {}), dict) else {},
+            last_message=read_text(output_file).strip() if isinstance(output_file, Path) and output_file.exists() else None,
+            attempt_count=int(entry.get("codex_attempt_count", 1) or 1),
+            duration_seconds=float(entry.get("duration_seconds", 0.0) or 0.0),
+            diagnostics=diagnostics if isinstance(diagnostics, dict) else {},
+        )
+        detail = self._run_result_failure_detail(synthetic_run_result)
+        summary = str(bundle_json.get("summary", "")).strip()
+        if detail and detail not in summary:
+            summary = f"{summary} Cause: {detail}".strip() if summary else f"Codex execution failed before verification. Cause: {detail}"
+        if not summary:
+            summary = f"{pass_name} failed before verification."
+        stdout_target = block_dir / f"{pass_name}.manual_debugger.stdout.log"
+        stderr_target = block_dir / f"{pass_name}.manual_debugger.stderr.log"
+        stdout_text = read_text(event_file) if isinstance(event_file, Path) and event_file.exists() else ""
+        stderr_text = read_text(stderr_file) if isinstance(stderr_file, Path) and stderr_file.exists() else ""
+        attempts = synthetic_run_result.diagnostics.get("attempts", []) if isinstance(synthetic_run_result.diagnostics, dict) else []
+        if not stdout_text:
+            for attempt in reversed(attempts if isinstance(attempts, list) else []):
+                if not isinstance(attempt, dict):
+                    continue
+                stdout_text = str(attempt.get("stdout_excerpt", "") or "").strip()
+                if stdout_text:
+                    break
+        if not stderr_text:
+            for attempt in reversed(attempts if isinstance(attempts, list) else []):
+                if not isinstance(attempt, dict):
+                    continue
+                stderr_text = str(attempt.get("stderr_excerpt", "") or "").strip()
+                if stderr_text:
+                    break
+        write_text(stdout_target, stdout_text or summary)
+        write_text(stderr_target, stderr_text or detail or summary)
+        return (
+            TestRunResult(
+                command=pass_name,
+                returncode=max(1, returncode),
+                stdout_file=stdout_target,
+                stderr_file=stderr_target,
+                summary=summary,
+                failure_reason=detail,
+                duration_seconds=float(entry.get("duration_seconds", 0.0) or 0.0),
+            ),
+            pass_name,
+        )
+
     def _manual_recovery_block_index(
         self,
         context: ProjectContext,
@@ -5313,6 +5466,10 @@ class Orchestrator:
         message = str(getattr(run_result, "last_message", "") or "").strip()
         if message:
             return message
+        if isinstance(run_result, CodexRunResult):
+            detail = self._run_result_failure_detail(run_result)
+            if detail:
+                return detail
         return f"Manual debugger pass failed with code {int(getattr(run_result, 'returncode', 1) or 1)}."
 
     def _manual_merger_failure_message(self, run_result, success: bool) -> str:
@@ -5334,11 +5491,15 @@ class Orchestrator:
         plan_state = self.load_execution_plan_state(context)
         bundle_json = self._latest_failure_bundle_json(context)
         failing_test_entry = self._latest_failed_test_run_entry(context)
-        if failing_test_entry is None:
-            raise RuntimeError("No failed verification log is available for manual debugger recovery.")
-
-        failing_test_result = self._test_run_result_from_log_entry(context, failing_test_entry)
-        failing_pass_name = str(failing_test_entry.get("label", "")).strip() or "manual-debugger"
+        failing_pass_name = "manual-debugger"
+        if failing_test_entry is not None:
+            failing_test_result = self._test_run_result_from_log_entry(context, failing_test_entry)
+            failing_pass_name = str(failing_test_entry.get("label", "")).strip() or failing_pass_name
+        else:
+            failing_pass_entry = self._latest_failed_pass_entry(context, bundle_json)
+            if failing_pass_entry is None:
+                raise RuntimeError("No failed verification log or Codex pass diagnostics are available for manual debugger recovery.")
+            failing_test_result, failing_pass_name = self._test_run_result_from_pass_entry(context, bundle_json, failing_pass_entry)
         selected_task = str(bundle_json.get("selected_task", "")).strip()
         recovery_steps = self._manual_recovery_steps(
             plan_state,
