@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import subprocess
 from typing import Any
@@ -56,6 +57,48 @@ def run_subprocess(
         ) from exc
 
 
+def windows_process_is_running(pid: int) -> bool | None:
+    if os.name != "nt":
+        return None
+    if pid <= 0:
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except ImportError:
+        return None
+
+    synchronize = 0x00100000
+    wait_object_0 = 0x00000000
+    wait_timeout = 0x00000102
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    handle = kernel32.OpenProcess(synchronize, False, pid)
+    if not handle:
+        error = ctypes.get_last_error()
+        if error == 5:
+            return True
+        if error == 87:
+            return False
+        return None
+    try:
+        wait_result = kernel32.WaitForSingleObject(handle, 0)
+    finally:
+        kernel32.CloseHandle(handle)
+    if wait_result == wait_timeout:
+        return True
+    if wait_result == wait_object_0:
+        return False
+    return None
+
+
 def terminate_process_handle(
     process: subprocess.Popen[Any] | None,
     *,
@@ -74,4 +117,3 @@ def terminate_process_handle(
             process.wait()
     except OSError:
         return
-
