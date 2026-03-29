@@ -558,9 +558,16 @@ export function RightSidebarPane({
   onStartNewChatSession,
   onSendChatMessage,
   onChangeChatModelSelection,
+  onResolveCommonRequirement,
+  onReopenCommonRequirement,
+  onRecordSpineCheckpoint,
 }) {
   const { language, t } = useI18n();
   const outputRef = useRef(null);
+  const [contractRequestNotes, setContractRequestNotes] = useState({});
+  const [checkpointVersionDraft, setCheckpointVersionDraft] = useState("");
+  const [checkpointNoteDraft, setCheckpointNoteDraft] = useState("");
+  const [checkpointContractsDraft, setCheckpointContractsDraft] = useState("");
 
   const processOutput = detail?.subprocess_output || detail?.agent_output || detail?.process_log || "";
   const selectedStep = (planDraft?.steps || []).find((step) => step.step_id === selectedStepId) || null;
@@ -601,6 +608,14 @@ export function RightSidebarPane({
     || Number(lineageManifestSummary?.red_count || 0) > 0;
 
   useEffect(() => {
+    setCheckpointVersionDraft(String(spineReport?.current_version || "spine-v1"));
+  }, [detail?.project?.repo_id, spineReport?.current_version]);
+
+  useEffect(() => {
+    setCheckpointContractsDraft(selectedStepContracts.join(", "));
+  }, [detail?.project?.repo_id, selectedStepId]);
+
+  useEffect(() => {
     if (activeTab === "output" && outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
@@ -609,6 +624,48 @@ export function RightSidebarPane({
   function handleOpenFile(path) {
     if (path) {
       openInSystem(path).catch(() => {});
+    }
+  }
+
+  function contractNoteValue(requestId) {
+    return String(contractRequestNotes?.[requestId] || "");
+  }
+
+  function updateContractNote(requestId, value) {
+    setContractRequestNotes((current) => ({
+      ...current,
+      [requestId]: value,
+    }));
+  }
+
+  async function handleResolveCommonRequirement(requestId) {
+    const succeeded = await Promise.resolve(
+      onResolveCommonRequirement?.(requestId, contractNoteValue(requestId)),
+    );
+    if (succeeded) {
+      updateContractNote(requestId, "");
+    }
+  }
+
+  async function handleReopenCommonRequirement(requestId) {
+    const succeeded = await Promise.resolve(
+      onReopenCommonRequirement?.(requestId, contractNoteValue(requestId)),
+    );
+    if (succeeded) {
+      updateContractNote(requestId, "");
+    }
+  }
+
+  async function handleRecordSpineCheckpoint() {
+    const succeeded = await Promise.resolve(
+      onRecordSpineCheckpoint?.({
+        version: checkpointVersionDraft,
+        notes: checkpointNoteDraft,
+        sharedContracts: checkpointContractsDraft,
+      }),
+    );
+    if (succeeded) {
+      setCheckpointNoteDraft("");
     }
   }
 

@@ -1804,6 +1804,104 @@ export function useDesktopController() {
     });
   }
 
+  function normalizeOperatorList(value) {
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => String(item || "").trim())
+        .filter(Boolean);
+    }
+    return String(value || "")
+      .replace(/\r/g, "\n")
+      .split(/[\n,]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  async function resolveCommonRequirement(requestId, note = "") {
+    if (!selectedProjectId) {
+      setMessage(messagePayload("error", translate(language, "message.openProjectFirst")));
+      return false;
+    }
+    const detail = await withPending("resolve-common-requirement", async () =>
+      bridgeRequest(
+        BRIDGE_COMMANDS.RESOLVE_COMMON_REQUIREMENT,
+        {
+          repo_id: selectedProjectId,
+          request_id: String(requestId || "").trim(),
+          note: String(note || "").trim(),
+        },
+        workspaceRoot || null,
+      )
+    );
+    if (!detail) {
+      return false;
+    }
+    lastAppliedDetailSignatureRef.current = "";
+    applyProjectDetail(detail, { force: true, preserveDirtyPlan: true });
+    setMessage(messagePayload("success", language === "ko" ? "CRR를 resolved로 변경했습니다." : "Marked the CRR as resolved."));
+    return true;
+  }
+
+  async function reopenCommonRequirement(requestId, note = "") {
+    if (!selectedProjectId) {
+      setMessage(messagePayload("error", translate(language, "message.openProjectFirst")));
+      return false;
+    }
+    const detail = await withPending("reopen-common-requirement", async () =>
+      bridgeRequest(
+        BRIDGE_COMMANDS.REOPEN_COMMON_REQUIREMENT,
+        {
+          repo_id: selectedProjectId,
+          request_id: String(requestId || "").trim(),
+          note: String(note || "").trim(),
+        },
+        workspaceRoot || null,
+      )
+    );
+    if (!detail) {
+      return false;
+    }
+    lastAppliedDetailSignatureRef.current = "";
+    applyProjectDetail(detail, { force: true, preserveDirtyPlan: true });
+    setMessage(messagePayload("success", language === "ko" ? "CRR를 다시 open 상태로 돌렸습니다." : "Reopened the CRR."));
+    return true;
+  }
+
+  async function recordSpineCheckpoint(options = {}) {
+    if (!selectedProjectId) {
+      setMessage(messagePayload("error", translate(language, "message.openProjectFirst")));
+      return false;
+    }
+    const selectedStep = (planDraft?.steps || []).find((step) => step?.step_id === selectedStepId) || null;
+    const payload = {
+      repo_id: selectedProjectId,
+      version: String(options?.version || "").trim(),
+      notes: String(options?.notes || "").trim(),
+      shared_contracts: normalizeOperatorList(
+        options?.sharedContracts ?? selectedStep?.shared_contracts ?? [],
+      ),
+      touched_files: normalizeOperatorList(
+        options?.touchedFiles
+          ?? selectedStep?.primary_scope_paths
+          ?? selectedStep?.owned_paths
+          ?? [],
+      ),
+      step_id: String(options?.stepId || selectedStep?.step_id || "").trim(),
+      lineage_id: String(options?.lineageId || selectedStep?.metadata?.lineage_id || "").trim(),
+      commit_hash: String(options?.commitHash || "").trim(),
+    };
+    const detail = await withPending("record-spine-checkpoint", async () =>
+      bridgeRequest(BRIDGE_COMMANDS.RECORD_SPINE_CHECKPOINT, payload, workspaceRoot || null)
+    );
+    if (!detail) {
+      return false;
+    }
+    lastAppliedDetailSignatureRef.current = "";
+    applyProjectDetail(detail, { force: true, preserveDirtyPlan: true });
+    setMessage(messagePayload("success", language === "ko" ? "Spine checkpoint를 기록했습니다." : "Recorded the spine checkpoint."));
+    return true;
+  }
+
   async function reloadProject() {
     if (!selectedProjectId) {
       setMessage(messagePayload("error", translate(language, "message.noProjectOpen")));
@@ -2000,6 +2098,9 @@ export function useDesktopController() {
     revokeShareLink,
     copyShareLink,
     approveCheckpoint,
+    resolveCommonRequirement,
+    reopenCommonRequirement,
+    recordSpineCheckpoint,
     reloadProject,
     saveStepLocal,
     addStep,

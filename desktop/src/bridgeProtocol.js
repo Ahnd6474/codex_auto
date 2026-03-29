@@ -32,6 +32,9 @@ export const BRIDGE_COMMANDS = Object.freeze({
   CREATE_SHARE_SESSION: "create_share_session",
   REVOKE_SHARE_SESSION: "revoke_share_session",
   APPROVE_CHECKPOINT: "approve-checkpoint",
+  RESOLVE_COMMON_REQUIREMENT: "resolve-common-requirement",
+  REOPEN_COMMON_REQUIREMENT: "reopen-common-requirement",
+  RECORD_SPINE_CHECKPOINT: "record-spine-checkpoint",
 });
 
 export const BRIDGE_EVENTS = Object.freeze({
@@ -60,5 +63,8 @@ export function isBridgeMutationCommand(command) {
     BRIDGE_COMMANDS.CREATE_SHARE_SESSION,
     BRIDGE_COMMANDS.REVOKE_SHARE_SESSION,
     BRIDGE_COMMANDS.APPROVE_CHECKPOINT,
+    BRIDGE_COMMANDS.RESOLVE_COMMON_REQUIREMENT,
+    BRIDGE_COMMANDS.REOPEN_COMMON_REQUIREMENT,
+    BRIDGE_COMMANDS.RECORD_SPINE_CHECKPOINT,
   ]).has(command);
 }

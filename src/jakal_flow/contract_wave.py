@@ -453,6 +453,28 @@ def save_common_requirements_state(path: Path, state: CommonRequirementsState) -
     return state
 
 
+def _persist_contract_wave_artifacts(
+    paths: ProjectPaths,
+    *,
+    spine_state: SpineState,
+    requirements_state: CommonRequirementsState,
+) -> tuple[SpineState, CommonRequirementsState]:
+    save_spine_state(paths.spine_file, spine_state)
+    save_common_requirements_state(paths.common_requirements_file, requirements_state)
+    write_text(paths.shared_contracts_file, render_shared_contracts_markdown(spine_state, requirements_state))
+    return spine_state, requirements_state
+
+
+def _append_note(existing: str, note: str) -> str:
+    normalized_existing = str(existing or "").strip()
+    normalized_note = str(note or "").strip()
+    if not normalized_note:
+        return normalized_existing
+    if not normalized_existing:
+        return normalized_note
+    return f"{normalized_existing} | {normalized_note}"
+
+
 def _collect_shared_contract_names(spine_state: SpineState, requirements_state: CommonRequirementsState) -> list[str]:
     ordered: list[str] = []
     seen: set[str] = set()
@@ -545,6 +567,92 @@ def _advance_spine_version(current_version: str) -> str:
     if normalized.endswith("-"):
         return f"{normalized}1"
     return f"{normalized}-1"
+
+
+def set_common_requirement_status(
+    paths: ProjectPaths,
+    *,
+    request_id: str,
+    status: str,
+    note: str = "",
+) -> tuple[SpineState, CommonRequirementsState, CommonRequirementRecord]:
+    ensure_contract_wave_artifacts(paths)
+    normalized_request_id = str(request_id or "").strip()
+    if not normalized_request_id:
+        raise ValueError("request_id is required.")
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status not in {"open", "resolved"}:
+        raise ValueError("status must be 'open' or 'resolved'.")
+    spine_state = load_spine_state(paths.spine_file)
+    requirements_state = load_common_requirements_state(paths.common_requirements_file)
+    timestamp = now_utc_iso()
+
+    if normalized_status == "resolved":
+        source = requirements_state.open_requirements
+        target = requirements_state.resolved_requirements
+    else:
+        source = requirements_state.resolved_requirements
+        target = requirements_state.open_requirements
+
+    record: CommonRequirementRecord | None = None
+    remaining: list[CommonRequirementRecord] = []
+    for item in source:
+        if record is None and item.request_id == normalized_request_id:
+            record = item
+            continue
+        remaining.append(item)
+    if record is None:
+        raise KeyError(f"Unknown common requirement request: {normalized_request_id}")
+
+    if normalized_status == "resolved":
+        record.status = "resolved"
+        record.resolved_at = timestamp
+        record.notes = _append_note(record.notes, note)
+        requirements_state.open_requirements = remaining
+        target.append(record)
+    else:
+        record.status = "open"
+        record.resolved_at = None
+        record.notes = _append_note(record.notes, note)
+        requirements_state.resolved_requirements = remaining
+        target.append(record)
+    requirements_state.updated_at = timestamp
+    _persist_contract_wave_artifacts(paths, spine_state=spine_state, requirements_state=requirements_state)
+    return spine_state, requirements_state, record
+
+
+def record_manual_spine_checkpoint(
+    paths: ProjectPaths,
+    *,
+    version: str = "",
+    notes: str = "",
+    shared_contracts: object = None,
+    touched_files: object = None,
+    step_id: str = "",
+    lineage_id: str = "",
+    commit_hash: str = "",
+) -> tuple[SpineState, CommonRequirementsState, SpineCheckpoint]:
+    ensure_contract_wave_artifacts(paths)
+    spine_state = load_spine_state(paths.spine_file)
+    requirements_state = load_common_requirements_state(paths.common_requirements_file)
+    timestamp = now_utc_iso()
+    checkpoint_version = str(version or "").strip() or spine_state.current_version or DEFAULT_SPINE_VERSION
+    checkpoint = SpineCheckpoint(
+        version=checkpoint_version,
+        created_at=timestamp,
+        step_id=str(step_id or "").strip(),
+        lineage_id=str(lineage_id or "").strip(),
+        commit_hash=str(commit_hash or "").strip(),
+        shared_contracts=_normalize_strings(shared_contracts),
+        touched_files=_normalize_paths(touched_files),
+        notes=str(notes or "").strip(),
+    )
+    spine_state.current_version = checkpoint.version
+    spine_state.updated_at = timestamp
+    spine_state.history.append(checkpoint)
+    requirements_state.updated_at = timestamp
+    _persist_contract_wave_artifacts(paths, spine_state=spine_state, requirements_state=requirements_state)
+    return spine_state, requirements_state, checkpoint
 
 
 def classify_completed_lineage_step(
@@ -1060,7 +1168,5 @@ def update_contract_wave_artifacts_for_completion(
     if created_record is not None:
         manifest.common_requirement_request_id = created_record.request_id
 
-    save_spine_state(paths.spine_file, spine_state)
-    save_common_requirements_state(paths.common_requirements_file, requirements_state)
-    write_text(paths.shared_contracts_file, render_shared_contracts_markdown(spine_state, requirements_state))
+    _persist_contract_wave_artifacts(paths, spine_state=spine_state, requirements_state=requirements_state)
     return spine_state, requirements_state, created_record

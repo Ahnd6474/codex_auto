@@ -72,6 +72,7 @@ from .step_models import (
 )
 from .ui_bridge_commands import (
     BridgeCommandContext,
+    build_contract_command_handlers,
     build_project_command_handlers,
     build_read_model_handlers,
     build_run_command_handlers,
@@ -492,6 +493,10 @@ def bridge_command_handlers() -> dict[str, Any]:
             clear_stop_request=clear_stop_request,
             execution_scope_id=execution_scope_id,
             execution_stop_registry=EXECUTION_STOP_REGISTRY,
+        ),
+        **build_contract_command_handlers(
+            resolve_project=resolve_project,
+            append_ui_event=append_ui_event,
         ),
         **build_share_command_handlers(
             resolve_project=resolve_project,

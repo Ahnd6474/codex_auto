@@ -398,6 +398,9 @@ export default function App() {
             onSelectChatSession={controller.loadChatSession}
             onStartNewChatSession={controller.startNewChatSession}
             onSendChatMessage={controller.sendChatMessage}
+            onResolveCommonRequirement={controller.resolveCommonRequirement}
+            onReopenCommonRequirement={controller.reopenCommonRequirement}
+            onRecordSpineCheckpoint={controller.recordSpineCheckpoint}
           />
         </div>
       </div>

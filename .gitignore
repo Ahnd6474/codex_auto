@@ -35,3 +35,4 @@ pytestdebug.log
 junit.xml
 junit-*.xml
 test-results/
+chat_sessions/
