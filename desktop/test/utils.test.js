@@ -155,6 +155,13 @@ test("backgroundJobProjectKey normalizes workspace and project paths for dedupin
   assert.equal(backgroundJobProjectKey({}, "/tmp/workspace"), "");
 });
 
+test("commandLabel maps manual recovery commands to readable labels", () => {
+  assert.equal(commandLabel("run-manual-debugger", "en"), "Manual Debugger");
+  assert.equal(commandLabel("run-manual-merger", "en"), "Manual Merger");
+  assert.equal(commandLabel("run-manual-debugger", "ko"), "수동 디버거");
+  assert.equal(commandLabel("run-manual-merger", "ko"), "수동 머저");
+});
+
 test("isDuplicateProjectJobError detects bridge rejections for already-active jobs", () => {
   assert.equal(isDuplicateProjectJobError("Another background task is already active for this project."), true);
   assert.equal(isDuplicateProjectJobError(new Error("another background task is already active for this project.")), true);

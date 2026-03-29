@@ -1,4 +1,4 @@
-use serde::Serialize;
+﻿use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::env;
@@ -499,6 +499,28 @@ fn cancel_bridge_job<R: tauri::Runtime>(
     session.request("cancel_job", json!({ "job_id": job_id }), bridge_timeout())
 }
 
+
+#[tauri::command]
+fn open_in_system(path: String) -> Result<(), String> {
+    if path.trim().is_empty() {
+        return Err("Path is required.".to_string());
+    }
+    #[cfg(target_os = "windows")]
+    { Command::new("explorer").arg(&path).spawn().map_err(|e| e.to_string()).map(|_| ()) }
+    #[cfg(target_os = "macos")]
+    { Command::new("open").arg(&path).spawn().map_err(|e| e.to_string()).map(|_| ()) }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    { Command::new("xdg-open").arg(&path).spawn().map_err(|e| e.to_string()).map(|_| ()) }
+}
+
+#[tauri::command]
+fn open_in_vscode(path: String) -> Result<(), String> {
+    if path.trim().is_empty() {
+        return Err("Path is required.".to_string());
+    }
+    Command::new("code").arg(&path).spawn().map_err(|e| e.to_string()).map(|_| ())
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -509,7 +531,9 @@ pub fn run() {
             get_bridge_job,
             list_bridge_jobs,
             configure_bridge_scheduler,
-            cancel_bridge_job
+            cancel_bridge_job,
+            open_in_system,
+            open_in_vscode
         ])
         .run(tauri::generate_context!())
         .expect("error while running jakal-flow desktop");

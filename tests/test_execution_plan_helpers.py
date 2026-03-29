@@ -261,6 +261,19 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(step.model_provider, "gemini")
         self.assertEqual(step.model, GEMINI_DEFAULT_MODEL)
 
+    def test_execution_step_from_dict_drops_plain_codex_model_for_openai_steps(self) -> None:
+        step = ExecutionStep.from_dict(
+            {
+                "step_id": "ST1",
+                "title": "Backend pass",
+                "model_provider": "openai",
+                "model": "codex",
+            }
+        )
+
+        self.assertEqual(step.model_provider, "openai")
+        self.assertEqual(step.model, "")
+
     def test_resolve_step_model_choice_prefers_gemini_for_ui_steps(self) -> None:
         runtime = RuntimeOptions(model="gpt-5.4", model_provider="openai")
         step = ExecutionStep(
@@ -488,6 +501,66 @@ class ExecutionPlanHelperTests(unittest.TestCase):
 
         mocked_remove.assert_called_once_with(repo_dir, worktree_dir, force=True)
         mocked_delete.assert_called_once_with(repo_dir, "jakal-flow-integration", force=True)
+
+    def test_build_lineage_paths_writes_logs_under_worktree_repo_root_and_migrates_legacy_logs(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_lineage_repo_logs_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        worktree_dir = temp_root / "lineage-worktree"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        worktree_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium")
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            legacy_logs_dir = context.paths.project_root / ".lineages" / "ln1" / "logs"
+            legacy_logs_dir.mkdir(parents=True, exist_ok=True)
+            (legacy_logs_dir / "passes.jsonl").write_text('{"event":"legacy"}\n', encoding="utf-8")
+            (legacy_logs_dir / "block_0001").mkdir(parents=True, exist_ok=True)
+            (legacy_logs_dir / "block_0001" / "debug.txt").write_text("legacy-lineage", encoding="utf-8")
+
+            repo_logs_dir = worktree_dir / "jakal-flow-logs"
+            repo_logs_dir.mkdir(parents=True, exist_ok=True)
+            (repo_logs_dir / "passes.jsonl").write_text('{"event":"current"}\n', encoding="utf-8")
+
+            lineage_paths = orchestrator._build_lineage_paths(context, "LN1", worktree_dir)
+            self.assertEqual(lineage_paths.logs_dir, repo_logs_dir.resolve())
+            self.assertFalse(legacy_logs_dir.exists())
+            self.assertEqual(
+                read_jsonl_tail(lineage_paths.pass_log_file, 10),
+                [{"event": "legacy"}, {"event": "current"}],
+            )
+            self.assertEqual((lineage_paths.logs_dir / "block_0001" / "debug.txt").read_text(encoding="utf-8"), "legacy-lineage")
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+    def test_build_integration_paths_writes_logs_under_worktree_repo_root(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_integration_repo_logs_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        worktree_dir = temp_root / "integration-worktree"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        worktree_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium")
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            integration_paths = orchestrator._build_integration_paths(context, "token-demo", worktree_dir)
+            self.assertEqual(integration_paths.logs_dir, worktree_dir.resolve() / "jakal-flow-logs")
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
 
     def test_pending_execution_batches_uses_dependency_ready_waves(self) -> None:
         orchestrator = Orchestrator(Path.cwd() / ".tmp_pending_batches_workspace")
@@ -2930,6 +3003,188 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         mocked_reset.assert_called_once_with(repo_dir, "safe-revision")
         mocked_commit.assert_called_once()
 
+    def test_run_result_failure_detail_prefers_event_error_over_empty_output_warning(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_run_result_failure_detail_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        temp_root.mkdir(parents=True, exist_ok=True)
+        try:
+            orchestrator = Orchestrator(temp_root / "workspace")
+            event_file = temp_root / "block-search-pass.events.jsonl"
+            event_file.write_text(
+                "\n".join(
+                    [
+                        '{"type":"thread.started","thread_id":"demo"}',
+                        '{"type":"turn.started"}',
+                        '{"type":"error","message":"{\\"type\\":\\"error\\",\\"status\\":400,\\"error\\":{\\"type\\":\\"invalid_request_error\\",\\"message\\":\\"The \'codex\' model is not supported when using Codex with a ChatGPT account.\\"}}"}',
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            run_result = CodexRunResult(
+                pass_type="block-search-pass",
+                prompt_file=temp_root / "block-search-pass.prompt.md",
+                output_file=temp_root / "block-search-pass.last_message.txt",
+                event_file=event_file,
+                returncode=1,
+                search_enabled=True,
+                changed_files=[],
+                usage={},
+                last_message="",
+                diagnostics={
+                    "attempts": [
+                        {
+                            "attempt": 1,
+                            "returncode": 1,
+                            "stderr_excerpt": "Warning: no last agent message; wrote empty content to C:/Temp/out.txt",
+                            "stdout_excerpt": '{"type":"turn.started"}',
+                        }
+                    ]
+                },
+            )
+
+            detail = orchestrator._run_result_failure_detail(run_result)
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(detail, "The 'codex' model is not supported when using Codex with a ChatGPT account.")
+
+    def test_run_manual_debugger_recovery_uses_failed_pass_diagnostics_without_test_log(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_manual_debugger_pass_fallback_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", test_cmd="python -m pytest")
+        captured: dict[str, str] = {}
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            plan_state = ExecutionPlanState(
+                plan_title="Manual debugger fallback",
+                default_test_command="python -m pytest",
+                steps=[
+                    ExecutionStep(
+                        step_id="ST1",
+                        title="Freeze Shared Sync Boundary",
+                        display_description="Add the shared integration boundary.",
+                        codex_description="Repair the shared integration boundary safely.",
+                        model_provider="openai",
+                        model="codex",
+                        test_command="python -m pytest",
+                        status="failed",
+                    )
+                ],
+            )
+            orchestrator.save_execution_plan_state(context, plan_state)
+            block_dir = context.paths.logs_dir / "block_0001"
+            block_dir.mkdir(parents=True, exist_ok=True)
+            event_file = block_dir / "block-search-pass.events.jsonl"
+            event_file.write_text(
+                "\n".join(
+                    [
+                        '{"type":"thread.started","thread_id":"demo"}',
+                        '{"type":"turn.started"}',
+                        '{"type":"error","message":"{\\"type\\":\\"error\\",\\"status\\":400,\\"error\\":{\\"type\\":\\"invalid_request_error\\",\\"message\\":\\"The \'codex\' model is not supported when using Codex with a ChatGPT account.\\"}}"}',
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (block_dir / "block-search-pass.stderr.log").write_text(
+                "Warning: no last agent message; wrote empty content to C:/Temp/out.txt\n",
+                encoding="utf-8",
+            )
+            bundle_json = {
+                "block_index": 1,
+                "selected_task": "Freeze Shared Sync Boundary",
+                "summary": "Freeze Shared Sync Boundary Codex pass failed and changes were rolled back.",
+                "recent_passes": [
+                    {
+                        "block_index": 1,
+                        "pass_type": "block-search-pass",
+                        "selected_task": "Freeze Shared Sync Boundary",
+                        "codex_return_code": 1,
+                        "search_enabled": True,
+                        "duration_seconds": 2.0,
+                        "codex_diagnostics": {
+                            "attempts": [
+                                {
+                                    "attempt": 1,
+                                    "returncode": 1,
+                                    "stderr_excerpt": "Warning: no last agent message; wrote empty content to C:/Temp/out.txt",
+                                    "stdout_excerpt": '{"type":"error","message":"The \'codex\' model is not supported when using Codex with a ChatGPT account."}',
+                                }
+                            ]
+                        },
+                    }
+                ],
+            }
+            report_json = context.paths.reports_dir / "20260329060315_lineage_batch_failed.prfail.json"
+            report_json.write_text(json.dumps(bundle_json), encoding="utf-8")
+            (context.paths.reports_dir / "latest_pr_failure_status.json").write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-03-29T06:03:15+00:00",
+                        "failure_type": "lineage_batch_failed",
+                        "report_json_file": str(report_json),
+                        "report_markdown_file": str(context.paths.reports_dir / "20260329060315_lineage_batch_failed.prfail.md"),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            def fake_run_debugger_pass(**kwargs):
+                execution_step = kwargs["execution_step"]
+                failing_test_result = kwargs["failing_test_result"]
+                captured["step_model"] = execution_step.model if execution_step is not None else ""
+                captured["pass_name"] = kwargs["failing_pass_name"]
+                captured["summary"] = failing_test_result.summary
+                captured["stdout"] = failing_test_result.stdout_file.read_text(encoding="utf-8")
+                captured["stderr"] = failing_test_result.stderr_file.read_text(encoding="utf-8")
+                return (
+                    "block-search-debug",
+                    CodexRunResult(
+                        pass_type="block-search-debug",
+                        prompt_file=block_dir / "block-search-debug.prompt.md",
+                        output_file=block_dir / "block-search-debug.last_message.txt",
+                        event_file=block_dir / "block-search-debug.events.jsonl",
+                        returncode=0,
+                        search_enabled=False,
+                        changed_files=[],
+                        usage={},
+                        last_message="Debugger repair applied",
+                    ),
+                    TestRunResult(
+                        command="python -m pytest",
+                        returncode=0,
+                        stdout_file=block_dir / "block-search-debug.test.stdout.log",
+                        stderr_file=block_dir / "block-search-debug.test.stderr.log",
+                        summary="python -m pytest exited with 0",
+                    ),
+                    "debug-commit",
+                )
+
+            with mock.patch.object(orchestrator, "_run_debugger_pass", side_effect=fake_run_debugger_pass):
+                _context, _saved, result = orchestrator.run_manual_debugger_recovery(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(captured["step_model"], "")
+        self.assertEqual(captured["pass_name"], "block-search-pass")
+        self.assertIn("The 'codex' model is not supported when using Codex with a ChatGPT account.", captured["summary"])
+        self.assertIn("The 'codex' model is not supported when using Codex with a ChatGPT account.", captured["stdout"])
+        self.assertIn("Warning: no last agent message", captured["stderr"])
+        self.assertEqual(result["commit_hash"], "debug-commit")
+
     def test_parallel_batch_verification_failure_invokes_debugger(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_batch_debugger_test"
         shutil.rmtree(temp_root, ignore_errors=True)
@@ -3540,6 +3795,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             shutil.rmtree(temp_root, ignore_errors=True)
 
         self.assertEqual(worker_paths.lineage_state_file, worker_paths.state_dir / "LINEAGES.json")
+        self.assertEqual(worker_paths.logs_dir, repo_dir.resolve() / "jakal-flow-logs")
 
     def test_parallel_batch_merge_conflict_invokes_merger_and_continues(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_merge_debugger_test"
@@ -3939,6 +4195,8 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("Do not edit README.md during debugger recovery.", parallel_debugger_template)
         self.assertIn("{merge_targets}", parallel_merger_template)
         self.assertIn("integration worktree", parallel_merger_template)
+        self.assertIn("git worktree list", parallel_merger_template)
+        self.assertIn("multiple branches or lineages", parallel_merger_template)
         self.assertIn("Failing merge context", parallel_merger_template)
         self.assertIn("adjacent compatibility breakage", parallel_merger_template)
         self.assertIn("adjacent integration touchpoints", parallel_merger_template)

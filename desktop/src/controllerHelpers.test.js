@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { planGenerationValidation } from "./controllerHelpers.js";
+import { toggleStepSelection } from "./utils.js";
 
 test("planGenerationValidation requires a prepared project", () => {
   assert.equal(
@@ -42,4 +43,13 @@ test("planGenerationValidation still allows regenerating after completed steps e
       requiresReplacementConfirmation: true,
     },
   );
+});
+
+test("toggleStepSelection clears the current step when the same step is selected again", () => {
+  assert.equal(toggleStepSelection("ST2", "ST2"), "");
+});
+
+test("toggleStepSelection keeps the new selection for a different step", () => {
+  assert.equal(toggleStepSelection("ST2", "ST3"), "ST3");
+  assert.equal(toggleStepSelection("ST2", null), "");
 });

@@ -11,6 +11,7 @@ import { StatusBar } from "./components/layout/StatusBar";
 import { nextSidebarTab } from "./controllerHelpers";
 import { useDesktopController } from "./hooks/useDesktopController";
 import { useI18n } from "./i18n";
+import { toggleStepSelection } from "./utils";
 
 /* ── Clamp helpers ── */
 const SIDEBAR_MIN = 200;
@@ -73,9 +74,9 @@ export default function App() {
         return;
       }
 
-      /* Alt+1..4 → sidebar tool windows */
-      if (event.altKey && !event.ctrlKey && !event.metaKey && event.key >= "1" && event.key <= "4") {
-        const sidebarTabs = ["projects", "history", "workspace", "plans"];
+      /* Alt+1..6 → sidebar tool windows */
+      if (event.altKey && !event.ctrlKey && !event.metaKey && event.key >= "1" && event.key <= "6") {
+        const sidebarTabs = ["projects", "history", "workspace", "plans", "reservations", "chat"];
         const target = sidebarTabs[Number.parseInt(event.key, 10) - 1];
         setSidebarTab((current) => nextSidebarTab(current, target));
         event.preventDefault();
@@ -161,6 +162,12 @@ export default function App() {
   const sidebarOpen = Boolean(controller.sidebarTab);
   const sidebarStyle = sidebarOpen ? { width: controller.sidebarWidth, flex: `0 0 ${controller.sidebarWidth}px` } : undefined;
   const compact = Boolean(controller.programSettings?.compact_mode);
+  const handleSelectStep = useCallback(
+    (stepId) => {
+      controller.setSelectedStepId((current) => toggleStepSelection(current, stepId));
+    },
+    [controller.setSelectedStepId],
+  );
 
   const paletteActions = useMemo(() => [
     { id: "tab-run", label: t("tab.flow"), shortcut: "Ctrl+1", category: "Tab", keywords: "run flow execution", onExecute: () => controller.setCenterTab("run") },
@@ -172,6 +179,8 @@ export default function App() {
     { id: "sidebar-history", label: t("tab.history"), shortcut: "Alt+2", category: "Sidebar", keywords: "history archive", onExecute: () => controller.setSidebarTab((c) => nextSidebarTab(c, "history")) },
     { id: "sidebar-workspace", label: t("sidebar.explorer"), shortcut: "Alt+3", category: "Sidebar", keywords: "explorer files workspace", onExecute: () => controller.setSidebarTab((c) => nextSidebarTab(c, "workspace")) },
     { id: "sidebar-plans", label: t("sidebar.checkpoints"), shortcut: "Alt+4", category: "Sidebar", keywords: "checkpoints plans", onExecute: () => controller.setSidebarTab((c) => nextSidebarTab(c, "plans")) },
+    { id: "sidebar-reservations", label: "Job Queue", shortcut: "Alt+5", category: "Sidebar", keywords: "reservations queue jobs", onExecute: () => controller.setSidebarTab((c) => nextSidebarTab(c, "reservations")) },
+    { id: "sidebar-chat", label: "AI Chat", shortcut: "Alt+6", category: "Sidebar", keywords: "chat ai message intervene", onExecute: () => controller.setSidebarTab((c) => nextSidebarTab(c, "chat")) },
     { id: "toggle-bottom", label: "Toggle Bottom Panel", shortcut: "Alt+B", category: "Panel", keywords: "bottom tool panel logs json tokens", onExecute: () => controller.setBottomCollapsed((v) => !v) },
     { id: "toggle-right", label: "Toggle Inspector", shortcut: "Alt+R", category: "Panel", keywords: "right inspector details", onExecute: () => controller.setRightCollapsed((v) => !v) },
     { id: "generate-plan", label: t("action.generatePlan"), category: "Action", keywords: "generate plan ai", onExecute: () => controller.generatePlan() },
@@ -184,12 +193,18 @@ export default function App() {
     <main className={`ide-shell ${compact ? "ide-shell--compact" : ""}`.trim()}>
       {/* ── Top toolbar ── */}
       <IdeToolbar
+        projects={controller.filteredProjects}
+        selectedProjectId={controller.selectedProjectId}
+        onSelectProject={controller.loadProject}
+        onNewProject={controller.startNewProject}
         projectDetail={detail}
         planDraft={controller.planDraft}
         pendingCheckpoint={detail?.checkpoints?.pending || null}
         busy={controller.busy}
         activeJob={controller.activeJob}
         activeCenterTab={controller.centerTab}
+        projectPath={detail?.project?.repo_path || controller.projectForm?.project_dir || ""}
+        githubUrl={detail?.github?.origin_url || detail?.github?.repo_url || controller.projectForm?.origin_url || ""}
         shareUrl={controller.workspaceShareDetail?.active_session?.share_url || ""}
         shareBusy={controller.shareBusy}
         onRefresh={controller.forceRefresh}
@@ -197,7 +212,10 @@ export default function App() {
         onGeneratePlan={controller.generatePlan}
         onRunPlan={controller.runPlan}
         onApproveCheckpoint={controller.approveCheckpoint}
-        onGenerateShareLink={controller.generateShareLink}
+        onSmartShareLink={controller.smartShareLink}
+        onOpenFolder={controller.openRepoInFolder}
+        onOpenVsCode={controller.openRepoInVsCode}
+        onOpenGithub={controller.openRepoOnGithub}
       />
 
       {/* ── Live run progress banner ── */}
@@ -225,8 +243,8 @@ export default function App() {
             onChangeTab={(nextTab) =>
               controller.setSidebarTab((currentTab) => nextSidebarTab(currentTab, nextTab))
             }
-            projects={controller.filteredProjects}
-            historyProjects={controller.filteredHistoryProjects}
+            projects={controller.projects}
+            historyProjects={controller.historyProjects}
             selectedProjectId={controller.selectedProjectId}
             selectedHistoryId={controller.selectedHistoryId}
             loadingProjectId={controller.loadingProjectId}
@@ -243,6 +261,12 @@ export default function App() {
             workspaceTree={detail?.workspace_tree}
             checkpoints={detail?.checkpoints}
             github={detail?.github}
+            onOpenFolder={controller.openRepoInFolder}
+            onOpenVsCode={controller.openRepoInVsCode}
+            onOpenGithub={controller.openRepoOnGithub}
+            queuedJobs={controller.queuedJobs}
+            onCancelQueuedJob={controller.cancelQueuedReservation}
+            busy={controller.busy}
           />
         </div>
 
@@ -274,6 +298,9 @@ export default function App() {
               queuedJobs={controller.queuedJobs}
               onChangeForm={controller.setProjectForm}
               onChangeProgramSettings={controller.setProgramSettings}
+              onSaveProject={controller.saveProject}
+              onSaveProgramSettings={controller.saveProgramSettings}
+              programSettingsDirty={controller.programSettingsDirty}
               onChooseDirectory={controller.chooseDirectory}
               onArchiveProject={controller.archiveProject}
               onDeleteProject={controller.deleteProject}
@@ -293,9 +320,11 @@ export default function App() {
               onSavePlan={controller.savePlan}
               onResetPlan={controller.resetPlan}
               onRunPlan={controller.runPlan}
+              onRunManualDebugger={controller.runManualDebugger}
+              onRunManualMerger={controller.runManualMerger}
               onRequestStop={controller.requestStop}
               onCancelQueuedJob={controller.cancelQueuedReservation}
-              onSelectStep={controller.setSelectedStepId}
+              onSelectStep={handleSelectStep}
               onUpdateStepField={controller.updateSelectedStep}
               onSaveStepLocal={controller.saveStepLocal}
               onAddStep={controller.addStep}

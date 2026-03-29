@@ -20,12 +20,12 @@
     <style>
       .title { font: 700 34px 'Segoe UI', 'Bahnschrift', 'Malgun Gothic', sans-serif; fill: #172433; }
       .subtitle { font: 500 16px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: #4F6275; }
-      .section { font: 700 13px 'Segoe UI', 'Bahnschrift', sans-serif; letter-spacing: 0.12em; fill: #294055; }
-      .panelTitle { font: 700 19px 'Segoe UI', 'Bahnschrift', 'Malgun Gothic', sans-serif; fill: #162636; }
-      .body { font: 500 12px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: #4C6074; }
-      .mono { font: 700 11px 'Consolas', 'Courier New', monospace; fill: #1F3447; }
-      .chipLabel { font: 700 11px 'Segoe UI', 'Bahnschrift', sans-serif; fill: #FFFFFF; }
-      .chipText { font: 600 10px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: rgba(255,255,255,0.92); }
+      .section { font: 700 12px 'Segoe UI', 'Bahnschrift', sans-serif; letter-spacing: 0.11em; fill: #294055; }
+      .panelTitle { font: 700 16px 'Segoe UI', 'Bahnschrift', 'Malgun Gothic', sans-serif; fill: #162636; }
+      .body { font: 500 10.5px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: #4C6074; }
+      .mono { font: 700 7.8px 'Consolas', 'Courier New', monospace; fill: #1F3447; }
+      .chipLabel { font: 700 10px 'Segoe UI', 'Bahnschrift', sans-serif; fill: #FFFFFF; }
+      .chipText { font: 600 7.6px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: rgba(255,255,255,0.92); }
       .panel { fill: #FFFFFF; stroke: #D6E1EB; stroke-width: 1.5; filter: url(#shadow); }
       .soft { fill: #FFFFFF; stroke: #D6E1EB; stroke-width: 1.2; }
       .line { stroke: #60748A; stroke-width: 2.6; fill: none; marker-end: url(#arrow); }
@@ -40,21 +40,21 @@
   <text x="44" y="100" class="subtitle">UI is only an entry surface. The critical path lives in the Python orchestration core.</text>
   <text x="44" y="124" class="subtitle">The system keeps planning, execution, verification, rollback, and reports isolated per repository.</text>
 
-  <rect x="44" y="146" width="132" height="34" rx="12" fill="#1D4ED8"/>
+  <rect x="44" y="146" width="156" height="34" rx="12" fill="#1D4ED8"/>
   <text x="60" y="167" class="chipLabel">PLAN</text>
-  <text x="110" y="167" class="chipText">prompt packing</text>
+  <text x="112" y="167" class="chipText">prompt packing</text>
 
-  <rect x="188" y="146" width="156" height="34" rx="12" fill="#0F766E"/>
-  <text x="204" y="167" class="chipLabel">EXECUTE</text>
-  <text x="270" y="167" class="chipText">Codex pass</text>
+  <rect x="212" y="146" width="176" height="34" rx="12" fill="#0F766E"/>
+  <text x="228" y="167" class="chipLabel">EXECUTE</text>
+  <text x="294" y="167" class="chipText">Codex pass</text>
 
-  <rect x="356" y="146" width="164" height="34" rx="12" fill="#B45309"/>
-  <text x="372" y="167" class="chipLabel">VERIFY</text>
-  <text x="428" y="167" class="chipText">cache and debugger</text>
+  <rect x="400" y="146" width="186" height="34" rx="12" fill="#B45309"/>
+  <text x="416" y="167" class="chipLabel">VERIFY</text>
+  <text x="472" y="167" class="chipText">cache and debugger</text>
 
-  <rect x="532" y="146" width="176" height="34" rx="12" fill="#475569"/>
-  <text x="548" y="167" class="chipLabel">PERSIST</text>
-  <text x="612" y="167" class="chipText">logs, memory, reports</text>
+  <rect x="598" y="146" width="198" height="34" rx="12" fill="#475569"/>
+  <text x="614" y="167" class="chipLabel">PERSIST</text>
+  <text x="682" y="167" class="chipText">logs, memory, reports</text>
 
   <rect x="44" y="192" width="1372" height="74" rx="18" fill="url(#band)" stroke="#D6E1EB" stroke-width="1.5" filter="url(#shadow)"/>
   <text x="64" y="218" class="section">ENTRY AND RUNTIME</text>
@@ -62,28 +62,28 @@
 
   <rect x="68" y="240" width="426" height="16" rx="8" fill="#1D4ED8"/>
   <text x="82" y="252" class="chipLabel">Trigger</text>
-  <text x="136" y="252" class="chipText">cli.py run/resume or bridge command; desktop stays out of the core loop</text>
+  <text x="132" y="252" class="chipText">cli.py run/resume or bridge command; desktop stays out of the core loop</text>
 
   <rect x="518" y="240" width="458" height="16" rx="8" fill="#0F766E"/>
   <text x="532" y="252" class="chipLabel">Runtime</text>
-  <text x="592" y="252" class="chipText">model/provider, reasoning effort, sandbox, approval mode, checkpoint rules</text>
+  <text x="586" y="252" class="chipText">model/provider, reasoning effort, sandbox, approval mode, checkpoint rules</text>
 
   <rect x="1000" y="240" width="392" height="16" rx="8" fill="#B45309"/>
   <text x="1014" y="252" class="chipLabel">Verify Contract</text>
-  <text x="1112" y="252" class="chipText">test_cmd, rollback, optional push, PR failure bundles</text>
+  <text x="1104" y="252" class="chipText">test_cmd, rollback, optional push, PR failure bundles</text>
 
   <rect x="40" y="286" width="260" height="460" rx="20" class="panel"/>
   <text x="60" y="314" class="section">1. PROJECT ISOLATION</text>
 
   <rect x="58" y="336" width="224" height="94" rx="14" fill="#F5F9FF" stroke="#C9D9EE"/>
-  <text x="74" y="360" class="panelTitle">WorkspaceManager</text>
+  <text x="74" y="358" class="panelTitle">WorkspaceManager</text>
   <text x="74" y="382" class="mono">build_paths()</text>
   <text x="74" y="402" class="body">Creates a per-repo project root with</text>
   <text x="74" y="418" class="body">separate docs, logs, memory, reports,</text>
   <text x="74" y="434" class="body">and state directories.</text>
 
   <rect x="58" y="446" width="224" height="112" rx="14" fill="#F6FCFA" stroke="#CAE8DF"/>
-  <text x="74" y="470" class="panelTitle">setup_local_project()</text>
+  <text x="74" y="468" class="panelTitle">setup_local_project()</text>
   <text x="74" y="490" class="body">or init_repo()</text>
   <text x="74" y="512" class="body">Attaches or clones the repository,</text>
   <text x="74" y="528" class="body">ensures venv and gitignore, configures</text>
@@ -91,7 +91,7 @@
   <text x="74" y="560" class="body">safe revision.</text>
 
   <rect x="58" y="574" width="224" height="136" rx="14" fill="#FFF9F1" stroke="#EFDABD"/>
-  <text x="74" y="598" class="panelTitle">Boot Metadata</text>
+  <text x="74" y="596" class="panelTitle">Boot Metadata</text>
   <text x="74" y="620" class="mono">metadata.json</text>
   <text x="74" y="636" class="mono">project_config.json</text>
   <text x="74" y="652" class="mono">state/LOOP_STATE.json</text>
@@ -102,38 +102,44 @@
   <rect x="318" y="286" width="286" height="460" rx="20" class="panel"/>
   <text x="338" y="314" class="section">2. PLAN COMPILER</text>
 
-  <rect x="338" y="336" width="246" height="84" rx="14" fill="#F5F9FF" stroke="#C9D9EE"/>
-  <text x="354" y="360" class="panelTitle">scan_repository_inputs()</text>
-  <text x="354" y="382" class="body">Reads README, AGENTS, and repo/docs</text>
-  <text x="354" y="398" class="body">to build a compact planning context.</text>
+  <rect x="338" y="336" width="246" height="90" rx="14" fill="#F5F9FF" stroke="#C9D9EE"/>
+  <text x="354" y="358" class="panelTitle">scan_repository_</text>
+  <text x="354" y="376" class="panelTitle">inputs()</text>
+  <text x="354" y="398" class="body">Reads README, AGENTS, and repo/docs</text>
+  <text x="354" y="414" class="body">to build a compact planning context.</text>
 
-  <rect x="338" y="436" width="246" height="92" rx="14" fill="#F2F7FF" stroke="#C7D8F2"/>
-  <text x="354" y="460" class="panelTitle">planning.py</text>
-  <text x="354" y="482" class="mono">prompt_to_plan_decomposition_prompt()</text>
-  <text x="354" y="498" class="mono">prompt_to_execution_plan_prompt()</text>
-  <text x="354" y="518" class="body">Builds Planner A and Planner B prompts</text>
-  <text x="354" y="534" class="body">from repository context and runtime mode.</text>
+  <rect x="338" y="436" width="246" height="102" rx="14" fill="#F2F7FF" stroke="#C7D8F2"/>
+  <text x="354" y="458" class="panelTitle">planning.py</text>
+  <text x="354" y="478" class="mono">prompt_to_plan_decomposition_</text>
+  <text x="354" y="491" class="mono">prompt()</text>
+  <text x="354" y="505" class="mono">prompt_to_execution_plan_</text>
+  <text x="354" y="518" class="mono">prompt()</text>
+  <text x="354" y="534" class="body">Builds Planner A and Planner B prompts</text>
+  <text x="354" y="550" class="body">from repository context and runtime mode.</text>
 
-  <rect x="338" y="544" width="246" height="100" rx="14" fill="#EEF5FF" stroke="#C7D8F2"/>
-  <text x="354" y="568" class="panelTitle">CodexRunner.run_pass()</text>
-  <text x="354" y="590" class="body">Runs two planning passes:</text>
-  <text x="354" y="606" class="mono">plan-agent-a-decomposition</text>
-  <text x="354" y="622" class="mono">plan-agent-b-packing</text>
-  <text x="354" y="642" class="body">Both write prompt, JSON events, output,</text>
-  <text x="354" y="658" class="body">and diagnostics under block logs.</text>
+  <rect x="338" y="548" width="246" height="110" rx="14" fill="#EEF5FF" stroke="#C7D8F2"/>
+  <text x="354" y="570" class="panelTitle">CodexRunner.</text>
+  <text x="354" y="588" class="panelTitle">run_pass()</text>
+  <text x="354" y="608" class="body">Runs two planning passes:</text>
+  <text x="354" y="624" class="mono">plan-agent-a-decomposition</text>
+  <text x="354" y="638" class="mono">plan-agent-b-packing</text>
+  <text x="354" y="654" class="body">Both write prompt, JSON events, output,</text>
+  <text x="354" y="670" class="body">and diagnostics under block logs.</text>
 
-  <rect x="338" y="660" width="246" height="68" rx="14" fill="#F5FBF6" stroke="#CAE6D3"/>
-  <text x="354" y="684" class="panelTitle">save_execution_plan_state()</text>
-  <text x="354" y="706" class="body">Parses the DAG, normalizes step ids,</text>
-  <text x="354" y="722" class="body">and emits saved planning artifacts.</text>
+  <rect x="338" y="672" width="246" height="78" rx="14" fill="#F5FBF6" stroke="#CAE6D3"/>
+  <text x="354" y="692" class="panelTitle">save_execution_plan_</text>
+  <text x="354" y="710" class="panelTitle">state()</text>
+  <text x="354" y="730" class="body">Parses the DAG, normalizes step ids,</text>
+  <text x="354" y="744" class="body">and emits saved planning artifacts.</text>
 
   <rect x="622" y="286" width="286" height="460" rx="20" class="panel"/>
   <text x="642" y="314" class="section">3. BLOCK EXECUTOR</text>
 
-  <rect x="642" y="336" width="246" height="84" rx="14" fill="#F6FCFA" stroke="#CAE8DF"/>
-  <text x="658" y="360" class="panelTitle">run() -&gt; _run_single_block()</text>
-  <text x="658" y="382" class="body">Advances block_index, enforces stop</text>
-  <text x="658" y="398" class="body">limits, and gates checkpoint approval.</text>
+  <rect x="642" y="336" width="246" height="90" rx="14" fill="#F6FCFA" stroke="#CAE8DF"/>
+  <text x="658" y="358" class="panelTitle">run() -&gt;</text>
+  <text x="658" y="376" class="panelTitle">_run_single_block()</text>
+  <text x="658" y="398" class="body">Advances block_index, enforces stop</text>
+  <text x="658" y="414" class="body">limits, and gates checkpoint approval.</text>
 
   <rect x="642" y="436" width="246" height="100" rx="14" fill="#F7FCF8" stroke="#CAE8DF"/>
   <text x="658" y="460" class="panelTitle">Candidate Selection</text>
@@ -142,28 +148,31 @@
   <text x="658" y="518" class="body">Builds MID_TERM_PLAN, scores candidate</text>
   <text x="658" y="534" class="body">tasks, and writes ACTIVE_TASK.md.</text>
 
-  <rect x="642" y="552" width="246" height="86" rx="14" fill="#F0FBF8" stroke="#CAE8DF"/>
-  <text x="658" y="576" class="panelTitle">implementation_prompt()</text>
-  <text x="658" y="598" class="body">Injects plan, scope guard, task, memory,</text>
-  <text x="658" y="614" class="body">success criteria, and step-specific rules.</text>
+  <rect x="642" y="552" width="246" height="92" rx="14" fill="#F0FBF8" stroke="#CAE8DF"/>
+  <text x="658" y="574" class="panelTitle">implementation_</text>
+  <text x="658" y="592" class="panelTitle">prompt()</text>
+  <text x="658" y="612" class="body">Injects plan, scope guard, task, memory,</text>
+  <text x="658" y="628" class="body">success criteria, and step-specific rules.</text>
 
-  <rect x="642" y="654" width="246" height="74" rx="14" fill="#ECFDF5" stroke="#BFE5D2"/>
-  <text x="658" y="678" class="panelTitle">Execution Pass</text>
-  <text x="658" y="700" class="mono">CodexRunner.run_pass(search_enabled=True)</text>
-  <text x="658" y="716" class="body">Calls codex exec --json inside repo_dir.</text>
+  <rect x="642" y="660" width="246" height="82" rx="14" fill="#ECFDF5" stroke="#BFE5D2"/>
+  <text x="658" y="680" class="panelTitle">Execution Pass</text>
+  <text x="658" y="700" class="mono">CodexRunner.run_pass(</text>
+  <text x="658" y="713" class="mono">search_enabled=True)</text>
+  <text x="658" y="728" class="body">Calls codex exec --json inside repo_dir.</text>
 
   <rect x="926" y="286" width="494" height="460" rx="20" class="panel"/>
   <text x="946" y="314" class="section">4. VALIDATE, RECOVER, AND PERSIST</text>
   <line x1="1172" y1="336" x2="1172" y2="726" class="dash"/>
 
-  <rect x="946" y="336" width="206" height="88" rx="14" fill="#FFF9F3" stroke="#EFD7C2"/>
-  <text x="962" y="360" class="panelTitle">VerificationRunner.run()</text>
-  <text x="962" y="382" class="body">Builds a cache key from git HEAD, dirty</text>
-  <text x="962" y="398" class="body">tree, environment lockfiles, and test_cmd.</text>
-  <text x="962" y="414" class="body">Replays cached logs when fingerprints match.</text>
+  <rect x="946" y="336" width="206" height="94" rx="14" fill="#FFF9F3" stroke="#EFD7C2"/>
+  <text x="962" y="356" class="panelTitle">VerificationRunner.</text>
+  <text x="962" y="374" class="panelTitle">run()</text>
+  <text x="962" y="394" class="body">Builds a cache key from git HEAD, dirty</text>
+  <text x="962" y="410" class="body">tree, environment lockfiles, and test_cmd.</text>
+  <text x="962" y="426" class="body">Replays cached logs when fingerprints match.</text>
 
   <rect x="946" y="440" width="206" height="118" rx="14" fill="#FFF7F5" stroke="#F0D0CA"/>
-  <text x="962" y="464" class="panelTitle">Failure Recovery</text>
+  <text x="962" y="460" class="panelTitle">Failure Recovery</text>
   <text x="962" y="486" class="mono">_run_debugger_pass()</text>
   <text x="962" y="506" class="body">If verification fails, the debugger prompt</text>
   <text x="962" y="522" class="body">gets the failing logs and tries a repair.</text>
@@ -171,55 +180,60 @@
   <text x="962" y="554" class="body">repo back to the saved safe revision.</text>
 
   <rect x="946" y="574" width="206" height="94" rx="14" fill="#F5FBF6" stroke="#CAE6D3"/>
-  <text x="962" y="598" class="panelTitle">Success Path</text>
-  <text x="962" y="620" class="mono">git.commit_all()</text>
-  <text x="962" y="636" class="mono">current_safe_revision = commit</text>
-  <text x="962" y="656" class="body">Optional push happens only after a verified</text>
-  <text x="962" y="672" class="body">commit and an origin remote.</text>
+  <text x="962" y="596" class="panelTitle">Success Path</text>
+  <text x="962" y="616" class="mono">git.commit_all()</text>
+  <text x="962" y="629" class="mono">current_safe_revision =</text>
+  <text x="962" y="642" class="mono">commit</text>
+  <text x="962" y="658" class="body">Optional push happens only after a verified</text>
+  <text x="962" y="674" class="body">commit and an origin remote.</text>
 
-  <rect x="946" y="684" width="206" height="42" rx="14" fill="#EEF4FF" stroke="#CDDCEF"/>
-  <text x="962" y="710" class="body">Closeout uses a separate finalization prompt and verification pass.</text>
+  <rect x="946" y="686" width="206" height="46" rx="14" fill="#EEF4FF" stroke="#CDDCEF"/>
+  <text x="962" y="706" class="body">Closeout uses a separate finalization</text>
+  <text x="962" y="720" class="body">prompt and verification pass.</text>
 
   <rect x="1192" y="336" width="208" height="172" rx="14" fill="#F3F8FF" stroke="#CADAF0"/>
   <text x="1208" y="360" class="panelTitle">Parallel DAG Branch</text>
-  <text x="1208" y="382" class="mono">pending_execution_batches()</text>
-  <text x="1208" y="404" class="body">Ready steps are grouped by dependencies</text>
-  <text x="1208" y="420" class="body">and hard owned-path conflicts.</text>
-  <text x="1208" y="440" class="body">Each worker runs in a git worktree with</text>
-  <text x="1208" y="456" class="body">its own docs, memory, logs, reports,</text>
-  <text x="1208" y="472" class="body">and state directories.</text>
-  <text x="1208" y="492" class="body">Worker commits are cherry-picked back,</text>
-  <text x="1208" y="508" class="body">then the merged batch is verified again.</text>
+  <text x="1208" y="380" class="mono">pending_execution_</text>
+  <text x="1208" y="393" class="mono">batches()</text>
+  <text x="1208" y="410" class="body">Ready steps are grouped by dependencies</text>
+  <text x="1208" y="426" class="body">and hard owned-path conflicts.</text>
+  <text x="1208" y="444" class="body">Each worker runs in a git worktree with</text>
+  <text x="1208" y="460" class="body">its own docs, memory, logs, reports,</text>
+  <text x="1208" y="476" class="body">and state directories.</text>
+  <text x="1208" y="496" class="body">Worker commits are cherry-picked back,</text>
+  <text x="1208" y="512" class="body">then the merged batch is verified again.</text>
 
   <rect x="1192" y="526" width="208" height="120" rx="14" fill="#F6FCFA" stroke="#CAE8DF"/>
-  <text x="1208" y="550" class="panelTitle">Reporter + MemoryStore</text>
-  <text x="1208" y="572" class="body">Writes pass logs, block logs, test runs,</text>
-  <text x="1208" y="588" class="body">attempt history, block reviews, and task</text>
-  <text x="1208" y="604" class="body">memory summaries after each block.</text>
-  <text x="1208" y="624" class="body">Failure bundles can also be posted to</text>
-  <text x="1208" y="640" class="body">an open GitHub pull request.</text>
+  <text x="1208" y="548" class="panelTitle">Reporter +</text>
+  <text x="1208" y="566" class="panelTitle">MemoryStore</text>
+  <text x="1208" y="586" class="body">Writes pass logs, block logs, test runs,</text>
+  <text x="1208" y="602" class="body">attempt history, block reviews, and task</text>
+  <text x="1208" y="618" class="body">memory summaries after each block.</text>
+  <text x="1208" y="634" class="body">Failure bundles can also be posted to</text>
+  <text x="1208" y="650" class="body">an open GitHub pull request.</text>
 
-  <rect x="1192" y="664" width="208" height="62" rx="14" fill="#FFF7F5" stroke="#F0D0CA"/>
-  <text x="1208" y="688" class="panelTitle">Failure Outputs</text>
-  <text x="1208" y="710" class="mono">reports/*.prfail.json / .md</text>
-  <text x="1208" y="726" class="mono">reports/latest_pr_failure_status.json</text>
+  <rect x="1192" y="658" width="208" height="74" rx="14" fill="#FFF7F5" stroke="#F0D0CA"/>
+  <text x="1208" y="678" class="panelTitle">Failure Outputs</text>
+  <text x="1208" y="698" class="mono">reports/*.prfail.json / .md</text>
+  <text x="1208" y="711" class="mono">reports/latest_pr_</text>
+  <text x="1208" y="724" class="mono">failure_status.json</text>
 
   <path d="M281 497H318" class="line"/>
   <path d="M604 497H622" class="line"/>
   <path d="M908 497H926" class="line"/>
   <path d="M174 256V286" class="line"/>
 
-  <path d="M477 728V792" class="line"/>
-  <path d="M764 728V792" class="line"/>
-  <path d="M1102 728V792" class="line"/>
-  <path d="M1296 508V526" class="line"/>
+  <path d="M477 750V792" class="line"/>
+  <path d="M764 742V792" class="line"/>
+  <path d="M1102 732V792" class="line"/>
+  <path d="M1296 512V526" class="line"/>
 
   <rect x="40" y="780" width="1380" height="216" rx="20" class="panel"/>
   <text x="60" y="808" class="section">PERSISTED ARTIFACTS PER PROJECT</text>
   <text x="60" y="830" class="body">The backend keeps execution traceability outside the repository working tree, then updates the repo only through verified commits.</text>
 
   <rect x="58" y="850" width="238" height="122" rx="14" class="soft"/>
-  <text x="74" y="876" class="panelTitle">docs/</text>
+  <text x="74" y="874" class="panelTitle">docs/</text>
   <text x="74" y="898" class="mono">PLAN.md</text>
   <text x="74" y="914" class="mono">MID_TERM_PLAN.md</text>
   <text x="74" y="930" class="mono">ACTIVE_TASK.md</text>
@@ -227,7 +241,7 @@
   <text x="74" y="962" class="mono">CLOSEOUT_REPORT.md</text>
 
   <rect x="316" y="850" width="238" height="122" rx="14" class="soft"/>
-  <text x="332" y="876" class="panelTitle">logs/</text>
+  <text x="332" y="874" class="panelTitle">logs/</text>
   <text x="332" y="898" class="mono">block_000x/*.prompt.md</text>
   <text x="332" y="914" class="mono">block_000x/*.events.jsonl</text>
   <text x="332" y="930" class="mono">passes.jsonl</text>
@@ -235,7 +249,7 @@
   <text x="332" y="962" class="mono">test_runs.jsonl</text>
 
   <rect x="574" y="850" width="238" height="122" rx="14" class="soft"/>
-  <text x="590" y="876" class="panelTitle">memory/</text>
+  <text x="590" y="874" class="panelTitle">memory/</text>
   <text x="590" y="898" class="mono">success_patterns.jsonl</text>
   <text x="590" y="914" class="mono">failure_patterns.jsonl</text>
   <text x="590" y="930" class="mono">task_summaries.jsonl</text>
@@ -243,7 +257,7 @@
   <text x="590" y="968" class="body">and recovery context.</text>
 
   <rect x="832" y="850" width="238" height="122" rx="14" class="soft"/>
-  <text x="848" y="876" class="panelTitle">reports/</text>
+  <text x="848" y="874" class="panelTitle">reports/</text>
   <text x="848" y="898" class="mono">latest_report.json</text>
   <text x="848" y="914" class="mono">*.prfail.json</text>
   <text x="848" y="930" class="mono">*.prfail.md</text>
@@ -252,7 +266,7 @@
   <text x="848" y="984" class="body">failure bundles live here.</text>
 
   <rect x="1090" y="850" width="312" height="122" rx="14" class="soft"/>
-  <text x="1106" y="876" class="panelTitle">state/</text>
+  <text x="1106" y="874" class="panelTitle">state/</text>
   <text x="1106" y="898" class="mono">EXECUTION_PLAN.json</text>
   <text x="1106" y="914" class="mono">CHECKPOINTS.json</text>
   <text x="1106" y="930" class="mono">verification_cache/*</text>

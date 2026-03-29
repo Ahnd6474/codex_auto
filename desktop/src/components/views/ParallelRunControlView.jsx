@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import { ExecutionFlowChart } from "../common/ExecutionFlowChart";
@@ -250,15 +250,19 @@ export function ParallelRunControlView({
   activeJob,
   autoRunAfterPlan,
   selectedStepId,
+  form,
   busy,
   canRequestStop = false,
   canCancelReservation = false,
   queuedJobs = [],
   onPromptChange,
+  onChangeForm,
   onGeneratePlan,
   onSavePlan,
   onResetPlan,
   onRunPlan,
+  onRunManualDebugger,
+  onRunManualMerger,
   onRequestStop,
   onCancelQueuedJob,
   onAutoRunAfterPlanChange,
@@ -269,6 +273,7 @@ export function ParallelRunControlView({
   onDeleteStep,
 }) {
   const { language, t } = useI18n();
+  const promptRef = useRef(null);
   const providerOptions = [
     ["ensemble", t("option.providerEnsemble")],
     ["openai", "Codex CLI"],
@@ -288,6 +293,7 @@ export function ParallelRunControlView({
   const livePlan = activeJob?.status === "running" && detail?.plan ? detail.plan : planDraft;
   const promptValue = livePlan?.project_prompt || "";
   const [promptDraft, setPromptDraft] = useState(promptValue);
+  const [failureDismissed, setFailureDismissed] = useState(false);
   const steps = useMemo(
     () =>
       planStepsWithCloseout(livePlan, {
@@ -316,6 +322,7 @@ export function ParallelRunControlView({
     [steps],
   );
   const selectedSystemStep = isSystemStep(selectedStep);
+  const selectedStepIndex = selectedStep ? steps.findIndex((s) => s.step_id === selectedStepId) : -1;
   const parallelLimitValue = parallelWorkerLabel(parallelInsight.recommended_workers ?? 1, language);
   const parallelLimitDetails = parallelLimitDescription(parallelInsight, language);
   const parallelLimitCardTone = parallelLimitTone(parallelInsight);
@@ -344,6 +351,15 @@ export function ParallelRunControlView({
         || failureArtifacts.length
       ),
   );
+  const manualDebuggerLabel = language === "ko" ? "수동 디버거 호출" : "Run Debugger";
+  const manualMergerLabel = language === "ko" ? "수동 머저 호출" : "Run Merger";
+  const manualRecoveryHint = language === "ko"
+    ? "자동 복구가 실패했을 때 최근 실패 로그로 debugger를 다시 실행하거나, 현재 git 충돌 상태를 merger에 넘길 수 있습니다."
+    : "When automatic recovery falls short, rerun the debugger against the latest failure logs or hand the current git conflict to the merger.";
+
+  useEffect(() => {
+    setFailureDismissed(false);
+  }, [latestFailure?.summary, latestFailure?.report_markdown_file, latestFailure?.report_json_file]);
 
   useEffect(() => {
     setPromptDraft(promptValue);
@@ -358,6 +374,21 @@ export function ParallelRunControlView({
     }, 180);
     return () => window.clearTimeout(timer);
   }, [onPromptChange, promptDraft, promptValue]);
+
+  // Auto-resize textarea based on content
+  useEffect(() => {
+    const el = promptRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+  }, [promptDraft]);
+
+  useEffect(() => {
+    if (!selectedStep) return undefined;
+    const handler = (e) => { if (e.key === "Escape") onSelectStep?.(null); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedStep, onSelectStep]);
 
   return (
     <section className="workspace-view run-view">
@@ -400,11 +431,18 @@ export function ParallelRunControlView({
       </div>
 
       {/* ── Failure card ── */}
-      {showFailureCard ? (
+      {showFailureCard && !failureDismissed ? (
         <div className="content-card" style={{ borderColor: "rgba(200,93,97,0.4)" }}>
           <div className="content-card__header">
             <strong style={{ color: "var(--danger)" }}>{t("test.failed")}</strong>
             <span className={`status-badge status-badge--${statusTone("failed")}`}>{displayStatus("failed", language)}</span>
+            <button
+              className="step-editor-close"
+              onClick={() => setFailureDismissed(true)}
+              type="button"
+              title={language === "ko" ? "닫기" : "Dismiss"}
+              aria-label={language === "ko" ? "닫기" : "Dismiss"}
+            >✕</button>
           </div>
           <div className="step-editor-grid">
             {latestFailure?.summary ? <div className="field field--wide"><span>{t("common.status")}</span><p>{latestFailure.summary}</p></div> : null}
@@ -412,6 +450,15 @@ export function ParallelRunControlView({
             {latestFailure?.report_json_file ? <div className="field field--wide"><span>Failure bundle</span><p style={{ fontFamily: "monospace", fontSize: "12px" }}>{latestFailure.report_json_file}</p></div> : null}
             {failureArtifacts.length ? <div className="field field--wide"><span>Failure artifacts</span><p style={{ fontFamily: "monospace", fontSize: "12px" }}>{failureArtifacts.join("\n")}</p></div> : null}
           </div>
+          <div className="action-row" style={{ marginTop: "12px" }}>
+            <button className="toolbar-btn toolbar-btn--accent" onClick={onRunManualDebugger} type="button" disabled={busy}>
+              <RunIcon /><span>{manualDebuggerLabel}</span>
+            </button>
+            <button className="toolbar-btn" onClick={onRunManualMerger} type="button" disabled={busy}>
+              <RunIcon /><span>{manualMergerLabel}</span>
+            </button>
+          </div>
+          <p style={{ marginTop: "10px", fontSize: "12px", color: "var(--text-dim)" }}>{manualRecoveryHint}</p>
         </div>
       ) : null}
 
@@ -419,9 +466,29 @@ export function ParallelRunControlView({
       <div className="run-prompt-strip">
         <div className="run-prompt-strip__label">
           <span>{language === "ko" ? "프롬프트" : "Prompt"}</span>
-          <span className="run-prompt-strip__count">{livePlan?.project_prompt?.length || 0} {language === "ko" ? "자" : "chars"}</span>
+          <div className="run-prompt-strip__label-right">
+            <span className="run-prompt-strip__count">{livePlan?.project_prompt?.length || 0} {language === "ko" ? "자" : "chars"}</span>
+            {/* Effort pill */}
+            <select
+              className="run-effort-pill"
+              value={form?.runtime?.effort || detail?.runtime?.effort || "high"}
+              onChange={(event) =>
+                onChangeForm?.((current) => ({
+                  ...current,
+                  runtime: { ...current.runtime, effort: event.target.value },
+                }))
+              }
+              disabled={busy}
+              title={language === "ko" ? "모델 추론 강도" : "Reasoning strength"}
+            >
+              {REASONING_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>{reasoningEffortLabel(opt, language)}</option>
+              ))}
+            </select>
+          </div>
         </div>
         <textarea
+          ref={promptRef}
           className="run-prompt-strip__input"
           value={promptDraft}
           onChange={(event) => setPromptDraft(event.target.value)}
@@ -470,14 +537,25 @@ export function ParallelRunControlView({
         <div className="run-step-editor">
           <div className="run-step-editor__header">
             <strong>{selectedStep.step_id}: {selectedStep.title || t("run.selectedStep")}</strong>
+            {selectedStepIndex >= 0 ? (
+              <span className="step-position-badge">{selectedStepIndex + 1}/{steps.length}</span>
+            ) : null}
             <span className={`status-badge status-badge--${statusTone(selectedStepStatus)}`}>
               {displayStatus(selectedStepStatus, language)}
             </span>
+            <button
+              className="step-editor-close"
+              onClick={() => onSelectStep?.(null)}
+              type="button"
+              title={language === "ko" ? "닫기 (Esc)" : "Close (Esc)"}
+              aria-label={language === "ko" ? "닫기" : "Close"}
+            >✕</button>
           </div>
 
           {selectedSystemStep ? (
             <div className="step-editor-grid">
               <div className="field field--wide"><span>{t("field.description")}</span><p>{selectedStep.display_description || t("run.noSummary")}</p></div>
+              {selectedStep.deadline_at ? <div className="field field--wide"><span>{language === "ko" ? "마감" : "Deadline"}</span><p>{selectedStep.deadline_at}</p></div> : null}
               <div className="field field--wide"><span>{t("field.dependsOn")}</span><p>{(selectedStep.depends_on || []).join(", ") || t("common.none")}</p></div>
               {selectedStep.notes ? <div className="field field--wide"><span>{t("common.status")}</span><p>{selectedStep.notes}</p></div> : null}
               {selectedStep.step_id === CLOSEOUT_STEP_ID ? (
@@ -503,6 +581,16 @@ export function ParallelRunControlView({
               ) : null}
 
               <label className="field field--wide"><span>{t("field.title")}</span><input value={selectedStep.title || ""} onChange={(event) => onUpdateStepField("title", event.target.value)} disabled={!editableStep} /></label>
+
+              <label className="field">
+                <span>{language === "ko" ? "마감" : "Deadline"}</span>
+                <input
+                  value={selectedStep.deadline_at || ""}
+                  onChange={(event) => onUpdateStepField("deadline_at", event.target.value)}
+                  disabled={!editableStep}
+                  placeholder={language === "ko" ? "예: 2026-04-05 18:00" : "Example: 2026-04-05 18:00"}
+                />
+              </label>
 
               <label className="field"><span>{t("field.gptReasoning")}</span>
                 <select value={selectedStep.reasoning_effort || detail?.runtime?.effort || "high"} onChange={(event) => onUpdateStepField("reasoning_effort", event.target.value)} disabled={!editableStep}>

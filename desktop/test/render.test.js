@@ -708,8 +708,133 @@ test("IdeToolbar renders the active command and DAG-ready progress text", async 
 
   assert.match(html, /Run Remaining Steps/);
   assert.match(html, /Completed 1\/4 steps, ready: ST2, ST3/);
-  assert.match(html, /Program Settings/);
+  assert.match(html, /Project Settings/);
   assert.doesNotMatch(html, />Closeout<\/button>/);
+});
+
+test("IdeToolbar renders the selected project and highlights project settings", async () => {
+  const html = await renderBundledComponent(
+    "ide-toolbar-project-selector-render",
+    "./src/components/layout/IdeToolbar.jsx",
+    "IdeToolbar",
+    {
+      projects: [
+        {
+          repo_id: "demo",
+          display_name: "Demo Project",
+          status: "plan_ready",
+        },
+      ],
+      selectedProjectId: "demo",
+      projectDetail: {
+        project: {
+          display_name: "Demo Project",
+          current_status: "plan_ready",
+        },
+      },
+      planDraft: {
+        execution_mode: "serial",
+        closeout_status: "not_started",
+        steps: [],
+      },
+      busy: false,
+      activeJob: null,
+      activeCenterTab: "config",
+      onSelectProject: noop,
+      onNewProject: noop,
+      onRefresh: noop,
+      onOpenSettings: noop,
+      onGeneratePlan: noop,
+      onRunPlan: noop,
+      onApproveCheckpoint: noop,
+    },
+  );
+
+  assert.match(html, /Demo Project/);
+  assert.match(html, /toolbar-btn toolbar-btn--active/);
+  assert.match(html, /title="Project Settings"/);
+});
+
+test("IdeToolbar keeps project link actions visible when only form-level paths are available", async () => {
+  const html = await renderBundledComponent(
+    "ide-toolbar-project-links-render",
+    "./src/components/layout/IdeToolbar.jsx",
+    "IdeToolbar",
+    {
+      projects: [],
+      selectedProjectId: "",
+      projectDetail: {
+        project: {
+          current_status: "setup_ready",
+        },
+      },
+      planDraft: {
+        execution_mode: "serial",
+        closeout_status: "not_started",
+        steps: [],
+      },
+      projectPath: "C:/demo",
+      githubUrl: "https://github.com/example/demo",
+      busy: false,
+      activeJob: null,
+      activeCenterTab: "config",
+      onSelectProject: noop,
+      onNewProject: noop,
+      onRefresh: noop,
+      onOpenSettings: noop,
+      onGeneratePlan: noop,
+      onRunPlan: noop,
+      onApproveCheckpoint: noop,
+      onOpenFolder: noop,
+      onOpenVsCode: noop,
+      onOpenGithub: noop,
+    },
+  );
+
+  assert.match(html, /title="Open folder"/);
+  assert.match(html, /title="Open in external editor"/);
+  assert.match(html, /title="Open on GitHub"/);
+});
+
+test("IdeToolbar keeps project link actions visible but disabled without project paths", async () => {
+  const html = await renderBundledComponent(
+    "ide-toolbar-project-links-disabled-render",
+    "./src/components/layout/IdeToolbar.jsx",
+    "IdeToolbar",
+    {
+      projects: [],
+      selectedProjectId: "",
+      projectDetail: {
+        project: {
+          current_status: "idle",
+        },
+      },
+      planDraft: {
+        execution_mode: "serial",
+        closeout_status: "not_started",
+        steps: [],
+      },
+      projectPath: "",
+      githubUrl: "",
+      busy: false,
+      activeJob: null,
+      activeCenterTab: "config",
+      onSelectProject: noop,
+      onNewProject: noop,
+      onRefresh: noop,
+      onOpenSettings: noop,
+      onGeneratePlan: noop,
+      onRunPlan: noop,
+      onApproveCheckpoint: noop,
+      onOpenFolder: noop,
+      onOpenVsCode: noop,
+      onOpenGithub: noop,
+    },
+  );
+
+  assert.match(html, /title="Open folder"[^>]*disabled=""/);
+  assert.match(html, /title="Open in external editor"[^>]*disabled=""/);
+  assert.match(html, /title="Open on GitHub"[^>]*disabled=""/);
 });
 
 test("IdeToolbar prefers the live plan progress while a run is active", async () => {
@@ -1651,7 +1776,9 @@ test("AppSettingsView exposes dashboard visibility controls", async () => {
         },
       },
       busy: false,
+      dirty: true,
       onChangeSettings: noop,
+      onSaveSettings: noop,
       onGenerateShareLink: noop,
       onCopyShareLink: noop,
       onRevokeShareLink: noop,
@@ -1660,6 +1787,7 @@ test("AppSettingsView exposes dashboard visibility controls", async () => {
   );
 
   assert.doesNotMatch(html, /Show only the dashboard cards you want to keep visible\./);
+  assert.match(html, /Save Program Settings/);
   assert.match(html, /Status/);
   assert.match(html, /5h Usage/);
   assert.match(html, /7d Usage/);
@@ -1819,6 +1947,7 @@ test("ConfigEditorView no longer renders the advanced settings section", async (
       ],
       busy: false,
       onChangeForm: noop,
+      onSaveProject: noop,
       onChooseDirectory: noop,
       onArchiveProject: noop,
       onDeleteProject: noop,
@@ -1827,11 +1956,142 @@ test("ConfigEditorView no longer renders the advanced settings section", async (
 
   assert.doesNotMatch(html, /Advanced Settings/);
   assert.doesNotMatch(html, /Custom Model Slug/);
+  assert.match(html, />Save Configuration<\/button>/);
   assert.match(html, /Planning Reasoning/);
   assert.match(html, /Memory \/ Worker \(GiB\)/);
   assert.doesNotMatch(html, /Extra Prompt/);
   assert.match(html, />Archive Project<\/button>/);
   assert.match(html, />Delete Project<\/button>/);
+});
+
+test("ConfigEditorView keeps checkpoint and report controls editable during an active run", async () => {
+  const html = await renderBundledComponent(
+    "config-editor-live-runtime-render",
+    "./src/components/views/ConfigEditorView.jsx",
+    "ConfigEditorView",
+    {
+      form: {
+        project_dir: "C:/demo",
+        display_name: "Demo",
+        branch: "main",
+        github_mode: "existing",
+        origin_url: "",
+        runtime: {
+          model_provider: "openai",
+          model: "gpt-5.4",
+          model_preset: "",
+          model_slug_input: "gpt-5.4",
+          effort: "medium",
+          workflow_mode: "standard",
+          execution_mode: "parallel",
+          parallel_worker_mode: "auto",
+          parallel_workers: 0,
+          parallel_memory_per_worker_gib: 3,
+          checkpoint_interval_blocks: 2,
+          require_checkpoint_approval: true,
+          generate_word_report: true,
+          ml_max_cycles: 3,
+          max_blocks: 5,
+        },
+      },
+      modelPresets: [],
+      modelCatalog: [
+        {
+          model: "gpt-5.4",
+          display_name: "GPT-5.4",
+          hidden: false,
+          default_reasoning_effort: "medium",
+          supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
+        },
+      ],
+      busy: true,
+      activeJob: {
+        status: "running",
+        command: "run-plan",
+      },
+      onChangeForm: noop,
+      onSaveProject: noop,
+      onChooseDirectory: noop,
+      onArchiveProject: noop,
+      onDeleteProject: noop,
+    },
+  );
+
+  assert.match(html, /Save Configuration/);
+  const saveButtonMatch = html.match(/<button[^>]*>Save Configuration<\/button>/);
+  assert.ok(saveButtonMatch, "Save Configuration button should exist");
+  assert.doesNotMatch(saveButtonMatch[0], /disabled=""/);
+  assert.match(html, /Checkpoint Interval/);
+  assert.match(html, /Generate Word Report/);
+});
+
+test("DetailsPane shows report documents and checkpoint deadlines in the inspector", async () => {
+  const html = await renderBundledComponent(
+    "details-pane-documents-render",
+    "./src/components/layout/DetailsPane.jsx",
+    "DetailsPane",
+    {
+      detail: {
+        project: {
+          current_status: "running:parallel",
+          display_name: "Demo",
+          slug: "demo",
+          branch: "main",
+          repo_path: "C:/demo",
+          current_safe_revision: "abc123",
+        },
+        runtime: {
+          model: "gpt-5.4",
+          effort: "medium",
+          generate_word_report: true,
+        },
+        checkpoints: {
+          pending: {
+            checkpoint_id: "CP1",
+            title: "Prepare release",
+            target_block: 1,
+            status: "awaiting_review",
+            deadline_at: "2026-04-05 18:00",
+          },
+        },
+        reports: {
+          closeout_report_text: "# Closeout Report",
+          word_report_path: "C:/demo/reports/CLOSEOUT_REPORT.docx",
+          powerpoint_report_path: "",
+          powerpoint_report_target_path: "C:/demo/reports/CLOSEOUT_REPORT.pptx",
+          ml_experiment_report_text: "",
+        },
+        files: {
+          closeout_report_file: "C:/demo/docs/CLOSEOUT_REPORT.md",
+          word_report_file: "C:/demo/reports/CLOSEOUT_REPORT.docx",
+          powerpoint_report_file: "C:/demo/reports/CLOSEOUT_REPORT.pptx",
+          ml_experiment_report_file: "C:/demo/docs/ML_EXPERIMENT_REPORT.md",
+        },
+      },
+      planDraft: {
+        steps: [
+          {
+            step_id: "ST1",
+            title: "Prepare release",
+            display_description: "Prepare release checkpoint",
+            success_criteria: "Release notes updated",
+            reasoning_effort: "medium",
+            deadline_at: "2026-04-05 18:00",
+            status: "pending",
+          },
+        ],
+      },
+      selectedStepId: "ST1",
+      modelPresets: [],
+      onHide: noop,
+    },
+  );
+
+  assert.match(html, /Documents/);
+  assert.match(html, /PowerPoint Report/);
+  assert.match(html, /C:\/demo\/reports\/CLOSEOUT_REPORT\.pptx/);
+  assert.match(html, /Deadline:/);
+  assert.match(html, /2026-04-05 18:00/);
 });
 
 test("ConfigEditorView keeps a selected model visible even when the catalog omits it", async () => {

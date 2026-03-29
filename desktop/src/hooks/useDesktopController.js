@@ -1,6 +1,6 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { confirm as confirmDialog, open } from "@tauri-apps/plugin-dialog";
-import { bridgeRequest, cancelBridgeJob, configureBridgeScheduler, startBridgeJob, subscribeBridgeEvents } from "../api";
+import { bridgeRequest, cancelBridgeJob, configureBridgeScheduler, openInSystem, openInVsCode, startBridgeJob, subscribeBridgeEvents } from "../api";
 import { BRIDGE_COMMANDS } from "../bridgeProtocol";
 import { bridgeEventJob, bridgeEventProject, isJobUpdatedEvent, isProjectChangedEvent, isProjectUiEvent } from "../controller/bridgeEvents";
 import {
@@ -94,7 +94,6 @@ export function useDesktopController() {
   const [message, setMessage] = useState(null);
   const [shareSettings, setShareSettings] = useState(() => defaultShareSettings());
   const [autoRunAfterPlan, setAutoRunAfterPlan] = usePersistentState("jakal-flow:auto-run-after-plan", false);
-  const projectAutosaveTimerRef = useRef(null);
   const lastAppliedDetailSignatureRef = useRef("");
   const bridgeRefreshInFlightRef = useRef(false);
   const bridgeRefreshTimerRef = useRef(null);
@@ -196,9 +195,6 @@ export function useDesktopController() {
 
   useEffect(() => {
     return () => {
-      if (projectAutosaveTimerRef.current) {
-        window.clearTimeout(projectAutosaveTimerRef.current);
-      }
       if (bridgeRefreshTimerRef.current) {
         window.clearTimeout(bridgeRefreshTimerRef.current);
       }
@@ -859,17 +855,13 @@ export function useDesktopController() {
     if (!repoId) {
       return null;
     }
-    if (projectAutosaveTimerRef.current) {
-      window.clearTimeout(projectAutosaveTimerRef.current);
-      projectAutosaveTimerRef.current = null;
-    }
     const previousProjectId = selectedProjectId;
     setLoadingProjectId(repoId);
     setSelectedProjectId(repoId);
     try {
       const detail = await fetchProjectDetail(bridgeRequest, repoId, workspaceRoot, {
         refreshCodexStatus: options.refreshCodexStatus ?? false,
-        detailLevel: options.detailLevel ?? "core",
+        detailLevel: options.detailLevel ?? (wantsExpandedDetail ? "full" : "core"),
       });
         applyProjectDetail(
           detail,
@@ -965,10 +957,6 @@ export function useDesktopController() {
   }
 
   function startNewProject() {
-    if (projectAutosaveTimerRef.current) {
-      window.clearTimeout(projectAutosaveTimerRef.current);
-      projectAutosaveTimerRef.current = null;
-    }
     setMessage(null);
     clearSelectedProjectState(defaultRuntime);
     setCenterTab("config");
@@ -984,10 +972,7 @@ export function useDesktopController() {
   function updateProgramSettings(updater) {
     setProgramSettings((current) => {
       const draft = typeof updater === "function" ? updater(current) : updater;
-      const nextSettings = programSettingsFromRuntime(draft);
-      setStoredProgramSettings(nextSettings);
-      setProjectForm((form) => applyProgramSettingsToForm(form, nextSettings));
-      return nextSettings;
+      return programSettingsFromRuntime(draft);
     });
   }
 
@@ -1027,25 +1012,9 @@ export function useDesktopController() {
     });
   }
 
-  function scheduleProjectAutosave(nextForm) {
-    if (projectAutosaveTimerRef.current) {
-      window.clearTimeout(projectAutosaveTimerRef.current);
-      projectAutosaveTimerRef.current = null;
-    }
-    if (!String(nextForm?.project_dir || "").trim()) {
-      return;
-    }
-    projectAutosaveTimerRef.current = window.setTimeout(() => {
-      projectAutosaveTimerRef.current = null;
-      void saveProject({ formOverride: nextForm, silent: true });
-    }, 500);
-  }
-
   function updateProjectForm(updater) {
     setProjectForm((current) => {
-      const next = typeof updater === "function" ? updater(current) : updater;
-      scheduleProjectAutosave(next);
-      return next;
+      return typeof updater === "function" ? updater(current) : updater;
     });
   }
 
@@ -1457,6 +1426,40 @@ export function useDesktopController() {
     }
   }
 
+  async function runManualDebugger() {
+    if (!projectForm.project_dir.trim()) {
+      setMessage(messagePayload("error", translate(language, "message.openProjectFirst")));
+      return;
+    }
+    const latestFailure = projectDetail?.reports?.latest_failure || {};
+    if (!latestFailure.summary && !latestFailure.report_markdown_file && !latestFailure.report_json_file) {
+      setMessage(
+        messagePayload(
+          "error",
+          language === "ko"
+            ? "최근 실패 로그가 없어 수동 디버거를 실행할 수 없습니다."
+            : "Manual debugger requires a recent failure log.",
+        ),
+      );
+      return;
+    }
+    const job = await startJob(BRIDGE_COMMANDS.RUN_MANUAL_DEBUGGER, buildProjectPayload(projectForm, planDraft));
+    if (job) {
+      setPlanDirty(false);
+    }
+  }
+
+  async function runManualMerger() {
+    if (!projectForm.project_dir.trim()) {
+      setMessage(messagePayload("error", translate(language, "message.openProjectFirst")));
+      return;
+    }
+    const job = await startJob(BRIDGE_COMMANDS.RUN_MANUAL_MERGER, buildProjectPayload(projectForm, planDraft));
+    if (job) {
+      setPlanDirty(false);
+    }
+  }
+
   async function requestStop() {
     if (!projectForm.project_dir.trim() || String(activeJob?.status || "").trim().toLowerCase() !== "running") {
       return;
@@ -1772,6 +1775,8 @@ export function useDesktopController() {
     saveProgramSettings,
     generatePlan,
     runPlan,
+    runManualDebugger,
+    runManualMerger,
     requestStop,
     cancelQueuedReservation,
     generateShareLink,
@@ -1784,5 +1789,31 @@ export function useDesktopController() {
     deleteStep,
     moveStep,
     setSelectedProjectId,
+    openRepoInFolder: () => {
+      const path = projectDetail?.project?.repo_path || projectForm?.project_dir || "";
+      if (path) openInSystem(path).catch(() => {});
+    },
+    openRepoInVsCode: () => {
+      const path = projectDetail?.project?.repo_path || projectForm?.project_dir || "";
+      if (path) openInVsCode(path).catch(() => {});
+    },
+    openRepoOnGithub: () => {
+      const url = projectDetail?.github?.origin_url || projectDetail?.github?.repo_url || projectForm?.origin_url || "";
+      if (!url) {
+        return;
+      }
+      const normalizedUrl = url.startsWith("http")
+        ? url.replace(/\.git$/i, "")
+        : `https://github.com/${url.replace(/^git@github\.com:/i, "").replace(/\.git$/i, "")}`;
+      openInSystem(normalizedUrl).catch(() => {});
+    },
+    smartShareLink: async () => {
+      const existingUrl = workspaceShareDetail?.active_session?.share_url || "";
+      if (existingUrl) {
+        copyShareLink();
+      } else {
+        generateShareLink();
+      }
+    },
   };
 }

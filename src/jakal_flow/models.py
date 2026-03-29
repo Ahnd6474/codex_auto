@@ -66,6 +66,14 @@ def _optional_str(value: Any) -> str | None:
     return normalized or None
 
 
+def _normalize_execution_step_model(model_provider: Any, model: Any) -> str:
+    normalized_provider = str(model_provider or "").strip().lower()
+    normalized_model = str(model or "").strip().lower()
+    if normalized_model == "codex" and normalized_provider in {"openai", "ensemble"}:
+        return ""
+    return normalized_model
+
+
 @dataclass(slots=True)
 class RuntimeOptions:
     model_provider: str = "openai"
@@ -233,6 +241,7 @@ class ProjectPaths:
     execution_flow_svg_file: Path
     closeout_report_file: Path
     closeout_report_docx_file: Path
+    closeout_report_pptx_file: Path
     ml_experiment_report_file: Path
     ml_experiment_results_svg_file: Path
 
@@ -366,6 +375,7 @@ class Checkpoint:
     title: str
     plan_refs: list[str]
     target_block: int
+    deadline_at: str = ""
     status: str = "pending"
     created_at: str | None = None
     reached_at: str | None = None
@@ -384,6 +394,7 @@ class ExecutionStep:
     title: str
     display_description: str = ""
     codex_description: str = ""
+    deadline_at: str = ""
     model_provider: str = ""
     model: str = ""
     test_command: str = ""
@@ -412,8 +423,12 @@ class ExecutionStep:
             title=str(data.get("title", data.get("task_title", ""))).strip(),
             display_description=display_description,
             codex_description=codex_description,
+            deadline_at=str(data.get("deadline_at", "")).strip(),
             model_provider=str(data.get("model_provider", "")).strip().lower(),
-            model=str(data.get("model", data.get("model_slug_input", ""))).strip().lower(),
+            model=_normalize_execution_step_model(
+                data.get("model_provider", ""),
+                data.get("model", data.get("model_slug_input", "")),
+            ),
             test_command=str(data.get("test_command", "")).strip(),
             success_criteria=str(data.get("success_criteria", "")).strip(),
             reasoning_effort=str(data.get("reasoning_effort", data.get("effort", ""))).strip().lower(),

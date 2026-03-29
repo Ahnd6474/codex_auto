@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import { commandLabel, isDebuggingStatus, isPlanningProgressRunning, projectStatusWithJob, statusTone, toolbarProgressCaptionDisplay } from "../../utils";
@@ -67,6 +68,121 @@ function ChevronRight() {
   );
 }
 
+function ChevronDown() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
+function PlusSmIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function ProjectSelector({ projects, selectedProjectId, onSelectProject = () => {}, onNewProject = () => {} }) {
+  const { language, t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+  const containerRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const selectedProject = (projects || []).find((p) => p.repo_id === selectedProjectId);
+  const filtered = filter.trim()
+    ? (projects || []).filter((p) => (p.display_name || "").toLowerCase().includes(filter.toLowerCase()))
+    : (projects || []);
+
+  useEffect(() => {
+    if (!open) { setFilter(""); return; }
+    const timer = setTimeout(() => inputRef.current?.focus(), 30);
+    return () => clearTimeout(timer);
+  }, [open]);
+
+  useEffect(() => {
+    function onPointerDown(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
+    }
+    function onKeyDown(e) { if (e.key === "Escape") setOpen(false); }
+    if (open) {
+      window.addEventListener("pointerdown", onPointerDown);
+      window.addEventListener("keydown", onKeyDown);
+    }
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const selectProjectLabel = language === "ko" ? "프로젝트 선택" : "Select project";
+  const selectProjectPlaceholder = language === "ko" ? "프로젝트 선택..." : "Select project...";
+  const searchProjectsPlaceholder = language === "ko" ? "프로젝트 검색..." : "Search projects...";
+  const noProjectsLabel = language === "ko" ? "프로젝트 없음" : "No projects yet";
+
+  function handleNewProject() {
+    setOpen(false);
+    onNewProject();
+  }
+
+  function handleSelectProject(repoId) {
+    onSelectProject(repoId);
+    setOpen(false);
+  }
+
+  return (
+    <div className="project-selector" ref={containerRef}>
+      <button
+        className="project-selector__btn"
+        onClick={() => setOpen((v) => !v)}
+        type="button"
+        title={selectProjectLabel}
+      >
+        <span>{selectedProject?.display_name || selectProjectPlaceholder}</span>
+        <ChevronDown />
+      </button>
+
+      {open ? (
+        <div className="project-selector__dropdown">
+          <div className="project-selector__search">
+            <input
+              ref={inputRef}
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder={searchProjectsPlaceholder}
+              type="search"
+            />
+          </div>
+          <button
+            className="project-selector__new"
+            onClick={handleNewProject}
+            type="button"
+          >
+            <PlusSmIcon /> {t("action.new")}
+          </button>
+          <div className="project-selector__list">
+            {filtered.length ? filtered.map((p) => (
+              <button
+                key={p.repo_id}
+                className={`project-selector__item${p.repo_id === selectedProjectId ? " active" : ""}`}
+                onClick={() => handleSelectProject(p.repo_id)}
+                type="button"
+              >
+                <span className="project-selector__item-name">{p.display_name}</span>
+                <span className={`chip-dot chip-dot--${statusTone(p.status)}`} />
+              </button>
+            )) : (
+              <div className="project-selector__empty">{noProjectsLabel}</div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function RemoteLinkIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -76,13 +192,44 @@ function RemoteLinkIcon() {
   );
 }
 
+function FolderIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function EditorIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M9 9l3 3-3 3M13 15h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function GithubIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function IdeToolbar({
+  projects,
+  selectedProjectId,
+  onSelectProject,
+  onNewProject,
   projectDetail,
   planDraft,
   pendingCheckpoint,
   busy,
   activeJob,
   activeCenterTab,
+  projectPath,
+  githubUrl,
   shareUrl,
   shareBusy,
   onRefresh,
@@ -90,7 +237,10 @@ export function IdeToolbar({
   onGeneratePlan,
   onRunPlan,
   onApproveCheckpoint,
-  onGenerateShareLink,
+  onSmartShareLink,
+  onOpenFolder,
+  onOpenVsCode,
+  onOpenGithub,
 }) {
   const planningRunning = isPlanningProgressRunning(projectDetail?.planning_progress);
   const projectStatusWithActiveJob = projectStatusWithJob(projectDetail?.project?.current_status || "idle", activeJob) || "idle";
@@ -99,7 +249,6 @@ export function IdeToolbar({
       ? projectStatusWithActiveJob
       : "running:generate-plan";
   const livePlan = String(activeJob?.status || "").trim().toLowerCase() === "running" && projectDetail?.plan ? projectDetail.plan : planDraft;
-  const projectName = projectDetail?.project?.display_name || projectDetail?.project?.slug || null;
   const { language, t } = useI18n();
   const normalizedProjectStatus = String(projectStatus || "").trim().toLowerCase();
   const statusLabel =
@@ -115,7 +264,8 @@ export function IdeToolbar({
     planningProgress: projectDetail?.planning_progress,
   });
   const tone = statusTone(projectStatus);
-
+  const repoPath = String(projectPath || "").trim();
+  const remoteUrl = String(githubUrl || "").trim();
   return (
     <header className="ide-toolbar">
       {/* Logo + Refresh */}
@@ -132,12 +282,16 @@ export function IdeToolbar({
         </button>
       </div>
 
-      {/* Breadcrumb: Project > Status > Plan */}
+      {/* Project selector dropdown */}
+      <ProjectSelector
+        projects={projects}
+        selectedProjectId={selectedProjectId}
+        onSelectProject={onSelectProject}
+        onNewProject={onNewProject}
+      />
+
+      {/* Breadcrumb: Status > Plan */}
       <nav className="ide-toolbar__breadcrumb" aria-label="Navigation">
-        <span className="breadcrumb-segment">
-          <strong>{projectName || t("project.none")}</strong>
-        </span>
-        <ChevronRight />
         <span className={`breadcrumb-segment breadcrumb-segment--${tone}`}>
           <span className={`chip-dot chip-dot--${tone}`} />
           {statusLabel}
@@ -162,11 +316,11 @@ export function IdeToolbar({
       {/* Quick actions */}
       <div className="ide-toolbar__group">
         <button
-          className={`toolbar-btn ${activeCenterTab === "app-settings" ? "toolbar-btn--active" : ""}`}
+          className={`toolbar-btn ${activeCenterTab === "config" ? "toolbar-btn--active" : ""}`}
           onClick={onOpenSettings}
-          title={`${t("toolbar.programSettings")} (Ctrl+6)`}
+          title={t("tab.config")}
           type="button"
-          aria-label={t("toolbar.programSettings")}
+          aria-label={t("tab.config")}
         >
           <SettingsIcon />
         </button>
@@ -174,14 +328,44 @@ export function IdeToolbar({
         <div className="toolbar-divider" />
 
         <button
-          className={`toolbar-btn toolbar-btn--remote${shareUrl ? " toolbar-btn--active" : ""}`}
-          onClick={onGenerateShareLink}
+          className="toolbar-btn toolbar-btn--icon"
+          onClick={onOpenFolder}
+          type="button"
+          title={language === "ko" ? "폴더 열기" : "Open folder"}
+          disabled={!repoPath}
+        >
+          <FolderIcon />
+        </button>
+        <button
+          className="toolbar-btn toolbar-btn--icon"
+          onClick={onOpenVsCode}
+          type="button"
+          title={language === "ko" ? "외부 에디터에서 열기" : "Open in external editor"}
+          disabled={!repoPath}
+        >
+          <EditorIcon />
+        </button>
+        <button
+          className="toolbar-btn toolbar-btn--icon"
+          onClick={onOpenGithub}
+          type="button"
+          title="Open on GitHub"
+          disabled={!remoteUrl}
+        >
+          <GithubIcon />
+        </button>
+
+        <div className="toolbar-divider" />
+
+        <button
+          className={`toolbar-btn toolbar-btn--icon toolbar-btn--remote${shareUrl ? " toolbar-btn--active" : ""}`}
+          onClick={onSmartShareLink}
           type="button"
           disabled={shareBusy || !projectDetail?.project}
-          title={shareUrl ? `Remote Control: ${shareUrl}` : (t("action.generateShareLink") || "Remote Control")}
+          title={shareUrl ? `클릭하여 링크 복사: ${shareUrl}` : "Remote Control 링크 생성"}
+          aria-label={shareUrl ? "링크 복사" : "Remote Control"}
         >
           <RemoteLinkIcon />
-          <span>Remote Control</span>
         </button>
 
         <div className="toolbar-divider" />

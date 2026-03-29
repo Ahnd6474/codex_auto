@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import {
@@ -104,18 +105,31 @@ function stepModelPlaceholder(step, runtime) {
 }
 
 function FlowNode({ step, projectStatus, selected, onSelect, language, t }) {
+  const [tooltipVisible, setTooltipVisible] = useState(false);
   const stepStatus = effectiveStepStatus(step, projectStatus);
   const tone = statusTone(stepStatus);
   const summary = step.display_description || step.success_criteria || t("run.noSummary");
   return (
-    <button className={`run-node run-node--${tone} ${selected ? "selected" : ""}`} onClick={() => onSelect(step.step_id)} type="button">
-      <div className="run-node__meta">
-        <span className="run-node__id">{step.step_id}</span>
-        <span className={`status-badge status-badge--${tone}`}>{displayStatus(stepStatus, language)}</span>
-      </div>
-      <strong>{step.title}</strong>
-      <p>{summary}</p>
-    </button>
+    <div
+      className="run-node-wrapper"
+      onMouseEnter={() => setTooltipVisible(true)}
+      onMouseLeave={() => setTooltipVisible(false)}
+    >
+      <button
+        className={`run-node run-node--${tone} ${selected ? "selected" : ""}`}
+        onClick={() => { onSelect(step.step_id); setTooltipVisible((v) => !v); }}
+        type="button"
+      >
+        <div className="run-node__meta">
+          <span className="run-node__id">{step.step_id}</span>
+          <span className={`status-badge status-badge--${tone}`}>{displayStatus(stepStatus, language)}</span>
+        </div>
+        <strong>{step.title}</strong>
+      </button>
+      {tooltipVisible && summary ? (
+        <div className="run-node__tooltip" role="tooltip">{summary}</div>
+      ) : null}
+    </div>
   );
 }
 
@@ -277,20 +291,21 @@ export function RunControlView({
         <div className="content-card__header">
           <strong>{t("run.flowChart")}</strong>
           <div className="action-row">
-            <button className="toolbar-button" onClick={onGeneratePlan} type="button" disabled={busy}>
-              {t("action.generate")}
-            </button>
-            <button className="toolbar-button" onClick={onSavePlan} type="button" disabled={busy}>
-              {t("action.save")}
-            </button>
-            <button className="toolbar-button toolbar-button--ghost" onClick={onResetPlan} type="button" disabled={!canResetPlan}>
-              {t("action.reset")}
-            </button>
             <button className="toolbar-button toolbar-button--accent" onClick={onRunPlan} type="button" disabled={busy}>
               {t("action.run")}
             </button>
+            <button className="toolbar-button" onClick={onGeneratePlan} type="button" disabled={busy}>
+              {t("action.generate")}
+            </button>
+            <button className="toolbar-button toolbar-button--ghost" onClick={onSavePlan} type="button" disabled={busy}>
+              {t("action.save")}
+            </button>
+            <div className="action-row__divider" />
             <button className="toolbar-button toolbar-button--ghost" onClick={onRequestStop} type="button" disabled={!canRequestStop}>
               {t("action.stop")}
+            </button>
+            <button className="toolbar-button toolbar-button--ghost" onClick={onResetPlan} type="button" disabled={!canResetPlan}>
+              {t("action.reset")}
             </button>
           </div>
         </div>
@@ -310,7 +325,12 @@ export function RunControlView({
               </div>
             ))
           ) : (
-            <div className="empty-block">{t("run.noSteps")}</div>
+            <div className="empty-block empty-block--action">
+              <span>{t("run.noSteps")}</span>
+              <button className="toolbar-button toolbar-button--accent" onClick={onGeneratePlan} type="button" disabled={busy}>
+                {t("action.generatePlan")}
+              </button>
+            </div>
           )}
         </div>
       </div>

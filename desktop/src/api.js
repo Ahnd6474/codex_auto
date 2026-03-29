@@ -61,3 +61,15 @@ export const {
   cancelBridgeJob,
   subscribeBridgeEvents,
 } = bridgeClient;
+
+export async function openInSystem(path) {
+  return tauriInvoke("open_in_system", { path });
+}
+
+export async function openInVsCode(path) {
+  return tauriInvoke("open_in_vscode", { path });
+}
+
+export function openUrl(url) {
+  if (url) window.open(url, "_blank", "noopener");
+}

@@ -11,13 +11,14 @@ from uuid import uuid4
 
 from .commit_naming import build_commit_descriptor, build_initial_commit_descriptor
 from .environment import ensure_gitignore, ensure_virtualenv
+from . import execution_plan_support
 from .codex_runner import CodexRunner
 from .execution_control import ImmediateStopRequested
 from .git_ops import GitOps
 from .memory import MemoryStore
 from .model_providers import normalize_billing_mode, provider_preset, provider_supports_auto_model
 from .model_selection import normalize_reasoning_effort
-from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, LineageState, LoopState, MLExperimentRecord, MLModeState, ProjectContext, ProjectPaths, RepoMetadata, RuntimeOptions, TestRunResult
+from .models import CandidateTask, Checkpoint, CodexRunResult, ExecutionPlanState, ExecutionStep, LineageState, LoopState, MLExperimentRecord, MLModeState, ProjectContext, ProjectPaths, RepoMetadata, RuntimeOptions, TestRunResult
 from .optimization import scan_optimization_candidates
 from .parallel_resources import build_parallel_resource_plan, normalize_parallel_worker_mode
 from .platform_defaults import default_codex_path
@@ -64,7 +65,7 @@ from .planning import (
 from .reporting import Reporter
 from .status_views import status_from_plan_state
 from .step_models import normalize_step_model, normalize_step_model_provider, provider_execution_preflight_error, resolve_step_model_choice
-from .utils import compact_text, ensure_dir, normalize_workflow_mode, now_utc_iso, parse_json_text, read_json, read_last_jsonl, read_text, remove_tree, similarity_score, svg_text_element, wrap_svg_text, write_json, write_text
+from .utils import compact_text, ensure_dir, normalize_workflow_mode, now_utc_iso, read_json, read_jsonl_tail, read_last_jsonl, read_text, remove_tree, svg_text_element, wrap_svg_text, write_json, write_text
 from .verification import VerificationRunner
 from .workspace import WorkspaceManager
 
@@ -410,287 +411,24 @@ class Orchestrator:
         planner_outline: str,
         execution_mode: str,
     ) -> list[ExecutionStep]:
-        if not steps or not planner_outline.strip():
-            return steps
-        outline = self._parse_planner_outline_payload(planner_outline)
-        if not outline:
-            return steps
-        outline_blocks = self._planner_outline_blocks(outline)
-        if not outline_blocks:
-            return steps
-
-        processed_steps = [deepcopy(step) for step in steps]
-        block_matches: dict[str, dict[str, object]] = {}
-        step_by_block_id: dict[str, str] = {}
-        shared_contracts = self._planner_outline_shared_contracts(outline)
-
-        for step in processed_steps:
-            block = self._match_step_to_planner_outline_block(step, outline_blocks)
-            metadata = deepcopy(step.metadata) if isinstance(step.metadata, dict) else {}
-            if block:
-                block_id = str(block.get("block_id", "")).strip()
-                if block_id and not str(metadata.get("candidate_block_id", "")).strip():
-                    metadata["candidate_block_id"] = block_id
-                parallelizable_after = self._coerce_string_list(block.get("parallelizable_after", []))
-                if parallelizable_after and not self._coerce_string_list(metadata.get("parallelizable_after", [])):
-                    metadata["parallelizable_after"] = parallelizable_after
-                candidate_owned_paths = self._coerce_string_list(block.get("candidate_owned_paths", []))
-                if candidate_owned_paths and not self._coerce_string_list(metadata.get("candidate_owned_paths", [])):
-                    metadata["candidate_owned_paths"] = candidate_owned_paths
-                implementation_notes = str(block.get("implementation_notes", "")).strip()
-                if implementation_notes and not str(metadata.get("implementation_notes", "")).strip():
-                    metadata["implementation_notes"] = implementation_notes
-                if bool(block.get("is_skeleton_contract")):
-                    metadata["is_skeleton_contract"] = True
-                    contract_docstring = str(block.get("skeleton_contract_docstring", "")).strip()
-                    if contract_docstring and not str(metadata.get("skeleton_contract_docstring", "")).strip():
-                        metadata["skeleton_contract_docstring"] = contract_docstring
-                    step.codex_description = self._apply_skeleton_contract_docstring(
-                        step.codex_description or step.display_description or step.title,
-                        contract_docstring,
-                    )
-                step.metadata = metadata
-                block_matches[step.step_id] = block
-                if block_id:
-                    step_by_block_id[block_id] = step.step_id
-            else:
-                step.metadata = metadata
-
-            if execution_mode == "parallel" and not step.owned_paths:
-                step.owned_paths = self._normalize_owned_paths(
-                    step.metadata.get("candidate_owned_paths", []),
-                )
-
-        if execution_mode == "parallel":
-            self._repack_parallelizable_steps(
-                processed_steps,
-                block_matches=block_matches,
-                step_by_block_id=step_by_block_id,
-                shared_contracts=shared_contracts,
-            )
-        return processed_steps
+        return execution_plan_support.postprocess_generated_plan_steps(
+            steps,
+            planner_outline=planner_outline,
+            execution_mode=execution_mode,
+        )
 
     def _materialize_generated_step_models(
         self,
         steps: list[ExecutionStep],
         runtime: RuntimeOptions,
     ) -> list[ExecutionStep]:
-        if str(getattr(runtime, "model_provider", "") or "").strip().lower() != "ensemble":
-            return steps
-
-        materialized: list[ExecutionStep] = []
-        for step in steps:
-            next_step = deepcopy(step)
-            choice = resolve_step_model_choice(next_step, runtime)
-            metadata = deepcopy(next_step.metadata) if isinstance(next_step.metadata, dict) else {}
-            if not next_step.model_provider:
-                next_step.model_provider = choice.provider
-            if not next_step.model:
-                next_step.model = choice.model
-            if "model_selection_source" not in metadata:
-                metadata["model_selection_source"] = choice.source
-            if "model_selection_reason" not in metadata:
-                metadata["model_selection_reason"] = choice.reason
-            next_step.metadata = metadata
-            materialized.append(next_step)
-        return materialized
-
-    def _parse_planner_outline_payload(self, planner_outline: str) -> dict[str, object]:
-        raw = planner_outline.strip()
-        if not raw:
-            return {}
-        try:
-            payload = parse_json_text(raw)
-        except json.JSONDecodeError:
-            return {}
-        return payload if isinstance(payload, dict) else {}
-
-    def _planner_outline_blocks(self, outline: dict[str, object]) -> list[dict[str, object]]:
-        blocks: list[dict[str, object]] = []
-
-        skeleton_payload = outline.get("skeleton_step")
-        if not isinstance(skeleton_payload, dict):
-            skeleton_payload = outline.get("bootstrap_step")
-        if isinstance(skeleton_payload, dict) and bool(skeleton_payload.get("needed")):
-            blocks.append(
-                {
-                    "block_id": str(skeleton_payload.get("block_id", "")).strip() or "SK1",
-                    "title": str(skeleton_payload.get("task_title", "")).strip() or "Skeleton bootstrap",
-                    "candidate_owned_paths": self._coerce_string_list(skeleton_payload.get("candidate_owned_paths", [])),
-                    "parallelizable_after": [],
-                    "implementation_notes": "",
-                    "is_skeleton_contract": True,
-                    "skeleton_contract_docstring": str(
-                        skeleton_payload.get("contract_docstring", skeleton_payload.get("executor_docstring", ""))
-                    ).strip(),
-                }
-            )
-
-        candidate_payload = outline.get("candidate_blocks")
-        if not isinstance(candidate_payload, list):
-            candidate_payload = outline.get("candidate_experiments")
-        if isinstance(candidate_payload, list):
-            for index, item in enumerate(candidate_payload, start=1):
-                if not isinstance(item, dict):
-                    continue
-                blocks.append(
-                    {
-                        "block_id": str(item.get("block_id", "")).strip() or f"B{index}",
-                        "title": str(item.get("goal", item.get("task_title", ""))).strip() or f"Candidate block {index}",
-                        "candidate_owned_paths": self._coerce_string_list(item.get("candidate_owned_paths", [])),
-                        "parallelizable_after": self._coerce_string_list(item.get("parallelizable_after", [])),
-                        "implementation_notes": str(
-                            item.get("implementation_notes", item.get("executor_docstring", ""))
-                        ).strip(),
-                        "is_skeleton_contract": False,
-                        "skeleton_contract_docstring": "",
-                    }
-                )
-        return blocks
-
-    def _planner_outline_shared_contracts(self, outline: dict[str, object]) -> set[str]:
-        names = self._coerce_string_list(outline.get("shared_contracts", []))
-        names.extend(self._coerce_string_list(outline.get("guardrail_contracts", [])))
-        return {item.strip().lower() for item in names if item.strip()}
-
-    def _match_step_to_planner_outline_block(
-        self,
-        step: ExecutionStep,
-        outline_blocks: list[dict[str, object]],
-    ) -> dict[str, object] | None:
-        metadata = step.metadata if isinstance(step.metadata, dict) else {}
-        candidate_block_id = str(metadata.get("candidate_block_id", "")).strip()
-        if candidate_block_id:
-            for block in outline_blocks:
-                if str(block.get("block_id", "")).strip() == candidate_block_id:
-                    return block
-
-        normalized_title = step.title.strip().lower()
-        if normalized_title:
-            for block in outline_blocks:
-                block_title = str(block.get("title", "")).strip().lower()
-                if block_title and block_title == normalized_title:
-                    return block
-
-        best_block: dict[str, object] | None = None
-        best_score = 0.0
-        for block in outline_blocks:
-            block_title = str(block.get("title", "")).strip()
-            if not block_title:
-                continue
-            score = similarity_score(step.title, block_title)
-            if score > best_score:
-                best_score = score
-                best_block = block
-        if best_score >= 0.45:
-            return best_block
-        return None
-
-    def _repack_parallelizable_steps(
-        self,
-        steps: list[ExecutionStep],
-        *,
-        block_matches: dict[str, dict[str, object]],
-        step_by_block_id: dict[str, str],
-        shared_contracts: set[str],
-    ) -> None:
-        step_index = {step.step_id: index for index, step in enumerate(steps)}
-        skeleton_step_id = ""
-        for step in steps:
-            metadata = step.metadata if isinstance(step.metadata, dict) else {}
-            if metadata.get("is_skeleton_contract"):
-                skeleton_step_id = step.step_id
-                break
-
-        for step in steps:
-            metadata = step.metadata if isinstance(step.metadata, dict) else {}
-            parallelizable_after = self._coerce_string_list(metadata.get("parallelizable_after", []))
-            if not parallelizable_after:
-                continue
-            resolved_dependencies = self._resolve_parallelizable_dependencies(
-                parallelizable_after,
-                step_by_block_id=step_by_block_id,
-                shared_contracts=shared_contracts,
-                skeleton_step_id=skeleton_step_id,
-                current_step_id=step.step_id,
-            )
-            if not resolved_dependencies:
-                continue
-            current_dependencies = [dependency for dependency in step.depends_on if dependency and dependency != step.step_id]
-            if not current_dependencies:
-                step.depends_on = resolved_dependencies
-                continue
-            if len(current_dependencies) == 1 and current_dependencies[0] not in resolved_dependencies:
-                current_dependency_index = step_index.get(current_dependencies[0], -1)
-                step_position = step_index.get(step.step_id, -1)
-                if 0 <= current_dependency_index < step_position:
-                    step.depends_on = resolved_dependencies
-
-    def _resolve_parallelizable_dependencies(
-        self,
-        values: list[str],
-        *,
-        step_by_block_id: dict[str, str],
-        shared_contracts: set[str],
-        skeleton_step_id: str,
-        current_step_id: str,
-    ) -> list[str]:
-        resolved: list[str] = []
-        seen: set[str] = set()
-        for item in values:
-            normalized = str(item).strip()
-            if not normalized:
-                continue
-            target_step_id = step_by_block_id.get(normalized, "")
-            if not target_step_id and skeleton_step_id and normalized.lower() in shared_contracts:
-                target_step_id = skeleton_step_id
-            if not target_step_id or target_step_id == current_step_id or target_step_id in seen:
-                continue
-            seen.add(target_step_id)
-            resolved.append(target_step_id)
-        return resolved
-
-    def _apply_skeleton_contract_docstring(self, codex_description: str, contract_docstring: str) -> str:
-        base = codex_description.strip()
-        normalized_docstring = " ".join(contract_docstring.split())
-        if not normalized_docstring:
-            return base
-        if normalized_docstring.lower() in base.lower():
-            return base
-        instruction = (
-            f'If the relevant module, class, or function already exists, update it in place; otherwise create only the '
-            f'smallest necessary skeleton with this contract docstring: '
-            f'"""{normalized_docstring}"""'
-        )
-        return f"{base} {instruction}".strip()
+        return execution_plan_support.materialize_generated_step_models(steps, runtime)
 
     def _coerce_string_list(self, value: object) -> list[str]:
-        items: list[str]
-        if isinstance(value, list):
-            items = [str(item).strip() for item in value]
-        elif isinstance(value, str):
-            items = [part.strip() for part in value.replace("\r", "\n").replace(",", "\n").split("\n")]
-        else:
-            return []
-        ordered: list[str] = []
-        seen: set[str] = set()
-        for item in items:
-            if not item or item in seen:
-                continue
-            seen.add(item)
-            ordered.append(item)
-        return ordered
+        return execution_plan_support.coerce_string_list(value)
 
     def _normalize_owned_paths(self, value: object) -> list[str]:
-        ordered: list[str] = []
-        seen: set[str] = set()
-        for item in self._coerce_string_list(value):
-            normalized = self._normalize_owned_path(item)
-            if not normalized or normalized in seen:
-                continue
-            seen.add(normalized)
-            ordered.append(normalized)
-        return ordered
+        return execution_plan_support.normalize_owned_paths(value)
 
     def _plan_uses_hybrid_lineages(self, plan_state: ExecutionPlanState) -> bool:
         return any(self._step_kind(step) in {"join", "barrier"} for step in plan_state.steps)
@@ -747,11 +485,13 @@ class Orchestrator:
         lineage_root = self._lineage_root(context, lineage_id)
         docs_dir = lineage_root / "docs"
         memory_dir = lineage_root / "memory"
-        logs_dir = lineage_root / "logs"
+        legacy_logs_dir = lineage_root / "logs"
+        logs_dir = WorkspaceManager.repo_logs_dir(worktree_dir)
         reports_dir = lineage_root / "reports"
         state_dir = lineage_root / "state"
         for directory in [lineage_root, docs_dir, memory_dir, logs_dir, reports_dir, state_dir]:
             ensure_dir(directory)
+        self.workspace.migrate_logs_dir(legacy_logs_dir, logs_dir)
         return ProjectPaths(
             workspace_root=context.paths.workspace_root,
             projects_root=context.paths.projects_root,
@@ -789,6 +529,7 @@ class Orchestrator:
             execution_flow_svg_file=docs_dir / "EXECUTION_FLOW.svg",
             closeout_report_file=docs_dir / "CLOSEOUT_REPORT.md",
             closeout_report_docx_file=reports_dir / "CLOSEOUT_REPORT.docx",
+            closeout_report_pptx_file=reports_dir / "CLOSEOUT_REPORT.pptx",
             ml_experiment_report_file=docs_dir / "ML_EXPERIMENT_REPORT.md",
             ml_experiment_results_svg_file=docs_dir / "ML_EXPERIMENT_RESULTS.svg",
         )
@@ -1621,11 +1362,13 @@ class Orchestrator:
         integration_root = self._integration_root(context, integration_token)
         docs_dir = integration_root / "docs"
         memory_dir = integration_root / "memory"
-        logs_dir = integration_root / "logs"
+        legacy_logs_dir = integration_root / "logs"
+        logs_dir = WorkspaceManager.repo_logs_dir(worktree_dir)
         reports_dir = integration_root / "reports"
         state_dir = integration_root / "state"
         for directory in [integration_root, docs_dir, memory_dir, logs_dir, reports_dir, state_dir]:
             ensure_dir(directory)
+        self.workspace.migrate_logs_dir(legacy_logs_dir, logs_dir)
         return ProjectPaths(
             workspace_root=context.paths.workspace_root,
             projects_root=context.paths.projects_root,
@@ -1663,6 +1406,7 @@ class Orchestrator:
             execution_flow_svg_file=docs_dir / "EXECUTION_FLOW.svg",
             closeout_report_file=docs_dir / "CLOSEOUT_REPORT.md",
             closeout_report_docx_file=reports_dir / "CLOSEOUT_REPORT.docx",
+            closeout_report_pptx_file=reports_dir / "CLOSEOUT_REPORT.pptx",
             ml_experiment_report_file=docs_dir / "ML_EXPERIMENT_REPORT.md",
             ml_experiment_results_svg_file=docs_dir / "ML_EXPERIMENT_RESULTS.svg",
         )
@@ -1974,39 +1718,11 @@ class Orchestrator:
         return state
 
     def pending_execution_batches(self, plan_state: ExecutionPlanState) -> list[list[ExecutionStep]]:
-        remaining = [step for step in plan_state.steps if step.status != "completed"]
-        if not remaining:
-            return []
-        if self._normalize_execution_mode(plan_state.execution_mode) != "parallel":
-            return [[step] for step in remaining]
-        if self._plan_uses_dag_parallelism(plan_state.steps):
-            completed_ids = {step.step_id for step in plan_state.steps if step.status == "completed"}
-            ready = [
-                step
-                for step in plan_state.steps
-                if step.status != "completed"
-                and all(dep in completed_ids for dep in step.depends_on)
-            ]
-            if not ready:
-                raise RuntimeError("No dependency-ready execution step is available. Check the DAG dependencies for cycles or blocked nodes.")
-            return self._dag_ready_batches(ready)
-
-        batches: list[list[ExecutionStep]] = []
-        index = 0
-        while index < len(remaining):
-            current = remaining[index]
-            group = current.parallel_group.strip()
-            if not group:
-                batches.append([current])
-                index += 1
-                continue
-            batch = [current]
-            index += 1
-            while index < len(remaining) and remaining[index].parallel_group.strip() == group:
-                batch.append(remaining[index])
-                index += 1
-            batches.append(batch)
-        return batches
+        return execution_plan_support.pending_execution_batches(
+            plan_state,
+            normalized_execution_mode=self._normalize_execution_mode(plan_state.execution_mode),
+            step_kind=self._step_kind,
+        )
 
     def _normalize_execution_steps(
         self,
@@ -2056,6 +1772,7 @@ class Orchestrator:
                     title=step.title.strip(),
                     display_description=step.display_description.strip(),
                     codex_description=step.codex_description.strip() or step.display_description.strip() or step.title.strip(),
+                    deadline_at=step.deadline_at.strip(),
                     model_provider=normalize_step_model_provider(step.model_provider),
                     model=normalize_step_model(step.model),
                     test_command=step.test_command.strip() or default_test_command or context.runtime.test_cmd,
@@ -2087,75 +1804,16 @@ class Orchestrator:
         metadata: dict[str, object],
         id_map: dict[str, str],
     ) -> dict[str, object]:
-        normalized = deepcopy(metadata) if isinstance(metadata, dict) else {}
-        if "merge_from" not in normalized:
-            return normalized
-        mapped_merge_from: list[str] = []
-        seen_refs: set[str] = set()
-        for item in self._coerce_string_list(normalized.get("merge_from", [])):
-            ref = str(item).strip()
-            if not ref:
-                continue
-            if ref not in id_map:
-                raise ValueError(f"Unknown merge_from reference: {ref}")
-            mapped_ref = id_map[ref]
-            if mapped_ref == id_map[raw_id]:
-                raise ValueError(f"{raw_id} cannot merge from itself.")
-            if mapped_ref in seen_refs:
-                continue
-            seen_refs.add(mapped_ref)
-            mapped_merge_from.append(mapped_ref)
-        normalized["merge_from"] = mapped_merge_from
-        return normalized
+        return execution_plan_support.normalize_parallel_step_metadata(raw_id, metadata, id_map)
 
     def _normalize_owned_path(self, value: str) -> str:
-        normalized = str(value).strip().replace("\\", "/")
-        while normalized.startswith("./"):
-            normalized = normalized[2:]
-        return normalized.rstrip("/")
+        return execution_plan_support.normalize_owned_path(value)
 
     def _reduce_redundant_parallel_dependencies(self, steps: list[ExecutionStep]) -> None:
-        step_by_id = {step.step_id: step for step in steps}
-        dependency_cache: dict[str, set[str]] = {}
-
-        def dependency_closure(step_id: str, visiting: set[str]) -> set[str]:
-            cached = dependency_cache.get(step_id)
-            if cached is not None:
-                return cached
-            if step_id in visiting:
-                return set()
-            step = step_by_id.get(step_id)
-            if step is None:
-                dependency_cache[step_id] = set()
-                return dependency_cache[step_id]
-            next_visiting = set(visiting)
-            next_visiting.add(step_id)
-            closure: set[str] = set()
-            for dependency in step.depends_on:
-                if dependency not in step_by_id:
-                    continue
-                closure.add(dependency)
-                closure.update(dependency_closure(dependency, next_visiting))
-            dependency_cache[step_id] = closure
-            return closure
-
-        for step in steps:
-            if len(step.depends_on) < 2:
-                continue
-            redundant_dependencies = {
-                dependency
-                for dependency in step.depends_on
-                if any(
-                    dependency in dependency_closure(other_dependency, set())
-                    for other_dependency in step.depends_on
-                    if other_dependency != dependency
-                )
-            }
-            if redundant_dependencies:
-                step.depends_on = [dependency for dependency in step.depends_on if dependency not in redundant_dependencies]
+        execution_plan_support.reduce_redundant_parallel_dependencies(steps)
 
     def _plan_uses_dag_parallelism(self, steps: list[ExecutionStep]) -> bool:
-        return any(step.depends_on or step.owned_paths for step in steps)
+        return execution_plan_support.plan_uses_dag_parallelism(steps)
 
     def _validate_hybrid_execution_steps(self, steps: list[ExecutionStep]) -> None:
         step_ids = {step.step_id for step in steps}
@@ -2184,118 +1842,15 @@ class Orchestrator:
                 metadata["join_policy"] = join_policy
                 metadata["merge_from"] = merge_from
                 step.metadata = metadata
+
     def _validate_parallel_execution_steps(self, steps: list[ExecutionStep]) -> None:
-        step_ids = {step.step_id for step in steps}
-        indegree = {step.step_id: 0 for step in steps}
-        edges: dict[str, list[str]] = {step.step_id: [] for step in steps}
-        for step in steps:
-            for dependency in step.depends_on:
-                if dependency not in step_ids:
-                    raise ValueError(f"Unknown dependency reference: {dependency}")
-                if dependency == step.step_id:
-                    raise ValueError(f"{step.step_id} cannot depend on itself.")
-                indegree[step.step_id] += 1
-                edges[dependency].append(step.step_id)
-        ready = [step.step_id for step in steps if indegree[step.step_id] == 0]
-        visited = 0
-        while ready:
-            current = ready.pop(0)
-            visited += 1
-            for neighbor in edges[current]:
-                indegree[neighbor] -= 1
-                if indegree[neighbor] == 0:
-                    ready.append(neighbor)
-        if visited != len(steps):
-            cycle = self._find_parallel_dependency_cycle(steps)
-            if cycle:
-                raise ValueError(f"Parallel execution plan contains a dependency cycle: {' -> '.join(cycle)}.")
-            raise ValueError("Parallel execution plan contains a dependency cycle.")
-
-    def _find_parallel_dependency_cycle(self, steps: list[ExecutionStep]) -> list[str]:
-        step_ids = {step.step_id for step in steps}
-        dependencies = {
-            step.step_id: [dependency for dependency in step.depends_on if dependency in step_ids]
-            for step in steps
-        }
-        visit_state: dict[str, int] = {}
-        path: list[str] = []
-
-        def visit(step_id: str) -> list[str]:
-            state = visit_state.get(step_id, 0)
-            if state == 1:
-                if step_id in path:
-                    cycle_start = path.index(step_id)
-                    return path[cycle_start:] + [step_id]
-                return [step_id, step_id]
-            if state == 2:
-                return []
-            visit_state[step_id] = 1
-            path.append(step_id)
-            for dependency in dependencies.get(step_id, []):
-                cycle = visit(dependency)
-                if cycle:
-                    return cycle
-            path.pop()
-            visit_state[step_id] = 2
-            return []
-
-        for step in steps:
-            cycle = visit(step.step_id)
-            if cycle:
-                return cycle
-        return []
-
-    def _dag_ready_batches(self, ready_steps: list[ExecutionStep]) -> list[list[ExecutionStep]]:
-        batches: list[list[ExecutionStep]] = []
-        current_batch: list[ExecutionStep] = []
-        current_paths: list[str] = []
-        for step in ready_steps:
-            if self._step_kind(step) in {"join", "barrier"}:
-                if current_batch:
-                    batches.append(current_batch)
-                    current_batch = []
-                    current_paths = []
-                batches.append([step])
-                continue
-            if not step.owned_paths:
-                if current_batch:
-                    batches.append(current_batch)
-                    current_batch = []
-                    current_paths = []
-                batches.append([step])
-                continue
-            conflict = any(
-                self._owned_paths_conflict(candidate_path, existing_path)
-                for candidate_path in step.owned_paths
-                for existing_path in current_paths
-            )
-            if conflict and current_batch:
-                batches.append(current_batch)
-                current_batch = [step]
-                current_paths = list(step.owned_paths)
-                continue
-            current_batch.append(step)
-            current_paths.extend(step.owned_paths)
-        if current_batch:
-            batches.append(current_batch)
-        return batches or [[step] for step in ready_steps]
+        execution_plan_support.validate_parallel_execution_steps(steps)
 
     def _owned_paths_overlap_level(self, left: str, right: str) -> str:
-        normalized_left = self._normalize_owned_path(left).lower()
-        normalized_right = self._normalize_owned_path(right).lower()
-        if not normalized_left or not normalized_right:
-            return "none"
-        if normalized_left == normalized_right:
-            return "hard"
-        if (
-            normalized_left.startswith(f"{normalized_right}/")
-            or normalized_right.startswith(f"{normalized_left}/")
-        ):
-            return "soft"
-        return "none"
+        return execution_plan_support.owned_paths_overlap_level(left, right)
 
     def _owned_paths_conflict(self, left: str, right: str) -> bool:
-        return self._owned_paths_overlap_level(left, right) == "hard"
+        return execution_plan_support.owned_paths_conflict(left, right)
 
     def _run_saved_execution_step_with_context(
         self,
@@ -3427,15 +2982,82 @@ class Orchestrator:
             detail = compact_text(str(run_result.last_message).strip(), max_chars=280)
             if detail:
                 return detail
+        event_detail = self._event_file_failure_detail(run_result)
+        if event_detail:
+            return event_detail
         attempts = run_result.diagnostics.get("attempts", []) if isinstance(run_result.diagnostics, dict) else []
+        generic_detail = ""
         for attempt in reversed(attempts if isinstance(attempts, list) else []):
             if not isinstance(attempt, dict):
                 continue
-            for key in ("stderr_excerpt", "last_message_excerpt", "stdout_excerpt"):
+            values = {
+                "stderr_excerpt": str(attempt.get("stderr_excerpt") or "").strip(),
+                "last_message_excerpt": str(attempt.get("last_message_excerpt") or "").strip(),
+                "stdout_excerpt": str(attempt.get("stdout_excerpt") or "").strip(),
+            }
+            keys = ("stderr_excerpt", "last_message_excerpt", "stdout_excerpt")
+            if self._is_generic_empty_output_warning(values["stderr_excerpt"]) and values["stdout_excerpt"]:
+                keys = ("stdout_excerpt", "last_message_excerpt", "stderr_excerpt")
+            for key in keys:
                 detail = compact_text(str(attempt.get(key) or "").strip(), max_chars=280)
+                if detail:
+                    if self._is_generic_empty_output_warning(detail):
+                        generic_detail = generic_detail or detail
+                        continue
+                    return detail
+        return generic_detail
+
+    def _is_generic_empty_output_warning(self, detail: str) -> bool:
+        lowered = str(detail or "").strip().lower()
+        return "no last agent message" in lowered and "wrote empty content to" in lowered
+
+    def _event_file_failure_detail(self, run_result: CodexRunResult) -> str:
+        event_file = getattr(run_result, "event_file", None)
+        if not isinstance(event_file, Path) or not event_file.exists():
+            return ""
+        detail = self._event_log_error_detail(read_text(event_file))
+        return compact_text(detail, max_chars=280) if detail else ""
+
+    def _event_log_error_detail(self, event_text: str) -> str:
+        for raw_line in reversed(str(event_text or "").splitlines()):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            payload_type = str(payload.get("type", "")).strip().lower()
+            if payload_type == "error":
+                detail = self._error_message_from_payload_value(payload.get("message"))
+                if detail:
+                    return detail
+            item = payload.get("item")
+            if isinstance(item, dict) and str(item.get("type", "")).strip().lower() == "error":
+                detail = self._error_message_from_payload_value(item.get("message"))
                 if detail:
                     return detail
         return ""
+
+    def _error_message_from_payload_value(self, value: object) -> str:
+        message = str(value or "").strip()
+        if not message:
+            return ""
+        try:
+            payload = json.loads(message)
+        except json.JSONDecodeError:
+            return message
+        if not isinstance(payload, dict):
+            return message
+        error = payload.get("error")
+        if isinstance(error, dict):
+            nested = str(error.get("message", "")).strip()
+            if nested:
+                return nested
+        nested = str(payload.get("message", "")).strip()
+        return nested or message
 
     def _is_auto_provider_fallback_error(self, detail: str) -> bool:
         lowered = str(detail or "").strip().lower()
@@ -3616,11 +3238,13 @@ class Orchestrator:
         worker_root = context.paths.project_root / ".parallel_runs" / batch_token / worker_slug
         docs_dir = worker_root / "docs"
         memory_dir = worker_root / "memory"
-        logs_dir = worker_root / "logs"
+        legacy_logs_dir = worker_root / "logs"
+        logs_dir = WorkspaceManager.repo_logs_dir(worktree_dir)
         reports_dir = worker_root / "reports"
         state_dir = worker_root / "state"
         for directory in [worker_root, docs_dir, memory_dir, logs_dir, reports_dir, state_dir]:
             ensure_dir(directory)
+        self.workspace.migrate_logs_dir(legacy_logs_dir, logs_dir)
         return ProjectPaths(
             workspace_root=context.paths.workspace_root,
             projects_root=context.paths.projects_root,
@@ -3658,6 +3282,7 @@ class Orchestrator:
             execution_flow_svg_file=docs_dir / "EXECUTION_FLOW.svg",
             closeout_report_file=docs_dir / "CLOSEOUT_REPORT.md",
             closeout_report_docx_file=reports_dir / "CLOSEOUT_REPORT.docx",
+            closeout_report_pptx_file=reports_dir / "CLOSEOUT_REPORT.pptx",
             ml_experiment_report_file=docs_dir / "ML_EXPERIMENT_REPORT.md",
             ml_experiment_results_svg_file=docs_dir / "ML_EXPERIMENT_RESULTS.svg",
         )
@@ -4091,25 +3716,7 @@ class Orchestrator:
         return max(1, context.loop_state.block_index + 1, latest_logged_block_index + 1)
 
     def _codex_failure_note(self, task_name: str, run_result: CodexRunResult) -> str:
-        detail = ""
-        if run_result.last_message:
-            detail = compact_text(str(run_result.last_message).strip(), max_chars=280)
-        if not detail:
-            attempts = run_result.diagnostics.get("attempts", []) if isinstance(run_result.diagnostics, dict) else []
-            for attempt in reversed(attempts if isinstance(attempts, list) else []):
-                if not isinstance(attempt, dict):
-                    continue
-                detail = compact_text(
-                    str(
-                        attempt.get("stderr_excerpt")
-                        or attempt.get("last_message_excerpt")
-                        or attempt.get("stdout_excerpt")
-                        or ""
-                    ).strip(),
-                    max_chars=280,
-                )
-                if detail:
-                    break
+        detail = self._run_result_failure_detail(run_result)
         summary = f"{task_name} Codex pass failed and changes were rolled back."
         if detail:
             return f"{summary} Cause: {detail}"
@@ -5178,9 +4785,6 @@ class Orchestrator:
     def _all_steps_completed(self, steps: list[ExecutionStep]) -> bool:
         return bool(steps) and all(step.status == "completed" for step in steps)
 
-    def _normalize_execution_mode(self, value: str | None) -> str:
-        return "parallel"
-
     def _status_from_plan_state(self, plan_state: ExecutionPlanState) -> str:
         return status_from_plan_state(plan_state)
 
@@ -5200,6 +4804,7 @@ class Orchestrator:
                     title=step.title,
                     plan_refs=[step.step_id],
                     target_block=index,
+                    deadline_at=str(step.deadline_at or "").strip(),
                     status=status,
                     created_at=step.started_at or now_utc_iso(),
                     reached_at=step.completed_at if step.status == "completed" else step.started_at,
@@ -5662,6 +5267,458 @@ class Orchestrator:
             owned_paths=ordered_paths,
             metadata={"parallel_step_titles": parallel_step_titles},
         )
+
+    def _latest_failure_bundle_json(self, context: ProjectContext) -> dict[str, object]:
+        latest_failure_status = read_json(context.paths.reports_dir / "latest_pr_failure_status.json", default={})
+        if not isinstance(latest_failure_status, dict) or not latest_failure_status:
+            return {}
+        report_json_file = str(latest_failure_status.get("report_json_file", "")).strip()
+        if not report_json_file:
+            return {}
+        bundle_json = read_json(Path(report_json_file), default={})
+        return bundle_json if isinstance(bundle_json, dict) else {}
+
+    def _latest_failed_test_run_entry(
+        self,
+        context: ProjectContext,
+        *,
+        preferred_labels: tuple[str, ...] = (),
+    ) -> dict[str, object] | None:
+        recent_test_runs = read_jsonl_tail(context.paths.logs_dir / "test_runs.jsonl", 40)
+        normalized_preferred = tuple(str(item).strip().lower() for item in preferred_labels if str(item).strip())
+        for entry in reversed(recent_test_runs):
+            try:
+                returncode = int(entry.get("returncode", 0))
+            except (TypeError, ValueError):
+                continue
+            if returncode == 0:
+                continue
+            label = str(entry.get("label", "")).strip().lower()
+            if normalized_preferred and label not in normalized_preferred:
+                continue
+            return entry
+        return None
+
+    def _test_run_result_from_log_entry(self, context: ProjectContext, entry: dict[str, object]) -> TestRunResult:
+        label = str(entry.get("label", "")).strip() or "manual-recovery"
+        stdout_file_value = str(entry.get("stdout_file", "")).strip()
+        stderr_file_value = str(entry.get("stderr_file", "")).strip()
+        stdout_file = Path(stdout_file_value) if stdout_file_value else context.paths.logs_dir / f"{label}.stdout.log"
+        stderr_file = Path(stderr_file_value) if stderr_file_value else context.paths.logs_dir / f"{label}.stderr.log"
+        try:
+            returncode = int(entry.get("returncode", 1))
+        except (TypeError, ValueError):
+            returncode = 1
+        return TestRunResult(
+            command=str(entry.get("command", context.runtime.test_cmd)).strip() or context.runtime.test_cmd,
+            returncode=returncode,
+            stdout_file=stdout_file,
+            stderr_file=stderr_file,
+            summary=str(entry.get("summary", "")).strip() or f"{label} failed.",
+            failure_reason=str(entry.get("failure_reason", "")).strip(),
+            duration_seconds=float(entry.get("duration_seconds", 0.0) or 0.0),
+            source_duration_seconds=float(entry.get("source_duration_seconds", 0.0) or 0.0),
+            cache_hit=bool(entry.get("cache_hit")),
+            state_fingerprint=str(entry.get("state_fingerprint", "")).strip() or None,
+            cache_key=str(entry.get("cache_key", "")).strip() or None,
+        )
+
+    def _latest_failed_pass_entry(
+        self,
+        context: ProjectContext,
+        bundle_json: dict[str, object],
+    ) -> dict[str, object] | None:
+        recent_passes = bundle_json.get("recent_passes", []) if isinstance(bundle_json, dict) else []
+        for entry in reversed(recent_passes if isinstance(recent_passes, list) else []):
+            if not isinstance(entry, dict):
+                continue
+            try:
+                returncode = int(entry.get("codex_return_code", entry.get("returncode", 0)))
+            except (TypeError, ValueError):
+                continue
+            if returncode != 0:
+                return entry
+        for entry in reversed(read_jsonl_tail(context.paths.pass_log_file, 40)):
+            if not isinstance(entry, dict):
+                continue
+            try:
+                returncode = int(entry.get("codex_return_code", entry.get("returncode", 0)))
+            except (TypeError, ValueError):
+                continue
+            if returncode != 0:
+                return entry
+        return None
+
+    def _pass_artifact_path(self, block_dir: Path, pass_name: str, suffix: str) -> Path | None:
+        direct = block_dir / f"{pass_name}{suffix}"
+        if direct.exists():
+            return direct
+        matches = sorted(block_dir.glob(f"{pass_name}.attempt_*{suffix}"))
+        return matches[-1] if matches else None
+
+    def _test_run_result_from_pass_entry(
+        self,
+        context: ProjectContext,
+        bundle_json: dict[str, object],
+        entry: dict[str, object],
+    ) -> tuple[TestRunResult, str]:
+        pass_name = str(entry.get("pass_type", entry.get("label", ""))).strip() or "manual-debugger"
+        block_index = self._manual_recovery_block_index(context, bundle_json=bundle_json, test_entry=entry)
+        block_dir = ensure_dir(context.paths.logs_dir / f"block_{block_index:04d}")
+        event_file = self._pass_artifact_path(block_dir, pass_name, ".events.jsonl")
+        stderr_file = self._pass_artifact_path(block_dir, pass_name, ".stderr.log")
+        output_file = self._pass_artifact_path(block_dir, pass_name, ".last_message.txt")
+        try:
+            returncode = int(entry.get("codex_return_code", entry.get("returncode", 1)))
+        except (TypeError, ValueError):
+            returncode = 1
+        diagnostics = entry.get("codex_diagnostics", {})
+        synthetic_run_result = CodexRunResult(
+            pass_type=pass_name,
+            prompt_file=block_dir / f"{pass_name}.prompt.md",
+            output_file=output_file or (block_dir / f"{pass_name}.last_message.txt"),
+            event_file=event_file or (block_dir / f"{pass_name}.events.jsonl"),
+            returncode=returncode,
+            search_enabled=bool(entry.get("search_enabled")),
+            changed_files=[],
+            usage=entry.get("usage", {}) if isinstance(entry.get("usage", {}), dict) else {},
+            last_message=read_text(output_file).strip() if isinstance(output_file, Path) and output_file.exists() else None,
+            attempt_count=int(entry.get("codex_attempt_count", 1) or 1),
+            duration_seconds=float(entry.get("duration_seconds", 0.0) or 0.0),
+            diagnostics=diagnostics if isinstance(diagnostics, dict) else {},
+        )
+        detail = self._run_result_failure_detail(synthetic_run_result)
+        summary = str(bundle_json.get("summary", "")).strip()
+        if detail and detail not in summary:
+            summary = f"{summary} Cause: {detail}".strip() if summary else f"Codex execution failed before verification. Cause: {detail}"
+        if not summary:
+            summary = f"{pass_name} failed before verification."
+        stdout_target = block_dir / f"{pass_name}.manual_debugger.stdout.log"
+        stderr_target = block_dir / f"{pass_name}.manual_debugger.stderr.log"
+        stdout_text = read_text(event_file) if isinstance(event_file, Path) and event_file.exists() else ""
+        stderr_text = read_text(stderr_file) if isinstance(stderr_file, Path) and stderr_file.exists() else ""
+        attempts = synthetic_run_result.diagnostics.get("attempts", []) if isinstance(synthetic_run_result.diagnostics, dict) else []
+        if not stdout_text:
+            for attempt in reversed(attempts if isinstance(attempts, list) else []):
+                if not isinstance(attempt, dict):
+                    continue
+                stdout_text = str(attempt.get("stdout_excerpt", "") or "").strip()
+                if stdout_text:
+                    break
+        if not stderr_text:
+            for attempt in reversed(attempts if isinstance(attempts, list) else []):
+                if not isinstance(attempt, dict):
+                    continue
+                stderr_text = str(attempt.get("stderr_excerpt", "") or "").strip()
+                if stderr_text:
+                    break
+        write_text(stdout_target, stdout_text or summary)
+        write_text(stderr_target, stderr_text or detail or summary)
+        return (
+            TestRunResult(
+                command=pass_name,
+                returncode=max(1, returncode),
+                stdout_file=stdout_target,
+                stderr_file=stderr_target,
+                summary=summary,
+                failure_reason=detail,
+                duration_seconds=float(entry.get("duration_seconds", 0.0) or 0.0),
+            ),
+            pass_name,
+        )
+
+    def _manual_recovery_block_index(
+        self,
+        context: ProjectContext,
+        *,
+        bundle_json: dict[str, object],
+        test_entry: dict[str, object] | None = None,
+    ) -> int:
+        raw_block_index = bundle_json.get("block_index") if isinstance(bundle_json, dict) else None
+        if raw_block_index is None and isinstance(test_entry, dict):
+            raw_block_index = test_entry.get("block_index")
+        try:
+            block_index = int(raw_block_index)
+        except (TypeError, ValueError):
+            block_index = int(context.loop_state.block_index or 0)
+        return max(1, block_index)
+
+    def _manual_recovery_steps(
+        self,
+        plan_state: ExecutionPlanState,
+        *,
+        selected_task: str,
+        failing_label: str,
+    ) -> list[ExecutionStep]:
+        normalized_task = str(selected_task).strip().lower()
+        normalized_label = str(failing_label).strip().lower()
+        for step in plan_state.steps:
+            if normalized_task and normalized_task in {step.step_id.strip().lower(), step.title.strip().lower()}:
+                return [step]
+        failed_steps = [step for step in plan_state.steps if step.status == "failed"]
+        if normalized_label.startswith("parallel-batch") or "parallel batch" in normalized_task:
+            if len(failed_steps) >= 2:
+                return failed_steps
+            non_completed = [step for step in plan_state.steps if step.status != "completed"]
+            return non_completed if non_completed else failed_steps
+        if failed_steps:
+            return failed_steps
+        return []
+
+    def _manual_debugger_failure_message(self, run_result, test_result: TestRunResult | None) -> str:
+        if test_result is not None and test_result.returncode != 0:
+            return str(test_result.summary).strip() or "Manual debugger recovery still failed verification."
+        message = str(getattr(run_result, "last_message", "") or "").strip()
+        if message:
+            return message
+        if isinstance(run_result, CodexRunResult):
+            detail = self._run_result_failure_detail(run_result)
+            if detail:
+                return detail
+        return f"Manual debugger pass failed with code {int(getattr(run_result, 'returncode', 1) or 1)}."
+
+    def _manual_merger_failure_message(self, run_result, success: bool) -> str:
+        if success:
+            return ""
+        message = str(getattr(run_result, "last_message", "") or "").strip()
+        if message:
+            return message
+        return f"Manual merger pass failed with code {int(getattr(run_result, 'returncode', 1) or 1)}."
+
+    def run_manual_debugger_recovery(
+        self,
+        project_dir: Path,
+        runtime: RuntimeOptions,
+        branch: str = "main",
+        origin_url: str = "",
+    ) -> tuple[ProjectContext, ExecutionPlanState, dict[str, object]]:
+        context = self.setup_local_project(project_dir=project_dir, runtime=runtime, branch=branch, origin_url=origin_url)
+        plan_state = self.load_execution_plan_state(context)
+        bundle_json = self._latest_failure_bundle_json(context)
+        failing_test_entry = self._latest_failed_test_run_entry(context)
+        failing_pass_name = "manual-debugger"
+        if failing_test_entry is not None:
+            failing_test_result = self._test_run_result_from_log_entry(context, failing_test_entry)
+            failing_pass_name = str(failing_test_entry.get("label", "")).strip() or failing_pass_name
+        else:
+            failing_pass_entry = self._latest_failed_pass_entry(context, bundle_json)
+            if failing_pass_entry is None:
+                raise RuntimeError("No failed verification log or Codex pass diagnostics are available for manual debugger recovery.")
+            failing_test_result, failing_pass_name = self._test_run_result_from_pass_entry(context, bundle_json, failing_pass_entry)
+        selected_task = str(bundle_json.get("selected_task", "")).strip()
+        recovery_steps = self._manual_recovery_steps(
+            plan_state,
+            selected_task=selected_task,
+            failing_label=failing_pass_name,
+        )
+        test_command = str(plan_state.default_test_command or runtime.test_cmd).strip() or runtime.test_cmd
+        execution_step: ExecutionStep | None = None
+        if len(recovery_steps) > 1 or str(failing_pass_name).strip().lower().startswith("parallel-batch"):
+            execution_step = self._build_parallel_batch_debug_step(recovery_steps, test_command)
+        elif recovery_steps:
+            execution_step = recovery_steps[0]
+        candidate_title = selected_task or (execution_step.title if execution_step is not None else "Manual debugger recovery")
+        candidate = CandidateTask(
+            candidate_id="manual-debugger",
+            title=candidate_title,
+            rationale=(
+                self._execution_step_rationale(execution_step, test_command)
+                if execution_step is not None
+                else "Inspect the latest failing verification logs and repair the current repository state safely."
+            ),
+            plan_refs=[step.step_id for step in recovery_steps],
+            score=1.0,
+        )
+        runner = CodexRunner(context.runtime.codex_path)
+        reporter = Reporter(context)
+        memory_context = MemoryStore(context.paths).render_context(read_text(context.paths.mid_term_plan_file))
+        block_index = self._manual_recovery_block_index(
+            context,
+            bundle_json=bundle_json,
+            test_entry=failing_test_entry,
+        )
+        pass_name, run_result, test_result, commit_hash = self._run_debugger_pass(
+            context=context,
+            runner=runner,
+            reporter=reporter,
+            block_index=block_index,
+            candidate=candidate,
+            execution_step=execution_step,
+            memory_context=memory_context,
+            failing_pass_name=failing_pass_name,
+            failing_test_result=failing_test_result,
+        )
+        failure_summary = self._manual_debugger_failure_message(run_result, test_result)
+        if run_result.returncode != 0 or test_result is None or test_result.returncode != 0:
+            rollback_status = "manual_recovery_failed"
+            self._log_pass_result(
+                context=context,
+                reporter=reporter,
+                block_index=block_index,
+                candidate=candidate,
+                pass_name=pass_name,
+                run_result=run_result,
+                test_result=test_result,
+                commit_hash=None,
+                rollback_status=rollback_status,
+                search_enabled=False,
+            )
+            self._report_failure(
+                context,
+                reporter,
+                failure_type="manual_debugger_failed",
+                summary=failure_summary,
+                block_index=block_index,
+                selected_task=candidate.title,
+                extra={
+                    "artifact_paths": [
+                        str(failing_test_result.stdout_file),
+                        str(failing_test_result.stderr_file),
+                    ],
+                },
+            )
+            latest_failure_status = read_json(context.paths.reports_dir / "latest_pr_failure_status.json", default={})
+            failure_report = str(latest_failure_status.get("report_markdown_file", "")).strip() if isinstance(latest_failure_status, dict) else ""
+            if failure_report:
+                raise RuntimeError(f"{failure_summary} Failure report: {failure_report}")
+            raise RuntimeError(failure_summary)
+        self._log_pass_result(
+            context=context,
+            reporter=reporter,
+            block_index=block_index,
+            candidate=candidate,
+            pass_name=pass_name,
+            run_result=run_result,
+            test_result=test_result,
+            commit_hash=commit_hash,
+            rollback_status="not_needed",
+            search_enabled=False,
+        )
+        if commit_hash:
+            context.metadata.current_safe_revision = commit_hash
+            context.loop_state.current_safe_revision = commit_hash
+            context.loop_state.last_commit_hash = commit_hash
+            context.metadata.last_run_at = now_utc_iso()
+            self.workspace.save_project(context)
+        self.clear_latest_failure_status(context)
+        reporter.write_status_report()
+        return context, self.load_execution_plan_state(context), {
+            "pass_name": pass_name,
+            "summary": str(test_result.summary).strip(),
+            "commit_hash": commit_hash,
+        }
+
+    def run_manual_merger_recovery(
+        self,
+        project_dir: Path,
+        runtime: RuntimeOptions,
+        branch: str = "main",
+        origin_url: str = "",
+    ) -> tuple[ProjectContext, ExecutionPlanState, dict[str, object]]:
+        context = self.setup_local_project(project_dir=project_dir, runtime=runtime, branch=branch, origin_url=origin_url)
+        plan_state = self.load_execution_plan_state(context)
+        conflicted_files = self.git.conflicted_files(context.paths.repo_dir)
+        if not conflicted_files:
+            raise RuntimeError("No active git conflict is available for manual merger recovery.")
+
+        bundle_json = self._latest_failure_bundle_json(context)
+        selected_task = str(bundle_json.get("selected_task", "")).strip()
+        recovery_steps = self._manual_recovery_steps(
+            plan_state,
+            selected_task=selected_task,
+            failing_label="parallel-batch-merge",
+        )
+        test_command = str(plan_state.default_test_command or runtime.test_cmd).strip() or runtime.test_cmd
+        execution_step = self._build_parallel_batch_merge_step(recovery_steps, test_command)
+        candidate = CandidateTask(
+            candidate_id="manual-merger",
+            title=selected_task or execution_step.title,
+            rationale=self._execution_step_rationale(execution_step, test_command),
+            plan_refs=[step.step_id for step in recovery_steps],
+            score=1.0,
+        )
+        runner = CodexRunner(context.runtime.codex_path)
+        reporter = Reporter(context)
+        memory_context = MemoryStore(context.paths).render_context(read_text(context.paths.mid_term_plan_file))
+        block_index = self._manual_recovery_block_index(context, bundle_json=bundle_json)
+        git_status_result = self.git.run(["status", "--short"], cwd=context.paths.repo_dir, check=False)
+        report_text = ""
+        report_markdown_file = str(bundle_json.get("report_markdown_file", "")).strip()
+        if report_markdown_file:
+            report_text = read_text(Path(report_markdown_file))
+        failing_summary = (
+            str(bundle_json.get("summary", "")).strip()
+            or f"Manual merge recovery requested for conflicted files: {', '.join(conflicted_files)}."
+        )
+        pass_name, run_result, success, commit_hash = self._run_merger_pass(
+            context=context,
+            runner=runner,
+            reporter=reporter,
+            block_index=block_index,
+            candidate=candidate,
+            execution_step=execution_step,
+            memory_context=memory_context,
+            failing_command="parallel-batch-merge",
+            failing_summary=failing_summary,
+            failing_stdout=git_status_result.stdout,
+            failing_stderr=report_text or git_status_result.stderr or failing_summary,
+            merge_targets=[step.step_id for step in recovery_steps],
+            post_success_strategy="continue_cherry_pick",
+        )
+        failure_summary = self._manual_merger_failure_message(run_result, success)
+        if run_result.returncode != 0 or not success:
+            rollback_status = "manual_recovery_failed"
+            self._log_pass_result(
+                context=context,
+                reporter=reporter,
+                block_index=block_index,
+                candidate=candidate,
+                pass_name=pass_name,
+                run_result=run_result,
+                test_result=None,
+                commit_hash=None,
+                rollback_status=rollback_status,
+                search_enabled=False,
+            )
+            self._report_failure(
+                context,
+                reporter,
+                failure_type="manual_merger_failed",
+                summary=failure_summary,
+                block_index=block_index,
+                selected_task=candidate.title,
+                extra={"conflict": self._parallel_conflict_details(conflicted_files)},
+            )
+            latest_failure_status = read_json(context.paths.reports_dir / "latest_pr_failure_status.json", default={})
+            failure_report = str(latest_failure_status.get("report_markdown_file", "")).strip() if isinstance(latest_failure_status, dict) else ""
+            if failure_report:
+                raise RuntimeError(f"{failure_summary} Failure report: {failure_report}")
+            raise RuntimeError(failure_summary)
+        self._log_pass_result(
+            context=context,
+            reporter=reporter,
+            block_index=block_index,
+            candidate=candidate,
+            pass_name=pass_name,
+            run_result=run_result,
+            test_result=None,
+            commit_hash=commit_hash,
+            rollback_status="not_needed",
+            search_enabled=False,
+        )
+        if commit_hash:
+            context.metadata.current_safe_revision = commit_hash
+            context.loop_state.current_safe_revision = commit_hash
+            context.loop_state.last_commit_hash = commit_hash
+            context.metadata.last_run_at = now_utc_iso()
+            self.workspace.save_project(context)
+        self.clear_latest_failure_status(context)
+        reporter.write_status_report()
+        return context, self.load_execution_plan_state(context), {
+            "pass_name": pass_name,
+            "summary": f"Resolved conflicted files: {', '.join(conflicted_files)}.",
+            "commit_hash": commit_hash,
+        }
 
     def _execute_pass(
         self,

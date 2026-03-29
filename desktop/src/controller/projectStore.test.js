@@ -57,6 +57,31 @@ test("preserveProjectDetailSupplement keeps full report text while accepting fre
   assert.equal(merged.reports.closeout_report_text, "full report body");
 });
 
+test("preserveProjectDetailSupplement clears stale latest failure when core refresh reports none", () => {
+  const previousDetail = {
+    detail_level: "full",
+    project: { repo_id: "repo-1" },
+    reports: {
+      latest_failure: { summary: "old failure" },
+      closeout_report_text: "full report body",
+    },
+    loaded_sections: { reports: true },
+  };
+  const nextDetail = {
+    detail_level: "core",
+    project: { repo_id: "repo-1" },
+    reports: {
+      latest_failure: {},
+    },
+    loaded_sections: {},
+  };
+
+  const merged = preserveProjectDetailSupplement(nextDetail, previousDetail);
+
+  assert.deepEqual(merged.reports.latest_failure, {});
+  assert.equal(merged.reports.closeout_report_text, "full report body");
+});
+
 test("applyProjectDetailState preserves the current project_dir when a sparse detail payload omits repo_path", () => {
   let capturedProjectForm = {
     project_dir: "C:/repo",

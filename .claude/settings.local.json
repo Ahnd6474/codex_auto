@@ -2,7 +2,17 @@
   "permissions": {
     "allow": [
       "Bash(wc -l ./src/jakal_flow/*.py)",
-      "Bash(find /c/Users/alber/OneDrive/문서/GitHub/codex_auto -type f -name *.vue -o -name *.svelte)"
+      "Bash(find /c/Users/alber/OneDrive/문서/GitHub/codex_auto -type f -name *.vue -o -name *.svelte)",
+      "Bash(powershell -Command \"Get-Content ''c:\\\\Users\\\\alber\\\\OneDrive\\\\문서\\\\GitHub\\\\codex_auto\\\\desktop\\\\src-tauri\\\\lib.rs'' -TotalCount 80\")",
+      "Bash(powershell -Command \"Get-ChildItem ''c:\\\\Users\\\\alber\\\\OneDrive\\\\문서\\\\GitHub\\\\codex_auto\\\\desktop\\\\src-tauri\\\\'' | Select-Object Name\")",
+      "Bash(powershell -Command \"Get-Content ''c:\\\\Users\\\\alber\\\\OneDrive\\\\문서\\\\GitHub\\\\codex_auto\\\\desktop\\\\src-tauri\\\\Cargo.toml''\")",
+      "Bash(powershell -Command \"Get-Content ''c:\\\\Users\\\\alber\\\\OneDrive\\\\문서\\\\GitHub\\\\codex_auto\\\\desktop\\\\src-tauri\\\\src\\\\lib.rs''\")",
+      "Bash(powershell -Command \"Get-Content ''c:\\\\Users\\\\alber\\\\OneDrive\\\\문서\\\\GitHub\\\\codex_auto\\\\desktop\\\\src-tauri\\\\src\\\\lib.rs'' | Select-String -Pattern ''pub fn run|cancel_bridge_job'' -Context 0,3\")",
+      "Bash(powershell -Command \":*)",
+      "Read(//c/Users/alber/OneDrive/文档/GitHub/codex_auto/**)",
+      "Read(//c/Users/alber/OneDrive/文서/GitHub/codex_auto/desktop/src/components/views/**)",
+      "Read(//c/Users/alber/OneDrive/文서/GitHub/codex_auto/desktop/src/controller/**)",
+      "Read(//c/Users/alber/OneDrive/文서/GitHub/codex_auto/desktop/src/hooks/**)"
     ]
   }
 }

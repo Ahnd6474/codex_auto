@@ -399,9 +399,97 @@ def build_run_command_handlers(
                 save_run_control(latest, default_run_control())
                 execution_stop_registry.clear(execution_scope_id(latest))
 
+    def run_manual_debugger(ctx: BridgeCommandContext) -> dict:
+        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload, ctx.orchestrator)
+        raw_plan = ctx.payload.get("plan", {})
+        if not isinstance(raw_plan, dict):
+            raise ValueError("plan payload must be an object.")
+        plan_state = parse_plan_state(raw_plan)
+        project, _saved = ctx.orchestrator.update_execution_plan(
+            project_dir=project_dir,
+            runtime=runtime,
+            plan_state=plan_state,
+            branch=branch,
+            origin_url=origin_url,
+        )
+        append_ui_event(project, "manual-debugger-started", "Started manual debugger recovery.")
+        try:
+            project, saved, result = ctx.orchestrator.run_manual_debugger_recovery(
+                project_dir=project_dir,
+                runtime=runtime,
+                branch=branch,
+                origin_url=origin_url,
+            )
+        except Exception as exc:
+            latest_project = ctx.orchestrator.local_project(project_dir)
+            if latest_project is not None:
+                append_ui_event(
+                    latest_project,
+                    "manual-debugger-finished",
+                    f"Manual debugger failed: {str(exc).strip() or 'unknown error'}",
+                    {"status": "failed"},
+                )
+            raise
+        append_ui_event(
+            project,
+            "manual-debugger-finished",
+            f"Manual debugger finished. {str(result.get('summary', '')).strip()}",
+            {
+                "status": "completed",
+                "pass_name": result.get("pass_name", ""),
+                "commit_hash": result.get("commit_hash", ""),
+            },
+        )
+        return ctx.detail_payload(project)
+
+    def run_manual_merger(ctx: BridgeCommandContext) -> dict:
+        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload, ctx.orchestrator)
+        raw_plan = ctx.payload.get("plan", {})
+        if not isinstance(raw_plan, dict):
+            raise ValueError("plan payload must be an object.")
+        plan_state = parse_plan_state(raw_plan)
+        project, _saved = ctx.orchestrator.update_execution_plan(
+            project_dir=project_dir,
+            runtime=runtime,
+            plan_state=plan_state,
+            branch=branch,
+            origin_url=origin_url,
+        )
+        append_ui_event(project, "manual-merger-started", "Started manual merger recovery.")
+        try:
+            project, saved, result = ctx.orchestrator.run_manual_merger_recovery(
+                project_dir=project_dir,
+                runtime=runtime,
+                branch=branch,
+                origin_url=origin_url,
+            )
+        except Exception as exc:
+            latest_project = ctx.orchestrator.local_project(project_dir)
+            if latest_project is not None:
+                append_ui_event(
+                    latest_project,
+                    "manual-merger-finished",
+                    f"Manual merger failed: {str(exc).strip() or 'unknown error'}",
+                    {"status": "failed"},
+                )
+            raise
+        append_ui_event(
+            project,
+            "manual-merger-finished",
+            f"Manual merger finished. {str(result.get('summary', '')).strip()}",
+            {
+                "status": "completed",
+                "pass_name": result.get("pass_name", ""),
+                "commit_hash": result.get("commit_hash", ""),
+            },
+        )
+        return ctx.detail_payload(project)
+
     return {
         "request-stop": request_stop,
         "approve-checkpoint": approve_checkpoint,
         "run-plan": run_plan,
         "run-closeout": run_closeout,
+        "run-manual-debugger": run_manual_debugger,
+        "run-manual-merger": run_manual_merger,
     }
