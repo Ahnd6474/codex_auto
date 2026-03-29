@@ -63,7 +63,7 @@ from .planning import (
 )
 from .reporting import Reporter
 from .status_views import status_from_plan_state
-from .step_models import normalize_step_model, normalize_step_model_provider, resolve_step_model_choice
+from .step_models import normalize_step_model, normalize_step_model_provider, provider_execution_preflight_error, resolve_step_model_choice
 from .utils import compact_text, ensure_dir, normalize_workflow_mode, now_utc_iso, parse_json_text, read_json, read_last_jsonl, read_text, remove_tree, similarity_score, svg_text_element, wrap_svg_text, write_json, write_text
 from .verification import VerificationRunner
 from .workspace import WorkspaceManager
@@ -2305,6 +2305,7 @@ class Orchestrator:
         runtime: RuntimeOptions,
         step_id: str | None = None,
         allow_push: bool = True,
+        final_failure_reports: bool = True,
     ) -> tuple[ProjectContext, ExecutionPlanState, ExecutionStep]:
         plan_state = self.load_execution_plan_state(context)
         if not plan_state.steps:
@@ -2328,6 +2329,37 @@ class Orchestrator:
         if target_step is None:
             raise RuntimeError("No remaining execution step is available.")
 
+        previous_runtime = context.runtime
+        step_runtime = self._build_execution_step_runtime(
+            previous_runtime,
+            target_step,
+            execution_mode=previous_runtime.execution_mode or "parallel",
+            max_blocks=1,
+            allow_push=allow_push,
+            approval_mode=runtime.approval_mode,
+            sandbox_mode=runtime.sandbox_mode,
+            require_checkpoint_approval=False,
+            checkpoint_interval_blocks=1,
+        )
+        preflight_error = self._execution_runtime_preflight_error(context, step_runtime)
+        if preflight_error:
+            for step in plan_state.steps:
+                if step.step_id == target_step.step_id:
+                    step.status = "failed"
+                    step.completed_at = None
+                    step.commit_hash = None
+                    step.notes = preflight_error
+                elif step.status == "running":
+                    step.status = "paused"
+            context.loop_state.stop_reason = preflight_error
+            context.metadata.current_status = "failed"
+            context.metadata.last_run_at = now_utc_iso()
+            plan_state.default_test_command = runtime.test_cmd
+            plan_state = self.save_execution_plan_state(context, plan_state)
+            self.workspace.save_project(context)
+            target_step = next(step for step in plan_state.steps if step.step_id == target_step.step_id)
+            return context, plan_state, target_step
+
         for step in plan_state.steps:
             if step.step_id == target_step.step_id:
                 step.status = "running"
@@ -2340,18 +2372,7 @@ class Orchestrator:
         plan_state.default_test_command = runtime.test_cmd
         plan_state = self.save_execution_plan_state(context, plan_state)
 
-        previous_runtime = context.runtime
-        context.runtime = self._build_execution_step_runtime(
-            previous_runtime,
-            target_step,
-            execution_mode=previous_runtime.execution_mode or "parallel",
-            max_blocks=1,
-            allow_push=allow_push,
-            approval_mode=runtime.approval_mode,
-            sandbox_mode=runtime.sandbox_mode,
-            require_checkpoint_approval=False,
-            checkpoint_interval_blocks=1,
-        )
+        context.runtime = step_runtime
         self.workspace.save_project(context)
 
         runner = CodexRunner(context.runtime.codex_path)
@@ -2373,6 +2394,7 @@ class Orchestrator:
                 reporter=reporter,
                 candidate=candidate,
                 execution_step=target_step,
+                final_failure_reports=final_failure_reports,
             )
             if latest_block and latest_block.get("status") == "completed":
                 target_step.status = "completed"
@@ -2557,6 +2579,7 @@ class Orchestrator:
         batch_token = f"{now_utc_iso().replace(':', '').replace('-', '').replace('+', '').replace('T', 't')}-{uuid4().hex[:8]}"
         worker_results: list[dict[str, object]] = []
         merged_commit_hashes: list[str] = []
+        merged_commit_by_step_id: dict[str, str] = {}
         group_test_result: TestRunResult | None = None
         rollback_status = "not_needed"
         final_status = "completed"
@@ -2591,11 +2614,20 @@ class Orchestrator:
                         worker_result=result,
                         success_status="integrating",
                         running_status="running:parallel",
+                        failure_status="pending",
+                        failure_project_status="running:parallel",
                     )
                 worker_results = [by_step_id[step.step_id] for step in ordered_targets]
 
-            paused_worker = next((item for item in worker_results if str(item.get("status") or "").strip() == "paused"), None)
-            failed_worker = next((item for item in worker_results if str(item.get("status") or "").strip() == "failed"), None)
+            paused_worker = next((item for item in worker_results if self._parallel_worker_status(item) == "paused"), None)
+            failed_worker = next((item for item in worker_results if self._parallel_worker_status(item) == "failed"), None)
+            completed_step_ids = {
+                str(item.get("step_id") or "").strip()
+                for item in worker_results
+                if self._parallel_worker_status(item) == "completed"
+            }
+            successful_targets = [step for step in ordered_targets if step.step_id in completed_step_ids]
+            partial_failure = failed_worker is not None and bool(successful_targets)
             if paused_worker is not None:
                 final_status = "paused"
                 rollback_status = "rolled_back_to_safe_revision"
@@ -2608,49 +2640,66 @@ class Orchestrator:
                     step.commit_hash = None
                     step.notes = batch_summary
                 context.metadata.current_status = self._status_from_plan_state(plan_state)
-            elif failed_worker is not None:
-                final_status = "failed"
-                rollback_status = "not_needed"
-                batch_summary = str(failed_worker.get("notes") or "Parallel worker failed.").strip()
-                for step in ordered_targets:
-                    step.status = "failed"
-                    step.notes = batch_summary if step.step_id == failed_worker.get("step_id") else "Parallel batch aborted because another worker failed."
-                context.metadata.current_status = "failed"
+            elif failed_worker is not None and not successful_targets:
+                rollback_status = "serial_recovery_after_worker_failure"
+                initial_summary, failure_extra = self._parallel_partial_failure_details(ordered_targets, worker_results)
+                recovery_ids = [step.step_id for step in ordered_targets]
+                plan_state, ordered_targets, recovery_status, recovery_summary = self._run_parallel_serial_recovery(
+                    context=context,
+                    runtime=runtime,
+                    ordered_targets=ordered_targets,
+                    recovery_step_ids=recovery_ids,
+                )
+                batch_summary = f"{initial_summary} | {recovery_summary}".strip(" |")
+                if recovery_status == "paused":
+                    final_status = "paused"
+                    rollback_status = "rolled_back_to_safe_revision"
+                elif recovery_status == "deferred":
+                    final_status = "deferred"
+                    rollback_status = "parallel_recovery_deferred"
+                else:
+                    final_status = "completed"
             else:
                 verification_block_index = max(1, context.loop_state.block_index + len(ordered_targets))
+                batch_targets = successful_targets or ordered_targets
                 batch_merge_step = self._build_parallel_batch_merge_step(
-                    ordered_targets,
+                    batch_targets,
                     plan_state.default_test_command or runtime.test_cmd,
                 )
                 batch_merge_candidate = CandidateTask(
                     candidate_id="parallel-batch-merge",
                     title=batch_merge_step.title,
                     rationale=self._execution_step_rationale(batch_merge_step, batch_merge_step.test_command),
-                    plan_refs=[step.step_id for step in ordered_targets],
+                    plan_refs=[step.step_id for step in batch_targets],
                     score=1.0,
                 )
                 batch_debug_step = self._build_parallel_batch_debug_step(
-                    ordered_targets,
+                    batch_targets,
                     plan_state.default_test_command or runtime.test_cmd,
                 )
                 batch_candidate = CandidateTask(
                     candidate_id="parallel-batch-debug",
                     title=batch_debug_step.title,
                     rationale=self._execution_step_rationale(batch_debug_step, batch_debug_step.test_command),
-                    plan_refs=[step.step_id for step in ordered_targets],
+                    plan_refs=[step.step_id for step in batch_targets],
                     score=1.0,
                 )
                 batch_memory_context = MemoryStore(context.paths).render_context(read_text(context.paths.mid_term_plan_file))
                 batch_runner = CodexRunner(context.runtime.codex_path)
                 try:
                     for result in worker_results:
+                        result_step_id = str(result.get("step_id") or "").strip()
+                        if result_step_id not in completed_step_ids:
+                            continue
                         worker_commit = str(result.get("commit_hash") or "").strip()
                         if not worker_commit:
-                            merged_commit_hashes.append("")
+                            merged_commit_by_step_id[result_step_id] = ""
                             continue
                         merge_result = self.git.try_cherry_pick(context.paths.repo_dir, worker_commit)
                         if merge_result.returncode == 0:
-                            merged_commit_hashes.append(self.git.current_revision(context.paths.repo_dir))
+                            merged_commit = self.git.current_revision(context.paths.repo_dir)
+                            merged_commit_hashes.append(merged_commit)
+                            merged_commit_by_step_id[result_step_id] = merged_commit
                             continue
                         conflicted_files = self.git.conflicted_files(context.paths.repo_dir)
                         failure_extra = {"conflict": self._parallel_conflict_details(conflicted_files)}
@@ -2673,7 +2722,7 @@ class Orchestrator:
                                 failing_summary=merge_test_result.summary,
                                 failing_stdout=read_text(merge_test_result.stdout_file),
                                 failing_stderr=read_text(merge_test_result.stderr_file),
-                                merge_targets=[step.step_id for step in ordered_targets],
+                                merge_targets=[step.step_id for step in batch_targets],
                                 post_success_strategy="continue_cherry_pick",
                             )
                             if merge_run_result.returncode == 0 and merge_success and merge_commit_hash:
@@ -2690,6 +2739,7 @@ class Orchestrator:
                                     search_enabled=False,
                                 )
                                 merged_commit_hashes.append(merge_commit_hash)
+                                merged_commit_by_step_id[result_step_id] = merge_commit_hash
                                 continue
                         raise RuntimeError(
                             f"Parallel merge conflict while cherry-picking {worker_commit}: {', '.join(conflicted_files) or merge_result.stderr.strip() or 'unknown conflict'}"
@@ -2709,13 +2759,24 @@ class Orchestrator:
                 except Exception as exc:
                     self.git.abort_cherry_pick(context.paths.repo_dir)
                     self.git.hard_reset(context.paths.repo_dir, base_revision)
-                    rollback_status = "rolled_back_to_safe_revision"
-                    final_status = "failed"
-                    batch_summary = str(exc).strip() or "Parallel merge failed."
-                    for step in ordered_targets:
-                        step.status = "failed"
-                        step.notes = batch_summary
-                    context.metadata.current_status = "failed"
+                    rollback_status = "serial_recovery_after_merge_failure"
+                    merge_summary = str(exc).strip() or "Parallel merge failed."
+                    recovery_ids = [step.step_id for step in ordered_targets]
+                    plan_state, ordered_targets, recovery_status, recovery_summary = self._run_parallel_serial_recovery(
+                        context=context,
+                        runtime=runtime,
+                        ordered_targets=ordered_targets,
+                        recovery_step_ids=recovery_ids,
+                    )
+                    batch_summary = f"{merge_summary} | {recovery_summary}".strip(" |")
+                    if recovery_status == "paused":
+                        final_status = "paused"
+                        rollback_status = "rolled_back_to_safe_revision"
+                    elif recovery_status == "deferred":
+                        final_status = "deferred"
+                        rollback_status = "parallel_recovery_deferred"
+                    else:
+                        final_status = "completed"
                 else:
                     try:
                         if any(commit_hash.strip() for commit_hash in merged_commit_hashes):
@@ -2739,8 +2800,7 @@ class Orchestrator:
                             )
                             if debug_run_result.returncode != 0 or debug_test_result is None or debug_test_result.returncode != 0:
                                 self.git.hard_reset(context.paths.repo_dir, base_revision)
-                                rollback_status = "rolled_back_to_safe_revision"
-                                final_status = "failed"
+                                rollback_status = "serial_recovery_after_batch_debugger"
                                 batch_summary = "Parallel batch verification failed and debugger recovery did not fix it."
                                 group_test_result = None
                                 self._log_pass_result(
@@ -2755,10 +2815,22 @@ class Orchestrator:
                                     rollback_status=rollback_status,
                                     search_enabled=False,
                                 )
-                                for step in ordered_targets:
-                                    step.status = "failed"
-                                    step.notes = batch_summary
-                                context.metadata.current_status = "failed"
+                                recovery_ids = [step.step_id for step in ordered_targets]
+                                plan_state, ordered_targets, recovery_status, recovery_summary = self._run_parallel_serial_recovery(
+                                    context=context,
+                                    runtime=runtime,
+                                    ordered_targets=ordered_targets,
+                                    recovery_step_ids=recovery_ids,
+                                )
+                                batch_summary = f"{batch_summary} | {recovery_summary}".strip(" |")
+                                if recovery_status == "paused":
+                                    final_status = "paused"
+                                    rollback_status = "rolled_back_to_safe_revision"
+                                elif recovery_status == "deferred":
+                                    final_status = "deferred"
+                                    rollback_status = "parallel_recovery_deferred"
+                                else:
+                                    final_status = "completed"
                             else:
                                 self._log_pass_result(
                                     context=context,
@@ -2776,29 +2848,67 @@ class Orchestrator:
                                     merged_commit_hashes.append(debug_commit_hash)
                                 group_test_result = debug_test_result
                                 batch_summary = debug_test_result.summary
+                                if partial_failure:
+                                    partial_summary, partial_extra = self._parallel_partial_failure_details(ordered_targets, worker_results)
+                                    rollback_status = "serial_recovery_after_worker_failure"
+                                    recovery_ids = [step.step_id for step in ordered_targets if step.step_id not in completed_step_ids]
+                                    failure_extra = {
+                                        **(failure_extra or {}),
+                                        **partial_extra,
+                                    }
                                 merged_commits = [item for item in merged_commit_hashes if item]
                                 if merged_commits:
                                     last_commit = merged_commits[-1]
                                     context.metadata.current_safe_revision = last_commit
                                     context.loop_state.current_safe_revision = last_commit
                                     context.loop_state.last_commit_hash = last_commit
-                                for index, step in enumerate(ordered_targets):
-                                    step.status = "completed"
-                                    step.completed_at = now_utc_iso()
-                                    merged_commit = merged_commit_hashes[index] if index < len(merged_commit_hashes) else ""
-                                    step.commit_hash = merged_commit or None
-                                    worker_note = str(worker_results[index].get("test_summary") or "").strip()
-                                    step.notes = worker_note if worker_note else debug_test_result.summary
+                                self._apply_parallel_batch_outcomes(
+                                    ordered_targets,
+                                    worker_results,
+                                    completed_step_ids=completed_step_ids,
+                                    merged_commit_by_step_id=merged_commit_by_step_id,
+                                    completed_note=debug_test_result.summary,
+                                )
+                                plan_state = self.save_execution_plan_state(context, plan_state)
+                                ordered_targets = self._refresh_ordered_targets(plan_state, ordered_targets)
                                 context.metadata.current_status = self._status_from_plan_state(plan_state)
+                                if partial_failure:
+                                    plan_state, ordered_targets, recovery_status, recovery_summary = self._run_parallel_serial_recovery(
+                                        context=context,
+                                        runtime=runtime,
+                                        ordered_targets=ordered_targets,
+                                        recovery_step_ids=recovery_ids,
+                                    )
+                                    batch_summary = f"{partial_summary} | {debug_test_result.summary} | {recovery_summary}".strip(" |")
+                                    if recovery_status == "paused":
+                                        final_status = "paused"
+                                        rollback_status = "rolled_back_to_safe_revision"
+                                    elif recovery_status == "deferred":
+                                        final_status = "deferred"
+                                        rollback_status = "parallel_recovery_deferred"
+                                    else:
+                                        final_status = "completed"
+                                else:
+                                    batch_summary = debug_test_result.summary
                         else:
                             batch_summary = group_test_result.summary if group_test_result else "Parallel batch completed successfully."
-                            for index, step in enumerate(ordered_targets):
-                                step.status = "completed"
-                                step.completed_at = now_utc_iso()
-                                merged_commit = merged_commit_hashes[index] if index < len(merged_commit_hashes) else ""
-                                step.commit_hash = merged_commit or None
-                                worker_note = str(worker_results[index].get("test_summary") or "").strip()
-                                step.notes = worker_note if worker_note else batch_summary
+                            if partial_failure:
+                                partial_summary, partial_extra = self._parallel_partial_failure_details(ordered_targets, worker_results)
+                                rollback_status = "serial_recovery_after_worker_failure"
+                                recovery_ids = [step.step_id for step in ordered_targets if step.step_id not in completed_step_ids]
+                                failure_extra = {
+                                    **(failure_extra or {}),
+                                    **partial_extra,
+                                }
+                            self._apply_parallel_batch_outcomes(
+                                ordered_targets,
+                                worker_results,
+                                completed_step_ids=completed_step_ids,
+                                merged_commit_by_step_id=merged_commit_by_step_id,
+                                completed_note=batch_summary,
+                            )
+                            plan_state = self.save_execution_plan_state(context, plan_state)
+                            ordered_targets = self._refresh_ordered_targets(plan_state, ordered_targets)
                             merged_commits = [item for item in merged_commit_hashes if item]
                             if merged_commits:
                                 last_commit = merged_commits[-1]
@@ -2814,6 +2924,22 @@ class Orchestrator:
                                 if not pushed and push_reason not in {"already_up_to_date"}:
                                     batch_summary = (batch_summary + f" | push skipped: {push_reason}").strip(" |")
                             context.metadata.current_status = self._status_from_plan_state(plan_state)
+                            if partial_failure:
+                                plan_state, ordered_targets, recovery_status, recovery_summary = self._run_parallel_serial_recovery(
+                                    context=context,
+                                    runtime=runtime,
+                                    ordered_targets=ordered_targets,
+                                    recovery_step_ids=recovery_ids,
+                                )
+                                batch_summary = f"{partial_summary} | {batch_summary} | {recovery_summary}".strip(" |")
+                                if recovery_status == "paused":
+                                    final_status = "paused"
+                                    rollback_status = "rolled_back_to_safe_revision"
+                                elif recovery_status == "deferred":
+                                    final_status = "deferred"
+                                    rollback_status = "parallel_recovery_deferred"
+                                else:
+                                    final_status = "completed"
                     except ImmediateStopRequested as exc:
                         self.git.abort_cherry_pick(context.paths.repo_dir)
                         self.git.hard_reset(context.paths.repo_dir, base_revision)
@@ -2844,7 +2970,11 @@ class Orchestrator:
                         "block_index": next_block_index,
                         "selected_task": step.title,
                         "commit_hash": step.commit_hash if step.status == "completed" else None,
-                        "rollback_status": rollback_status if step.status != "completed" else "not_needed",
+                        "rollback_status": (
+                            "not_needed"
+                            if step.status == "completed"
+                            else ("parallel_recovery_deferred" if step.status == "pending" else rollback_status)
+                        ),
                         "changed_files": changed_files,
                         "test_results": group_test_result.to_dict() if group_test_result and step.status == "completed" else None,
                     }
@@ -2854,12 +2984,16 @@ class Orchestrator:
                         "repository_id": context.metadata.repo_id,
                         "repository_slug": context.metadata.slug,
                         "block_index": next_block_index,
-                        "status": "completed" if step.status == "completed" else ("paused" if step.status == "paused" else "failed"),
+                        "status": self._parallel_batch_log_status(step.status),
                         "selected_task": step.title,
                         "changed_files": changed_files,
                         "test_summary": step.notes or batch_summary,
                         "commit_hashes": [step.commit_hash] if step.commit_hash else [],
-                        "rollback_status": rollback_status if step.status != "completed" else "not_needed",
+                        "rollback_status": (
+                            "not_needed"
+                            if step.status == "completed"
+                            else ("parallel_recovery_deferred" if step.status == "pending" else rollback_status)
+                        ),
                     }
                 )
                 reporter.log_pass(pass_entry)
@@ -2868,7 +3002,7 @@ class Orchestrator:
                     attempt_history_entry(
                         next_block_index,
                         step.title,
-                        "completed" if step.status == "completed" else ("parallel batch paused" if step.status == "paused" else "parallel batch failed"),
+                        self._parallel_batch_attempt_status(step.status),
                         [step.commit_hash] if step.commit_hash else [],
                     )
                 )
@@ -2955,222 +3089,255 @@ class Orchestrator:
         context.metadata.current_status = f"running:{target_step.step_id.lower()}"
         context.metadata.last_run_at = started_at
         self.workspace.save_project(context)
+        attempt_limit = max(1, int(runtime.regression_limit or 1))
+        last_failure_note = ""
 
-        integration_info: dict[str, object] | None = None
-        try:
-            integration_token = self._integration_token(target_step)
-            integration_info = self._build_integration_context(
-                context,
-                runtime,
-                target_step,
-                pre_join_safe_revision,
-                integration_token,
-            )
-            integration_context = integration_info.get("integration_context")
-            if not isinstance(integration_context, ProjectContext):
-                raise RuntimeError("Integration context could not be created.")
-            integration_plan_state = self.save_execution_plan_state(integration_context, deepcopy(plan_state))
-            self._save_lineage_states(integration_context, lineages)
-            integration_runner = CodexRunner(integration_context.runtime.codex_path)
-            integration_reporter = Reporter(integration_context)
-            integration_memory_context = MemoryStore(integration_context.paths).render_context(read_text(integration_context.paths.mid_term_plan_file))
-            merge_step = self._build_join_merge_step(integration_plan_state, target_step, merge_targets)
-            merge_candidate = CandidateTask(
-                candidate_id=f"{target_step.step_id}-merge",
-                title=merge_step.title,
-                rationale=self._execution_step_rationale(merge_step, merge_step.test_command),
-                plan_refs=merge_targets,
-                score=1.0,
-            )
-            merge_block_index = self._next_logged_block_index(integration_context)
-
-            for lineage in merge_lineages:
-                source_commit = str(lineage.head_commit or lineage.safe_revision or "").strip()
-                if not source_commit:
-                    raise RuntimeError(f"{target_step.step_id} could not find a mergeable commit for lineage {lineage.lineage_id}.")
-                merge_result = self.git.try_cherry_pick(integration_context.paths.repo_dir, source_commit)
-                if merge_result.returncode == 0:
-                    integration_head = self.git.current_revision(integration_context.paths.repo_dir)
-                    integration_context.metadata.current_safe_revision = integration_head
-                    integration_context.loop_state.current_safe_revision = integration_head
-                    self.workspace.save_project(integration_context)
-                    continue
-                conflicted_files = self.git.conflicted_files(integration_context.paths.repo_dir)
-                merge_test_result = self._merge_conflict_test_result(
-                    context=integration_context,
-                    label="integration-merge",
-                    command=f"git cherry-pick {source_commit}",
-                    merge_result=merge_result,
-                    conflicted_files=conflicted_files,
+        for attempt_index in range(1, attempt_limit + 1):
+            integration_info: dict[str, object] | None = None
+            integration_context: ProjectContext | None = None
+            try:
+                integration_token = self._integration_token(target_step)
+                integration_info = self._build_integration_context(
+                    context,
+                    runtime,
+                    target_step,
+                    pre_join_safe_revision,
+                    integration_token,
                 )
-                if conflicted_files and self.git.cherry_pick_in_progress(integration_context.paths.repo_dir):
-                    merge_pass_name, merge_run_result, merge_success, merge_commit_hash = self._run_merger_pass(
+                integration_context = integration_info.get("integration_context")
+                if not isinstance(integration_context, ProjectContext):
+                    raise RuntimeError("Integration context could not be created.")
+                integration_plan_state = self.save_execution_plan_state(integration_context, deepcopy(plan_state))
+                self._save_lineage_states(integration_context, lineages)
+                integration_runner = CodexRunner(integration_context.runtime.codex_path)
+                integration_reporter = Reporter(integration_context)
+                integration_memory_context = MemoryStore(integration_context.paths).render_context(read_text(integration_context.paths.mid_term_plan_file))
+                merge_step = self._build_join_merge_step(integration_plan_state, target_step, merge_targets)
+                merge_candidate = CandidateTask(
+                    candidate_id=f"{target_step.step_id}-merge",
+                    title=merge_step.title,
+                    rationale=self._execution_step_rationale(merge_step, merge_step.test_command),
+                    plan_refs=merge_targets,
+                    score=1.0,
+                )
+                merge_block_index = self._next_logged_block_index(integration_context)
+
+                for lineage in merge_lineages:
+                    source_commit = str(lineage.head_commit or lineage.safe_revision or "").strip()
+                    if not source_commit:
+                        raise RuntimeError(f"{target_step.step_id} could not find a mergeable commit for lineage {lineage.lineage_id}.")
+                    merge_result = self.git.try_cherry_pick(integration_context.paths.repo_dir, source_commit)
+                    if merge_result.returncode == 0:
+                        integration_head = self.git.current_revision(integration_context.paths.repo_dir)
+                        integration_context.metadata.current_safe_revision = integration_head
+                        integration_context.loop_state.current_safe_revision = integration_head
+                        self.workspace.save_project(integration_context)
+                        continue
+                    if self._is_empty_cherry_pick_result(merge_result):
+                        if self.git.cherry_pick_in_progress(integration_context.paths.repo_dir):
+                            self.git.skip_cherry_pick(integration_context.paths.repo_dir)
+                        integration_head = self.git.current_revision(integration_context.paths.repo_dir)
+                        integration_context.metadata.current_safe_revision = integration_head
+                        integration_context.loop_state.current_safe_revision = integration_head
+                        self.workspace.save_project(integration_context)
+                        continue
+                    conflicted_files = self.git.conflicted_files(integration_context.paths.repo_dir)
+                    merge_test_result = self._merge_conflict_test_result(
                         context=integration_context,
-                        runner=integration_runner,
-                        reporter=integration_reporter,
-                        block_index=merge_block_index,
-                        candidate=merge_candidate,
-                        execution_step=merge_step,
-                        memory_context=integration_memory_context,
-                        failing_command="integration-merge",
-                        failing_summary=merge_test_result.summary,
-                        failing_stdout=read_text(merge_test_result.stdout_file),
-                        failing_stderr=read_text(merge_test_result.stderr_file),
-                        merge_targets=merge_targets,
+                        label="integration-merge",
+                        command=f"git cherry-pick {source_commit}",
+                        merge_result=merge_result,
+                        conflicted_files=conflicted_files,
                     )
-                    if merge_run_result.returncode == 0 and merge_success and merge_commit_hash:
-                        self._log_pass_result(
+                    if conflicted_files and self.git.cherry_pick_in_progress(integration_context.paths.repo_dir):
+                        merge_pass_name, merge_run_result, merge_success, merge_commit_hash = self._run_merger_pass(
                             context=integration_context,
+                            runner=integration_runner,
                             reporter=integration_reporter,
                             block_index=merge_block_index,
                             candidate=merge_candidate,
-                            pass_name=merge_pass_name,
-                            run_result=merge_run_result,
-                            test_result=None,
-                            commit_hash=merge_commit_hash,
-                            rollback_status="not_needed",
-                            search_enabled=False,
+                            execution_step=merge_step,
+                            memory_context=integration_memory_context,
+                            failing_command="integration-merge",
+                            failing_summary=merge_test_result.summary,
+                            failing_stdout=read_text(merge_test_result.stdout_file),
+                            failing_stderr=read_text(merge_test_result.stderr_file),
+                            merge_targets=merge_targets,
                         )
-                        integration_context.metadata.current_safe_revision = merge_commit_hash
-                        integration_context.loop_state.current_safe_revision = merge_commit_hash
-                        self.workspace.save_project(integration_context)
-                        merge_block_index += 1
-                        continue
-                self.git.abort_cherry_pick(integration_context.paths.repo_dir)
-                self.git.hard_reset(integration_context.paths.repo_dir, pre_join_safe_revision)
+                        if merge_run_result.returncode == 0 and merge_success and merge_commit_hash:
+                            self._log_pass_result(
+                                context=integration_context,
+                                reporter=integration_reporter,
+                                block_index=merge_block_index,
+                                candidate=merge_candidate,
+                                pass_name=merge_pass_name,
+                                run_result=merge_run_result,
+                                test_result=None,
+                                commit_hash=merge_commit_hash,
+                                rollback_status="not_needed",
+                                search_enabled=False,
+                            )
+                            integration_context.metadata.current_safe_revision = merge_commit_hash
+                            integration_context.loop_state.current_safe_revision = merge_commit_hash
+                            self.workspace.save_project(integration_context)
+                            merge_block_index += 1
+                            continue
+                    raise RuntimeError(
+                        f"{target_step.step_id} failed while merging {lineage.lineage_id}: "
+                        f"{', '.join(conflicted_files) or merge_result.stderr.strip() or 'unknown conflict'}"
+                    )
+
+                integration_context.metadata.current_safe_revision = self.git.current_revision(integration_context.paths.repo_dir)
+                integration_context.loop_state.current_safe_revision = integration_context.metadata.current_safe_revision
+                self.workspace.save_project(integration_context)
+
+                _integration_project, _integration_saved, result_step = self._run_saved_execution_step_with_context(
+                    context=integration_context,
+                    runtime=runtime,
+                    step_id=target_step.step_id,
+                    allow_push=False,
+                )
+                if result_step.status != "completed":
+                    if integration_info is not None:
+                        if isinstance(integration_context, ProjectContext):
+                            self.git.abort_cherry_pick(integration_context.paths.repo_dir)
+                            self.git.hard_reset(integration_context.paths.repo_dir, pre_join_safe_revision)
+                        self._cleanup_integration_worktree(context.paths.repo_dir, integration_info)
+                    interrupted = result_step.status == "paused"
+                    context.metadata.current_status = self._status_from_plan_state(plan_state) if interrupted else "failed"
+                    target_step.status = "paused" if interrupted else "failed"
+                    target_step.completed_at = None
+                    target_step.commit_hash = None
+                    target_step.notes = result_step.notes or (
+                        "Immediate stop requested." if interrupted else "Join execution failed."
+                    )
+                    saved = self.save_execution_plan_state(context, plan_state)
+                    self.workspace.save_project(context)
+                    return context, saved, target_step
+
+                branch_name = str(integration_info.get("branch_name") if integration_info else "").strip()
+                self.git.merge_ff_only(context.paths.repo_dir, branch_name)
+
+                integrated_revision = self.git.current_revision(context.paths.repo_dir)
+                context.metadata.current_safe_revision = integrated_revision
+                context.loop_state.current_safe_revision = integrated_revision
+                context.loop_state.last_commit_hash = integrated_revision
+                pushed, push_reason = self._push_if_ready(
+                    context,
+                    context.paths.repo_dir,
+                    context.metadata.branch,
+                    commit_hash=integrated_revision,
+                )
+
+                refreshed = self.load_execution_plan_state(context)
+                refreshed_step = next((step for step in refreshed.steps if step.step_id == result_step.step_id), target_step)
+                refreshed_step.status = "completed"
+                refreshed_step.completed_at = result_step.completed_at or now_utc_iso()
+                refreshed_step.commit_hash = integrated_revision
+                refreshed_step.notes = result_step.notes or "Join step completed successfully."
+                if not pushed and push_reason not in {"already_up_to_date"}:
+                    refreshed_step.notes = f"{refreshed_step.notes} (push skipped: {push_reason})"
+                if pushed or push_reason == "already_up_to_date":
+                    remote_cleanup_notes: list[str] = []
+                    for candidate_branch in [lineage.branch_name for lineage in merge_lineages] + ([branch_name] if branch_name else []):
+                        _deleted, delete_reason = self._delete_remote_branch_if_present(
+                            context,
+                            context.paths.repo_dir,
+                            candidate_branch,
+                        )
+                        if delete_reason not in {"deleted", "missing_remote_branch", "push_disabled", "missing_remote"}:
+                            remote_cleanup_notes.append(f"{candidate_branch}: {delete_reason}")
+                    if remote_cleanup_notes:
+                        refreshed_step.notes = f"{refreshed_step.notes} (remote cleanup: {'; '.join(remote_cleanup_notes)})"
+                saved = self.save_execution_plan_state(context, refreshed)
+                context.metadata.current_status = self._status_from_plan_state(saved)
+
+                merged_at = now_utc_iso()
+                for lineage in merge_lineages:
+                    lineage.status = "merged"
+                    lineage.merged_by_step_id = refreshed_step.step_id
+                    lineage.updated_at = merged_at
+                    lineage.notes = refreshed_step.notes
+                    self._cleanup_lineage_worktree(context.paths.repo_dir, lineage)
                 if integration_info is not None:
                     self._cleanup_integration_worktree(context.paths.repo_dir, integration_info)
-                target_step.status = "failed"
-                target_step.notes = (
-                    f"{target_step.step_id} failed while merging {lineage.lineage_id}: "
-                    f"{', '.join(conflicted_files) or merge_result.stderr.strip() or 'unknown conflict'}"
-                )
-                context.metadata.current_status = "failed"
+                self._save_lineage_states(context, lineages)
+                self.workspace.save_project(context)
+                return context, saved, refreshed_step
+            except ImmediateStopRequested as exc:
+                if integration_context is not None:
+                    self.git.abort_cherry_pick(integration_context.paths.repo_dir)
+                    self.git.hard_reset(integration_context.paths.repo_dir, pre_join_safe_revision)
+                if integration_info is not None:
+                    self._cleanup_integration_worktree(context.paths.repo_dir, integration_info)
+                context.metadata.current_status = self._status_from_plan_state(plan_state)
+                target_step.status = "paused"
+                target_step.completed_at = None
+                target_step.commit_hash = None
+                target_step.notes = str(exc).strip() or "Immediate stop requested."
                 saved = self.save_execution_plan_state(context, plan_state)
                 self.workspace.save_project(context)
                 return context, saved, target_step
-
-            integration_context.metadata.current_safe_revision = self.git.current_revision(integration_context.paths.repo_dir)
-            integration_context.loop_state.current_safe_revision = integration_context.metadata.current_safe_revision
-            self.workspace.save_project(integration_context)
-
-            _integration_project, _integration_saved, result_step = self._run_saved_execution_step_with_context(
-                context=integration_context,
-                runtime=runtime,
-                step_id=target_step.step_id,
-                allow_push=False,
-            )
-        except ImmediateStopRequested as exc:
-            if integration_info is not None:
-                integration_context = integration_info.get("integration_context")
-                if isinstance(integration_context, ProjectContext):
+            except Exception as exc:
+                if integration_context is not None:
                     self.git.abort_cherry_pick(integration_context.paths.repo_dir)
                     self.git.hard_reset(integration_context.paths.repo_dir, pre_join_safe_revision)
-                self._cleanup_integration_worktree(context.paths.repo_dir, integration_info)
-            context.metadata.current_status = self._status_from_plan_state(plan_state)
-            target_step.status = "paused"
-            target_step.completed_at = None
-            target_step.commit_hash = None
-            target_step.notes = str(exc).strip() or "Immediate stop requested."
-            saved = self.save_execution_plan_state(context, plan_state)
-            self.workspace.save_project(context)
-            return context, saved, target_step
-        except Exception as exc:
-            if integration_info is not None:
-                integration_context = integration_info.get("integration_context")
-                if isinstance(integration_context, ProjectContext):
-                    self.git.abort_cherry_pick(integration_context.paths.repo_dir)
-                    self.git.hard_reset(integration_context.paths.repo_dir, pre_join_safe_revision)
-                self._cleanup_integration_worktree(context.paths.repo_dir, integration_info)
-            context.metadata.current_status = "failed"
-            target_step.status = "failed"
-            target_step.notes = str(exc).strip() or "Join execution failed."
-            saved = self.save_execution_plan_state(context, plan_state)
-            self.workspace.save_project(context)
-            raise
-
-        if result_step.status != "completed":
-            if integration_info is not None:
-                integration_context = integration_info.get("integration_context")
-                if isinstance(integration_context, ProjectContext):
-                    self.git.abort_cherry_pick(integration_context.paths.repo_dir)
-                    self.git.hard_reset(integration_context.paths.repo_dir, pre_join_safe_revision)
-                self._cleanup_integration_worktree(context.paths.repo_dir, integration_info)
-            interrupted = result_step.status == "paused"
-            context.metadata.current_status = self._status_from_plan_state(plan_state) if interrupted else "failed"
-            target_step.status = "paused" if interrupted else "failed"
-            target_step.completed_at = None
-            target_step.commit_hash = None
-            target_step.notes = result_step.notes or ("Immediate stop requested." if interrupted else "Join execution failed.")
-            saved = self.save_execution_plan_state(context, plan_state)
-            self.workspace.save_project(context)
-            return context, saved, target_step
-
-        branch_name = str(integration_info.get("branch_name") if integration_info else "").strip()
-        try:
-            self.git.merge_ff_only(context.paths.repo_dir, branch_name)
-        except Exception as exc:
-            if integration_info is not None:
-                self._cleanup_integration_worktree(context.paths.repo_dir, integration_info)
-            self.git.hard_reset(context.paths.repo_dir, pre_join_safe_revision)
-            context.metadata.current_safe_revision = pre_join_safe_revision
-            context.loop_state.current_safe_revision = pre_join_safe_revision
-            context.metadata.current_status = "failed"
-            target_step.status = "failed"
-            target_step.notes = str(exc).strip() or "Failed to promote the integration worktree onto main."
-            saved = self.save_execution_plan_state(context, plan_state)
-            self.workspace.save_project(context)
-            return context, saved, target_step
-
-        integrated_revision = self.git.current_revision(context.paths.repo_dir)
-        context.metadata.current_safe_revision = integrated_revision
-        context.loop_state.current_safe_revision = integrated_revision
-        context.loop_state.last_commit_hash = integrated_revision
-        pushed, push_reason = self._push_if_ready(
-            context,
-            context.paths.repo_dir,
-            context.metadata.branch,
-            commit_hash=integrated_revision,
-        )
-
-        refreshed = self.load_execution_plan_state(context)
-        refreshed_step = next((step for step in refreshed.steps if step.step_id == result_step.step_id), target_step)
-        refreshed_step.status = "completed"
-        refreshed_step.completed_at = result_step.completed_at or now_utc_iso()
-        refreshed_step.commit_hash = integrated_revision
-        refreshed_step.notes = result_step.notes or "Join step completed successfully."
-        if not pushed and push_reason not in {"already_up_to_date"}:
-            refreshed_step.notes = f"{refreshed_step.notes} (push skipped: {push_reason})"
-        if pushed or push_reason == "already_up_to_date":
-            remote_cleanup_notes: list[str] = []
-            for candidate_branch in [lineage.branch_name for lineage in merge_lineages] + ([branch_name] if branch_name else []):
-                deleted, delete_reason = self._delete_remote_branch_if_present(
-                    context,
-                    context.paths.repo_dir,
-                    candidate_branch,
+                if integration_info is not None:
+                    self._cleanup_integration_worktree(context.paths.repo_dir, integration_info)
+                self.git.hard_reset(context.paths.repo_dir, pre_join_safe_revision)
+                context.metadata.current_safe_revision = pre_join_safe_revision
+                context.loop_state.current_safe_revision = pre_join_safe_revision
+                last_failure_note = str(exc).strip() or "Join execution failed."
+                if attempt_index >= attempt_limit:
+                    context.metadata.current_status = "failed"
+                    target_step.status = "failed"
+                    target_step.completed_at = None
+                    target_step.commit_hash = None
+                    target_step.notes = last_failure_note
+                    saved = self.save_execution_plan_state(context, plan_state)
+                    self.workspace.save_project(context)
+                    return context, saved, target_step
+                target_step.status = "running"
+                target_step.completed_at = None
+                target_step.commit_hash = None
+                target_step.notes = (
+                    f"Retrying join attempt {attempt_index + 1} of {attempt_limit} after failure: {last_failure_note}"
                 )
-                if delete_reason not in {"deleted", "missing_remote_branch", "push_disabled", "missing_remote"}:
-                    remote_cleanup_notes.append(f"{candidate_branch}: {delete_reason}")
-            if remote_cleanup_notes:
-                refreshed_step.notes = f"{refreshed_step.notes} (remote cleanup: {'; '.join(remote_cleanup_notes)})"
-        saved = self.save_execution_plan_state(context, refreshed)
-        context.metadata.current_status = self._status_from_plan_state(saved)
+                context.metadata.current_status = f"running:retry-{target_step.step_id.lower()}"
+                context.metadata.last_run_at = now_utc_iso()
+                plan_state = self.save_execution_plan_state(context, plan_state)
+                target_step = next(step for step in plan_state.steps if step.step_id == target_step.step_id)
+                self.workspace.save_project(context)
+                continue
 
-        merged_at = now_utc_iso()
-        for lineage in merge_lineages:
-            lineage.status = "merged"
-            lineage.merged_by_step_id = refreshed_step.step_id
-            lineage.updated_at = merged_at
-            lineage.notes = refreshed_step.notes
-            self._cleanup_lineage_worktree(context.paths.repo_dir, lineage)
-        if integration_info is not None:
-            self._cleanup_integration_worktree(context.paths.repo_dir, integration_info)
-        self._save_lineage_states(context, lineages)
+        context.metadata.current_status = "failed"
+        target_step.status = "failed"
+        target_step.completed_at = None
+        target_step.commit_hash = None
+        target_step.notes = last_failure_note or "Join execution failed."
+        saved = self.save_execution_plan_state(context, plan_state)
         self.workspace.save_project(context)
-        return context, saved, refreshed_step
+        return context, saved, target_step
+
+    def _is_empty_cherry_pick_result(self, result: CommandResult) -> bool:
+        combined = f"{result.stdout}\n{result.stderr}".lower()
+        markers = (
+            "the previous cherry-pick is now empty",
+            "the patch is empty",
+            "nothing to commit",
+        )
+        return any(marker in combined for marker in markers)
 
     def _normalize_execution_mode(self, value: str | None) -> str:
         return "parallel"
+
+    def _execution_runtime_preflight_error(self, context: ProjectContext, runtime: RuntimeOptions) -> str:
+        return provider_execution_preflight_error(
+            str(getattr(runtime, "model_provider", "") or "").strip(),
+            codex_path=str(getattr(runtime, "codex_path", "") or "").strip(),
+            repo_dir=context.paths.repo_dir,
+            provider_api_key_env=str(getattr(runtime, "provider_api_key_env", "") or "").strip(),
+        )
 
     def _step_model_runtime_overrides(
         self,
@@ -3245,7 +3412,7 @@ class Orchestrator:
             merged["approval_mode"] = approval_mode
         if sandbox_mode is not None:
             merged["sandbox_mode"] = sandbox_mode
-        return RuntimeOptions(**merged)
+        return RuntimeOptions.from_dict(merged)
 
     def _parallel_worker_plan(self, runtime: RuntimeOptions):
         return build_parallel_resource_plan(
@@ -3320,7 +3487,6 @@ class Orchestrator:
             block_log_file=logs_dir / "blocks.jsonl",
             checkpoint_state_file=state_dir / "CHECKPOINTS.json",
             execution_plan_file=state_dir / "EXECUTION_PLAN.json",
-            lineage_state_file=state_dir / "LINEAGES.json",
             ml_mode_state_file=state_dir / "ML_MODE_STATE.json",
             ml_step_report_file=state_dir / "ML_STEP_REPORT.json",
             ml_experiment_reports_dir=state_dir / "ml_experiments",
@@ -3408,6 +3574,8 @@ class Orchestrator:
         worker_result: dict[str, object],
         success_status: str,
         running_status: str,
+        failure_status: str = "failed",
+        failure_project_status: str = "failed",
     ) -> tuple[ExecutionPlanState, list[ExecutionStep]]:
         step_by_id = {step.step_id: step for step in plan_state.steps}
         step = step_by_id.get(step_id.strip())
@@ -3445,17 +3613,212 @@ class Orchestrator:
             step.notes = worker_note or "Immediate stop requested."
             context.metadata.current_status = self._status_from_plan_state(plan_state)
         else:
-            step.status = "failed"
+            step.status = failure_status
             step.completed_at = None
             step.commit_hash = None
-            step.notes = worker_note or "Parallel worker failed."
-            context.metadata.current_status = "failed"
+            step.notes = worker_note or ("Parallel worker recovery pending." if failure_status == "pending" else "Parallel worker failed.")
+            context.metadata.current_status = failure_project_status
 
         context.metadata.last_run_at = synced_at
         plan_state = self.save_execution_plan_state(context, plan_state)
         self.workspace.save_project(context)
         refreshed_targets = {item.step_id: item for item in plan_state.steps}
         return plan_state, [refreshed_targets.get(item.step_id, item) for item in ordered_targets]
+
+    def _parallel_worker_status(self, worker_result: dict[str, object]) -> str:
+        return str(worker_result.get("status") or "").strip().lower() or "failed"
+
+    def _parallel_partial_failure_details(
+        self,
+        ordered_targets: list[ExecutionStep],
+        worker_results: list[dict[str, object]],
+    ) -> tuple[str, dict[str, object]]:
+        result_by_step = {
+            str(result.get("step_id") or "").strip(): result
+            for result in worker_results
+            if str(result.get("step_id") or "").strip()
+        }
+        completed_steps: list[str] = []
+        failed_steps: list[dict[str, str]] = []
+        for step in ordered_targets:
+            worker_result = result_by_step.get(step.step_id, {})
+            status = self._parallel_worker_status(worker_result)
+            if status == "completed":
+                completed_steps.append(step.step_id)
+                continue
+            if status != "failed":
+                continue
+            failed_steps.append(
+                {
+                    "step_id": step.step_id,
+                    "note": str(worker_result.get("notes") or "Parallel worker failed.").strip() or "Parallel worker failed.",
+                }
+            )
+        summary_parts: list[str] = ["Parallel batch partially completed." if completed_steps else "Parallel batch failed."]
+        if completed_steps:
+            summary_parts.append(f"Completed and kept: {', '.join(completed_steps)}.")
+        if failed_steps:
+            failure_details = "; ".join(f"{item['step_id']} ({item['note']})" for item in failed_steps)
+            summary_parts.append(f"Failed: {failure_details}.")
+        return " ".join(summary_parts).strip(), {
+            "partial_success": bool(completed_steps),
+            "completed_steps": completed_steps,
+            "failed_steps": failed_steps,
+        }
+
+    def _apply_parallel_batch_outcomes(
+        self,
+        ordered_targets: list[ExecutionStep],
+        worker_results: list[dict[str, object]],
+        *,
+        completed_step_ids: set[str],
+        merged_commit_by_step_id: dict[str, str],
+        completed_note: str,
+    ) -> None:
+        result_by_step = {
+            str(result.get("step_id") or "").strip(): result
+            for result in worker_results
+            if str(result.get("step_id") or "").strip()
+        }
+        completed_at = now_utc_iso()
+        for step in ordered_targets:
+            worker_result = result_by_step.get(step.step_id, {})
+            if step.step_id in completed_step_ids:
+                step.status = "completed"
+                step.completed_at = completed_at
+                step.commit_hash = str(merged_commit_by_step_id.get(step.step_id, "") or "").strip() or None
+                worker_note = str(worker_result.get("test_summary") or "").strip()
+                step.notes = worker_note or completed_note
+                continue
+            step.status = "failed"
+            step.completed_at = None
+            step.commit_hash = None
+            step.notes = str(worker_result.get("notes") or "Parallel worker failed.").strip() or "Parallel worker failed."
+
+    def _refresh_ordered_targets(
+        self,
+        plan_state: ExecutionPlanState,
+        ordered_targets: list[ExecutionStep],
+    ) -> list[ExecutionStep]:
+        refreshed_targets = {step.step_id: step for step in plan_state.steps}
+        return [refreshed_targets.get(step.step_id, step) for step in ordered_targets]
+
+    def _defer_parallel_recovery_step(
+        self,
+        *,
+        context: ProjectContext,
+        step_id: str,
+        note: str,
+        ordered_targets: list[ExecutionStep],
+    ) -> tuple[ExecutionPlanState, list[ExecutionStep], ExecutionStep]:
+        plan_state = self.load_execution_plan_state(context)
+        target_step = next((step for step in plan_state.steps if step.step_id == step_id.strip()), None)
+        if target_step is None:
+            raise RuntimeError(f"{step_id} could not be found while deferring parallel recovery.")
+        target_step.status = "pending"
+        target_step.completed_at = None
+        target_step.commit_hash = None
+        target_step.notes = note.strip() or "Automatic recovery deferred this step for retry."
+        context.metadata.current_status = self._status_from_plan_state(plan_state)
+        context.metadata.last_run_at = now_utc_iso()
+        saved = self.save_execution_plan_state(context, plan_state)
+        self.workspace.save_project(context)
+        refreshed_targets = self._refresh_ordered_targets(saved, ordered_targets)
+        refreshed_step = next((step for step in refreshed_targets if step.step_id == target_step.step_id), target_step)
+        return saved, refreshed_targets, refreshed_step
+
+    def _run_parallel_serial_recovery(
+        self,
+        *,
+        context: ProjectContext,
+        runtime: RuntimeOptions,
+        ordered_targets: list[ExecutionStep],
+        recovery_step_ids: list[str],
+    ) -> tuple[ExecutionPlanState, list[ExecutionStep], str, str]:
+        attempted_steps: list[str] = []
+        plan_state = self.load_execution_plan_state(context)
+        ordered_targets = self._refresh_ordered_targets(plan_state, ordered_targets)
+
+        for step_id in recovery_step_ids:
+            try:
+                context, plan_state, result_step = self._run_saved_execution_step_with_context(
+                    context=context,
+                    runtime=runtime,
+                    step_id=step_id,
+                    allow_push=False,
+                    final_failure_reports=False,
+                )
+            except Exception as exc:
+                deferred_note = (
+                    f"{str(exc).strip() or 'Automatic serial recovery failed.'} "
+                    "Automatic recovery deferred this step for retry."
+                ).strip()
+                plan_state, ordered_targets, _ = self._defer_parallel_recovery_step(
+                    context=context,
+                    step_id=step_id,
+                    note=deferred_note,
+                    ordered_targets=ordered_targets,
+                )
+                return plan_state, ordered_targets, "deferred", deferred_note
+
+            ordered_targets = self._refresh_ordered_targets(plan_state, ordered_targets)
+            result_step = next((step for step in ordered_targets if step.step_id == step_id.strip()), result_step)
+            if result_step.status == "completed":
+                attempted_steps.append(step_id)
+                continue
+            if result_step.status == "paused":
+                return plan_state, ordered_targets, "paused", result_step.notes or "Immediate stop requested."
+
+            deferred_note = (
+                f"{result_step.notes or 'Automatic serial recovery did not converge.'} "
+                "Automatic recovery deferred this step for retry."
+            ).strip()
+            plan_state, ordered_targets, _ = self._defer_parallel_recovery_step(
+                context=context,
+                step_id=step_id,
+                note=deferred_note,
+                ordered_targets=ordered_targets,
+            )
+            return plan_state, ordered_targets, "deferred", deferred_note
+
+        summary = (
+            f"Parallel batch recovered successfully after serial fallback for {', '.join(attempted_steps)}."
+            if attempted_steps
+            else "Parallel batch recovery did not require any serial fallback steps."
+        )
+        if attempted_steps:
+            last_commit = str(context.metadata.current_safe_revision or context.loop_state.current_safe_revision or "").strip()
+            if last_commit:
+                pushed, push_reason = self._push_if_ready(
+                    context,
+                    context.paths.repo_dir,
+                    context.metadata.branch,
+                    commit_hash=last_commit,
+                )
+                if not pushed and push_reason not in {"already_up_to_date"}:
+                    summary = f"{summary} | push skipped: {push_reason}".strip(" |")
+        plan_state = self.load_execution_plan_state(context)
+        ordered_targets = self._refresh_ordered_targets(plan_state, ordered_targets)
+        context.metadata.current_status = self._status_from_plan_state(plan_state)
+        context.metadata.last_run_at = now_utc_iso()
+        self.workspace.save_project(context)
+        return plan_state, ordered_targets, "completed", summary
+
+    def _parallel_batch_log_status(self, step_status: str) -> str:
+        normalized = str(step_status or "").strip().lower()
+        if normalized in {"completed", "paused", "pending"}:
+            return normalized
+        return "failed"
+
+    def _parallel_batch_attempt_status(self, step_status: str) -> str:
+        normalized = str(step_status or "").strip().lower()
+        if normalized == "completed":
+            return "completed"
+        if normalized == "paused":
+            return "parallel batch paused"
+        if normalized == "pending":
+            return "parallel batch deferred"
+        return "parallel batch failed"
 
     def _run_parallel_step_worker(
         self,
@@ -3484,6 +3847,13 @@ class Orchestrator:
             "test_summary": "",
             "ml_report_payload": {},
         }
+        worker_runtime = self._build_parallel_worker_runtime(runtime, step)
+        preflight_error = self._execution_runtime_preflight_error(context, worker_runtime)
+        if preflight_error:
+            worker_result["status"] = "failed"
+            worker_result["notes"] = preflight_error
+            worker_result["test_summary"] = preflight_error
+            return worker_result
         try:
             worker_info = self._build_parallel_worker_context(context, runtime, step, base_revision, batch_token, worker_index)
             worker_context = worker_info["worker_context"]
@@ -3587,11 +3957,6 @@ class Orchestrator:
         if detail:
             return f"{detail} (changes were rolled back)"
         return f"{fallback_task_name} verification failed and changes were rolled back."
-
-    def _search_pass_failure_summary(self, task_name: str, run_result: CodexRunResult) -> tuple[bool, str]:
-        if run_result.returncode != 0:
-            return False, self._codex_failure_note(task_name, run_result)
-        return True, "Search-enabled Codex pass regressed tests and was rolled back."
 
     def _execute_verified_repo_pass(
         self,
@@ -3992,7 +4357,16 @@ class Orchestrator:
                     selected_task=closeout_task,
                 )
             elif plan_state.closeout_status == "completed":
-                self._publish_closeout_pull_request(context, plan_state)
+                self._maybe_open_pull_request(
+                    context,
+                    head_branch=context.metadata.branch,
+                    title=plan_state.plan_title.strip() or "jakal-flow closeout",
+                    body=(
+                        "Automatically opened by jakal-flow after a successful closeout push.\n\n"
+                        f"- Branch: `{context.metadata.branch}`\n"
+                        f"- Closeout commit: `{plan_state.closeout_commit_hash or 'unknown'}`\n"
+                    ),
+                )
 
         return context, plan_state
 
@@ -4736,27 +5110,29 @@ class Orchestrator:
         )
         block_changed_files.extend(search_pass.changed_files)
         if search_tests is None:
-            counted_as_regression, failure_summary = self._search_pass_failure_summary(selected_task, search_pass)
-            if counted_as_regression:
+            regression_failure = search_pass.returncode == 0
+            failure_summary = (
+                "Search-enabled Codex pass regressed tests and was rolled back."
+                if regression_failure
+                else self._codex_failure_note(selected_task, search_pass)
+            )
+            if regression_failure:
                 context.loop_state.counters.regression_failures += 1
-            context.loop_state.stop_reason = self._stop_reason(context)
+                context.loop_state.stop_reason = self._stop_reason(context)
+            else:
+                context.loop_state.stop_reason = failure_summary
             memory.record_failure(
                 task=selected_task,
                 summary=failure_summary,
-                tags=["search", "regression" if counted_as_regression else "execution_failure"],
+                tags=["search", "regression"] if regression_failure else ["search", "codex_failure"],
                 block_index=block_index,
                 commit_hash=None,
             )
             reporter.write_block_review(
-                reflection_markdown(selected_task, failure_summary, [], [])
+                reflection_markdown(selected_task, "Search-enabled pass failed; rolled back.", [], [])
             )
             reporter.append_attempt_history(
-                attempt_history_entry(
-                    block_index,
-                    selected_task,
-                    "search pass rolled back" if counted_as_regression else "search pass execution failed",
-                    [],
-                )
+                attempt_history_entry(block_index, selected_task, "search pass rolled back", [])
             )
             reporter.log_block(
                 {
@@ -5418,86 +5794,6 @@ class Orchestrator:
             },
         )
 
-    def _closeout_branch_name(self, plan_state: ExecutionPlanState) -> str:
-        commit_token = str(plan_state.closeout_commit_hash or "").strip().lower()[:8] or "pending"
-        started_token = "".join(char for char in str(plan_state.closeout_started_at or "") if char.isdigit())[:14]
-        if not started_token:
-            started_token = "".join(char for char in now_utc_iso() if char.isdigit())[:14] or "00000000000000"
-        return f"jakal-flow-closeout-{started_token}-{commit_token}"
-
-    def _sync_base_branch_after_closeout_merge(self, context: ProjectContext, base_branch: str) -> tuple[bool, str]:
-        branch = str(base_branch or "").strip()
-        if not branch:
-            return False, "missing_base_branch"
-        try:
-            self.git.fetch(context.paths.repo_dir, "origin", branch)
-            self.git.pull_ff_only(context.paths.repo_dir, "origin", branch)
-            synced_revision = self.git.current_revision(context.paths.repo_dir)
-            context.metadata.current_safe_revision = synced_revision
-            context.loop_state.current_safe_revision = synced_revision
-            context.loop_state.last_commit_hash = synced_revision
-            return True, synced_revision
-        except Exception as exc:
-            detail = str(exc).strip().splitlines()[0] if str(exc).strip() else "unknown_error"
-            return False, f"sync_failed:{detail}"
-
-    def _publish_closeout_pull_request(
-        self,
-        context: ProjectContext,
-        plan_state: ExecutionPlanState,
-    ) -> dict:
-        title = plan_state.plan_title.strip() or "jakal-flow closeout"
-        body = (
-            "Automatically opened by jakal-flow after a successful closeout push.\n\n"
-            f"- Branch: `{context.metadata.branch}`\n"
-            f"- Closeout commit: `{plan_state.closeout_commit_hash or 'unknown'}`\n"
-        )
-        result = self._maybe_open_pull_request(
-            context,
-            head_branch=context.metadata.branch,
-            title=title,
-            body=body,
-            auto_merge=context.runtime.auto_merge_pull_request,
-            merge_method="merge",
-        )
-        if str(result.get("reason") or "").strip() != "head_matches_base":
-            return result
-
-        closeout_branch = self._closeout_branch_name(plan_state)
-        try:
-            self.git.push_refspec(context.paths.repo_dir, "HEAD", closeout_branch)
-        except Exception as exc:
-            detail = str(exc).strip().splitlines()[0] if str(exc).strip() else "unknown_error"
-            return {
-                **result,
-                "created": False,
-                "head_branch": closeout_branch,
-                "reason": f"closeout_branch_push_failed:{detail}",
-            }
-
-        retry = self._maybe_open_pull_request(
-            context,
-            head_branch=closeout_branch,
-            base_branch=context.metadata.branch,
-            title=title,
-            body=(
-                "Automatically opened by jakal-flow after a successful closeout push.\n\n"
-                f"- Base branch: `{context.metadata.branch}`\n"
-                f"- Head branch: `{closeout_branch}`\n"
-                f"- Closeout commit: `{plan_state.closeout_commit_hash or 'unknown'}`\n"
-            ),
-            auto_merge=context.runtime.auto_merge_pull_request,
-            merge_method="merge",
-        )
-        retry["head_branch"] = closeout_branch
-        retry["base_branch"] = context.metadata.branch
-        retry["closeout_branch_pushed"] = True
-        if bool(retry.get("merged")):
-            synced, sync_result = self._sync_base_branch_after_closeout_merge(context, context.metadata.branch)
-            retry["base_branch_synced"] = synced
-            retry["base_branch_sync_result"] = sync_result
-        return retry
-
     def _maybe_open_pull_request(
         self,
         context: ProjectContext,
@@ -5507,8 +5803,6 @@ class Orchestrator:
         title: str,
         body: str = "",
         draft: bool = False,
-        auto_merge: bool = False,
-        merge_method: str = "squash",
         status_filename: str = "latest_pull_request_status.json",
     ) -> dict:
         reporter = Reporter(context)
@@ -5518,8 +5812,6 @@ class Orchestrator:
             title=title,
             body=body,
             draft=draft,
-            auto_merge=auto_merge,
-            merge_method=merge_method,
         )
         write_json(
             context.paths.reports_dir / status_filename,

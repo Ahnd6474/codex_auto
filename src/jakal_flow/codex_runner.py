@@ -23,6 +23,7 @@ from .model_providers import (
     provider_uses_openai_compatible_api,
 )
 from .models import CodexRunResult, ProjectContext
+from .step_models import provider_execution_preflight_error
 from .utils import compact_text, decode_process_output, ensure_dir, get_env_or_dotenv, parse_json_text, read_text, sanitized_subprocess_env, write_json, write_text
 
 
@@ -65,6 +66,14 @@ class CodexRunner:
 
         provider = normalize_model_provider(getattr(context.runtime, "model_provider", ""))
         backend = self._backend_kind(provider)
+        preflight_error = provider_execution_preflight_error(
+            provider,
+            codex_path=self.codex_path,
+            repo_dir=context.paths.repo_dir,
+            provider_api_key_env=str(getattr(context.runtime, "provider_api_key_env", "") or "").strip(),
+        )
+        if preflight_error:
+            raise RuntimeError(preflight_error)
         child_env = sanitized_subprocess_env(self._provider_environment(context, backend=backend))
         stdout = ""
         stderr = ""

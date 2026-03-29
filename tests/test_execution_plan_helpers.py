@@ -1434,6 +1434,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             effort="medium",
             test_cmd="python -m pytest",
             execution_mode="parallel",
+            regression_limit=1,
         )
 
         try:
@@ -1539,13 +1540,311 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(step.status, "failed")
         self.assertIn("src/conflict.py", step.notes)
         mocked_abort.assert_called_once_with(integration_context.paths.repo_dir)
-        mocked_reset.assert_called_once_with(integration_context.paths.repo_dir, "safe-main")
+        mocked_reset.assert_any_call(integration_context.paths.repo_dir, "safe-main")
+        mocked_reset.assert_any_call(repo_dir, "safe-main")
+        self.assertEqual(mocked_reset.call_count, 2)
         mocked_join_step.assert_not_called()
         mocked_cleanup_integration.assert_called_once()
         self.assertEqual(project.metadata.current_status, "failed")
         self.assertEqual(
             {item["lineage_id"]: item["status"] for item in lineage_state["lineages"]},
             {"LN1": "active", "LN2": "active"},
+        )
+
+    def test_run_join_execution_step_skips_empty_cherry_pick_results(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_join_empty_cherry_pick_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model="gpt-5.4",
+            effort="medium",
+            test_cmd="python -m pytest",
+            execution_mode="parallel",
+            allow_push=False,
+        )
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            context.metadata.current_safe_revision = "safe-main"
+            context.loop_state.current_safe_revision = "safe-main"
+            orchestrator.workspace.save_project(context)
+            orchestrator.save_execution_plan_state(
+                context,
+                ExecutionPlanState(
+                    plan_title="Join Empty Cherry Pick Demo",
+                    execution_mode="parallel",
+                    default_test_command="python -m pytest",
+                    steps=[
+                        ExecutionStep(step_id="ST1", title="Artifact branch", status="completed", metadata={"lineage_id": "LN1"}),
+                        ExecutionStep(step_id="ST2", title="Reference branch", status="completed", metadata={"lineage_id": "LN2"}),
+                        ExecutionStep(
+                            step_id="ST3",
+                            title="Join artifacts",
+                            depends_on=["ST1", "ST2"],
+                            metadata={"step_kind": "join", "merge_from": ["ST1", "ST2"], "join_policy": "all"},
+                        ),
+                    ],
+                ),
+            )
+            orchestrator._save_lineage_states(
+                context,
+                {
+                    "LN1": LineageState(
+                        lineage_id="LN1",
+                        branch_name="jakal-flow-lineage-ln1",
+                        worktree_dir=temp_root / "ln1" / "repo",
+                        project_root=temp_root / "ln1",
+                        created_at="2026-03-27T00:00:00+00:00",
+                        updated_at="2026-03-27T00:00:00+00:00",
+                        head_commit="ln1-head",
+                        safe_revision="ln1-head",
+                    ),
+                    "LN2": LineageState(
+                        lineage_id="LN2",
+                        branch_name="jakal-flow-lineage-ln2",
+                        worktree_dir=temp_root / "ln2" / "repo",
+                        project_root=temp_root / "ln2",
+                        created_at="2026-03-27T00:00:00+00:00",
+                        updated_at="2026-03-27T00:00:00+00:00",
+                        head_commit="ln2-head",
+                        safe_revision="ln2-head",
+                    ),
+                },
+            )
+
+            with mock.patch.object(orchestrator.git, "add_worktree"), mock.patch.object(
+                orchestrator.git,
+                "current_revision",
+                return_value="main-integrated",
+            ), mock.patch.object(
+                orchestrator,
+                "_cleanup_lineage_worktree",
+            ) as mocked_cleanup, mock.patch.object(
+                orchestrator,
+                "_cleanup_integration_worktree",
+            ) as mocked_cleanup_integration:
+
+                def fake_run_saved_execution_step_with_context(*args, **kwargs):
+                    integration_context = kwargs["context"]
+                    current = orchestrator.load_execution_plan_state(integration_context)
+                    join_step = next(step for step in current.steps if step.step_id == "ST3")
+                    join_step.status = "completed"
+                    join_step.completed_at = "2026-03-27T01:00:00+00:00"
+                    join_step.notes = "Integrated the already-applied lineage."
+                    saved = orchestrator.save_execution_plan_state(integration_context, current)
+                    return integration_context, saved, next(step for step in saved.steps if step.step_id == "ST3")
+
+                with mock.patch.object(orchestrator, "setup_local_project", return_value=context), mock.patch.object(
+                    orchestrator.git,
+                    "try_cherry_pick",
+                    side_effect=[
+                        CommandResult(
+                            command=["git", "cherry-pick"],
+                            returncode=1,
+                            stdout="",
+                            stderr="The previous cherry-pick is now empty, possibly due to conflict resolution.",
+                        ),
+                        CommandResult(command=["git", "cherry-pick"], returncode=0, stdout="", stderr=""),
+                    ],
+                ), mock.patch.object(
+                    orchestrator.git,
+                    "cherry_pick_in_progress",
+                    return_value=True,
+                ), mock.patch.object(
+                    orchestrator.git,
+                    "skip_cherry_pick",
+                ) as mocked_skip, mock.patch.object(
+                    orchestrator,
+                    "_run_saved_execution_step_with_context",
+                    side_effect=fake_run_saved_execution_step_with_context,
+                ), mock.patch.object(
+                    orchestrator.git,
+                    "merge_ff_only",
+                ) as mocked_ff_merge, mock.patch.object(
+                    orchestrator,
+                    "_push_if_ready",
+                    return_value=(False, "push_disabled"),
+                ):
+                    project, saved, step = orchestrator.run_join_execution_step(
+                        project_dir=repo_dir,
+                        runtime=runtime,
+                        step_id="ST3",
+                    )
+                    lineage_state = read_json(project.paths.lineage_state_file, default={})
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(step.status, "completed")
+        self.assertEqual(step.commit_hash, "main-integrated")
+        self.assertEqual(project.metadata.current_status, "plan_completed")
+        mocked_skip.assert_called_once()
+        mocked_ff_merge.assert_called_once()
+        self.assertEqual(mocked_cleanup.call_count, 2)
+        mocked_cleanup_integration.assert_called_once()
+        self.assertEqual(
+            {item["lineage_id"]: item["status"] for item in lineage_state["lineages"]},
+            {"LN1": "merged", "LN2": "merged"},
+        )
+
+    def test_run_join_execution_step_retries_failed_merges_and_persists_retry_status(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_join_retry_status_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model="gpt-5.4",
+            effort="medium",
+            test_cmd="python -m pytest",
+            execution_mode="parallel",
+            regression_limit=2,
+            allow_push=False,
+        )
+        observed_statuses: list[str] = []
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            context.metadata.current_safe_revision = "safe-main"
+            context.loop_state.current_safe_revision = "safe-main"
+            orchestrator.workspace.save_project(context)
+            orchestrator.save_execution_plan_state(
+                context,
+                ExecutionPlanState(
+                    plan_title="Join Retry Demo",
+                    execution_mode="parallel",
+                    default_test_command="python -m pytest",
+                    steps=[
+                        ExecutionStep(step_id="ST1", title="Verification branch", status="completed", metadata={"lineage_id": "LN1"}),
+                        ExecutionStep(step_id="ST2", title="Reference branch", status="completed", metadata={"lineage_id": "LN2"}),
+                        ExecutionStep(
+                            step_id="ST3",
+                            title="Join verification work",
+                            depends_on=["ST1", "ST2"],
+                            metadata={"step_kind": "join", "merge_from": ["ST1", "ST2"], "join_policy": "all"},
+                        ),
+                    ],
+                ),
+            )
+            orchestrator._save_lineage_states(
+                context,
+                {
+                    "LN1": LineageState(
+                        lineage_id="LN1",
+                        branch_name="jakal-flow-lineage-ln1",
+                        worktree_dir=temp_root / "ln1" / "repo",
+                        project_root=temp_root / "ln1",
+                        created_at="2026-03-27T00:00:00+00:00",
+                        updated_at="2026-03-27T00:00:00+00:00",
+                        head_commit="ln1-head",
+                        safe_revision="ln1-head",
+                    ),
+                    "LN2": LineageState(
+                        lineage_id="LN2",
+                        branch_name="jakal-flow-lineage-ln2",
+                        worktree_dir=temp_root / "ln2" / "repo",
+                        project_root=temp_root / "ln2",
+                        created_at="2026-03-27T00:00:00+00:00",
+                        updated_at="2026-03-27T00:00:00+00:00",
+                        head_commit="ln2-head",
+                        safe_revision="ln2-head",
+                    ),
+                },
+            )
+
+            def fake_try_cherry_pick(repo_path: Path, revision: str) -> CommandResult:
+                observed_statuses.append(read_json(context.paths.metadata_file, default={}).get("current_status", ""))
+                if len(observed_statuses) == 1:
+                    return CommandResult(command=["git", "cherry-pick"], returncode=1, stdout="", stderr="merge conflict")
+                return CommandResult(command=["git", "cherry-pick"], returncode=0, stdout="", stderr="")
+
+            def fake_run_saved_execution_step_with_context(*args, **kwargs):
+                integration_context = kwargs["context"]
+                current = orchestrator.load_execution_plan_state(integration_context)
+                join_step = next(step for step in current.steps if step.step_id == "ST3")
+                join_step.status = "completed"
+                join_step.completed_at = "2026-03-27T01:00:00+00:00"
+                join_step.notes = "Integrated verification work after retry."
+                saved = orchestrator.save_execution_plan_state(integration_context, current)
+                return integration_context, saved, next(step for step in saved.steps if step.step_id == "ST3")
+
+            with mock.patch.object(orchestrator.git, "add_worktree"), mock.patch.object(
+                orchestrator.git,
+                "current_revision",
+                return_value="main-integrated",
+            ), mock.patch.object(
+                orchestrator,
+                "_cleanup_lineage_worktree",
+            ) as mocked_cleanup, mock.patch.object(
+                orchestrator,
+                "_cleanup_integration_worktree",
+            ) as mocked_cleanup_integration, mock.patch.object(
+                orchestrator, "setup_local_project", return_value=context
+            ), mock.patch.object(
+                orchestrator.git,
+                "try_cherry_pick",
+                side_effect=fake_try_cherry_pick,
+            ) as mocked_cherry_pick, mock.patch.object(
+                orchestrator.git,
+                "conflicted_files",
+                return_value=["src/conflict.py"],
+            ), mock.patch.object(
+                orchestrator.git,
+                "cherry_pick_in_progress",
+                return_value=False,
+            ), mock.patch.object(
+                orchestrator.git,
+                "abort_cherry_pick",
+            ) as mocked_abort, mock.patch.object(
+                orchestrator.git,
+                "hard_reset",
+            ) as mocked_reset, mock.patch.object(
+                orchestrator,
+                "_run_saved_execution_step_with_context",
+                side_effect=fake_run_saved_execution_step_with_context,
+            ), mock.patch.object(
+                orchestrator.git,
+                "merge_ff_only",
+            ) as mocked_ff_merge, mock.patch.object(
+                orchestrator,
+                "_push_if_ready",
+                return_value=(False, "push_disabled"),
+            ):
+                project, saved, step = orchestrator.run_join_execution_step(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    step_id="ST3",
+                )
+                lineage_state = read_json(project.paths.lineage_state_file, default={})
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(observed_statuses[0], "running:st3")
+        self.assertTrue(observed_statuses[1:])
+        self.assertTrue(all(status == "running:retry-st3" for status in observed_statuses[1:]))
+        self.assertEqual(mocked_cherry_pick.call_count, 3)
+        self.assertEqual(step.status, "completed")
+        self.assertEqual(step.commit_hash, "main-integrated")
+        self.assertEqual(project.metadata.current_status, "plan_completed")
+        mocked_abort.assert_called_once()
+        self.assertGreaterEqual(mocked_reset.call_count, 2)
+        mocked_ff_merge.assert_called_once()
+        self.assertEqual(mocked_cleanup.call_count, 2)
+        self.assertEqual(mocked_cleanup_integration.call_count, 2)
+        self.assertEqual(
+            {item["lineage_id"]: item["status"] for item in lineage_state["lineages"]},
+            {"LN1": "merged", "LN2": "merged"},
         )
 
     def test_save_execution_plan_state_keeps_running_checkpoint_status_in_sync(self) -> None:
@@ -1833,6 +2132,105 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(observed_statuses, ["running:st1"])
         self.assertEqual(step.status, "completed")
         self.assertEqual(context.metadata.current_status, "plan_completed")
+
+    def test_run_saved_execution_step_fails_fast_when_gemini_auth_is_missing(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_step_gemini_preflight_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", test_cmd="python -m pytest")
+
+        try:
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.step_models._command_available",
+                return_value=True,
+            ), mock.patch(
+                "jakal_flow.step_models._gemini_auth_env_configured",
+                return_value=False,
+            ), mock.patch(
+                "jakal_flow.step_models._gemini_settings_file_configured",
+                return_value=False,
+            ), mock.patch.object(
+                orchestrator,
+                "_run_single_block",
+                side_effect=AssertionError("step execution should stop before launching Codex"),
+            ):
+                orchestrator.update_execution_plan(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    plan_state=ExecutionPlanState(
+                        plan_title="Gemini Preflight Demo",
+                        default_test_command="python -m pytest",
+                        steps=[
+                            ExecutionStep(
+                                step_id="custom-1",
+                                title="Explicit Gemini task",
+                                model_provider="gemini",
+                                model=GEMINI_DEFAULT_MODEL,
+                                test_command="python -m pytest",
+                            )
+                        ],
+                    ),
+                )
+                context, _plan_state, step = orchestrator.run_saved_execution_step(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    step_id="ST1",
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(step.status, "failed")
+        self.assertIn("Please set an Auth method", step.notes)
+        self.assertEqual(context.metadata.current_status, "failed")
+
+    def test_parallel_step_worker_fails_fast_when_gemini_auth_is_missing(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_worker_gemini_preflight_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", test_cmd="python -m pytest", execution_mode="parallel")
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(project_dir=repo_dir, branch="main", runtime=runtime)
+            result = None
+            with mock.patch(
+                "jakal_flow.step_models._command_available",
+                return_value=True,
+            ), mock.patch(
+                "jakal_flow.step_models._gemini_auth_env_configured",
+                return_value=False,
+            ), mock.patch(
+                "jakal_flow.step_models._gemini_settings_file_configured",
+                return_value=False,
+            ), mock.patch.object(
+                orchestrator,
+                "_build_parallel_worker_context",
+                side_effect=AssertionError("worker context should not be created before auth preflight passes"),
+            ):
+                result = orchestrator._run_parallel_step_worker(
+                    context,
+                    runtime,
+                    ExecutionStep(
+                        step_id="ST2",
+                        title="Explicit Gemini slice",
+                        model_provider="gemini",
+                        model=GEMINI_DEFAULT_MODEL,
+                        test_command="python -m pytest",
+                    ),
+                    "safe-revision",
+                    "batch-token",
+                    1,
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("Please set an Auth method", result["notes"])
 
     def test_run_saved_execution_step_pauses_when_immediate_stop_is_requested(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_step_immediate_stop_test"
@@ -2400,6 +2798,289 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("integration assertion failed", debug_prompt_text)
         self.assertIn("parallel batch traceback", debug_prompt_text)
         self.assertIn("Do not modify tests unless", debug_prompt_text)
+
+    def test_parallel_batch_recovers_failed_worker_serially(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_batch_partial_success_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model="gpt-5.4",
+            effort="medium",
+            test_cmd="python -m pytest",
+            execution_mode="parallel",
+            parallel_workers=2,
+        )
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            context.metadata.current_safe_revision = "safe-revision"
+            context.loop_state.current_safe_revision = "safe-revision"
+            orchestrator.workspace.save_project(context)
+            orchestrator.save_execution_plan_state(
+                context,
+                ExecutionPlanState(
+                    plan_title="Parallel Partial Success Demo",
+                    execution_mode="parallel",
+                    default_test_command="python -m pytest",
+                    steps=[
+                        ExecutionStep(
+                            step_id="ST1",
+                            title="Desktop slice",
+                            codex_description="Implement the desktop slice.",
+                            test_command="python -m pytest",
+                            success_criteria="The desktop slice passes verification.",
+                            depends_on=[],
+                            owned_paths=["desktop/src"],
+                        ),
+                        ExecutionStep(
+                            step_id="ST2",
+                            title="Backend slice",
+                            codex_description="Implement the backend slice.",
+                            test_command="python -m pytest",
+                            success_criteria="The backend slice passes verification.",
+                            depends_on=[],
+                            owned_paths=["src/jakal_flow"],
+                        ),
+                    ],
+                ),
+            )
+
+            passing_stdout = workspace_root / "parallel-batch-pass.stdout.log"
+            passing_stderr = workspace_root / "parallel-batch-pass.stderr.log"
+            passing_stdout.parent.mkdir(parents=True, exist_ok=True)
+            passing_stdout.write_text("batch green\n", encoding="utf-8")
+            passing_stderr.write_text("", encoding="utf-8")
+            passing_test = TestRunResult(
+                command="python -m pytest",
+                returncode=0,
+                stdout_file=passing_stdout,
+                stderr_file=passing_stderr,
+                summary="python -m pytest exited with 0",
+            )
+            worker_results = [
+                {
+                    "step_id": "ST1",
+                    "status": "completed",
+                    "notes": "worker 1 ok",
+                    "commit_hash": "worker-1-commit",
+                    "changed_files": ["desktop/src/app.jsx"],
+                    "pass_log": {"pass_type": "block-search-pass"},
+                    "block_log": {"status": "completed"},
+                    "test_summary": "worker 1 ok",
+                },
+                {
+                    "step_id": "ST2",
+                    "status": "failed",
+                    "notes": "worker 2 failed badly",
+                    "commit_hash": None,
+                    "changed_files": ["src/jakal_flow/orchestrator.py"],
+                    "pass_log": {"pass_type": "block-search-pass"},
+                    "block_log": {"status": "failed"},
+                    "test_summary": "",
+                },
+            ]
+
+            def fake_serial_recovery(*args, **kwargs):
+                recovery_context = kwargs["context"]
+                self.assertFalse(kwargs["allow_push"])
+                self.assertFalse(kwargs["final_failure_reports"])
+                current = orchestrator.load_execution_plan_state(recovery_context)
+                target = next(step for step in current.steps if step.step_id == "ST2")
+                target.status = "completed"
+                target.completed_at = "2026-03-29T00:00:00+00:00"
+                target.commit_hash = "serial-recovery-commit"
+                target.notes = "worker 2 recovered serially"
+                recovery_context.metadata.current_safe_revision = "serial-recovery-commit"
+                recovery_context.loop_state.current_safe_revision = "serial-recovery-commit"
+                recovery_context.loop_state.last_commit_hash = "serial-recovery-commit"
+                saved = orchestrator.save_execution_plan_state(recovery_context, current)
+                return recovery_context, saved, next(step for step in saved.steps if step.step_id == "ST2")
+
+            with mock.patch.object(orchestrator, "_run_parallel_step_worker", side_effect=worker_results), mock.patch.object(
+                orchestrator,
+                "_run_test_command",
+                return_value=passing_test,
+            ) as mocked_test, mock.patch.object(
+                orchestrator.git,
+                "try_cherry_pick",
+                return_value=CommandResult(command=["git", "cherry-pick"], returncode=0, stdout="", stderr=""),
+            ) as mocked_pick, mock.patch.object(
+                orchestrator.git,
+                "current_revision",
+                return_value="merge-commit-1",
+            ), mock.patch.object(
+                orchestrator,
+                "_push_if_ready",
+                return_value=(False, "already_up_to_date"),
+            ) as mocked_push, mock.patch.object(
+                orchestrator,
+                "_run_saved_execution_step_with_context",
+                side_effect=fake_serial_recovery,
+            ) as mocked_serial_recovery, mock.patch.object(
+                orchestrator,
+                "_report_failure",
+            ) as mocked_report, mock.patch.object(
+                orchestrator,
+                "setup_local_project",
+                return_value=context,
+            ):
+                context, plan_state, steps = orchestrator.run_parallel_execution_batch(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    step_ids=["ST1", "ST2"],
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual([step.status for step in steps], ["completed", "completed"])
+        self.assertEqual([step.status for step in plan_state.steps], ["completed", "completed"])
+        self.assertEqual(steps[0].commit_hash, "merge-commit-1")
+        self.assertEqual(steps[1].commit_hash, "serial-recovery-commit")
+        self.assertEqual(context.metadata.current_safe_revision, "serial-recovery-commit")
+        self.assertEqual(context.metadata.current_status, "plan_completed")
+        mocked_test.assert_called_once()
+        self.assertEqual(mocked_push.call_count, 2)
+        self.assertEqual(mocked_pick.call_count, 1)
+        self.assertEqual(mocked_pick.call_args.args[1], "worker-1-commit")
+        mocked_serial_recovery.assert_called_once()
+        mocked_report.assert_not_called()
+        self.assertEqual(steps[0].notes, "worker 1 ok")
+        self.assertEqual(steps[1].notes, "worker 2 recovered serially")
+
+    def test_parallel_batch_defers_step_when_serial_recovery_still_fails(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_batch_deferred_recovery_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model="gpt-5.4",
+            effort="medium",
+            test_cmd="python -m pytest",
+            execution_mode="parallel",
+            parallel_workers=2,
+        )
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            context.metadata.current_safe_revision = "safe-revision"
+            context.loop_state.current_safe_revision = "safe-revision"
+            orchestrator.workspace.save_project(context)
+            orchestrator.save_execution_plan_state(
+                context,
+                ExecutionPlanState(
+                    plan_title="Parallel Deferred Recovery Demo",
+                    execution_mode="parallel",
+                    default_test_command="python -m pytest",
+                    steps=[
+                        ExecutionStep(step_id="ST1", title="Desktop slice", test_command="python -m pytest", owned_paths=["desktop/src"]),
+                        ExecutionStep(step_id="ST2", title="Backend slice", test_command="python -m pytest", owned_paths=["src/jakal_flow"]),
+                    ],
+                ),
+            )
+
+            passing_stdout = workspace_root / "parallel-batch-pass.stdout.log"
+            passing_stderr = workspace_root / "parallel-batch-pass.stderr.log"
+            passing_stdout.parent.mkdir(parents=True, exist_ok=True)
+            passing_stdout.write_text("batch green\n", encoding="utf-8")
+            passing_stderr.write_text("", encoding="utf-8")
+            passing_test = TestRunResult(
+                command="python -m pytest",
+                returncode=0,
+                stdout_file=passing_stdout,
+                stderr_file=passing_stderr,
+                summary="python -m pytest exited with 0",
+            )
+            worker_results = [
+                {
+                    "step_id": "ST1",
+                    "status": "completed",
+                    "notes": "worker 1 ok",
+                    "commit_hash": "worker-1-commit",
+                    "changed_files": ["desktop/src/app.jsx"],
+                    "pass_log": {"pass_type": "block-search-pass"},
+                    "block_log": {"status": "completed"},
+                    "test_summary": "worker 1 ok",
+                },
+                {
+                    "step_id": "ST2",
+                    "status": "failed",
+                    "notes": "worker 2 failed badly",
+                    "commit_hash": None,
+                    "changed_files": ["src/jakal_flow/orchestrator.py"],
+                    "pass_log": {"pass_type": "block-search-pass"},
+                    "block_log": {"status": "failed"},
+                    "test_summary": "",
+                },
+            ]
+
+            def fake_failed_serial_recovery(*args, **kwargs):
+                recovery_context = kwargs["context"]
+                current = orchestrator.load_execution_plan_state(recovery_context)
+                target = next(step for step in current.steps if step.step_id == "ST2")
+                target.status = "failed"
+                target.notes = "serial recovery still failed"
+                saved = orchestrator.save_execution_plan_state(recovery_context, current)
+                return recovery_context, saved, next(step for step in saved.steps if step.step_id == "ST2")
+
+            with mock.patch.object(orchestrator, "_run_parallel_step_worker", side_effect=worker_results), mock.patch.object(
+                orchestrator,
+                "_run_test_command",
+                return_value=passing_test,
+            ), mock.patch.object(
+                orchestrator.git,
+                "try_cherry_pick",
+                return_value=CommandResult(command=["git", "cherry-pick"], returncode=0, stdout="", stderr=""),
+            ), mock.patch.object(
+                orchestrator.git,
+                "current_revision",
+                return_value="merge-commit-1",
+            ), mock.patch.object(
+                orchestrator,
+                "_push_if_ready",
+                return_value=(False, "already_up_to_date"),
+            ) as mocked_push, mock.patch.object(
+                orchestrator,
+                "_run_saved_execution_step_with_context",
+                side_effect=fake_failed_serial_recovery,
+            ) as mocked_serial_recovery, mock.patch.object(
+                orchestrator,
+                "_report_failure",
+            ) as mocked_report, mock.patch.object(
+                orchestrator,
+                "setup_local_project",
+                return_value=context,
+            ):
+                context, plan_state, steps = orchestrator.run_parallel_execution_batch(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    step_ids=["ST1", "ST2"],
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual([step.status for step in steps], ["completed", "pending"])
+        self.assertEqual([step.status for step in plan_state.steps], ["completed", "pending"])
+        self.assertEqual(steps[0].commit_hash, "merge-commit-1")
+        self.assertIsNone(steps[1].commit_hash)
+        self.assertEqual(context.metadata.current_safe_revision, "merge-commit-1")
+        self.assertEqual(context.metadata.current_status, "plan_ready")
+        self.assertEqual(mocked_push.call_count, 1)
+        mocked_serial_recovery.assert_called_once()
+        mocked_report.assert_not_called()
+        self.assertIn("Automatic recovery deferred", steps[1].notes)
 
     def test_parallel_batch_persists_worker_sync_before_last_worker_finishes(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_batch_sync_test"

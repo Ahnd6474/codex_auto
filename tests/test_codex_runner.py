@@ -421,6 +421,89 @@ class CodexRunnerTests(unittest.TestCase):
             self.assertEqual(result.usage["reasoning_output_tokens"], 3)
             self.assertEqual(result.usage["total_tokens"], 23)
 
+    def test_run_pass_fails_fast_when_gemini_auth_is_missing(self) -> None:
+        with _TemporaryTestDir() as temp_root:
+            repo_dir = temp_root / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            manager = WorkspaceManager(temp_root / "workspace")
+            context = manager.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=RuntimeOptions(
+                    model_provider="gemini",
+                    provider_api_key_env="GEMINI_API_KEY",
+                    model="gemini-2.5-flash",
+                    effort="medium",
+                    codex_path="gemini.cmd",
+                ),
+            )
+            runner = CodexRunner("gemini.cmd")
+
+            with mock.patch("jakal_flow.step_models._command_available", return_value=True), mock.patch(
+                "jakal_flow.step_models._gemini_auth_env_configured",
+                return_value=False,
+            ), mock.patch(
+                "jakal_flow.step_models._gemini_settings_file_configured",
+                return_value=False,
+            ), mock.patch(
+                "jakal_flow.codex_runner.run_subprocess_capture",
+                side_effect=AssertionError("gemini subprocess should not start without auth"),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "Please set an Auth method"):
+                    runner.run_pass(
+                        context=context,
+                        prompt="Apply a safe fix",
+                        pass_type="demo pass",
+                        block_index=1,
+                        search_enabled=False,
+                    )
+
+    def test_run_pass_accepts_gemini_api_key_from_repo_dotenv(self) -> None:
+        with _TemporaryTestDir() as temp_root:
+            repo_dir = temp_root / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            (repo_dir / ".env").write_text("GEMINI_API_KEY=dotenv-gemini-secret\n", encoding="utf-8")
+            manager = WorkspaceManager(temp_root / "workspace")
+            context = manager.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=RuntimeOptions(
+                    model_provider="gemini",
+                    provider_api_key_env="GEMINI_API_KEY",
+                    model="gemini-2.5-flash",
+                    effort="medium",
+                    codex_path="gemini.cmd",
+                ),
+            )
+            runner = CodexRunner("gemini.cmd")
+            observed_envs: list[dict[str, str]] = []
+
+            def fake_run(command, scope_id=None, label="", input_bytes=None, env=None, cwd=None, **_kwargs):
+                observed_envs.append(dict(env or {}))
+                payload = {"response": "Gemini response"}
+                return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload).encode("utf-8"), stderr=b"")
+
+            with mock.patch("jakal_flow.step_models._command_available", return_value=True), mock.patch(
+                "jakal_flow.step_models._gemini_auth_env_configured",
+                return_value=False,
+            ), mock.patch(
+                "jakal_flow.step_models._gemini_settings_file_configured",
+                return_value=False,
+            ), mock.patch(
+                "jakal_flow.codex_runner.run_subprocess_capture",
+                side_effect=fake_run,
+            ):
+                result = runner.run_pass(
+                    context=context,
+                    prompt="Apply a safe fix",
+                    pass_type="demo pass",
+                    block_index=1,
+                    search_enabled=False,
+                )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(observed_envs[0]["GEMINI_API_KEY"], "dotenv-gemini-secret")
+
     def test_run_pass_uses_claude_print_mode(self) -> None:
         with _TemporaryTestDir() as temp_root:
             repo_dir = temp_root / "repo"

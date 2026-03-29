@@ -474,6 +474,7 @@ workspace_root/
 - `state/verification_cache/*.json`
 - `metadata.json`
 - `project_config.json`
+로컬 프로젝트는 실행 로그 파일을 `<repo>/jakal-flow-logs/` 아래에도 직접 기록합니다.
 
 워크스페이스 레벨 부가 파일:
 

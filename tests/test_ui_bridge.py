@@ -20,7 +20,7 @@ from jakal_flow.bridge_events import bridge_event_context
 from jakal_flow.execution_control import ImmediateStopRequested
 import jakal_flow.ui_bridge as ui_bridge
 import jakal_flow.ui_bridge_payloads as ui_bridge_payloads
-from jakal_flow.models import ExecutionPlanState, ExecutionStep
+from jakal_flow.models import ExecutionPlanState, ExecutionStep, RuntimeOptions
 from jakal_flow.share import share_server_status_payload
 from jakal_flow.status_views import effective_project_status
 from jakal_flow.ui_bridge import default_workspace_root, progress_caption, run_command, runtime_from_payload
@@ -160,6 +160,25 @@ class UIBridgeTests(unittest.TestCase):
                 workspace.save_project(context)
 
             self.assertEqual(events, [])
+
+    def test_local_project_logs_are_written_under_repo_root_folder(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            project_dir = temp_dir / "repo"
+            workspace = WorkspaceManager(workspace_root)
+            context = workspace.initialize_local_project(project_dir, "main", runtime_from_payload({}), display_name="Demo")
+
+            self.assertEqual(context.paths.logs_dir, project_dir.resolve() / "jakal-flow-logs")
+            self.assertEqual(context.paths.pass_log_file, project_dir.resolve() / "jakal-flow-logs" / "passes.jsonl")
+            self.assertEqual(context.paths.block_log_file, project_dir.resolve() / "jakal-flow-logs" / "blocks.jsonl")
+            self.assertEqual(context.paths.ui_event_log_file, project_dir.resolve() / "jakal-flow-logs" / "ui_events.jsonl")
+
+            ui_bridge.append_ui_event(context, "step-started", "Running ST1", {"step_id": "ST1"})
+
+            events = read_jsonl(project_dir.resolve() / "jakal-flow-logs" / "ui_events.jsonl")
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0]["event_type"], "step-started")
+            self.assertEqual(events[0]["details"]["step_id"], "ST1")
 
     def test_start_share_server_process_replaces_stale_state_file(self) -> None:
         with TemporaryTestDir() as temp_dir:
@@ -366,6 +385,34 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(runtime.parallel_worker_mode, "auto")
         self.assertEqual(runtime.parallel_workers, 0)
         self.assertEqual(runtime.parallel_memory_per_worker_gib, 3)
+
+    def test_runtime_from_payload_ignores_unknown_runtime_keys(self) -> None:
+        runtime = runtime_from_payload(
+            {
+                "model_provider": "ensemble",
+                "ensemble_claude_model": "claude-3.7-sonnet",
+                "future_runtime_field": "ignored",
+            }
+        )
+
+        self.assertEqual(runtime.model_provider, "ensemble")
+        self.assertEqual(runtime.ensemble_claude_model, "claude-3.7-sonnet")
+
+    def test_workspace_load_project_ignores_unknown_runtime_keys(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            project_dir = temp_dir / "repo"
+            workspace = WorkspaceManager(workspace_root)
+            context = workspace.initialize_local_project(project_dir, "main", RuntimeOptions())
+
+            config = json.loads(context.paths.project_config_file.read_text(encoding="utf-8"))
+            config["ensemble_claude_model"] = "claude-3.7-sonnet"
+            config["future_runtime_field"] = "ignored"
+            context.paths.project_config_file.write_text(json.dumps(config), encoding="utf-8")
+
+            reloaded = workspace.load_project_by_id(context.metadata.repo_id)
+
+        self.assertEqual(reloaded.runtime.ensemble_claude_model, "claude-3.7-sonnet")
 
     def test_runtime_from_payload_uses_platform_default_codex_path_when_missing(self) -> None:
         with mock.patch("jakal_flow.ui_bridge.default_codex_path", return_value="codex"):
