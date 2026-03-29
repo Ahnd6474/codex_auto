@@ -134,7 +134,7 @@ function ReportFileCard({ title, kind, icon, path, available, onOpen, language }
 }
 
 /* ── Main component ── */
-export function RightSidebarPane({ detail, planDraft, selectedStepId, modelPresets, onHide, busy }) {
+export function RightSidebarPane({ detail, planDraft, selectedStepId, modelPresets, busy }) {
   const { language, t } = useI18n();
   const [activeTab, setActiveTab] = useState("chat");
 
@@ -238,20 +238,6 @@ export function RightSidebarPane({ detail, planDraft, selectedStepId, modelPrese
             <span>Info</span>
           </button>
         </div>
-        {onHide ? (
-          <button
-            className="tool-window__header-btn"
-            onClick={onHide}
-            type="button"
-            title={`${t("action.dismiss")} (Alt+R)`}
-            aria-label="Hide panel"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        ) : null}
       </div>
 
       {/* ── Chat tab ── */}

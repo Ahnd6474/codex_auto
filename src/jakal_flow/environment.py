@@ -21,6 +21,9 @@ DEFAULT_GITIGNORE_ENTRIES = [
     "*.pyc",
     "build/",
     "dist/",
+    ".parallel_runs/",
+    ".lineages/",
+    "jakal-flow-logs/",
 ]
 
 

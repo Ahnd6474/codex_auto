@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -200,6 +201,24 @@ class GitOpsTests(unittest.TestCase):
 
         self.assertEqual(changed_files, [])
         self.assertFalse(has_changes)
+
+    def test_run_filters_benign_line_ending_warnings_from_stderr(self) -> None:
+        repo_dir = Path(__file__).resolve().parents[1]
+        git = GitOps()
+        completed = subprocess.CompletedProcess(
+            args=["git", "status", "--short"],
+            returncode=0,
+            stdout=b"",
+            stderr=(
+                b"warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it\n"
+                b"fatal: unrelated\n"
+            ),
+        )
+
+        with mock.patch("jakal_flow.git_ops.run_subprocess", return_value=completed):
+            result = git.run(["status", "--short"], cwd=repo_dir, check=False)
+
+        self.assertEqual(result.stderr, "fatal: unrelated\n")
 
     def test_add_worktree_recovers_missing_registered_path_and_reuses_existing_branch(self) -> None:
         repo_dir = Path(__file__).resolve().parents[1]

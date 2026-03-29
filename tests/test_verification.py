@@ -52,7 +52,7 @@ class VerificationRunnerTests(unittest.TestCase):
             self.assertEqual(first.cache_key, second.cache_key)
             self.assertIn("(cached)", second.summary)
             self.assertEqual(second.stdout_file.read_text(encoding="utf-8"), "green\n")
-            self.assertTrue((context.paths.state_dir / "verification_cache" / f"{first.cache_key}.json").exists())
+            self.assertTrue((context.paths.state_dir / "verification_cache" / f"{first.cache_key[:16]}.json").exists())
         finally:
             shutil.rmtree(temp_root, ignore_errors=True)
 
@@ -139,6 +139,30 @@ class VerificationRunnerTests(unittest.TestCase):
             self.assertIn("(cached)", second.summary)
             self.assertIn("AssertionError: experiment2 failed", second.summary)
             self.assertEqual(second.failure_reason, first.failure_reason)
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+    def test_fallback_tree_fingerprint_ignores_parallel_runtime_paths(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_verification_runtime_ignore_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        try:
+            context = self._build_context(temp_root)
+            runner = VerificationRunner()
+            (context.paths.repo_dir / "README.md").write_text("tracked\n", encoding="utf-8")
+            runtime_cache = (
+                context.paths.repo_dir
+                / ".parallel_runs"
+                / "pr-1234567890"
+                / "01-st2"
+                / "state"
+                / "verification_cache"
+            )
+            runtime_cache.mkdir(parents=True, exist_ok=True)
+            (runtime_cache / ("x" * 120 + ".stderr.log")).write_text("noise\n", encoding="utf-8")
+
+            fingerprint = runner._fallback_tree_fingerprint(context.paths.repo_dir)
+
+            self.assertTrue(fingerprint)
         finally:
             shutil.rmtree(temp_root, ignore_errors=True)
 

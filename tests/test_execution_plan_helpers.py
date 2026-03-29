@@ -4955,8 +4955,8 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         gitignore = project_dir / ".gitignore"
         gitignore.write_text("node_modules/\n", encoding="utf-8")
 
-        changed_first = ensure_gitignore(project_dir, entries=["_tmp_*/", ".venv/", "__pycache__/"])
-        changed_second = ensure_gitignore(project_dir, entries=["_tmp_*/", ".venv/", "__pycache__/"])
+        changed_first = ensure_gitignore(project_dir, entries=["_tmp_*/", ".venv/", "__pycache__/", ".parallel_runs/"])
+        changed_second = ensure_gitignore(project_dir, entries=["_tmp_*/", ".venv/", "__pycache__/", ".parallel_runs/"])
         content = gitignore.read_text(encoding="utf-8")
         shutil.rmtree(project_dir, ignore_errors=True)
 
@@ -4965,6 +4965,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("_tmp_*/", content)
         self.assertIn(".venv/", content)
         self.assertIn("__pycache__/", content)
+        self.assertIn(".parallel_runs/", content)
 
     def test_jsonl_tail_helpers_only_return_recent_entries(self) -> None:
         temp_dir = Path(__file__).resolve().parents[1] / ".tmp_jsonl_tail_test"

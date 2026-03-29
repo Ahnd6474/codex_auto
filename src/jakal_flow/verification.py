@@ -29,6 +29,17 @@ RELEVANT_ENV_FILES = (
     "composer.lock",
 )
 GIT_FINGERPRINT_TIMEOUT_SECONDS = 20.0
+IGNORED_RUNTIME_PATH_PARTS = frozenset(
+    {
+        ".git",
+        ".lineages",
+        ".parallel_runs",
+        ".pytest_cache",
+        "__pycache__",
+        "jakal-flow-logs",
+    }
+)
+SHORT_CACHE_KEY_LENGTH = 16
 
 
 class VerificationRunner:
@@ -64,8 +75,10 @@ class VerificationRunner:
         environment_fingerprint = self._environment_fingerprint(context.paths.repo_dir)
         cache_key = self._cache_key(verify_command, state_fingerprint, environment_fingerprint)
         cache_root = ensure_dir(context.paths.state_dir / "verification_cache")
-        cache_entry_file = cache_root / f"{cache_key}.json"
+        cache_entry_file = self._cache_entry_file(cache_root, cache_key)
         cached = read_json(cache_entry_file, default=None)
+        if not isinstance(cached, dict):
+            cached = read_json(cache_root / f"{cache_key}.json", default=None)
         if isinstance(cached, dict):
             cached_result = self._replay_cached_result(
                 cached,
@@ -94,8 +107,8 @@ class VerificationRunner:
         write_text(stderr_file, stderr)
         summary, failure_reason = self._summary(verify_command, completed.returncode, stdout=stdout, stderr=stderr)
 
-        cache_stdout_file = cache_root / f"{cache_key}.stdout.log"
-        cache_stderr_file = cache_root / f"{cache_key}.stderr.log"
+        cache_stdout_file = self._cache_artifact_file(cache_root, cache_key, "stdout")
+        cache_stderr_file = self._cache_artifact_file(cache_root, cache_key, "stderr")
         write_text(cache_stdout_file, stdout)
         write_text(cache_stderr_file, stderr)
         write_json(
@@ -234,14 +247,17 @@ class VerificationRunner:
     def _fallback_tree_fingerprint(self, repo_dir: Path) -> str:
         digest = hashlib.sha1()
         for path in sorted(repo_dir.rglob("*")):
-            if ".git" in path.parts:
+            if self._should_ignore_path(path, repo_dir):
                 continue
-            if path.is_dir():
+            try:
+                if path.is_dir():
+                    continue
+                digest.update(str(path.relative_to(repo_dir)).replace("\\", "/").encode("utf-8"))
+                digest.update(b"\n")
+                digest.update(hashlib.sha1(path.read_bytes()).hexdigest().encode("utf-8"))
+                digest.update(b"\n")
+            except OSError:
                 continue
-            digest.update(str(path.relative_to(repo_dir)).replace("\\", "/").encode("utf-8"))
-            digest.update(b"\n")
-            digest.update(hashlib.sha1(path.read_bytes()).hexdigest().encode("utf-8"))
-            digest.update(b"\n")
         return digest.hexdigest()
 
     def _parse_status_entries(self, output: str) -> list[dict[str, str]]:
@@ -270,13 +286,37 @@ class VerificationRunner:
         normalized = str(path).replace("\\", "/")
         digest.update(normalized.encode("utf-8"))
         digest.update(b"\n")
-        if not path.exists():
-            digest.update(b"<missing>\n")
-            return
-        if path.is_symlink():
-            digest.update(b"<symlink>\n")
-            digest.update(str(path.readlink()).encode("utf-8"))
+        try:
+            if not path.exists():
+                digest.update(b"<missing>\n")
+                return
+            if path.is_dir():
+                digest.update(b"<dir>\n")
+                return
+            if path.is_symlink():
+                digest.update(b"<symlink>\n")
+                digest.update(str(path.readlink()).encode("utf-8"))
+                digest.update(b"\n")
+                return
+            digest.update(hashlib.sha1(path.read_bytes()).hexdigest().encode("utf-8"))
             digest.update(b"\n")
-            return
-        digest.update(hashlib.sha1(path.read_bytes()).hexdigest().encode("utf-8"))
-        digest.update(b"\n")
+        except OSError as exc:
+            digest.update(f"<unreadable:{exc.__class__.__name__}>\n".encode("utf-8"))
+
+    def _cache_entry_file(self, cache_root: Path, cache_key: str) -> Path:
+        return cache_root / f"{self._cache_file_stem(cache_key)}.json"
+
+    def _cache_artifact_file(self, cache_root: Path, cache_key: str, kind: str) -> Path:
+        suffix = "out.log" if kind == "stdout" else "err.log"
+        return cache_root / f"{self._cache_file_stem(cache_key)}.{suffix}"
+
+    def _cache_file_stem(self, cache_key: str) -> str:
+        normalized = str(cache_key).strip().lower()
+        return normalized[:SHORT_CACHE_KEY_LENGTH] or "cache"
+
+    def _should_ignore_path(self, path: Path, repo_dir: Path) -> bool:
+        try:
+            relative_parts = path.relative_to(repo_dir).parts
+        except ValueError:
+            relative_parts = path.parts
+        return any(part in IGNORED_RUNTIME_PATH_PARTS for part in relative_parts)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 
 from .models import CommandResult
@@ -19,6 +20,10 @@ GIT_COMMAND_TIMEOUT_SECONDS = 600.0
 
 class GitOps:
     _UNTRACKED_SCRATCH_PREFIXES = ("_tmp_",)
+    _BENIGN_STDERR_MARKERS = (
+        "LF will be replaced by CRLF the next time Git touches it",
+        "CRLF will be replaced by LF the next time Git touches it",
+    )
 
     def _safe_directory_args(self, cwd: Path) -> list[str]:
         resolved = cwd.resolve()
@@ -62,7 +67,7 @@ class GitOps:
             timeout_seconds=GIT_COMMAND_TIMEOUT_SECONDS,
         )
         stdout = decode_process_output(completed.stdout)
-        stderr = decode_process_output(completed.stderr)
+        stderr = self._filter_benign_stderr(decode_process_output(completed.stderr))
         result = CommandResult(
             command=command,
             returncode=completed.returncode,
@@ -74,6 +79,16 @@ class GitOps:
                 f"git {' '.join(args)} failed with code {completed.returncode}: {stderr.strip()}"
             )
         return result
+
+    def _filter_benign_stderr(self, stderr: str) -> str:
+        filtered_lines = [
+            line
+            for line in str(stderr).splitlines()
+            if not any(marker in line for marker in self._BENIGN_STDERR_MARKERS)
+        ]
+        if not filtered_lines:
+            return ""
+        return "\n".join(filtered_lines).rstrip() + "\n"
 
     def clone_or_update(self, repo_url: str, branch: str, repo_dir: Path) -> None:
         if (repo_dir / ".git").exists():

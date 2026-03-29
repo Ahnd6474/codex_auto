@@ -2151,6 +2151,58 @@ select:focus {
 }
 
 
+/* ── Sidebar checkpoint expand/collapse ── */
+.sidebar-item--checkpoint {
+  padding: 0;
+  overflow: hidden;
+}
+
+.sidebar-checkpoint-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 6px 8px;
+  text-align: left;
+  color: inherit;
+}
+
+.sidebar-checkpoint-row:hover {
+  background: var(--bg-panel-alt);
+}
+
+.sidebar-checkpoint-row__arrow {
+  font-size: 10px;
+  color: var(--text-dim);
+  width: 10px;
+  flex-shrink: 0;
+}
+
+.sidebar-checkpoint-row__id {
+  font-size: 12px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-checkpoint-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 8px 8px 24px;
+  font-size: 11px;
+  color: var(--text-dim);
+  animation: fade-in 0.1s ease;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* ── Sidebar reservations ── */
 .sidebar-reservation-item {
   display: flex;

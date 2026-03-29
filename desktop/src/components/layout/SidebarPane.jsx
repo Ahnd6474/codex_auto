@@ -376,6 +376,93 @@ function ChatPanel({ chatMessages, onSendChatMessage, busy, language, t }) {
   );
 }
 
+/* ── Checkpoints panel with expand/collapse ── */
+function CheckpointsPanel({ checkpoints, visibleCheckpoints, language, t }) {
+  const [expandedIds, setExpandedIds] = useState(new Set());
+
+  function toggleExpand(id) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  return (
+    <>
+      <div className="sidebar-panel__header">
+        <strong>{t("sidebar.checkpoints")}</strong>
+        {visibleCheckpoints.length > 0 ? (
+          <span className="sidebar-count-badge">{visibleCheckpoints.length}</span>
+        ) : null}
+      </div>
+
+      <div className="sidebar-group">
+        <div className="sidebar-list">
+          {visibleCheckpoints.length ? (
+            visibleCheckpoints.map((checkpoint) => {
+              const isPendingCheckpoint =
+                checkpoint?.status === "awaiting_review" ||
+                checkpoint?.checkpoint_id === checkpoints?.pending?.checkpoint_id;
+              const tone = statusTone(checkpoint.status);
+              const isExpanded = expandedIds.has(checkpoint.checkpoint_id);
+              const hasDetails = checkpoint.title || checkpoint.target_block || checkpoint.deadline_at;
+
+              return (
+                <div
+                  className={`sidebar-item sidebar-item--checkpoint ${isPendingCheckpoint ? "sidebar-item--checkpoint-live" : ""}`.trim()}
+                  key={checkpoint.checkpoint_id}
+                >
+                  <button
+                    type="button"
+                    className="sidebar-checkpoint-row"
+                    onClick={() => hasDetails && toggleExpand(checkpoint.checkpoint_id)}
+                    style={{ cursor: hasDetails ? "pointer" : "default" }}
+                    aria-expanded={isExpanded}
+                  >
+                    <span className="sidebar-checkpoint-row__arrow" aria-hidden="true">
+                      {hasDetails ? (isExpanded ? "▾" : "▸") : "·"}
+                    </span>
+                    <strong className="sidebar-checkpoint-row__id">{checkpoint.checkpoint_id}</strong>
+                    <span className={`status-badge status-badge--${tone} ${isPendingCheckpoint ? "status-badge--pulse" : ""}`.trim()}>
+                      {displayStatus(checkpoint.status, language)}
+                    </span>
+                  </button>
+
+                  {isExpanded && hasDetails ? (
+                    <div className="sidebar-checkpoint-detail">
+                      {checkpoint.title ? (
+                        <span>{checkpoint.title}</span>
+                      ) : null}
+                      {checkpoint.target_block ? (
+                        <span>{t("sidebar.targetBlock", { block: checkpoint.target_block })}</span>
+                      ) : null}
+                      {checkpoint.deadline_at ? (
+                        <span>
+                          {language === "ko" ? `마감 ${checkpoint.deadline_at}` : `Deadline ${checkpoint.deadline_at}`}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
+          ) : (
+            <div className="empty-block">
+              <EmptyCheckpointsIcon />
+              <span>{t("sidebar.noRecordedCheckpoints")}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 /* ── Main SidebarPane ── */
 export function SidebarPane({
   activeTab,
@@ -626,56 +713,12 @@ export function SidebarPane({
 
           {/* ── Checkpoints tab ── */}
           {activeTab === "plans" ? (
-            <>
-              <div className="sidebar-panel__header">
-                <strong>{t("sidebar.checkpoints")}</strong>
-                {visibleCheckpoints.length > 0 ? (
-                  <span className="sidebar-count-badge">{visibleCheckpoints.length}</span>
-                ) : null}
-              </div>
-
-              <div className="sidebar-group">
-                <div className="sidebar-list">
-                  {visibleCheckpoints.length ? (
-                    visibleCheckpoints.map((checkpoint) => {
-                      const isPendingCheckpoint =
-                        checkpoint?.status === "awaiting_review" ||
-                        checkpoint?.checkpoint_id === checkpoints?.pending?.checkpoint_id;
-                      const tone = statusTone(checkpoint.status);
-                      return (
-                        <div
-                          className={`sidebar-item ${isPendingCheckpoint ? "sidebar-item--checkpoint-live" : ""}`}
-                          key={checkpoint.checkpoint_id}
-                        >
-                          <div className="sidebar-item__title">
-                            <strong style={{ fontSize: "12px" }}>{checkpoint.checkpoint_id}</strong>
-                            <span className={`status-badge status-badge--${tone} ${isPendingCheckpoint ? "status-badge--pulse" : ""}`}>
-                              {displayStatus(checkpoint.status, language)}
-                            </span>
-                          </div>
-                          {checkpoint.title ? (
-                            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{checkpoint.title}</span>
-                          ) : null}
-                          <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>
-                            {t("sidebar.targetBlock", { block: checkpoint.target_block })}
-                          </span>
-                          {checkpoint.deadline_at ? (
-                            <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>
-                              {language === "ko" ? `마감 ${checkpoint.deadline_at}` : `Deadline ${checkpoint.deadline_at}`}
-                            </span>
-                          ) : null}
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="empty-block">
-                      <EmptyCheckpointsIcon />
-                      <span>{t("sidebar.noRecordedCheckpoints")}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
+            <CheckpointsPanel
+              checkpoints={checkpoints}
+              visibleCheckpoints={visibleCheckpoints}
+              language={language}
+              t={t}
+            />
           ) : null}
 
         </div>
