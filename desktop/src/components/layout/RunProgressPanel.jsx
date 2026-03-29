@@ -119,7 +119,7 @@ export function RunProgressPanel({ detail, planDraft, activeJob }) {
             <span className="chip-dot chip-dot--info status-badge--pulse" style={{ animation: "live-dot-pulse 1.4s ease-in-out infinite" }} />
             <div className="run-progress-banner__title-stack">
               <span className="eyebrow">{t("run.liveRun")}</span>
-              <strong className="run-progress-banner__main-work">
+              <strong className="run-progress-banner__main-work" title={currentWork || t("action.backgroundJob")}>
                 {currentWork || t("action.backgroundJob")}
               </strong>
             </div>
@@ -188,7 +188,7 @@ export function RunProgressPanel({ detail, planDraft, activeJob }) {
         {/* Planning stages */}
         {progress.phase === "planning" && progress.planningStages.length ? (
           <div className="run-progress-banner__stages" aria-label="Planning stages">
-            {progress.planningStages.map((stage) => (
+            {progress.planningStages.slice(0, 4).map((stage) => (
               <span
                 key={`${stage.key || "stage"}-${stage.index}`}
                 className={`run-progress-stage run-progress-stage--${stage.status || "pending"}`}
@@ -197,6 +197,9 @@ export function RunProgressPanel({ detail, planDraft, activeJob }) {
                 <span className="run-progress-stage__status">{displayStatus(stage.status || "pending", language)}</span>
               </span>
             ))}
+            {progress.planningStages.length > 4 ? (
+              <span className="run-progress-stage">+{progress.planningStages.length - 4}</span>
+            ) : null}
           </div>
         ) : null}
 

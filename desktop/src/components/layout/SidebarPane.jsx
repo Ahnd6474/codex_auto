@@ -358,7 +358,7 @@ export function SidebarPane({
                             {displayStatus(project.status, language)}
                           </span>
                         </div>
-                        {project.detail ? <span>{project.detail}</span> : null}
+                        {project.detail ? <span className="sidebar-project__detail" title={project.detail}>{project.detail}</span> : null}
                       </button>
                     );
                   })
@@ -402,7 +402,7 @@ export function SidebarPane({
                             {displayStatus(project.status, language)}
                           </span>
                         </div>
-                        {project.detail ? <span>{project.detail}</span> : null}
+                        {project.detail ? <span className="sidebar-project__detail" title={project.detail}>{project.detail}</span> : null}
                       </button>
                     );
                   })

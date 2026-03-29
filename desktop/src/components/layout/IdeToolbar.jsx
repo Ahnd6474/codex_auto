@@ -358,14 +358,14 @@ export function IdeToolbar({
         <div className="toolbar-divider" />
 
         <button
-          className={`toolbar-btn toolbar-btn--remote${shareUrl ? " toolbar-btn--active" : ""}`}
+          className={`toolbar-btn toolbar-btn--icon toolbar-btn--remote${shareUrl ? " toolbar-btn--active" : ""}`}
           onClick={onSmartShareLink}
           type="button"
           disabled={shareBusy || !projectDetail?.project}
           title={shareUrl ? `클릭하여 링크 복사: ${shareUrl}` : "Remote Control 링크 생성"}
+          aria-label={shareUrl ? "링크 복사" : "Remote Control"}
         >
           <RemoteLinkIcon />
-          <span>{shareUrl ? "링크 복사" : "Remote Control"}</span>
         </button>
 
         <div className="toolbar-divider" />

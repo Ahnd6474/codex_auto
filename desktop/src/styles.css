@@ -271,10 +271,19 @@ pre {
 .toolbar-button--accent {
   background: linear-gradient(180deg, var(--button-accent-start), var(--button-accent-end));
   border-color: var(--button-accent-border);
+  box-shadow: 0 1px 6px rgba(76, 123, 179, 0.28);
 }
 
 .toolbar-button--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-muted);
+}
+
+.toolbar-button--ghost:hover:not(:disabled) {
   background: var(--bg-panel-alt);
+  border-color: var(--border);
+  color: var(--text);
 }
 
 /* ── Compact toolbar buttons (IDE header) ── */
@@ -413,8 +422,8 @@ pre {
 .run-progress-banner {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 5px;
+  padding: 5px 12px;
   border-bottom: 1px solid rgba(95, 151, 214, 0.42);
   background:
     linear-gradient(180deg, rgba(95, 151, 214, 0.08), rgba(95, 151, 214, 0.02)),
@@ -437,9 +446,38 @@ pre {
   display: block;
 }
 
+.run-progress-banner__title-stack {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.run-progress-banner__title-stack .eyebrow {
+  color: var(--text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.run-progress-banner__main-work {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+}
+
+.run-progress-banner__identity {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex: 1;
+}
+
 .run-progress-banner__track {
   width: 100%;
-  height: 12px;
+  height: 5px;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
@@ -475,12 +513,12 @@ pre {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 9px;
+  padding: 2px 7px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .run-progress-stage strong {
@@ -810,7 +848,7 @@ pre {
 }
 
 .metric-card {
-  padding: 10px 12px;
+  padding: 8px 10px;
 }
 
 .content-card--flow {
@@ -917,8 +955,17 @@ pre {
 .sidebar-project {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   position: relative;
+}
+
+.sidebar-project__detail {
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .sidebar-project.loading::after {
@@ -1071,7 +1118,15 @@ pre {
 .share-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
+}
+
+.action-row__divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 2px;
+  flex-shrink: 0;
 }
 
 .share-panel {
@@ -1710,6 +1765,11 @@ pre {
   height: 32px;
   color: var(--text-dim);
   opacity: 0.6;
+}
+
+.empty-block--action {
+  gap: 12px;
+  color: var(--text-muted);
 }
 
 /* ── Focus ring improvements ── */

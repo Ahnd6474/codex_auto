@@ -277,20 +277,21 @@ export function RunControlView({
         <div className="content-card__header">
           <strong>{t("run.flowChart")}</strong>
           <div className="action-row">
-            <button className="toolbar-button" onClick={onGeneratePlan} type="button" disabled={busy}>
-              {t("action.generate")}
-            </button>
-            <button className="toolbar-button" onClick={onSavePlan} type="button" disabled={busy}>
-              {t("action.save")}
-            </button>
-            <button className="toolbar-button toolbar-button--ghost" onClick={onResetPlan} type="button" disabled={!canResetPlan}>
-              {t("action.reset")}
-            </button>
             <button className="toolbar-button toolbar-button--accent" onClick={onRunPlan} type="button" disabled={busy}>
               {t("action.run")}
             </button>
+            <button className="toolbar-button" onClick={onGeneratePlan} type="button" disabled={busy}>
+              {t("action.generate")}
+            </button>
+            <button className="toolbar-button toolbar-button--ghost" onClick={onSavePlan} type="button" disabled={busy}>
+              {t("action.save")}
+            </button>
+            <div className="action-row__divider" />
             <button className="toolbar-button toolbar-button--ghost" onClick={onRequestStop} type="button" disabled={!canRequestStop}>
               {t("action.stop")}
+            </button>
+            <button className="toolbar-button toolbar-button--ghost" onClick={onResetPlan} type="button" disabled={!canResetPlan}>
+              {t("action.reset")}
             </button>
           </div>
         </div>
@@ -310,7 +311,12 @@ export function RunControlView({
               </div>
             ))
           ) : (
-            <div className="empty-block">{t("run.noSteps")}</div>
+            <div className="empty-block empty-block--action">
+              <span>{t("run.noSteps")}</span>
+              <button className="toolbar-button toolbar-button--accent" onClick={onGeneratePlan} type="button" disabled={busy}>
+                {t("action.generatePlan")}
+              </button>
+            </div>
           )}
         </div>
       </div>
