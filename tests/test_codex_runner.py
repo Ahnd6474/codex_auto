@@ -217,6 +217,58 @@ class CodexRunnerTests(unittest.TestCase):
             self.assertEqual(len(observed_inputs), 1)
             self.assertEqual(observed_inputs[0].decode("utf-8"), "/fast\n\nApply the requested fix")
 
+    def test_run_pass_uses_ascii_execution_aliases_for_non_ascii_repo_paths(self) -> None:
+        with _TemporaryTestDir() as temp_root:
+            repo_dir = temp_root / "문서" / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            manager = WorkspaceManager(temp_root / "workspace")
+            context = manager.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=RuntimeOptions(model="gpt-5.4", effort="medium"),
+            )
+            runner = CodexRunner("codex.cmd")
+            observed: dict[str, object] = {}
+
+            def fake_run(command, scope_id=None, label="", input_bytes=None, env=None, cwd=None, **_kwargs):
+                observed["command"] = list(command)
+                observed["cwd"] = cwd
+                alias_output = Path(command[command.index("-o") + 1])
+                alias_output.write_text("Aliased response", encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+
+            with mock.patch("jakal_flow.codex_runner.run_subprocess_capture", side_effect=fake_run):
+                result = runner.run_pass(
+                    context=context,
+                    prompt="Apply a safe fix",
+                    pass_type="demo pass",
+                    block_index=1,
+                    search_enabled=False,
+                )
+
+            self.assertEqual(result.last_message, "Aliased response")
+            output_file = context.paths.logs_dir / "block_0001" / "demo_pass.last_message.txt"
+            self.assertEqual(output_file.read_text(encoding="utf-8"), "Aliased response")
+
+            observed_command = observed["command"]
+            self.assertIsInstance(observed_command, list)
+            observed_cwd = Path(observed["cwd"])
+            self.assertNotEqual(observed_cwd, context.paths.repo_dir)
+            self.assertTrue(all(ord(char) < 128 for char in str(observed_cwd)))
+
+            cli_repo = Path(observed_command[observed_command.index("-C") + 1])
+            self.assertEqual(cli_repo, observed_cwd)
+            self.assertTrue(all(ord(char) < 128 for char in str(cli_repo)))
+
+            cli_output = Path(observed_command[observed_command.index("-o") + 1])
+            self.assertNotEqual(cli_output, output_file)
+            self.assertTrue(all(ord(char) < 128 for char in str(cli_output)))
+
+            add_dirs = [Path(observed_command[index + 1]) for index, item in enumerate(observed_command) if item == "--add-dir"]
+            self.assertEqual(len(add_dirs), 3)
+            for directory in add_dirs:
+                self.assertTrue(all(ord(char) < 128 for char in str(directory)))
+
     def test_run_pass_adds_oss_flags_for_local_models(self) -> None:
         with _TemporaryTestDir() as temp_root:
             repo_dir = temp_root / "repo"

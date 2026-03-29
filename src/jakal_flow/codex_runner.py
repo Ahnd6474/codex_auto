@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+from dataclasses import dataclass
 import json
+import os
 import re
+import subprocess
+import tempfile
 import time
 from pathlib import Path
+from typing import Iterator
+from uuid import uuid4
 
 from .codex_app_server import cli_backend_kind, is_auto_model, resolve_codex_path
 from .execution_control import execution_scope_id, run_subprocess_capture
@@ -18,6 +25,18 @@ from .model_providers import (
 from .models import CodexRunResult, ProjectContext
 from .step_models import provider_execution_preflight_error
 from .utils import compact_text, decode_process_output, ensure_dir, get_env_or_dotenv, parse_json_text, read_text, sanitized_subprocess_env, write_json, write_text
+
+
+EXECUTION_PATH_ALIAS_LENGTH_THRESHOLD = 140
+
+
+@dataclass(slots=True)
+class _CLIExecutionLayout:
+    repo_dir: Path
+    docs_dir: Path
+    memory_dir: Path
+    state_dir: Path
+    output_file: Path
 
 
 class CodexRunner:
@@ -56,72 +75,77 @@ class CodexRunner:
         if preflight_error:
             raise RuntimeError(preflight_error)
         child_env = sanitized_subprocess_env(self._provider_environment(context, backend=backend))
-        command = self._build_command(
-            context,
-            backend=backend,
-            output_file=output_file,
-            search_enabled=search_enabled,
-            reasoning_effort=reasoning_effort,
-            prompt_text=formatted_prompt,
-        )
         stdout = ""
         stderr = ""
         completed = None
         attempt_records: list[dict[str, object]] = []
         started_monotonic = time.monotonic()
         scope_id = execution_scope_id(context)
-        for attempt_index in range(1, self._TRANSIENT_RETRY_LIMIT + 2):
-            try:
-                output_file.unlink(missing_ok=True)
-            except OSError:
-                pass
-            attempt_started_monotonic = time.monotonic()
-            completed = run_subprocess_capture(
-                command,
-                scope_id=scope_id,
-                label=f"{backend.title()} {pass_type}",
-                cwd=context.paths.repo_dir,
-                input_bytes=None if backend in {"claude", "qwen"} else formatted_prompt.encode("utf-8"),
-                env=child_env,
+        with self._execution_layout(context, output_file) as execution_layout:
+            command = self._build_command(
+                context,
+                backend=backend,
+                output_file=execution_layout.output_file,
+                search_enabled=search_enabled,
+                reasoning_effort=reasoning_effort,
+                prompt_text=formatted_prompt,
+                execution_layout=execution_layout,
             )
-            stdout = decode_process_output(completed.stdout)
-            stderr = decode_process_output(completed.stderr)
-            if backend == "gemini":
-                self._write_gemini_output_file(output_file, stdout)
-            elif backend == "claude":
-                self._write_claude_output_file(output_file, stdout)
-            elif backend == "qwen":
-                self._write_qwen_output_file(output_file, stdout)
-            attempt_last_message = read_text(output_file).strip()
-            unexpected_token_detected = self._is_unexpected_token_failure(
-                completed.returncode,
-                stdout,
-                stderr,
-                attempt_last_message,
-            )
-            self._write_attempt_artifacts(
-                block_dir=block_dir,
-                pass_slug=pass_slug,
-                attempt_index=attempt_index,
-                stdout=stdout,
-                stderr=stderr,
-                last_message=attempt_last_message,
-            )
-            attempt_records.append(
-                {
-                    "attempt": attempt_index,
-                    "returncode": completed.returncode,
-                    "unexpected_token_detected": unexpected_token_detected,
-                    "stdout_excerpt": compact_text(stdout, 500),
-                    "stderr_excerpt": compact_text(stderr, 500),
-                    "last_message_excerpt": compact_text(attempt_last_message, 500),
-                    "duration_seconds": round(max(0.0, time.monotonic() - attempt_started_monotonic), 3),
-                }
-            )
-            if unexpected_token_detected and completed.returncode != 0 and attempt_index <= self._TRANSIENT_RETRY_LIMIT:
-                time.sleep(float(attempt_index))
-                continue
-            break
+            for attempt_index in range(1, self._TRANSIENT_RETRY_LIMIT + 2):
+                for candidate in {output_file, execution_layout.output_file}:
+                    try:
+                        candidate.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+                attempt_started_monotonic = time.monotonic()
+                completed = run_subprocess_capture(
+                    command,
+                    scope_id=scope_id,
+                    label=f"{backend.title()} {pass_type}",
+                    cwd=execution_layout.repo_dir,
+                    input_bytes=None if backend in {"claude", "qwen"} else formatted_prompt.encode("utf-8"),
+                    env=child_env,
+                )
+                stdout = decode_process_output(completed.stdout)
+                stderr = decode_process_output(completed.stderr)
+                if backend == "codex":
+                    self._sync_output_file(execution_layout.output_file, output_file)
+                elif backend == "gemini":
+                    self._write_gemini_output_file(output_file, stdout)
+                elif backend == "claude":
+                    self._write_claude_output_file(output_file, stdout)
+                elif backend == "qwen":
+                    self._write_qwen_output_file(output_file, stdout)
+                attempt_last_message = read_text(output_file).strip()
+                unexpected_token_detected = self._is_unexpected_token_failure(
+                    completed.returncode,
+                    stdout,
+                    stderr,
+                    attempt_last_message,
+                )
+                self._write_attempt_artifacts(
+                    block_dir=block_dir,
+                    pass_slug=pass_slug,
+                    attempt_index=attempt_index,
+                    stdout=stdout,
+                    stderr=stderr,
+                    last_message=attempt_last_message,
+                )
+                attempt_records.append(
+                    {
+                        "attempt": attempt_index,
+                        "returncode": completed.returncode,
+                        "unexpected_token_detected": unexpected_token_detected,
+                        "stdout_excerpt": compact_text(stdout, 500),
+                        "stderr_excerpt": compact_text(stderr, 500),
+                        "last_message_excerpt": compact_text(attempt_last_message, 500),
+                        "duration_seconds": round(max(0.0, time.monotonic() - attempt_started_monotonic), 3),
+                    }
+                )
+                if unexpected_token_detected and completed.returncode != 0 and attempt_index <= self._TRANSIENT_RETRY_LIMIT:
+                    time.sleep(float(attempt_index))
+                    continue
+                break
 
         if completed is None:
             raise RuntimeError("Codex process did not start.")
@@ -334,18 +358,27 @@ class CodexRunner:
         search_enabled: bool,
         reasoning_effort: str | None,
         prompt_text: str,
+        execution_layout: _CLIExecutionLayout | None = None,
     ) -> list[str]:
+        execution_layout = execution_layout or _CLIExecutionLayout(
+            repo_dir=context.paths.repo_dir,
+            docs_dir=context.paths.docs_dir,
+            memory_dir=context.paths.memory_dir,
+            state_dir=context.paths.state_dir,
+            output_file=output_file,
+        )
         provider = normalize_model_provider(getattr(context.runtime, "model_provider", ""))
         if backend == "claude":
             return self._build_claude_command(
                 context,
                 prompt_text=prompt_text,
                 reasoning_effort=reasoning_effort,
+                execution_layout=execution_layout,
             )
         if backend == "gemini":
-            return self._build_gemini_command(context)
+            return self._build_gemini_command(context, execution_layout=execution_layout)
         if backend == "qwen":
-            return self._build_qwen_command(context, prompt_text=prompt_text)
+            return self._build_qwen_command(context, prompt_text=prompt_text, execution_layout=execution_layout)
         command = [self.codex_path]
         if provider == "oss":
             command.append("--oss")
@@ -374,13 +407,13 @@ class CodexRunner:
                 "-o",
                 str(output_file),
                 "-C",
-                str(context.paths.repo_dir),
+                str(execution_layout.repo_dir),
                 "--add-dir",
-                str(context.paths.docs_dir),
+                str(execution_layout.docs_dir),
                 "--add-dir",
-                str(context.paths.memory_dir),
+                str(execution_layout.memory_dir),
                 "--add-dir",
-                str(context.paths.state_dir),
+                str(execution_layout.state_dir),
                 "-",
             ]
         )
@@ -392,6 +425,7 @@ class CodexRunner:
         *,
         prompt_text: str,
         reasoning_effort: str | None,
+        execution_layout: _CLIExecutionLayout,
     ) -> list[str]:
         command = [
             self.codex_path,
@@ -408,7 +442,7 @@ class CodexRunner:
             command.extend(["--effort", effort])
         if not is_auto_model(context.runtime.model):
             command.extend(["--model", context.runtime.model])
-        for directory in (context.paths.docs_dir, context.paths.memory_dir, context.paths.state_dir):
+        for directory in (execution_layout.docs_dir, execution_layout.memory_dir, execution_layout.state_dir):
             command.extend(["--add-dir", str(directory)])
         command.append(prompt_text)
         return command
@@ -416,6 +450,8 @@ class CodexRunner:
     def _build_gemini_command(
         self,
         context: ProjectContext,
+        *,
+        execution_layout: _CLIExecutionLayout,
     ) -> list[str]:
         command = [
             self.codex_path,
@@ -426,9 +462,9 @@ class CodexRunner:
             "--include-directories",
             ",".join(
                 [
-                    str(context.paths.docs_dir),
-                    str(context.paths.memory_dir),
-                    str(context.paths.state_dir),
+                    str(execution_layout.docs_dir),
+                    str(execution_layout.memory_dir),
+                    str(execution_layout.state_dir),
                 ]
             ),
         ]
@@ -443,6 +479,7 @@ class CodexRunner:
         context: ProjectContext,
         *,
         prompt_text: str,
+        execution_layout: _CLIExecutionLayout,
     ) -> list[str]:
         command = [
             self.codex_path,
@@ -452,9 +489,9 @@ class CodexRunner:
             "--include-directories",
             ",".join(
                 [
-                    str(context.paths.docs_dir),
-                    str(context.paths.memory_dir),
-                    str(context.paths.state_dir),
+                    str(execution_layout.docs_dir),
+                    str(execution_layout.memory_dir),
+                    str(execution_layout.state_dir),
                 ]
             ),
             "-p",
@@ -504,6 +541,98 @@ class CodexRunner:
                 response_text = candidate
         if response_text:
             write_text(output_file, response_text)
+
+    def _sync_output_file(self, source: Path, destination: Path) -> None:
+        if source == destination or not source.exists():
+            return
+        write_text(destination, read_text(source))
+
+    def _execution_paths_need_alias(self, *paths: Path) -> bool:
+        return any(self._path_needs_alias(path) for path in paths)
+
+    def _path_needs_alias(self, path: Path) -> bool:
+        raw = str(path)
+        return len(raw) >= EXECUTION_PATH_ALIAS_LENGTH_THRESHOLD or any(ord(char) > 127 for char in raw)
+
+    @contextmanager
+    def _execution_layout(
+        self,
+        context: ProjectContext,
+        output_file: Path,
+    ) -> Iterator[_CLIExecutionLayout]:
+        default_layout = _CLIExecutionLayout(
+            repo_dir=context.paths.repo_dir,
+            docs_dir=context.paths.docs_dir,
+            memory_dir=context.paths.memory_dir,
+            state_dir=context.paths.state_dir,
+            output_file=output_file,
+        )
+        if not self._execution_paths_need_alias(
+            context.paths.repo_dir,
+            context.paths.docs_dir,
+            context.paths.memory_dir,
+            context.paths.state_dir,
+            output_file,
+        ):
+            yield default_layout
+            return
+
+        alias_root = Path(tempfile.gettempdir()) / "jakal-flow-cli" / uuid4().hex[:12]
+        alias_root.mkdir(parents=True, exist_ok=True)
+        alias_layout = _CLIExecutionLayout(
+            repo_dir=alias_root / "repo",
+            docs_dir=alias_root / "docs",
+            memory_dir=alias_root / "memory",
+            state_dir=alias_root / "state",
+            output_file=alias_root / "out.txt",
+        )
+        try:
+            self._create_directory_alias(alias_layout.repo_dir, context.paths.repo_dir)
+            self._create_directory_alias(alias_layout.docs_dir, context.paths.docs_dir)
+            self._create_directory_alias(alias_layout.memory_dir, context.paths.memory_dir)
+            self._create_directory_alias(alias_layout.state_dir, context.paths.state_dir)
+            yield alias_layout
+        finally:
+            for candidate in (
+                alias_layout.output_file,
+                alias_layout.state_dir,
+                alias_layout.memory_dir,
+                alias_layout.docs_dir,
+                alias_layout.repo_dir,
+            ):
+                self._remove_alias_path(candidate)
+            self._remove_alias_path(alias_root)
+
+    def _create_directory_alias(self, alias_path: Path, target_path: Path) -> None:
+        alias_path.parent.mkdir(parents=True, exist_ok=True)
+        self._remove_alias_path(alias_path)
+        if os.name == "nt":
+            completed = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(alias_path), str(target_path)],
+                capture_output=True,
+                check=False,
+            )
+            if completed.returncode != 0:
+                stderr = decode_process_output(completed.stderr).strip()
+                stdout = decode_process_output(completed.stdout).strip()
+                detail = stderr or stdout or "unknown error"
+                raise RuntimeError(f"Failed to create execution path alias for {target_path}: {detail}")
+            return
+        alias_path.symlink_to(target_path, target_is_directory=True)
+
+    def _remove_alias_path(self, path: Path) -> None:
+        if not path.exists() and not path.is_symlink():
+            return
+        try:
+            if path.is_symlink() or path.is_file():
+                path.unlink(missing_ok=True)
+                return
+        except OSError:
+            pass
+        try:
+            path.rmdir()
+        except OSError:
+            pass
 
     def _accumulate_gemini_usage(self, payload: dict[str, object], usage: dict[str, int]) -> bool:
         stats = payload.get("stats")
