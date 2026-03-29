@@ -3006,6 +3006,144 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         mocked_reset.assert_called_once_with(repo_dir, "safe-revision")
         mocked_commit.assert_called_once()
 
+    def test_execute_pass_falls_back_to_openai_after_gemini_model_not_found_error(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_execute_pass_model_not_found_fallback_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model_provider="gemini",
+            provider_api_key_env="GEMINI_API_KEY",
+            codex_path="gemini.cmd",
+            model="gemini-2.5-flash",
+            effort="medium",
+            test_cmd="python -m pytest",
+        )
+        observed_providers: list[str] = []
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            context.metadata.current_safe_revision = "safe-revision"
+            context.loop_state.current_safe_revision = "safe-revision"
+            orchestrator.workspace.save_project(context)
+
+            reporter = Reporter(context)
+            runner = mock.Mock()
+            candidate = CandidateTask(
+                candidate_id="ST7",
+                title="Ship Release Surfaces",
+                rationale="Finish the release surface step.",
+                plan_refs=["ST7"],
+                score=1.0,
+            )
+            execution_step = ExecutionStep(
+                step_id="ST7",
+                title="Ship Release Surfaces",
+                test_command="python -m pytest",
+            )
+            failing_result = CodexRunResult(
+                pass_type="block-search-pass",
+                prompt_file=context.paths.logs_dir / "initial.prompt.md",
+                output_file=context.paths.logs_dir / "initial.last_message.txt",
+                event_file=context.paths.logs_dir / "initial.events.jsonl",
+                returncode=1,
+                search_enabled=True,
+                changed_files=[],
+                usage={},
+                last_message="",
+                diagnostics={
+                    "attempts": [
+                        {
+                            "attempt": 1,
+                            "returncode": 1,
+                            "stderr_excerpt": (
+                                "YOLO mode is enabled. All tool calls will be automatically approved.\n"
+                                "Loaded cached credentials.\n"
+                                "Error when talking to Gemini API\n"
+                                "ModelNotFoundError: Requested entity was not found."
+                            ),
+                        }
+                    ]
+                },
+            )
+            recovered_result = CodexRunResult(
+                pass_type="block-search-pass-fallback-openai",
+                prompt_file=context.paths.logs_dir / "fallback.prompt.md",
+                output_file=context.paths.logs_dir / "fallback.last_message.txt",
+                event_file=context.paths.logs_dir / "fallback.events.jsonl",
+                returncode=0,
+                search_enabled=True,
+                changed_files=[],
+                usage={"input_tokens": 17},
+                last_message="fallback implementation pass",
+            )
+            successful_test = TestRunResult(
+                command="python -m pytest",
+                returncode=0,
+                stdout_file=context.paths.logs_dir / "fallback.test.stdout.log",
+                stderr_file=context.paths.logs_dir / "fallback.test.stderr.log",
+                summary="59 passed in 40.65s",
+            )
+
+            def fake_primary_run_pass(**kwargs):
+                observed_providers.append(str(kwargs["context"].runtime.model_provider))
+                return failing_result
+
+            def fake_fallback_run_pass(*args, **kwargs):
+                observed_providers.append(str(kwargs["context"].runtime.model_provider))
+                return recovered_result
+
+            runner.run_pass.side_effect = fake_primary_run_pass
+
+            with mock.patch("jakal_flow.orchestrator.CodexRunner.run_pass", side_effect=fake_fallback_run_pass) as mocked_fallback_run, mock.patch.object(
+                orchestrator,
+                "_run_test_command",
+                return_value=successful_test,
+            ), mock.patch.object(
+                orchestrator.git,
+                "changed_files",
+                return_value=["src/lit/cli.py", "desktop/src/components/layout/SidebarPane.jsx"],
+            ), mock.patch.object(orchestrator.git, "has_changes", return_value=True), mock.patch.object(
+                orchestrator.git,
+                "commit_all",
+                return_value="release-surfaces-commit",
+            ) as mocked_commit, mock.patch.object(orchestrator.git, "hard_reset") as mocked_reset:
+                run_result, test_result, commit_hash = orchestrator._execute_pass(
+                    context=context,
+                    runner=runner,
+                    reporter=reporter,
+                    block_index=2,
+                    candidate=candidate,
+                    pass_name="block-search-pass",
+                    safe_revision="safe-revision",
+                    search_enabled=True,
+                    memory_context_override="Recent memory context",
+                    execution_step=execution_step,
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(observed_providers, ["gemini", "openai"])
+        self.assertEqual(context.runtime.model_provider, "openai")
+        self.assertEqual(commit_hash, "release-surfaces-commit")
+        self.assertIsNotNone(test_result)
+        self.assertEqual(test_result.returncode, 0)
+        self.assertEqual(test_result.summary, "59 passed in 40.65s")
+        self.assertEqual(run_result.attempt_count, 2)
+        self.assertEqual(run_result.changed_files, ["src/lit/cli.py", "desktop/src/components/layout/SidebarPane.jsx"])
+        self.assertEqual(run_result.diagnostics["provider_fallback"]["from_provider"], "gemini")
+        self.assertEqual(run_result.diagnostics["provider_fallback"]["to_provider"], "openai")
+        self.assertIn("ModelNotFoundError", run_result.diagnostics["provider_fallback"]["trigger_detail"])
+        mocked_fallback_run.assert_called_once()
+        mocked_reset.assert_called_once_with(repo_dir, "safe-revision")
+        mocked_commit.assert_called_once()
+
     def test_execute_verified_repo_pass_falls_back_to_local_oss_after_remote_quota_failures(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_verified_repo_local_provider_fallback_test"
         shutil.rmtree(temp_root, ignore_errors=True)

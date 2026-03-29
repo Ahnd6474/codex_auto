@@ -2031,7 +2031,7 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
         reasoning_effort: str | None = None,
     ) -> CodexRunResult:
         failure_detail = self._run_result_failure_detail(run_result)
-        if not is_quota_exhaustion_error(failure_detail):
+        if not is_provider_fallbackable_error(failure_detail):
             return run_result
 
         primary_runtime = context.runtime
@@ -2176,7 +2176,7 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
             raise
         except RuntimeError as exc:
             error_detail = str(exc or "").strip()
-            if not is_quota_exhaustion_error(error_detail):
+            if not is_provider_fallbackable_error(error_detail):
                 raise
             run_result = self._runtime_error_run_result(
                 context=context,

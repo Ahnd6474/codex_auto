@@ -23,6 +23,8 @@ class ProviderFallbackTests(unittest.TestCase):
     def test_provider_fallbackable_detection_accepts_auth_and_connectivity_failures(self) -> None:
         self.assertTrue(is_provider_fallbackable_error("Please set an Auth method in your Gemini settings."))
         self.assertTrue(is_provider_fallbackable_error("connection refused"))
+        self.assertTrue(is_provider_fallbackable_error("Error when talking to Gemini API"))
+        self.assertTrue(is_provider_fallbackable_error("ModelNotFoundError: Requested entity was not found."))
         self.assertFalse(is_provider_fallbackable_error("pytest assertions failed"))
 
     def test_build_provider_fallback_runtimes_prefers_remote_then_local(self) -> None:

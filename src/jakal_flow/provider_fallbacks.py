@@ -60,6 +60,9 @@ _FALLBACKABLE_ERROR_MARKERS = _QUOTA_ERROR_MARKERS + (
     "timeout",
     "no such host",
     "name or service not known",
+    "error when talking to gemini api",
+    "modelnotfounderror",
+    "requested entity was not found",
     "requires at least one detected local model",
 )
 
