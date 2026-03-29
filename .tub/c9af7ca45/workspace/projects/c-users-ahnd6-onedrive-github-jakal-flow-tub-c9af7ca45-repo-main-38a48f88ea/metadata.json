@@ -1,0 +1,19 @@
+{
+  "archive_id": null,
+  "archived": false,
+  "archived_at": null,
+  "branch": "main",
+  "created_at": "2026-03-29T00:46:01+00:00",
+  "current_safe_revision": "16473992566a0cd7256aa034f0c86a86478ffce6",
+  "current_status": "setup_ready",
+  "display_name": "Retry Run Demo",
+  "last_run_at": "2026-03-29T00:46:02+00:00",
+  "origin_url": null,
+  "project_root": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea",
+  "repo_id": "38a48f88eac597eb744c9177b0f9f1ed7dce2224",
+  "repo_kind": "local",
+  "repo_path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo",
+  "repo_url": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo",
+  "slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea",
+  "source_repo_id": null
+}

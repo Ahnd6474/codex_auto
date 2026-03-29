@@ -1,8 +1,8 @@
 # Scope Guard
 
-- Repository URL: C:\Users\ahnd6\OneDrive\문서\GitHub\Jakal-flow\.tub\c9c022296\repo
+- Repository URL: C:\Users\ahnd6\OneDrive\문서\GitHub\Jakal-flow\.tub\c9af7ca45\repo
 - Branch: main
-- Project slug: c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b
+- Project slug: c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea
 
 ## Rules
 

@@ -1,10 +1,8 @@
 {
-  "content_signature": "577b69c1c6085054a732723c702eede7132c2706",
+  "content_signature": "5c1c3cbdd09b8f8b21687040c5cc402b3a31596d",
   "payload": {
     "activity": [
-      "2026-03-29T00:45:57+00:00 | closeout-finished | Closeout finished with status completed.",
-      "2026-03-29T00:45:57+00:00 | closeout-started | Started project closeout.",
-      "2026-03-29T00:45:37+00:00 | project-saved | Saved project setup from the desktop shell."
+      "2026-03-29T00:46:02+00:00 | project-saved | Saved project setup from the desktop shell."
     ],
     "bottom_panels": {
       "codex_status": {},
@@ -19,15 +17,15 @@
             "regression_failures": 0
           },
           "current_checkpoint_id": null,
-          "current_safe_revision": "637db311f09ba761f6e6bdcfc27c847915cf29bb",
+          "current_safe_revision": "16473992566a0cd7256aa034f0c86a86478ffce6",
           "current_task": null,
           "last_block_completed_at": null,
           "last_candidates": [],
           "last_commit_hash": null,
           "pending_checkpoint_approval": false,
           "plan_locked": true,
-          "repo_id": "1c0ebc2d8bc7d77be28a35b8b23e39853cf5c8e6",
-          "repo_slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+          "repo_id": "38a48f88eac597eb744c9177b0f9f1ed7dce2224",
+          "repo_slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea",
           "stop_reason": null,
           "stop_requested": false
         },
@@ -39,19 +37,17 @@
         }
       },
       "execution_log_lines": [
-        "2026-03-29T00:45:57+00:00 | closeout-finished | Closeout finished with status completed.",
-        "2026-03-29T00:45:57+00:00 | closeout-started | Started project closeout.",
-        "2026-03-29T00:45:37+00:00 | project-saved | Saved project setup from the desktop shell."
+        "2026-03-29T00:46:02+00:00 | project-saved | Saved project setup from the desktop shell."
       ],
       "git_status": {
         "branch": "main",
         "current_checkpoint_id": null,
-        "current_status": "closed_out",
+        "current_status": "setup_ready",
         "last_commit_hash": null,
         "origin_url": null,
         "pending_checkpoint_approval": false,
         "repo_kind": "local",
-        "safe_revision": "637db311f09ba761f6e6bdcfc27c847915cf29bb"
+        "safe_revision": "16473992566a0cd7256aa034f0c86a86478ffce6"
       },
       "runtime_insights": {
         "cost": {
@@ -98,7 +94,7 @@
           }
         },
         "execution": {
-          "completed_step_count": 1,
+          "completed_step_count": 0,
           "effort_baselines": [
             {
               "cost": {
@@ -197,28 +193,17 @@
               }
             }
           ],
-          "elapsed_seconds": 840.0,
-          "estimated_total_seconds": 840.0,
+          "elapsed_seconds": 0.0,
+          "estimated_total_seconds": 0.0,
           "pending_step_count": 0,
           "remaining_seconds": 0.0,
           "running_step_count": 0,
-          "step_estimates": [
-            {
-              "actual_duration_seconds": null,
-              "elapsed_seconds": 840.0,
-              "estimated_duration_seconds": 840.0,
-              "reasoning_effort": "high",
-              "remaining_seconds": 0.0,
-              "source": "heuristic",
-              "status": "completed",
-              "step_id": "ST1"
-            }
-          ]
+          "step_estimates": []
         },
         "parallel": {
           "cpu_logical_count": 16,
           "cpu_parallel_limit": 4,
-          "memory_available_bytes": 3192135680,
+          "memory_available_bytes": 3126411264,
           "memory_budget_per_worker_gib": 3.0,
           "memory_parallel_limit": 1,
           "memory_total_bytes": 16847327232,
@@ -238,25 +223,9 @@
       }
     },
     "checkpoints": {
-      "items": [
-        {
-          "approved_at": null,
-          "checkpoint_id": "CP1",
-          "commit_hashes": [],
-          "created_at": "2026-03-29T00:45:57+00:00",
-          "plan_refs": [
-            "ST1"
-          ],
-          "pushed": false,
-          "reached_at": null,
-          "review_notes": "",
-          "status": "approved",
-          "target_block": 1,
-          "title": "Already done"
-        }
-      ],
+      "items": [],
       "pending": null,
-      "timeline_markdown": "# Checkpoint Timeline\n\nThis timeline is derived from the saved plan and is intended for user review at checkpoint boundaries.\n\n## CP1\n- Title: Already done\n- Target block: 1\n- Plan refs: ST1\n- Status: approved"
+      "timeline_markdown": "# Checkpoint Timeline\n\nThis timeline is derived from the saved plan and is intended for user review at checkpoint boundaries."
     },
     "codex_status": {},
     "config": {
@@ -268,15 +237,15 @@
           "regression_failures": 0
         },
         "current_checkpoint_id": null,
-        "current_safe_revision": "637db311f09ba761f6e6bdcfc27c847915cf29bb",
+        "current_safe_revision": "16473992566a0cd7256aa034f0c86a86478ffce6",
         "current_task": null,
         "last_block_completed_at": null,
         "last_candidates": [],
         "last_commit_hash": null,
         "pending_checkpoint_approval": false,
         "plan_locked": true,
-        "repo_id": "1c0ebc2d8bc7d77be28a35b8b23e39853cf5c8e6",
-        "repo_slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+        "repo_id": "38a48f88eac597eb744c9177b0f9f1ed7dce2224",
+        "repo_slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea",
         "stop_reason": null,
         "stop_requested": false
       },
@@ -285,18 +254,18 @@
         "archived": false,
         "archived_at": null,
         "branch": "main",
-        "created_at": "2026-03-29T00:45:36+00:00",
-        "current_safe_revision": "637db311f09ba761f6e6bdcfc27c847915cf29bb",
-        "current_status": "closed_out",
-        "display_name": "Retry Closeout Demo",
-        "last_run_at": "2026-03-29T00:45:57+00:00",
+        "created_at": "2026-03-29T00:46:01+00:00",
+        "current_safe_revision": "16473992566a0cd7256aa034f0c86a86478ffce6",
+        "current_status": "setup_ready",
+        "display_name": "Retry Run Demo",
+        "last_run_at": "2026-03-29T00:46:02+00:00",
         "origin_url": null,
-        "project_root": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
-        "repo_id": "1c0ebc2d8bc7d77be28a35b8b23e39853cf5c8e6",
+        "project_root": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea",
+        "repo_id": "38a48f88eac597eb744c9177b0f9f1ed7dce2224",
         "repo_kind": "local",
-        "repo_path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo",
-        "repo_url": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo",
-        "slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+        "repo_path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo",
+        "repo_url": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo",
+        "slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea",
         "source_repo_id": null
       },
       "run_control_json": {
@@ -362,25 +331,25 @@
         "workflow_mode": "standard"
       }
     },
-    "content_signature": "577b69c1c6085054a732723c702eede7132c2706",
+    "content_signature": "5c1c3cbdd09b8f8b21687040c5cc402b3a31596d",
     "detail_level": "full",
     "files": {
-      "execution_plan_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\EXECUTION_PLAN.json",
-      "project_root": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
-      "repo_dir": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo",
-      "ui_control_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\UI_RUN_CONTROL.json",
-      "ui_event_log_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\jakal-flow-logs\\ui_events.jsonl"
+      "execution_plan_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\state\\EXECUTION_PLAN.json",
+      "project_root": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea",
+      "repo_dir": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo",
+      "ui_control_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\state\\UI_RUN_CONTROL.json",
+      "ui_event_log_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo\\jakal-flow-logs\\ui_events.jsonl"
     },
     "github": {
       "branch": "main",
       "connected": false,
       "origin_url": null,
-      "repo_url": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo"
+      "repo_url": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo"
     },
     "history": {
       "blocks": [],
-      "flow_svg_path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\EXECUTION_FLOW.svg",
-      "flow_svg_text": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1180\" height=\"328\" viewBox=\"0 0 1180 328\" role=\"img\">\n<rect width=\"100%\" height=\"100%\" fill=\"#f8fafc\" />\n<text x=\"40\" y=\"34\" fill=\"#0f172a\" font-family=\"Segoe UI, Malgun Gothic, sans-serif\" font-size=\"24\" font-weight=\"700\">Retry Closeout Demo execution flow</text>\n<rect x=\"40\" y=\"56\" rx=\"20\" ry=\"20\" width=\"220\" height=\"136\" fill=\"#0f766e\" />\n<text x=\"58\" y=\"84\" fill=\"#ecfeff\" font-family=\"Segoe UI, Malgun Gothic, sans-serif\" font-size=\"14\" font-weight=\"700\">ST1</text>\n<text x=\"58\" y=\"110\" fill=\"#ecfeff\" font-family=\"Segoe UI, Malgun Gothic, sans-serif\" font-size=\"13\">Already done</text>\n<text x=\"58\" y=\"144\" fill=\"#ecfeff\" font-family=\"Segoe UI, Malgun Gothic, sans-serif\" font-size=\"11\">Completed previously</text>\n<text x=\"58\" y=\"180\" fill=\"#ecfeff\" font-family=\"Segoe UI, Malgun Gothic, sans-serif\" font-size=\"11\">completed</text>\n</svg>",
+      "flow_svg_path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\docs\\EXECUTION_FLOW.svg",
+      "flow_svg_text": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1180\" height=\"328\" viewBox=\"0 0 1180 328\" role=\"img\">\n<rect width=\"100%\" height=\"100%\" fill=\"#f8fafc\" />\n<text x=\"40\" y=\"34\" fill=\"#0f172a\" font-family=\"Segoe UI, Malgun Gothic, sans-serif\" font-size=\"24\" font-weight=\"700\">Retry Run Demo execution flow</text>\n</svg>",
       "passes": [],
       "test_runs": [],
       "ui_events": [
@@ -388,23 +357,7 @@
           "details": {},
           "event_type": "project-saved",
           "message": "Saved project setup from the desktop shell.",
-          "timestamp": "2026-03-29T00:45:37+00:00"
-        },
-        {
-          "details": {},
-          "event_type": "closeout-started",
-          "message": "Started project closeout.",
-          "timestamp": "2026-03-29T00:45:57+00:00"
-        },
-        {
-          "details": {
-            "commit_hash": null,
-            "notes": "Closeout finished successfully.",
-            "status": "completed"
-          },
-          "event_type": "closeout-finished",
-          "message": "Closeout finished with status completed.",
-          "timestamp": "2026-03-29T00:45:57+00:00"
+          "timestamp": "2026-03-29T00:46:02+00:00"
         }
       ]
     },
@@ -416,74 +369,53 @@
         "regression_failures": 0
       },
       "current_checkpoint_id": null,
-      "current_safe_revision": "637db311f09ba761f6e6bdcfc27c847915cf29bb",
+      "current_safe_revision": "16473992566a0cd7256aa034f0c86a86478ffce6",
       "current_task": null,
       "last_block_completed_at": null,
       "last_candidates": [],
       "last_commit_hash": null,
       "pending_checkpoint_approval": false,
       "plan_locked": true,
-      "repo_id": "1c0ebc2d8bc7d77be28a35b8b23e39853cf5c8e6",
-      "repo_slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+      "repo_id": "38a48f88eac597eb744c9177b0f9f1ed7dce2224",
+      "repo_slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea",
       "stop_reason": null,
       "stop_requested": false
     },
     "payload_cache_hit": false,
     "plan": {
       "closeout_commit_hash": null,
-      "closeout_completed_at": "2026-03-29T00:12:00+00:00",
-      "closeout_notes": "Closeout finished successfully.",
-      "closeout_started_at": "2026-03-29T00:10:00+00:00",
-      "closeout_status": "completed",
+      "closeout_completed_at": null,
+      "closeout_notes": "",
+      "closeout_started_at": null,
+      "closeout_status": "not_started",
       "default_test_command": "python -m unittest",
       "execution_mode": "parallel",
-      "last_updated_at": "2026-03-29T00:45:57+00:00",
-      "plan_title": "Retry Closeout Demo",
-      "project_prompt": "Retry closeout",
-      "steps": [
-        {
-          "codex_description": "Completed previously",
-          "commit_hash": null,
-          "completed_at": null,
-          "depends_on": [],
-          "display_description": "Completed previously",
-          "metadata": {},
-          "model": "",
-          "model_provider": "",
-          "notes": "",
-          "owned_paths": [],
-          "parallel_group": "",
-          "reasoning_effort": "high",
-          "started_at": null,
-          "status": "completed",
-          "step_id": "ST1",
-          "success_criteria": "Nothing left to do.",
-          "test_command": "python -m unittest",
-          "title": "Already done"
-        }
-      ],
-      "summary": "Everything is ready.",
+      "last_updated_at": "2026-03-29T00:46:02+00:00",
+      "plan_title": "Retry Run Demo",
+      "project_prompt": "",
+      "steps": [],
+      "summary": "",
       "workflow_mode": "standard"
     },
     "planning_progress": {},
-    "progress": "Completed 1/1 steps, closeout completed",
+    "progress": "No plan yet",
     "project": {
       "archive_id": null,
       "archived": false,
       "archived_at": null,
       "branch": "main",
-      "created_at": "2026-03-29T00:45:36+00:00",
-      "current_safe_revision": "637db311f09ba761f6e6bdcfc27c847915cf29bb",
-      "current_status": "closed_out",
-      "display_name": "Retry Closeout Demo",
-      "last_run_at": "2026-03-29T00:45:57+00:00",
+      "created_at": "2026-03-29T00:46:01+00:00",
+      "current_safe_revision": "16473992566a0cd7256aa034f0c86a86478ffce6",
+      "current_status": "setup_ready",
+      "display_name": "Retry Run Demo",
+      "last_run_at": "2026-03-29T00:46:02+00:00",
       "origin_url": null,
-      "project_root": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
-      "repo_id": "1c0ebc2d8bc7d77be28a35b8b23e39853cf5c8e6",
+      "project_root": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea",
+      "repo_id": "38a48f88eac597eb744c9177b0f9f1ed7dce2224",
       "repo_kind": "local",
-      "repo_path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo",
-      "repo_url": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo",
-      "slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+      "repo_path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo",
+      "repo_url": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo",
+      "slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea",
       "source_repo_id": null
     },
     "recent_blocks": [],
@@ -493,7 +425,7 @@
       "closeout_report_text": "# Closeout Report\n\nNo closeout has been run yet.",
       "latest_failure": {},
       "ml_experiment_report_text": "# ML Experiment Report\n\nNo ML experiment summary has been generated yet.",
-      "ml_results_svg_path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\ML_EXPERIMENT_RESULTS.svg",
+      "ml_results_svg_path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\docs\\ML_EXPERIMENT_RESULTS.svg",
       "word_report_enabled": true,
       "word_report_path": ""
     },
@@ -604,7 +536,7 @@
         }
       },
       "execution": {
-        "completed_step_count": 1,
+        "completed_step_count": 0,
         "effort_baselines": [
           {
             "cost": {
@@ -703,28 +635,17 @@
             }
           }
         ],
-        "elapsed_seconds": 840.0,
-        "estimated_total_seconds": 840.0,
+        "elapsed_seconds": 0.0,
+        "estimated_total_seconds": 0.0,
         "pending_step_count": 0,
         "remaining_seconds": 0.0,
         "running_step_count": 0,
-        "step_estimates": [
-          {
-            "actual_duration_seconds": null,
-            "elapsed_seconds": 840.0,
-            "estimated_duration_seconds": 840.0,
-            "reasoning_effort": "high",
-            "remaining_seconds": 0.0,
-            "source": "heuristic",
-            "status": "completed",
-            "step_id": "ST1"
-          }
-        ]
+        "step_estimates": []
       },
       "parallel": {
         "cpu_logical_count": 16,
         "cpu_parallel_limit": 4,
-        "memory_available_bytes": 3192135680,
+        "memory_available_bytes": 3126411264,
         "memory_budget_per_worker_gib": 3.0,
         "memory_parallel_limit": 1,
         "memory_total_bytes": 16847327232,
@@ -776,52 +697,31 @@
           "regression_failures": 0
         },
         "current_checkpoint_id": null,
-        "current_safe_revision": "637db311f09ba761f6e6bdcfc27c847915cf29bb",
+        "current_safe_revision": "16473992566a0cd7256aa034f0c86a86478ffce6",
         "current_task": null,
         "last_block_completed_at": null,
         "last_candidates": [],
         "last_commit_hash": null,
         "pending_checkpoint_approval": false,
         "plan_locked": true,
-        "repo_id": "1c0ebc2d8bc7d77be28a35b8b23e39853cf5c8e6",
-        "repo_slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+        "repo_id": "38a48f88eac597eb744c9177b0f9f1ed7dce2224",
+        "repo_slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea",
         "stop_reason": null,
         "stop_requested": false
       },
       "plan": {
         "closeout_commit_hash": null,
-        "closeout_completed_at": "2026-03-29T00:12:00+00:00",
-        "closeout_notes": "Closeout finished successfully.",
-        "closeout_started_at": "2026-03-29T00:10:00+00:00",
-        "closeout_status": "completed",
+        "closeout_completed_at": null,
+        "closeout_notes": "",
+        "closeout_started_at": null,
+        "closeout_status": "not_started",
         "default_test_command": "python -m unittest",
         "execution_mode": "parallel",
-        "last_updated_at": "2026-03-29T00:45:57+00:00",
-        "plan_title": "Retry Closeout Demo",
-        "project_prompt": "Retry closeout",
-        "steps": [
-          {
-            "codex_description": "Completed previously",
-            "commit_hash": null,
-            "completed_at": null,
-            "depends_on": [],
-            "display_description": "Completed previously",
-            "metadata": {},
-            "model": "",
-            "model_provider": "",
-            "notes": "",
-            "owned_paths": [],
-            "parallel_group": "",
-            "reasoning_effort": "high",
-            "started_at": null,
-            "status": "completed",
-            "step_id": "ST1",
-            "success_criteria": "Nothing left to do.",
-            "test_command": "python -m unittest",
-            "title": "Already done"
-          }
-        ],
-        "summary": "Everything is ready.",
+        "last_updated_at": "2026-03-29T00:46:02+00:00",
+        "plan_title": "Retry Run Demo",
+        "project_prompt": "",
+        "steps": [],
+        "summary": "",
         "workflow_mode": "standard"
       },
       "project": {
@@ -829,18 +729,18 @@
         "archived": false,
         "archived_at": null,
         "branch": "main",
-        "created_at": "2026-03-29T00:45:36+00:00",
-        "current_safe_revision": "637db311f09ba761f6e6bdcfc27c847915cf29bb",
-        "current_status": "closed_out",
-        "display_name": "Retry Closeout Demo",
-        "last_run_at": "2026-03-29T00:45:57+00:00",
+        "created_at": "2026-03-29T00:46:01+00:00",
+        "current_safe_revision": "16473992566a0cd7256aa034f0c86a86478ffce6",
+        "current_status": "setup_ready",
+        "display_name": "Retry Run Demo",
+        "last_run_at": "2026-03-29T00:46:02+00:00",
         "origin_url": null,
-        "project_root": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
-        "repo_id": "1c0ebc2d8bc7d77be28a35b8b23e39853cf5c8e6",
+        "project_root": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea",
+        "repo_id": "38a48f88eac597eb744c9177b0f9f1ed7dce2224",
         "repo_kind": "local",
-        "repo_path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo",
-        "repo_url": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo",
-        "slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+        "repo_path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo",
+        "repo_url": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo",
+        "slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea",
         "source_repo_id": null
       },
       "recent_blocks": [],
@@ -959,7 +859,7 @@
           }
         },
         "execution": {
-          "completed_step_count": 1,
+          "completed_step_count": 0,
           "effort_baselines": [
             {
               "cost": {
@@ -1058,28 +958,17 @@
               }
             }
           ],
-          "elapsed_seconds": 840.0,
-          "estimated_total_seconds": 840.0,
+          "elapsed_seconds": 0.0,
+          "estimated_total_seconds": 0.0,
           "pending_step_count": 0,
           "remaining_seconds": 0.0,
           "running_step_count": 0,
-          "step_estimates": [
-            {
-              "actual_duration_seconds": null,
-              "elapsed_seconds": 840.0,
-              "estimated_duration_seconds": 840.0,
-              "reasoning_effort": "high",
-              "remaining_seconds": 0.0,
-              "source": "heuristic",
-              "status": "completed",
-              "step_id": "ST1"
-            }
-          ]
+          "step_estimates": []
         },
         "parallel": {
           "cpu_logical_count": 16,
           "cpu_parallel_limit": 4,
-          "memory_available_bytes": 3192135680,
+          "memory_available_bytes": 3126411264,
           "memory_budget_per_worker_gib": 3.0,
           "memory_parallel_limit": 1,
           "memory_total_bytes": 16847327232,
@@ -1091,13 +980,13 @@
       }
     },
     "stats": {
-      "completed_steps": 1,
+      "completed_steps": 0,
       "failed_steps": 0,
       "remaining_steps": 0,
       "running_steps": 0,
-      "total_steps": 1
+      "total_steps": 0
     },
-    "summary": "Name: Retry Closeout Demo\nDirectory: C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\nGitHub: Not connected\nBranch: main\nStatus: closed_out\nWorkflow: standard\nModel: gpt-5.4  (high) [OpenAI / Codex Cloud]\nVerification: python -m unittest\nRemaining Steps: None\nCloseout: completed\nPlan Title: Retry Closeout Demo\nLast Run: 2026-03-29T00:45:57+00:00",
+    "summary": "Name: Retry Run Demo\nDirectory: C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo\nGitHub: Not connected\nBranch: main\nStatus: setup_ready\nWorkflow: standard\nModel: gpt-5.4  (high) [OpenAI / Codex Cloud]\nVerification: python -m unittest\nRemaining Steps: None\nCloseout: not_started\nPlan Title: Retry Run Demo\nLast Run: 2026-03-29T00:46:02+00:00",
     "workspace_tree": [
       {
         "children": [
@@ -1106,185 +995,142 @@
               {
                 "kind": "dir",
                 "label": "hooks",
-                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git\\hooks"
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo\\.git\\hooks"
               },
               {
                 "kind": "dir",
                 "label": "info",
-                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git\\info"
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo\\.git\\info"
               },
               {
                 "kind": "dir",
                 "label": "logs",
-                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git\\logs"
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo\\.git\\logs"
               },
               {
                 "kind": "dir",
                 "label": "objects",
-                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git\\objects"
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo\\.git\\objects"
               },
               {
                 "kind": "dir",
                 "label": "refs",
-                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git\\refs"
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo\\.git\\refs"
               },
               {
                 "kind": "file",
                 "label": "COMMIT_EDITMSG",
-                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git\\COMMIT_EDITMSG"
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo\\.git\\COMMIT_EDITMSG"
               },
               {
                 "kind": "file",
                 "label": "config",
-                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git\\config"
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo\\.git\\config"
               },
               {
                 "kind": "file",
                 "label": "description",
-                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git\\description"
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo\\.git\\description"
               }
             ],
             "kind": "dir",
             "label": ".git",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo\\.git"
           },
           {
             "children": [
-              {
-                "kind": "dir",
-                "label": "Include",
-                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.venv\\Include"
-              },
-              {
-                "kind": "dir",
-                "label": "Lib",
-                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.venv\\Lib"
-              },
-              {
-                "kind": "dir",
-                "label": "Scripts",
-                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.venv\\Scripts"
-              },
-              {
-                "kind": "file",
-                "label": "pyvenv.cfg",
-                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.venv\\pyvenv.cfg"
-              }
-            ],
-            "kind": "dir",
-            "label": ".venv",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.venv"
-          },
-          {
-            "children": [
-              {
-                "kind": "file",
-                "label": "ui_bridge_perf.jsonl",
-                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\jakal-flow-logs\\ui_bridge_perf.jsonl"
-              },
               {
                 "kind": "file",
                 "label": "ui_events.jsonl",
-                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\jakal-flow-logs\\ui_events.jsonl"
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo\\jakal-flow-logs\\ui_events.jsonl"
               }
             ],
             "kind": "dir",
             "label": "jakal-flow-logs",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\jakal-flow-logs"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo\\jakal-flow-logs"
           },
           {
             "kind": "file",
             "label": ".gitignore",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.gitignore"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo\\.gitignore"
           }
         ],
         "kind": "dir",
         "label": "Repository",
-        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo"
+        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo"
       },
       {
         "children": [
           {
             "kind": "file",
             "label": "ACTIVE_TASK.md",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\ACTIVE_TASK.md"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\docs\\ACTIVE_TASK.md"
           },
           {
             "kind": "file",
             "label": "attempt_history.md",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\attempt_history.md"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\docs\\attempt_history.md"
           },
           {
             "kind": "file",
             "label": "BLOCK_REVIEW.md",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\BLOCK_REVIEW.md"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\docs\\BLOCK_REVIEW.md"
           },
           {
             "kind": "file",
             "label": "CHECKPOINT_TIMELINE.md",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\CHECKPOINT_TIMELINE.md"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\docs\\CHECKPOINT_TIMELINE.md"
           },
           {
             "kind": "file",
             "label": "CLOSEOUT_REPORT.md",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\CLOSEOUT_REPORT.md"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\docs\\CLOSEOUT_REPORT.md"
           },
           {
             "kind": "file",
             "label": "EXECUTION_FLOW.svg",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\EXECUTION_FLOW.svg"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\docs\\EXECUTION_FLOW.svg"
           },
           {
             "kind": "file",
             "label": "MID_TERM_PLAN.md",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\MID_TERM_PLAN.md"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\docs\\MID_TERM_PLAN.md"
           },
           {
             "kind": "file",
             "label": "ML_EXPERIMENT_REPORT.md",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\ML_EXPERIMENT_REPORT.md"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\docs\\ML_EXPERIMENT_REPORT.md"
           },
           {
             "kind": "file",
             "label": "ML_EXPERIMENT_RESULTS.svg",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\ML_EXPERIMENT_RESULTS.svg"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\docs\\ML_EXPERIMENT_RESULTS.svg"
           },
           {
             "kind": "file",
             "label": "PLAN.md",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\PLAN.md"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\docs\\PLAN.md"
           },
           {
             "kind": "file",
             "label": "RESEARCH_NOTES.md",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\RESEARCH_NOTES.md"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\docs\\RESEARCH_NOTES.md"
           },
           {
             "kind": "file",
             "label": "SCOPE_GUARD.md",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\SCOPE_GUARD.md"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\docs\\SCOPE_GUARD.md"
           }
         ],
         "kind": "dir",
         "label": "Docs",
-        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs"
+        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\docs"
       },
       {
-        "children": [
-          {
-            "kind": "file",
-            "label": "20260328000000_closeout_failed.prfail.json",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\reports\\20260328000000_closeout_failed.prfail.json"
-          },
-          {
-            "kind": "file",
-            "label": "20260328000000_closeout_failed.prfail.md",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\reports\\20260328000000_closeout_failed.prfail.md"
-          }
-        ],
+        "children": [],
         "kind": "dir",
         "label": "Reports",
-        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\reports"
+        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\reports"
       },
       {
         "children": [
@@ -1292,65 +1138,55 @@
             "children": [],
             "kind": "dir",
             "label": "ml_experiments",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\ml_experiments"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\state\\ml_experiments"
           },
           {
             "kind": "file",
             "label": "CHECKPOINTS.json",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\CHECKPOINTS.json"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\state\\CHECKPOINTS.json"
           },
           {
             "kind": "file",
             "label": "EXECUTION_PLAN.json",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\EXECUTION_PLAN.json"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\state\\EXECUTION_PLAN.json"
           },
           {
             "kind": "file",
             "label": "LOOP_STATE.json",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\LOOP_STATE.json"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\state\\LOOP_STATE.json"
           },
           {
             "kind": "file",
             "label": "ML_MODE_STATE.json",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\ML_MODE_STATE.json"
-          },
-          {
-            "kind": "file",
-            "label": "PROJECT_DETAIL_CACHE_FULL.json",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\PROJECT_DETAIL_CACHE_FULL.json"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\state\\ML_MODE_STATE.json"
           },
           {
             "kind": "file",
             "label": "UI_RUN_CONTROL.json",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\UI_RUN_CONTROL.json"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\state\\UI_RUN_CONTROL.json"
           }
         ],
         "kind": "dir",
         "label": "State",
-        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state"
+        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\state"
       },
       {
         "children": [
           {
             "kind": "file",
-            "label": "ui_bridge_perf.jsonl",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\jakal-flow-logs\\ui_bridge_perf.jsonl"
-          },
-          {
-            "kind": "file",
             "label": "ui_events.jsonl",
-            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\jakal-flow-logs\\ui_events.jsonl"
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo\\jakal-flow-logs\\ui_events.jsonl"
           }
         ],
         "kind": "dir",
         "label": "Logs",
-        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\jakal-flow-logs"
+        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\repo\\jakal-flow-logs"
       },
       {
         "children": [],
         "kind": "dir",
         "label": "Memory",
-        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\memory"
+        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9af7ca45\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9af7ca45-repo-main-38a48f88ea\\memory"
       }
     ]
   },
