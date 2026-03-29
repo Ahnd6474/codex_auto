@@ -14,6 +14,7 @@ import {
   KIMI_DEFAULT_MODEL,
   MINIMAX_DEFAULT_MODEL,
   planStepsWithCloseout,
+  providerAvailable,
   providerUsable,
   providerStatusReason,
   projectStatusWithJob,
@@ -404,10 +405,10 @@ export function RunControlView({
                   <select value={selectedStep.model_provider || ""} onChange={(event) => onUpdateStepField("model_provider", event.target.value)} disabled={!editableStep}>
                     <option value="">{autoProviderLabel(language)}</option>
                     {providerOptions.map(([value, label]) => (
-                        <option
+                      <option
                           key={value}
                           value={value}
-                        disabled={!providerUsable(value, codexStatus)}
+                        disabled={!providerAvailable(value, codexStatus)}
                         title={providerStatusReason(value, codexStatus)}
                       >
                         {label}

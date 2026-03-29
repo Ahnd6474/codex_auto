@@ -605,7 +605,7 @@ function CheckpointsPanel({ checkpoints, visibleCheckpoints, language, t }) {
                 checkpoint?.status === "awaiting_review" ||
                 checkpoint?.checkpoint_id === checkpoints?.pending?.checkpoint_id;
               const tone = statusTone(checkpoint.status);
-              const isExpanded = expandedIds.has(checkpoint.checkpoint_id);
+              const isExpanded = isPendingCheckpoint || expandedIds.has(checkpoint.checkpoint_id);
               const hasDetails = checkpoint.title || checkpoint.target_block || checkpoint.deadline_at;
 
               return (
