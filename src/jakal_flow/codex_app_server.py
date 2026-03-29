@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from ._version import __version__
+from .errors import SubprocessTimeoutError
 from .model_constants import AUTO_MODEL_SLUG, VALID_REASONING_EFFORTS
 from .model_providers import builtin_model_catalog, discover_local_model_catalog
 from .platform_defaults import default_codex_path
@@ -22,6 +23,7 @@ UTC = getattr(datetime, "UTC", timezone.utc)
 
 
 APP_SERVER_TIMEOUT_SECS = 8.0
+CLI_PROBE_TIMEOUT_SECS = 12.0
 MODEL_PAGE_LIMIT = 100
 
 
@@ -250,9 +252,9 @@ def _fetch_gemini_backend_snapshot(codex_path: str) -> CodexBackendSnapshot:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout_seconds=4,
+            timeout_seconds=CLI_PROBE_TIMEOUT_SECS,
         )
-    except (FileNotFoundError, OSError, subprocess.SubprocessError) as exc:
+    except (FileNotFoundError, OSError, SubprocessTimeoutError, subprocess.SubprocessError) as exc:
         return CodexBackendSnapshot(
             checked_at=checked_at,
             available=False,
@@ -298,9 +300,9 @@ def _fetch_claude_backend_snapshot(codex_path: str) -> CodexBackendSnapshot:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout_seconds=4,
+            timeout_seconds=CLI_PROBE_TIMEOUT_SECS,
         )
-    except (FileNotFoundError, OSError, subprocess.SubprocessError) as exc:
+    except (FileNotFoundError, OSError, SubprocessTimeoutError, subprocess.SubprocessError) as exc:
         return CodexBackendSnapshot(
             checked_at=checked_at,
             available=False,
@@ -346,14 +348,14 @@ def _fetch_claude_backend_snapshot(codex_path: str) -> CodexBackendSnapshot:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout_seconds=4,
+            timeout_seconds=CLI_PROBE_TIMEOUT_SECS,
         )
         auth_payload = _parse_json_output(auth_completed.stdout)
         account.update(_format_claude_account_snapshot(auth_completed.returncode, auth_payload))
         if auth_completed.returncode not in {0, 1}:
             auth_text = (auth_completed.stdout or auth_completed.stderr or "").strip()
             error = auth_text or f"Claude auth status exited with {auth_completed.returncode}."
-    except (FileNotFoundError, OSError, subprocess.SubprocessError) as exc:
+    except (FileNotFoundError, OSError, SubprocessTimeoutError, subprocess.SubprocessError) as exc:
         error = str(exc)
 
     return CodexBackendSnapshot(
@@ -377,9 +379,9 @@ def _fetch_qwen_backend_snapshot(codex_path: str) -> CodexBackendSnapshot:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout_seconds=4,
+            timeout_seconds=CLI_PROBE_TIMEOUT_SECS,
         )
-    except (FileNotFoundError, OSError, subprocess.SubprocessError) as exc:
+    except (FileNotFoundError, OSError, SubprocessTimeoutError, subprocess.SubprocessError) as exc:
         return CodexBackendSnapshot(
             checked_at=checked_at,
             available=False,

@@ -8,7 +8,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from jakal_flow.codex_app_server import fetch_codex_backend_snapshot, resolve_codex_path
+from jakal_flow.codex_app_server import CLI_PROBE_TIMEOUT_SECS, fetch_codex_backend_snapshot, resolve_codex_path
+from jakal_flow.errors import SubprocessTimeoutError
 
 
 class _FakeSession:
@@ -160,9 +161,9 @@ class CodexAppServerTests(unittest.TestCase):
 
     def test_fetch_codex_backend_snapshot_supports_gemini_cli(self) -> None:
         with mock.patch(
-            "jakal_flow.codex_app_server.subprocess.run",
+            "jakal_flow.codex_app_server.run_subprocess",
             return_value=subprocess.CompletedProcess(["gemini", "--version"], 0, stdout="0.1.0\n", stderr=""),
-        ):
+        ) as mocked_run:
             snapshot = fetch_codex_backend_snapshot("gemini")
 
         self.assertTrue(snapshot.available)
@@ -170,6 +171,18 @@ class CodexAppServerTests(unittest.TestCase):
         self.assertEqual(snapshot.account["version"], "0.1.0")
         self.assertIn("gemini-3-flash-preview", [item["model"] for item in snapshot.model_catalog if item.get("provider") == "gemini"])
         self.assertEqual(snapshot.error, "")
+        self.assertEqual(mocked_run.call_args.kwargs["timeout_seconds"], CLI_PROBE_TIMEOUT_SECS)
+
+    def test_fetch_codex_backend_snapshot_handles_gemini_probe_timeout(self) -> None:
+        with mock.patch(
+            "jakal_flow.codex_app_server.run_subprocess",
+            side_effect=SubprocessTimeoutError("Command timed out after 12.0 seconds: gemini --version"),
+        ):
+            snapshot = fetch_codex_backend_snapshot("gemini")
+
+        self.assertFalse(snapshot.available)
+        self.assertEqual(snapshot.account["type"], "gemini-cli")
+        self.assertIn("timed out", snapshot.error)
 
     def test_fetch_codex_backend_snapshot_supports_claude_code(self) -> None:
         def fake_run(command, **_kwargs):
@@ -184,7 +197,7 @@ class CodexAppServerTests(unittest.TestCase):
                 )
             raise AssertionError(f"Unexpected command: {command}")
 
-        with mock.patch("jakal_flow.codex_app_server.subprocess.run", side_effect=fake_run):
+        with mock.patch("jakal_flow.codex_app_server.run_subprocess", side_effect=fake_run):
             snapshot = fetch_codex_backend_snapshot("claude")
 
         self.assertTrue(snapshot.available)
@@ -196,11 +209,28 @@ class CodexAppServerTests(unittest.TestCase):
         self.assertIn("claude-sonnet-4-6", [item["model"] for item in snapshot.model_catalog if item.get("provider") == "claude"])
         self.assertEqual(snapshot.error, "")
 
+    def test_fetch_codex_backend_snapshot_handles_claude_auth_timeout(self) -> None:
+        def fake_run(command, **_kwargs):
+            if command[-1] == "--version":
+                return subprocess.CompletedProcess(command, 0, stdout="1.2.3\n", stderr="")
+            if command[-2:] == ["auth", "status"]:
+                raise SubprocessTimeoutError("Command timed out after 12.0 seconds: claude auth status")
+            raise AssertionError(f"Unexpected command: {command}")
+
+        with mock.patch("jakal_flow.codex_app_server.run_subprocess", side_effect=fake_run):
+            snapshot = fetch_codex_backend_snapshot("claude")
+
+        self.assertTrue(snapshot.available)
+        self.assertEqual(snapshot.account["type"], "claude-code")
+        self.assertEqual(snapshot.account["version"], "1.2.3")
+        self.assertFalse(snapshot.account["authenticated"])
+        self.assertIn("timed out", snapshot.error)
+
     def test_fetch_codex_backend_snapshot_supports_qwen_code(self) -> None:
         with mock.patch(
-            "jakal_flow.codex_app_server.subprocess.run",
+            "jakal_flow.codex_app_server.run_subprocess",
             return_value=subprocess.CompletedProcess(["qwen", "--version"], 0, stdout="0.13.1\n", stderr=""),
-        ):
+        ) as mocked_run:
             snapshot = fetch_codex_backend_snapshot("qwen")
 
         self.assertTrue(snapshot.available)
@@ -208,6 +238,7 @@ class CodexAppServerTests(unittest.TestCase):
         self.assertEqual(snapshot.account["version"], "0.13.1")
         self.assertIn("qwen3-coder-plus", [item["model"] for item in snapshot.model_catalog if item.get("provider") == "qwen_code"])
         self.assertEqual(snapshot.error, "")
+        self.assertEqual(mocked_run.call_args.kwargs["timeout_seconds"], CLI_PROBE_TIMEOUT_SECS)
 
 
 if __name__ == "__main__":
