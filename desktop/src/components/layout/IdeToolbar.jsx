@@ -5,13 +5,11 @@ import { commandLabel, isDebuggingStatus, isPlanningProgressRunning, projectStat
 
 function AppLogo() {
   return (
-    <div className="toolbar-logo">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M2 17l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </div>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 17l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -252,6 +250,8 @@ export function IdeToolbar({
   shareBusy,
   onRefresh,
   onOpenSettings,
+  rightCollapsed = false,
+  onToggleRight = () => {},
   onGeneratePlan,
   onRunPlan,
   onApproveCheckpoint,
@@ -290,15 +290,16 @@ export function IdeToolbar({
 
   return (
     <header className="ide-toolbar">
-      <ProjectSelector
-        projects={projects}
-        selectedProjectId={selectedProjectId}
-        onSelectProject={onSelectProject}
-        onNewProject={onNewProject}
-      />
-
       <div className="ide-toolbar__group ide-toolbar__group--utility">
-        <AppLogo />
+        <button
+          className={`toolbar-btn toolbar-btn--icon ${!rightCollapsed ? "toolbar-btn--active" : ""}`.trim()}
+          onClick={onToggleRight}
+          title={language === "ko" ? "오른쪽 사이드바" : "Toggle right sidebar"}
+          type="button"
+          aria-label={language === "ko" ? "오른쪽 사이드바" : "Toggle right sidebar"}
+        >
+          <AppLogo />
+        </button>
         <button
           className="toolbar-btn toolbar-btn--icon"
           onClick={onRefresh}
@@ -309,6 +310,13 @@ export function IdeToolbar({
           <RefreshIcon />
         </button>
       </div>
+
+      <ProjectSelector
+        projects={projects}
+        selectedProjectId={selectedProjectId}
+        onSelectProject={onSelectProject}
+        onNewProject={onNewProject}
+      />
 
       <nav className="ide-toolbar__breadcrumb" aria-label="Navigation">
         <span className={`breadcrumb-segment breadcrumb-segment--${tone}`}>
@@ -333,6 +341,18 @@ export function IdeToolbar({
       </nav>
 
       <div className="ide-toolbar__group ide-toolbar__group--actions">
+        <button
+          className={`toolbar-btn toolbar-btn--icon ${!rightCollapsed ? "toolbar-btn--active" : ""}`.trim()}
+          onClick={onToggleRight}
+          title={language === "ko" ? "오른쪽 사이드바" : "Toggle right sidebar"}
+          type="button"
+          aria-label={language === "ko" ? "오른쪽 사이드바" : "Toggle right sidebar"}
+        >
+          <AppLogo />
+        </button>
+
+        <div className="toolbar-divider" />
+
         <button
           className={`toolbar-btn ${activeCenterTab === "app-settings" ? "toolbar-btn--active" : ""}`}
           onClick={onOpenSettings}

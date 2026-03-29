@@ -821,6 +821,44 @@ test("IdeToolbar renders the selected project and highlights program settings", 
   assert.match(html, /title="Program Settings"/);
 });
 
+test("IdeToolbar exposes a right sidebar toggle and keeps it active while the inspector is open", async () => {
+  const html = await renderBundledComponent(
+    "ide-toolbar-right-sidebar-toggle-render",
+    "./src/components/layout/IdeToolbar.jsx",
+    "IdeToolbar",
+    {
+      projects: [],
+      selectedProjectId: "",
+      projectDetail: {
+        project: {
+          current_status: "plan_ready",
+        },
+      },
+      planDraft: {
+        execution_mode: "serial",
+        closeout_status: "not_started",
+        steps: [],
+      },
+      busy: false,
+      activeJob: null,
+      activeCenterTab: "run",
+      rightCollapsed: false,
+      onSelectProject: noop,
+      onNewProject: noop,
+      onRefresh: noop,
+      onOpenSettings: noop,
+      onToggleRight: noop,
+      onGeneratePlan: noop,
+      onRunPlan: noop,
+      onApproveCheckpoint: noop,
+    },
+  );
+
+  assert.match(html, /title="Toggle right sidebar"/);
+  assert.match(html, /title="Toggle right sidebar"[\s\S]*title="Toggle right sidebar"/);
+  assert.match(html, /toolbar-btn toolbar-btn--icon toolbar-btn--active/);
+});
+
 test("IdeToolbar keeps project link actions visible when only form-level paths are available", async () => {
   const html = await renderBundledComponent(
     "ide-toolbar-project-links-render",
@@ -1921,6 +1959,60 @@ test("AppSettingsView remote monitor fixes sharing to 0.0.0.0 and share link onl
   assert.doesNotMatch(html, /Local Link/);
   assert.doesNotMatch(html, /Public Share Base URL/);
   assert.doesNotMatch(html, /127\.0\.0\.1/);
+});
+
+test("AppSettingsView falls back to the project share session when the workspace active session is missing", async () => {
+  const html = await renderBundledComponent(
+    "app-settings-share-project-session-render",
+    "./src/components/views/AppSettingsView.jsx",
+    "AppSettingsView",
+    {
+      settings: {
+        ui_theme: "dark",
+        developer_mode: false,
+        model_provider: "openai",
+        model: "gpt-5.4",
+        model_preset: "",
+        model_selection_mode: "slug",
+        model_slug_input: "gpt-5.4",
+        approval_mode: "never",
+        sandbox_mode: "danger-full-access",
+        checkpoint_interval_blocks: 1,
+        execution_mode: "serial",
+        parallel_workers: 2,
+        parallel_memory_per_worker_gib: 3,
+        codex_path: "codex.cmd",
+        allow_push: true,
+        require_checkpoint_approval: false,
+        dashboard_visibility: {},
+      },
+      shareSettings: {
+        bind_host: "0.0.0.0",
+      },
+      shareDetail: {
+        server: {
+          running: true,
+          base_url: "http://127.0.0.1:43123",
+        },
+        active_session: null,
+        project_active_session: {
+          share_url: "https://demo.trycloudflare.com/share/view?session=demo&token=secret",
+          local_url: "http://127.0.0.1:43123/share/view?session=demo&token=secret",
+          expires_at: "2026-03-26T11:00:00+00:00",
+        },
+      },
+      busy: false,
+      initialSettingsTab: "share",
+      onChangeSettings: noop,
+      onGenerateShareLink: noop,
+      onCopyShareLink: noop,
+      onRevokeShareLink: noop,
+      onChangeShareSettings: noop,
+    },
+  );
+
+  assert.match(html, /demo\.trycloudflare\.com/);
+  assert.doesNotMatch(html, /No active share session\./);
 });
 
 test("AppSettingsView keeps share actions enabled while a run is active", async () => {

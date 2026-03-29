@@ -21,11 +21,11 @@
       .title { font: 700 34px 'Segoe UI', 'Bahnschrift', 'Malgun Gothic', sans-serif; fill: #172433; }
       .subtitle { font: 500 16px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: #4F6275; }
       .section { font: 700 12px 'Segoe UI', 'Bahnschrift', sans-serif; letter-spacing: 0.11em; fill: #294055; }
-      .panelTitle { font: 700 16px 'Segoe UI', 'Bahnschrift', 'Malgun Gothic', sans-serif; fill: #162636; }
-      .body { font: 500 10.5px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: #4C6074; }
-      .mono { font: 700 7.8px 'Consolas', 'Courier New', monospace; fill: #1F3447; }
-      .chipLabel { font: 700 10px 'Segoe UI', 'Bahnschrift', sans-serif; fill: #FFFFFF; }
-      .chipText { font: 600 7.6px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: rgba(255,255,255,0.92); }
+      .panelTitle { font: 700 15px 'Segoe UI', 'Bahnschrift', 'Malgun Gothic', sans-serif; fill: #162636; }
+      .body { font: 500 9.8px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: #4C6074; }
+      .mono { font: 700 7.2px 'Consolas', 'Courier New', monospace; fill: #1F3447; }
+      .chipLabel { font: 700 9.2px 'Segoe UI', 'Bahnschrift', sans-serif; fill: #FFFFFF; }
+      .chipText { font: 600 7.1px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: rgba(255,255,255,0.92); }
       .panel { fill: #FFFFFF; stroke: #D6E1EB; stroke-width: 1.5; filter: url(#shadow); }
       .soft { fill: #FFFFFF; stroke: #D6E1EB; stroke-width: 1.2; }
       .line { stroke: #60748A; stroke-width: 2.6; fill: none; marker-end: url(#arrow); }
@@ -60,15 +60,15 @@
   <text x="64" y="218" class="section">ENTRY AND RUNTIME</text>
   <line x1="64" y1="228" x2="1396" y2="228" class="divider"/>
 
-  <rect x="68" y="240" width="426" height="16" rx="8" fill="#1D4ED8"/>
+  <rect x="68" y="239" width="426" height="18" rx="9" fill="#1D4ED8"/>
   <text x="82" y="252" class="chipLabel">Trigger</text>
   <text x="132" y="252" class="chipText">CLI run/resume or bridge command</text>
 
-  <rect x="518" y="240" width="458" height="16" rx="8" fill="#0F766E"/>
+  <rect x="518" y="239" width="458" height="18" rx="9" fill="#0F766E"/>
   <text x="532" y="252" class="chipLabel">Runtime</text>
   <text x="586" y="252" class="chipText">model, provider, sandbox, approvals, checkpoints</text>
 
-  <rect x="1000" y="240" width="392" height="16" rx="8" fill="#B45309"/>
+  <rect x="1000" y="239" width="392" height="18" rx="9" fill="#B45309"/>
   <text x="1014" y="252" class="chipLabel">Verify Contract</text>
   <text x="1104" y="252" class="chipText">tests, rollback, optional push, PR bundle</text>
 

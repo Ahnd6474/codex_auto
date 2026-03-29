@@ -160,6 +160,7 @@ export default function App() {
 
   const detail = controller.projectDetail;
   const sidebarOpen = Boolean(controller.sidebarTab);
+  const rightOpen = !controller.rightCollapsed;
   const sidebarStyle = sidebarOpen ? { width: controller.sidebarWidth, flex: `0 0 ${controller.sidebarWidth}px` } : undefined;
   const compact = Boolean(controller.programSettings?.compact_mode);
   const handleSelectStep = useCallback(
@@ -202,10 +203,16 @@ export default function App() {
         activeCenterTab={controller.centerTab}
         projectPath={detail?.project?.repo_path || controller.projectForm?.project_dir || ""}
         githubUrl={detail?.github?.origin_url || detail?.github?.repo_url || controller.projectForm?.origin_url || ""}
-        shareUrl={controller.workspaceShareDetail?.active_session?.share_url || ""}
+        shareUrl={
+          controller.workspaceShareDetail?.active_session?.share_url
+          || controller.workspaceShareDetail?.project_active_session?.share_url
+          || ""
+        }
         shareBusy={controller.shareBusy}
         onRefresh={controller.forceRefresh}
         onOpenSettings={() => controller.setCenterTab("app-settings")}
+        rightCollapsed={controller.rightCollapsed}
+        onToggleRight={() => controller.setRightCollapsed((v) => !v)}
         onGeneratePlan={controller.generatePlan}
         onRunPlan={controller.runPlan}
         onApproveCheckpoint={controller.approveCheckpoint}
@@ -349,28 +356,32 @@ export default function App() {
         </div>
 
         {/* Right splitter + sidebar */}
-        <Splitter axis="vertical" onResize={rightSplitter.onResize} onDragEnd={rightSplitter.onDragEnd} title="Resize right sidebar" />
-        <div
-          className="ide-pane ide-pane--details"
-          style={{ width: controller.rightWidth, flex: `0 0 ${controller.rightWidth}px` }}
-        >
-          <RightSidebarPane
-            detail={detail}
-            planDraft={controller.planDraft}
-            selectedStepId={controller.selectedStepId}
-            modelPresets={controller.modelPresets}
-            form={controller.projectForm}
-            activeJob={controller.activeJob}
-            busy={controller.busy}
-            onChangeForm={controller.setProjectForm}
-            chat={detail?.chat}
-            selectedChatSessionId={controller.selectedChatSessionId}
-            chatDraftSession={controller.chatDraftSession}
-            onSelectChatSession={controller.loadChatSession}
-            onStartNewChatSession={controller.startNewChatSession}
-            onSendChatMessage={controller.sendChatMessage}
-          />
-        </div>
+        {rightOpen ? (
+          <>
+            <Splitter axis="vertical" onResize={rightSplitter.onResize} onDragEnd={rightSplitter.onDragEnd} title="Resize right sidebar" />
+            <div
+              className="ide-pane ide-pane--details"
+              style={{ width: controller.rightWidth, flex: `0 0 ${controller.rightWidth}px` }}
+            >
+              <RightSidebarPane
+                detail={detail}
+                planDraft={controller.planDraft}
+                selectedStepId={controller.selectedStepId}
+                modelPresets={controller.modelPresets}
+                form={controller.projectForm}
+                activeJob={controller.activeJob}
+                busy={controller.busy}
+                onChangeForm={controller.setProjectForm}
+                chat={detail?.chat}
+                selectedChatSessionId={controller.selectedChatSessionId}
+                chatDraftSession={controller.chatDraftSession}
+                onSelectChatSession={controller.loadChatSession}
+                onStartNewChatSession={controller.startNewChatSession}
+                onSendChatMessage={controller.sendChatMessage}
+              />
+            </div>
+          </>
+        ) : null}
       </div>
 
       {/* ── Status bar ── */}
@@ -380,9 +391,9 @@ export default function App() {
         queuedJobs={controller.queuedJobs}
         modelPresets={controller.modelPresets}
         bottomCollapsed={controller.bottomCollapsed}
-        rightCollapsed={false}
+        rightCollapsed={controller.rightCollapsed}
         onToggleBottom={() => controller.setBottomCollapsed((v) => !v)}
-        onToggleRight={() => {}}
+        onToggleRight={() => controller.setRightCollapsed((v) => !v)}
       />
 
       {/* ── Command palette (Double Shift / Ctrl+Shift+A) ── */}

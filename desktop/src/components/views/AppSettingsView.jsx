@@ -134,7 +134,7 @@ export function AppSettingsView({
     { key: "dashboard", label: language === "ko" ? "대시보드"    : "Dashboard" },
     { key: "share",     label: language === "ko" ? "공유"        : "Share" },
   ];
-  const activeShare = shareDetail?.active_session || null;
+  const activeShare = shareDetail?.active_session || shareDetail?.project_active_session || null;
   const shareServer = shareDetail?.server || null;
   const selectedProvider = normalizedModelProvider(settings);
   const dashboardVisibility = normalizeDashboardVisibility(settings?.dashboard_visibility);
