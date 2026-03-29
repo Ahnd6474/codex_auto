@@ -2272,11 +2272,17 @@ select:focus {
 }
 
 /* tone-based fill colors */
-.sidebar-project--info .sidebar-project__fill   { background: var(--color-info); }
-.sidebar-project--success .sidebar-project__fill { background: var(--color-success); }
-.sidebar-project--warning .sidebar-project__fill { background: var(--color-warning); }
-.sidebar-project--danger .sidebar-project__fill  { background: var(--color-danger); }
-.sidebar-project--neutral .sidebar-project__fill { background: var(--fg-muted); }
+.sidebar-project--info .sidebar-project__fill    { background: rgba(95, 151, 214, 0.14); }
+.sidebar-project--success .sidebar-project__fill { background: rgba(78, 163, 109, 0.14); }
+.sidebar-project--warning .sidebar-project__fill { background: rgba(211, 169, 84, 0.12); }
+.sidebar-project--danger .sidebar-project__fill  { background: rgba(200, 93, 97, 0.22); }
+.sidebar-project--neutral .sidebar-project__fill { background: rgba(255, 255, 255, 0.04); }
+
+/* Failed project: highlight entire card red */
+.sidebar-project--danger:not(.selected) {
+  border-color: rgba(200, 93, 97, 0.55);
+  background: rgba(200, 93, 97, 0.08);
+}
 
 /* shimmer on leading edge when running */
 .sidebar-project--info .sidebar-project__fill::after {
@@ -2324,11 +2330,11 @@ select:focus {
   transition: width 600ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.sidebar-project--info    .sidebar-project__steps-fill { background: var(--color-info); }
-.sidebar-project--success .sidebar-project__steps-fill { background: var(--color-success); }
-.sidebar-project--warning .sidebar-project__steps-fill { background: var(--color-warning); }
-.sidebar-project--danger  .sidebar-project__steps-fill { background: var(--color-danger); }
-.sidebar-project--neutral .sidebar-project__steps-fill { background: var(--fg-muted); }
+.sidebar-project--info    .sidebar-project__steps-fill { background: var(--info); }
+.sidebar-project--success .sidebar-project__steps-fill { background: var(--success); }
+.sidebar-project--warning .sidebar-project__steps-fill { background: var(--warning); }
+.sidebar-project--danger  .sidebar-project__steps-fill { background: var(--danger); }
+.sidebar-project--neutral .sidebar-project__steps-fill { background: var(--text-muted); }
 
 /* ═══════════════════════════════════════════════════
    RUN VIEW — ribbon, prompt, flow area, queue, step editor
