@@ -25,6 +25,16 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+function FloatingInspectorIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 17l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function App() {
   const controller = useDesktopController();
   const { t } = useI18n();
@@ -189,6 +199,15 @@ export default function App() {
 
   return (
     <main className={`ide-shell ${compact ? "ide-shell--compact" : ""}`.trim()}>
+      <button
+        className={`floating-right-toggle ${rightOpen ? "floating-right-toggle--active" : ""}`.trim()}
+        onClick={() => controller.setRightCollapsed((v) => !v)}
+        type="button"
+        title="Toggle right sidebar"
+        aria-label="Toggle right sidebar"
+      >
+        <FloatingInspectorIcon />
+      </button>
       {/* ── Top toolbar ── */}
       <IdeToolbar
         projects={controller.filteredProjects}

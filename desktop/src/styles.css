@@ -142,6 +142,33 @@ pre {
   gap: 0;
   padding: 0;
   overflow: hidden;
+  position: relative;
+}
+
+.floating-right-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 24;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--toolbar-pill-border);
+  border-radius: 6px;
+  background: var(--toolbar-pill-bg);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.floating-right-toggle:hover {
+  background: var(--bg-panel-hover);
+  border-color: var(--border-strong);
+}
+
+.floating-right-toggle--active {
+  color: var(--info);
 }
 
 .content-card,
