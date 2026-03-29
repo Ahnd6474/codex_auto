@@ -33,10 +33,22 @@ python -m pip install -e .
 - `jakal-flow`
 - `jakal-flow-ui-bridge`
 
+설치 스크립트와 모듈 엔트리포인트는 서로 대응합니다.
+
+- `jakal-flow` == `python -m jakal_flow`
+- `jakal-flow-ui-bridge` == `python -m jakal_flow.ui_bridge`
+
+체크아웃 기준 실제 명령 표면 확인:
+
+```bash
+jakal-flow --help
+jakal-flow run --help
+```
+
 관리 저장소 초기화:
 
 ```bash
-python -m jakal_flow init-repo \
+jakal-flow init-repo \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -51,7 +63,7 @@ python -m jakal_flow init-repo \
 검증 포함 개선 루프 실행:
 
 ```bash
-python -m jakal_flow run \
+jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -66,7 +78,7 @@ python -m jakal_flow run \
 같은 관리 저장소를 나중에 다시 이어서 실행:
 
 ```bash
-python -m jakal_flow resume \
+jakal-flow resume \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -81,13 +93,22 @@ python -m jakal_flow resume \
 상태 확인:
 
 ```bash
-python -m jakal_flow list-repos --workspace-root .jakal-flow-workspace
-python -m jakal_flow status --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
-python -m jakal_flow history --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace --limit 20
-python -m jakal_flow report --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
+jakal-flow list-repos --workspace-root .jakal-flow-workspace
+jakal-flow status --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
+jakal-flow history --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace --limit 20
+jakal-flow report --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
 ```
 
 `list-repos`는 JSON 요약을 출력하고, `report`는 최신 기계 판독용 리포트 파일 경로를 출력합니다.
+
+기본 출력 형식:
+
+| 명령 | 출력 |
+| --- | --- |
+| `list-repos` | 저장소 식별자, 상태, safe revision, 마지막 실행 시각이 들어 있는 JSON 배열 |
+| `status` | `metadata`와 `loop_state`를 담은 JSON 객체 |
+| `history` | 블록별 사람이 읽기 쉬운 요약 줄 |
+| `report` | `reports/latest_report.json` 파일 경로 |
 
 데스크톱 개발 실행:
 
@@ -244,8 +265,8 @@ npm run tauri:build
 현재 checkout 기준 명령 표면 확인:
 
 ```bash
-python -m jakal_flow --help
-python -m jakal_flow run --help
+jakal-flow --help
+jakal-flow run --help
 ```
 
 ### 데스크톱 저장 기본값
@@ -278,7 +299,7 @@ python -m jakal_flow run --help
 Ensemble 라우팅:
 
 ```bash
-python -m jakal_flow run \
+jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -294,7 +315,7 @@ python -m jakal_flow run \
 OpenRouter:
 
 ```bash
-python -m jakal_flow run \
+jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -313,7 +334,7 @@ python -m jakal_flow run \
 Gemini CLI:
 
 ```bash
-python -m jakal_flow run \
+jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -328,7 +349,7 @@ python -m jakal_flow run \
 Claude Code:
 
 ```bash
-python -m jakal_flow run \
+jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -343,7 +364,7 @@ python -m jakal_flow run \
 Qwen Code:
 
 ```bash
-python -m jakal_flow run \
+jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -358,7 +379,7 @@ python -m jakal_flow run \
 로컬 OSS + Ollama:
 
 ```bash
-python -m jakal_flow run \
+jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -375,7 +396,7 @@ python -m jakal_flow run \
 ML 워크플로:
 
 ```bash
-python -m jakal_flow run \
+jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -451,6 +472,8 @@ workspace_root/
   registry.json
 ```
 
+원격 저장소를 관리할 때는 `repo/` 아래에 clone합니다. 데스크톱에서 기존 로컬 저장소를 등록한 경우에는 원본 체크아웃을 그대로 두고, 관리 루트에는 `docs/`, `memory/`, `reports/`, `state/`만 분리 저장합니다.
+
 프로젝트별로 자주 생기는 파일:
 
 - `docs/PLAN.md`
@@ -510,6 +533,6 @@ workspace_root/
 - Claude Code는 print-mode JSON, Gemini CLI는 headless JSON을 쓰지만 최종 추적 파일 구조는 동일하게 정규화됩니다.
 - 로컬 OSS 실행도 Codex CLI를 우회하지 않고 그 경로를 사용합니다.
 - 데스크톱 브리지는 Windows에서 UTF-8 stdio를 강제해 JSON과 한글 텍스트가 깨지지 않도록 처리합니다.
-- CLI 기본값은 보수적입니다. `--max-blocks` 기본값은 `1`이고, `--allow-push`는 명시적으로 켜야 합니다.
+- CLI 기본값은 보수적입니다. `--max-blocks` 기본값은 `1`이고, `--allow-push`는 명시적으로 켜야 합니다. 이 README 예시는 설치된 `jakal-flow` 스크립트를 기준으로 쓰였고, 소스 체크아웃에서 바로 실행할 때는 `python -m jakal_flow`로 바꿔도 같습니다.
 - 데스크톱 저장 기본값은 프로젝트별로 저장되며, CLI 예시보다 더 적극적인 설정을 가질 수 있습니다.
 - 임시 공개 공유 링크는 설정된 public base URL이나 Cloudflare Quick Tunnel을 사용할 수 있고, Windows에서는 필요하면 `winget`으로 `cloudflared`를 설치할 수 있습니다.

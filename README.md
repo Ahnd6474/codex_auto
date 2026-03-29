@@ -59,10 +59,22 @@ That installs:
 - `jakal-flow`
 - `jakal-flow-ui-bridge`
 
+The installed scripts are thin wrappers around the module entrypoints:
+
+- `jakal-flow` == `python -m jakal_flow`
+- `jakal-flow-ui-bridge` == `python -m jakal_flow.ui_bridge`
+
+Check the live command surface from your checkout:
+
+```bash
+jakal-flow --help
+jakal-flow run --help
+```
+
 Initialize a managed repository:
 
 ```bash
-python -m jakal_flow init-repo \
+jakal-flow init-repo \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -77,7 +89,7 @@ python -m jakal_flow init-repo \
 Run a verified improvement loop:
 
 ```bash
-python -m jakal_flow run \
+jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -92,7 +104,7 @@ python -m jakal_flow run \
 Resume the same managed repository later without reinitializing it:
 
 ```bash
-python -m jakal_flow resume \
+jakal-flow resume \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -107,13 +119,22 @@ python -m jakal_flow resume \
 Inspect status later:
 
 ```bash
-python -m jakal_flow list-repos --workspace-root .jakal-flow-workspace
-python -m jakal_flow status --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
-python -m jakal_flow history --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace --limit 20
-python -m jakal_flow report --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
+jakal-flow list-repos --workspace-root .jakal-flow-workspace
+jakal-flow status --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
+jakal-flow history --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace --limit 20
+jakal-flow report --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
 ```
 
 `list-repos` prints JSON summaries, and `report` prints the path to the latest machine-readable report file.
+
+Common command outputs:
+
+| Command | Output |
+| --- | --- |
+| `list-repos` | JSON array with repo identity, status, safe revision, and last-run timestamp |
+| `status` | JSON object with `metadata` and `loop_state` |
+| `history` | Human-readable per-block summary lines |
+| `report` | Filesystem path to `reports/latest_report.json` |
 
 Open the desktop shell in development:
 
@@ -287,8 +308,8 @@ Related files:
 To inspect the current command surface from your local checkout:
 
 ```bash
-python -m jakal_flow --help
-python -m jakal_flow run --help
+jakal-flow --help
+jakal-flow run --help
 ```
 
 ### Desktop-managed Defaults
@@ -321,7 +342,7 @@ Supported billing estimation modes:
 Ensemble routing:
 
 ```bash
-python -m jakal_flow run \
+jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -337,7 +358,7 @@ python -m jakal_flow run \
 OpenRouter:
 
 ```bash
-python -m jakal_flow run \
+jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -356,7 +377,7 @@ python -m jakal_flow run \
 Gemini CLI:
 
 ```bash
-python -m jakal_flow run \
+jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -371,7 +392,7 @@ python -m jakal_flow run \
 Claude Code:
 
 ```bash
-python -m jakal_flow run \
+jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -386,7 +407,7 @@ python -m jakal_flow run \
 Qwen Code:
 
 ```bash
-python -m jakal_flow run \
+jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -401,7 +422,7 @@ python -m jakal_flow run \
 Local OSS via Ollama:
 
 ```bash
-python -m jakal_flow run \
+jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -418,7 +439,7 @@ python -m jakal_flow run \
 ML workflow:
 
 ```bash
-python -m jakal_flow run \
+jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
@@ -494,6 +515,8 @@ workspace_root/
   registry.json
 ```
 
+Remote-managed repositories are cloned into `repo/`. Desktop-registered local repositories keep the source checkout in place and still persist `docs/`, `memory/`, `reports/`, and `state/` under the managed project root.
+
 Common project artifacts can include:
 
 - `docs/PLAN.md`
@@ -554,7 +577,7 @@ Workspace-level sidecar files can additionally include:
 - Claude Code uses print-mode JSON output and Gemini CLI uses headless JSON output, but both are normalized into the same trace files.
 - Local OSS runs still go through Codex CLI rather than bypassing it.
 - The desktop bridge forces UTF-8 stdio on Windows so JSON payloads and Korean text survive the bridge boundary.
-- CLI defaults stay conservative: `--max-blocks` defaults to `1`, `--allow-push` is opt-in, and examples in this README use `python -m jakal_flow ...` so they work from a source checkout.
+- CLI defaults stay conservative: `--max-blocks` defaults to `1` and `--allow-push` is opt-in. The examples use the installed `jakal-flow` script; from a source checkout you can swap that to `python -m jakal_flow`.
 - Desktop-managed defaults are stored per project and can be more permissive than the CLI examples.
 - Temporary public share links can use a configured public base URL or a Cloudflare Quick Tunnel; on Windows the app can install `cloudflared` via `winget` when needed.
 
