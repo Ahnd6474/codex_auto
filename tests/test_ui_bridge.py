@@ -1169,6 +1169,9 @@ class UIBridgeTests(unittest.TestCase):
             workspace_root = temp_dir / "workspace"
             repo_dir = temp_dir / "repo"
             repo_dir.mkdir(parents=True, exist_ok=True)
+            (repo_dir / "README.md").write_text("# Demo\n", encoding="utf-8")
+            (repo_dir / "src").mkdir(parents=True, exist_ok=True)
+            (repo_dir / "src" / "main.py").write_text("print('demo')\n", encoding="utf-8")
 
             payload = {
                 "project_dir": str(repo_dir),
@@ -1204,6 +1207,14 @@ class UIBridgeTests(unittest.TestCase):
             self.assertIn("runtime_insights", detail)
             self.assertIn("runtime_insights", detail["bottom_panels"])
             self.assertIn("parallel", detail["runtime_insights"])
+            self.assertEqual(len(detail["workspace_tree"]), 1)
+            self.assertEqual(detail["workspace_tree"][0]["label"], "repo")
+            self.assertEqual(detail["workspace_tree"][0]["path"], str(repo_dir))
+            tree_labels = [item["label"] for item in detail["workspace_tree"][0]["children"]]
+            self.assertIn("src", tree_labels)
+            self.assertIn("README.md", tree_labels)
+            self.assertNotIn(".git", tree_labels)
+            self.assertNotIn("jakal-flow-logs", tree_labels)
 
             listing = run_command("list-projects", workspace_root)
             self.assertEqual(len(listing["projects"]), 1)

@@ -20,10 +20,12 @@ from .share import project_share_config_payload, project_share_payload
 from .status_views import effective_project_status
 from .step_models import provider_statuses_payload
 from .utils import append_jsonl, compact_text, normalize_workflow_mode, now_utc_iso, read_json, read_jsonl_tail, read_last_jsonl, read_text, write_json
-from .workspace import WorkspaceManager
+from .workspace import LOCAL_PROJECT_LOG_DIRNAME, WorkspaceManager
 
 
 DETAIL_CACHE_VERSION = 12
+DETAIL_CACHE_VERSION = 12
+PROJECT_TREE_EXCLUDED_NAMES = frozenset({".git", LOCAL_PROJECT_LOG_DIRNAME})
 
 PLANNING_STAGE_DEFINITIONS = (
     {"key": "context_scan", "label": "Scan repository context"},
@@ -60,7 +62,10 @@ def _preview_tree_signature(path: Path, max_entries: int = 16, child_limit: int 
     if not path.exists() or not path.is_dir():
         return f"{path.name}:missing"
     try:
-        children = sorted(path.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
+        children = sorted(
+            (item for item in path.iterdir() if item.name not in PROJECT_TREE_EXCLUDED_NAMES),
+            key=lambda item: (not item.is_dir(), item.name.lower()),
+        )
     except OSError:
         return f"{path.name}:unavailable"
     digest = hashlib.sha1()
@@ -70,7 +75,10 @@ def _preview_tree_signature(path: Path, max_entries: int = 16, child_limit: int 
         digest.update(str(child.name).encode("utf-8"))
         if child.is_dir():
             try:
-                grandchildren = sorted(child.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
+                grandchildren = sorted(
+                    (item for item in child.iterdir() if item.name not in PROJECT_TREE_EXCLUDED_NAMES),
+                    key=lambda item: (not item.is_dir(), item.name.lower()),
+                )
             except OSError:
                 digest.update(b"grandchildren:unavailable")
             else:
@@ -438,7 +446,10 @@ def preview_tree(path: Path, max_entries: int = 16) -> list[dict[str, Any]]:
     if not path.exists() or not path.is_dir():
         return []
     try:
-        children = sorted(path.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
+        children = sorted(
+            (item for item in path.iterdir() if item.name not in PROJECT_TREE_EXCLUDED_NAMES),
+            key=lambda item: (not item.is_dir(), item.name.lower()),
+        )
     except OSError:
         return [{"label": "Directory unavailable", "path": str(path), "kind": "meta"}]
     entries: list[dict[str, Any]] = []
@@ -450,7 +461,10 @@ def preview_tree(path: Path, max_entries: int = 16) -> list[dict[str, Any]]:
         }
         if child.is_dir():
             try:
-                grandchildren = sorted(child.iterdir(), key=lambda entry: (not entry.is_dir(), entry.name.lower()))
+                grandchildren = sorted(
+                    (entry for entry in child.iterdir() if entry.name not in PROJECT_TREE_EXCLUDED_NAMES),
+                    key=lambda entry: (not entry.is_dir(), entry.name.lower()),
+                )
             except OSError:
                 item["children"] = [{"label": "Directory unavailable", "path": str(child), "kind": "meta"}]
             else:
@@ -469,22 +483,15 @@ def preview_tree(path: Path, max_entries: int = 16) -> list[dict[str, Any]]:
 
 
 def managed_workspace_tree(context: ProjectContext) -> list[dict[str, Any]]:
-    sections = [
-        ("Repository", context.paths.repo_dir),
-        ("Docs", context.paths.docs_dir),
-        ("Reports", context.paths.reports_dir),
-        ("State", context.paths.state_dir),
-        ("Logs", context.paths.logs_dir),
-        ("Memory", context.paths.memory_dir),
-    ]
+    repo_dir = context.paths.repo_dir
+    root_label = repo_dir.name or context.metadata.display_name or context.metadata.slug or "Project"
     return [
         {
-            "label": label,
-            "path": str(path),
+            "label": root_label,
+            "path": str(repo_dir),
             "kind": "dir",
-            "children": preview_tree(path),
+            "children": preview_tree(repo_dir),
         }
-        for label, path in sections
     ]
 
 

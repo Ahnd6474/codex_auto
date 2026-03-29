@@ -347,6 +347,41 @@ test("preserveProjectDetailSupplement keeps loaded sidebar and report sections o
   assert.equal(preserved.loaded_sections.workspace, true);
 });
 
+test("preserveProjectDetailSupplement reuses the existing workspace tree when a full refresh returns equivalent nodes", () => {
+  const previousWorkspaceTree = [
+    {
+      label: "repo",
+      path: "/repo",
+      kind: "dir",
+      children: [{ label: "src", path: "/repo/src", kind: "dir" }],
+    },
+  ];
+
+  const preserved = preserveProjectDetailSupplement(
+    {
+      detail_level: "full",
+      project: { repo_id: "demo" },
+      workspace_tree: [
+        {
+          label: "repo",
+          path: "/repo",
+          kind: "dir",
+          children: [{ label: "src", path: "/repo/src", kind: "dir" }],
+        },
+      ],
+      loaded_sections: { workspace: true },
+    },
+    {
+      detail_level: "full",
+      project: { repo_id: "demo" },
+      workspace_tree: previousWorkspaceTree,
+      loaded_sections: { workspace: true },
+    },
+  );
+
+  assert.equal(preserved.workspace_tree, previousWorkspaceTree);
+});
+
 test("mergeProjectDetailSupplement applies loaded partial sections onto the selected project", () => {
   const merged = mergeProjectDetailSupplement(
     {
@@ -379,4 +414,37 @@ test("mergeProjectDetailSupplement applies loaded partial sections onto the sele
   assert.equal(merged.loaded_sections.reports, true);
   assert.equal(merged.loaded_sections.workspace, true);
   assert.equal(merged.loaded_sections.checkpoints, true);
+});
+
+test("mergeProjectDetailSupplement keeps the current workspace tree reference when the supplement tree matches", () => {
+  const currentWorkspaceTree = [
+    {
+      label: "repo",
+      path: "/repo",
+      kind: "dir",
+      children: [{ label: "README.md", path: "/repo/README.md", kind: "file" }],
+    },
+  ];
+
+  const merged = mergeProjectDetailSupplement(
+    {
+      detail_level: "core",
+      project: { repo_id: "demo" },
+      workspace_tree: currentWorkspaceTree,
+      loaded_sections: { workspace: true },
+    },
+    {
+      workspace_tree: [
+        {
+          label: "repo",
+          path: "/repo",
+          kind: "dir",
+          children: [{ label: "README.md", path: "/repo/README.md", kind: "file" }],
+        },
+      ],
+      loaded_sections: { workspace: true },
+    },
+  );
+
+  assert.equal(merged.workspace_tree, currentWorkspaceTree);
 });

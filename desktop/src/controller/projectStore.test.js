@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { applyProjectDetailState, preserveProjectDetailSupplement } from "./projectStore.js";
+import { applyProjectDetailState, mergeProjectDetailSupplement, preserveProjectDetailSupplement } from "./projectStore.js";
 
 test("preserveProjectDetailSupplement keeps the previous workspace tree reference on core refresh", () => {
   const previousWorkspaceTree = [
@@ -28,6 +28,73 @@ test("preserveProjectDetailSupplement keeps the previous workspace tree referenc
   const merged = preserveProjectDetailSupplement(nextDetail, previousDetail);
 
   assert.equal(merged.workspace_tree, previousWorkspaceTree);
+});
+
+test("preserveProjectDetailSupplement reuses the previous workspace tree when the refreshed tree is equivalent", () => {
+  const previousWorkspaceTree = [
+    {
+      label: "repo",
+      path: "C:/repo",
+      kind: "dir",
+      children: [{ label: "src", path: "C:/repo/src", kind: "dir" }],
+    },
+  ];
+  const refreshedWorkspaceTree = [
+    {
+      label: "repo",
+      path: "C:/repo",
+      kind: "dir",
+      children: [{ label: "src", path: "C:/repo/src", kind: "dir" }],
+    },
+  ];
+  const merged = preserveProjectDetailSupplement(
+    {
+      detail_level: "full",
+      project: { repo_id: "repo-1" },
+      workspace_tree: refreshedWorkspaceTree,
+      loaded_sections: { workspace: true },
+    },
+    {
+      detail_level: "full",
+      project: { repo_id: "repo-1" },
+      workspace_tree: previousWorkspaceTree,
+      loaded_sections: { workspace: true },
+    },
+  );
+
+  assert.equal(merged.workspace_tree, previousWorkspaceTree);
+});
+
+test("mergeProjectDetailSupplement reuses the current workspace tree reference when the supplement is equivalent", () => {
+  const currentWorkspaceTree = [
+    {
+      label: "repo",
+      path: "C:/repo",
+      kind: "dir",
+      children: [{ label: "README.md", path: "C:/repo/README.md", kind: "file" }],
+    },
+  ];
+  const merged = mergeProjectDetailSupplement(
+    {
+      detail_level: "core",
+      project: { repo_id: "repo-1" },
+      workspace_tree: currentWorkspaceTree,
+      loaded_sections: { workspace: true },
+    },
+    {
+      workspace_tree: [
+        {
+          label: "repo",
+          path: "C:/repo",
+          kind: "dir",
+          children: [{ label: "README.md", path: "C:/repo/README.md", kind: "file" }],
+        },
+      ],
+      loaded_sections: { workspace: true },
+    },
+  );
+
+  assert.equal(merged.workspace_tree, currentWorkspaceTree);
 });
 
 test("preserveProjectDetailSupplement keeps full report text while accepting fresh core failure data", () => {

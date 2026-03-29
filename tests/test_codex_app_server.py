@@ -111,6 +111,8 @@ class CodexAppServerTests(unittest.TestCase):
 
         self.assertFalse(snapshot.available)
         self.assertEqual(snapshot.model_catalog[0]["model"], "auto")
+        fallback_gpt = next(item for item in snapshot.model_catalog if item.get("provider") == "openai" and item.get("model") == "gpt-5.4")
+        self.assertEqual(fallback_gpt["supported_reasoning_efforts"], ["low", "medium", "high", "xhigh"])
         self.assertIn("boom", snapshot.error)
 
     def test_fetch_codex_backend_snapshot_appends_local_models(self) -> None:

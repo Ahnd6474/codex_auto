@@ -8,7 +8,7 @@ import { RunProgressPanel } from "./components/layout/RunProgressPanel";
 import { SidebarPane } from "./components/layout/SidebarPane";
 import { Splitter } from "./components/layout/Splitter";
 import { StatusBar } from "./components/layout/StatusBar";
-import { nextSidebarTab } from "./controllerHelpers";
+import { nextRightSidebarState, nextSidebarTab } from "./controllerHelpers";
 import { useDesktopController } from "./hooks/useDesktopController";
 import { useI18n } from "./i18n";
 import { toggleStepSelection } from "./utils";
@@ -18,21 +18,12 @@ const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 500;
 const RIGHT_MIN = 280;
 const RIGHT_MAX = 600;
+const RIGHT_RAIL_WIDTH = 36;
 const BOTTOM_MIN = 120;
 const BOTTOM_MAX = 600;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
-}
-
-function FloatingInspectorIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M2 17l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
 }
 
 export default function App() {
@@ -173,6 +164,10 @@ export default function App() {
   const sidebarOpen = Boolean(controller.sidebarTab);
   const rightOpen = !controller.rightCollapsed;
   const sidebarStyle = sidebarOpen ? { width: controller.sidebarWidth, flex: `0 0 ${controller.sidebarWidth}px` } : undefined;
+  const rightStyle = {
+    width: rightOpen ? controller.rightWidth : RIGHT_RAIL_WIDTH,
+    flex: `0 0 ${rightOpen ? controller.rightWidth : RIGHT_RAIL_WIDTH}px`,
+  };
   const compact = Boolean(controller.programSettings?.compact_mode);
   const handleRightTabChange = useCallback((nextTab) => {
     const requestedTab = String(nextTab || "").trim();
@@ -180,14 +175,11 @@ export default function App() {
       return;
     }
     setRightTab((currentTab) => {
-      if (currentTab === requestedTab) {
-        controller.setRightCollapsed(true);
-        return currentTab;
-      }
-      controller.setRightCollapsed(false);
-      return requestedTab;
+      const nextState = nextRightSidebarState(currentTab, requestedTab, controller.rightCollapsed);
+      controller.setRightCollapsed(nextState.collapsed);
+      return nextState.tab;
     });
-  }, [controller.setRightCollapsed]);
+  }, [controller.rightCollapsed, controller.setRightCollapsed]);
   const handleSelectStep = useCallback(
     (stepId) => {
       controller.setSelectedStepId((current) => toggleStepSelection(current, stepId));
@@ -214,15 +206,6 @@ export default function App() {
 
   return (
     <main className={`ide-shell ${compact ? "ide-shell--compact" : ""}`.trim()}>
-      <button
-        className={`floating-right-toggle ${rightOpen ? "floating-right-toggle--active" : ""}`.trim()}
-        onClick={() => controller.setRightCollapsed((v) => !v)}
-        type="button"
-        title="Toggle right sidebar"
-        aria-label="Toggle right sidebar"
-      >
-        <FloatingInspectorIcon />
-      </button>
       {/* ── Top toolbar ── */}
       <IdeToolbar
         projects={controller.filteredProjects}
@@ -245,8 +228,6 @@ export default function App() {
         shareBusy={controller.shareBusy}
         onRefresh={controller.forceRefresh}
         onOpenSettings={() => controller.setCenterTab("app-settings")}
-        rightCollapsed={controller.rightCollapsed}
-        onToggleRight={() => controller.setRightCollapsed((v) => !v)}
         onGeneratePlan={controller.generatePlan}
         onRunPlan={controller.runPlan}
         onApproveCheckpoint={controller.approveCheckpoint}
@@ -393,33 +374,32 @@ export default function App() {
 
         {/* Right splitter + sidebar */}
         {rightOpen ? (
-          <>
-            <Splitter axis="vertical" onResize={rightSplitter.onResize} onDragEnd={rightSplitter.onDragEnd} title="Resize right sidebar" />
-            <div
-              className="ide-pane ide-pane--details"
-              style={{ width: controller.rightWidth, flex: `0 0 ${controller.rightWidth}px` }}
-            >
-              <RightSidebarPane
-                activeTab={rightTab}
-                onChangeTab={handleRightTabChange}
-                detail={detail}
-                planDraft={controller.planDraft}
-                selectedStepId={controller.selectedStepId}
-                modelPresets={controller.modelPresets}
-                form={controller.projectForm}
-                activeJob={controller.activeJob}
-                busy={controller.busy}
-                onChangeForm={controller.setProjectForm}
-                chat={detail?.chat}
-                selectedChatSessionId={controller.selectedChatSessionId}
-                chatDraftSession={controller.chatDraftSession}
-                onSelectChatSession={controller.loadChatSession}
-                onStartNewChatSession={controller.startNewChatSession}
-                onSendChatMessage={controller.sendChatMessage}
-              />
-            </div>
-          </>
+          <Splitter axis="vertical" onResize={rightSplitter.onResize} onDragEnd={rightSplitter.onDragEnd} title="Resize right sidebar" />
         ) : null}
+        <div
+          className={`ide-pane ide-pane--details ${rightOpen ? "" : "ide-pane--details-collapsed"}`.trim()}
+          style={rightStyle}
+        >
+          <RightSidebarPane
+            activeTab={rightTab}
+            collapsed={!rightOpen}
+            onChangeTab={handleRightTabChange}
+            detail={detail}
+            planDraft={controller.planDraft}
+            selectedStepId={controller.selectedStepId}
+            modelPresets={controller.modelPresets}
+            form={controller.projectForm}
+            activeJob={controller.activeJob}
+            busy={controller.busy}
+            onChangeForm={controller.setProjectForm}
+            chat={detail?.chat}
+            selectedChatSessionId={controller.selectedChatSessionId}
+            chatDraftSession={controller.chatDraftSession}
+            onSelectChatSession={controller.loadChatSession}
+            onStartNewChatSession={controller.startNewChatSession}
+            onSendChatMessage={controller.sendChatMessage}
+          />
+        </div>
       </div>
 
       {/* ── Status bar ── */}
@@ -429,9 +409,7 @@ export default function App() {
         queuedJobs={controller.queuedJobs}
         modelPresets={controller.modelPresets}
         bottomCollapsed={controller.bottomCollapsed}
-        rightCollapsed={controller.rightCollapsed}
         onToggleBottom={() => controller.setBottomCollapsed((v) => !v)}
-        onToggleRight={() => controller.setRightCollapsed((v) => !v)}
       />
 
       {/* ── Command palette (Double Shift / Ctrl+Shift+A) ── */}

@@ -135,6 +135,46 @@ test("project job helpers match jobs by repo id or project path and derive displ
   assert.equal(projectStatusWithJob("setup_ready", jobs[1]), "running:generate-plan");
 });
 
+test("chat jobs do not affect execution status or progress", () => {
+  const chatJob = {
+    id: "job-chat",
+    status: "running",
+    command: "send-chat-message",
+    repo_id: "repo-1",
+  };
+
+  assert.equal(projectStatusWithJob("plan_ready", chatJob), "plan_ready");
+
+  const progress = deriveExecutionProgress(
+    {
+      project: {
+        current_status: "plan_ready",
+      },
+      plan: {
+        execution_mode: "serial",
+        closeout_status: "not_started",
+        steps: [],
+      },
+      stats: {
+        total_steps: 0,
+        completed_steps: 0,
+        failed_steps: 0,
+        running_steps: 0,
+        remaining_steps: 0,
+      },
+    },
+    {
+      execution_mode: "serial",
+      closeout_status: "not_started",
+      steps: [],
+    },
+    chatJob,
+  );
+
+  assert.equal(progress.isActive, false);
+  assert.equal(progress.command, "");
+});
+
 test("backgroundJobProjectKey normalizes workspace and project paths for deduping", () => {
   assert.equal(
     backgroundJobProjectKey(

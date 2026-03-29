@@ -36,9 +36,7 @@ export function StatusBar({
   queuedJobs,
   modelPresets,
   onToggleBottom,
-  onToggleRight,
   bottomCollapsed,
-  rightCollapsed,
 }) {
   const { language, t } = useI18n();
   const executionJob = visibleExecutionJob(activeJob);
@@ -106,17 +104,6 @@ export function StatusBar({
           </svg>
         </button>
 
-        <button
-          className={`status-bar__toggle ${!rightCollapsed ? "status-bar__toggle--active" : ""}`}
-          onClick={onToggleRight}
-          type="button"
-          title="Inspector"
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-            <rect x="14" y="3" width="7" height="18" rx="1.5" />
-            <rect x="3" y="3" width="7" height="18" rx="1.5" opacity=".35" />
-          </svg>
-        </button>
       </div>
     </footer>
   );

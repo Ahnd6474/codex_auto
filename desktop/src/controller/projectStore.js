@@ -23,6 +23,39 @@ function sameProjectDetail(left, right) {
   return Boolean(leftRepoId) && leftRepoId === rightRepoId;
 }
 
+function workspaceTreeNodesEqual(leftNodes = [], rightNodes = []) {
+  if (leftNodes === rightNodes) {
+    return true;
+  }
+  if (!Array.isArray(leftNodes) || !Array.isArray(rightNodes) || leftNodes.length !== rightNodes.length) {
+    return false;
+  }
+  return leftNodes.every((leftNode, index) => {
+    const rightNode = rightNodes[index];
+    if (!leftNode || !rightNode) {
+      return leftNode === rightNode;
+    }
+    return (
+      leftNode.label === rightNode.label
+      && leftNode.path === rightNode.path
+      && leftNode.kind === rightNode.kind
+      && workspaceTreeNodesEqual(leftNode.children || [], rightNode.children || [])
+    );
+  });
+}
+
+function resolveWorkspaceTree(nextWorkspaceTree, previousWorkspaceTree = []) {
+  const previousTree = Array.isArray(previousWorkspaceTree) ? previousWorkspaceTree : [];
+  const incomingTree = Array.isArray(nextWorkspaceTree) ? nextWorkspaceTree : [];
+  if (!incomingTree.length) {
+    return previousTree;
+  }
+  if (previousTree.length && workspaceTreeNodesEqual(incomingTree, previousTree)) {
+    return previousTree;
+  }
+  return cloneValue(incomingTree);
+}
+
 function mergeLoadedSections(currentSections = null, fallbackSections = null, detailLevel = "") {
   const nextSections = {
     ...(fallbackSections && typeof fallbackSections === "object" ? fallbackSections : {}),
@@ -229,20 +262,19 @@ export function preserveProjectDetailSupplement(detail, previousDetail = null) {
     sameProject ? previousDetail?.loaded_sections : null,
     detail?.detail_level,
   );
+  const resolvedWorkspaceTree = loadedSections.workspace
+    ? resolveWorkspaceTree(detail?.workspace_tree, sameProject ? previousDetail?.workspace_tree : [])
+    : detail?.workspace_tree;
   if (!sameProject || String(detail?.detail_level || "").trim().toLowerCase() === "full") {
     return {
       ...detail,
+      workspace_tree: resolvedWorkspaceTree,
       loaded_sections: loadedSections,
     };
   }
   return {
     ...detail,
-    workspace_tree:
-      loadedSections.workspace
-        ? (Array.isArray(detail?.workspace_tree) && detail.workspace_tree.length > 0
-          ? cloneValue(detail.workspace_tree)
-          : previousDetail?.workspace_tree || [])
-        : detail?.workspace_tree,
+    workspace_tree: resolvedWorkspaceTree,
     reports: loadedSections.reports
       ? mergeReportsSection(detail?.reports, previousDetail?.reports, true)
       : detail?.reports,
@@ -269,7 +301,7 @@ export function mergeProjectDetailSupplement(detail, supplement = {}) {
   return {
     ...detail,
     ...(hasOwnValue(supplement, "workspace_tree")
-      ? { workspace_tree: cloneValue(supplement.workspace_tree || []) }
+      ? { workspace_tree: resolveWorkspaceTree(supplement.workspace_tree, detail?.workspace_tree) }
       : {}),
     ...(hasOwnValue(supplement, "reports")
       ? { reports: mergeReportsSection(supplement.reports, detail?.reports, false) }

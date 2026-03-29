@@ -98,3 +98,24 @@ export function nextSidebarTab(currentTab, requestedTab) {
   }
   return current === requested ? "" : requested;
 }
+
+export function nextRightSidebarState(currentTab, requestedTab, collapsed = false) {
+  const current = String(currentTab || "").trim();
+  const requested = String(requestedTab || "").trim();
+  if (!requested) {
+    return {
+      tab: current,
+      collapsed: Boolean(collapsed),
+    };
+  }
+  if (!collapsed && current === requested) {
+    return {
+      tab: current,
+      collapsed: true,
+    };
+  }
+  return {
+    tab: requested,
+    collapsed: false,
+  };
+}

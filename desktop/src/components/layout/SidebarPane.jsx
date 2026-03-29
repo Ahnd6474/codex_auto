@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import { statusTone } from "../../utils";
@@ -185,7 +185,7 @@ function filterPreparedTree(node, normalizedQuery) {
   return null;
 }
 
-function TreeNode({ node, depth = 0, filter = "" }) {
+const TreeNode = memo(function TreeNode({ node, depth = 0, filter = "" }) {
   const query = filter.trim().toLowerCase();
   const [open, setOpen] = useState(depth < 1);
   const isFolder = node.kind === "dir" || node.kind === "directory" || Boolean((node.children || []).length);
@@ -221,7 +221,7 @@ function TreeNode({ node, depth = 0, filter = "" }) {
       ) : null}
     </div>
   );
-}
+});
 
 /* ── Search input with icon ── */
 function SearchInput({ value, onChange, placeholder }) {

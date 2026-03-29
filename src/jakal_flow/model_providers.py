@@ -189,6 +189,16 @@ PROVIDER_PRESETS: dict[str, ProviderPreset] = {
 }
 
 CURATED_PROVIDER_MODEL_CATALOG: dict[str, list[dict[str, Any]]] = {
+    "openai": [
+        {
+            "model": "gpt-5.4",
+            "display_name": "GPT-5.4",
+            "description": "Default Codex model for complex coding and professional work.",
+            "is_default": True,
+            "default_reasoning_effort": "medium",
+            "supported_reasoning_efforts": ALL_REASONING_EFFORTS,
+        },
+    ],
     "claude": [
         {
             "model": "claude-sonnet-4-6",

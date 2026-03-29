@@ -1,0 +1,2 @@
+{"created_at": "2026-03-29T14:22:59+00:00", "message_id": "msg-20260329142259-7ed462", "metadata": {}, "mode": "debugger", "role": "user", "status": "completed", "text": "Focus on the latest failing backend test."}
+{"created_at": "2026-03-29T14:22:59+00:00", "message_id": "msg-20260329142259-b39627", "metadata": {"command": "run-manual-debugger", "commit_hash": "abc123", "pass_name": "block-search-debug"}, "mode": "debugger", "role": "assistant", "status": "completed", "text": "Manual debugger finished. Recovered via chat."}

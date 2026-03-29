@@ -3,16 +3,6 @@ import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import { commandLabel, isDebuggingStatus, isPlanningProgressRunning, projectStatusWithJob, statusTone, toolbarProgressCaptionDisplay, visibleExecutionJob } from "../../utils";
 
-function AppLogo() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M2 17l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 function RefreshIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -271,8 +261,6 @@ export function IdeToolbar({
   shareBusy,
   onRefresh,
   onOpenSettings,
-  rightCollapsed = false,
-  onToggleRight = () => {},
   onGeneratePlan,
   onRunPlan,
   onApproveCheckpoint,
@@ -314,15 +302,6 @@ export function IdeToolbar({
     <header className="ide-toolbar">
       <div className="ide-toolbar__group ide-toolbar__group--utility">
         <button
-          className={`toolbar-btn toolbar-btn--icon ${!rightCollapsed ? "toolbar-btn--active" : ""}`.trim()}
-          onClick={onToggleRight}
-          title={language === "ko" ? "오른쪽 사이드바" : "Toggle right sidebar"}
-          type="button"
-          aria-label={language === "ko" ? "오른쪽 사이드바" : "Toggle right sidebar"}
-        >
-          <AppLogo />
-        </button>
-        <button
           className="toolbar-btn toolbar-btn--icon"
           onClick={onRefresh}
           title={t("action.refresh")}
@@ -363,17 +342,6 @@ export function IdeToolbar({
       </nav>
 
       <div className="ide-toolbar__group ide-toolbar__group--actions">
-        <button
-          className={`toolbar-btn toolbar-btn--icon ${!rightCollapsed ? "toolbar-btn--active" : ""}`.trim()}
-          onClick={onToggleRight}
-          title={language === "ko" ? "오른쪽 사이드바" : "Toggle right sidebar"}
-          type="button"
-          aria-label={language === "ko" ? "오른쪽 사이드바" : "Toggle right sidebar"}
-        >
-          <AppLogo />
-        </button>
-
-        <div className="toolbar-divider" />
 
         <button
           className={`toolbar-btn ${activeCenterTab === "app-settings" ? "toolbar-btn--active" : ""}`}

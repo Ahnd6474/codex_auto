@@ -145,32 +145,6 @@ pre {
   position: relative;
 }
 
-.floating-right-toggle {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 24;
-  width: 30px;
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--toolbar-pill-border);
-  border-radius: 6px;
-  background: var(--toolbar-pill-bg);
-  color: var(--text);
-  box-shadow: var(--shadow);
-}
-
-.floating-right-toggle:hover {
-  background: var(--bg-panel-hover);
-  border-color: var(--border-strong);
-}
-
-.floating-right-toggle--active {
-  color: var(--info);
-}
-
 .content-card,
 .metric-card {
   border: 1px solid var(--border);
@@ -642,6 +616,10 @@ pre {
 .ide-pane--details {
   border-right: none;
   border-left: 1px solid var(--border);
+}
+
+.ide-pane--details-collapsed {
+  overflow: hidden;
 }
 
 .ide-pane--sidebar {
@@ -4947,6 +4925,10 @@ select:focus {
   display: flex;
   flex-direction: row;
   gap: 0;
+}
+
+.rsb--collapsed {
+  justify-content: flex-end;
 }
 
 /* Content area — takes remaining width */

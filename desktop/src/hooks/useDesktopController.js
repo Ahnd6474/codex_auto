@@ -312,7 +312,7 @@ export function useDesktopController() {
       current_status: projectDetail?.project?.current_status || "",
       last_run_at: projectDetail?.project?.last_run_at || "",
     });
-    activeJobRef.current = nextActiveJob;
+    activeJobRef.current = visibleExecutionJob(nextActiveJob);
     return nextActiveJob;
   }
 

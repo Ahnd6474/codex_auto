@@ -580,6 +580,51 @@ test("RightSidebarPane renders the project chat on the right rail by default", a
   assert.match(html, /chat\.summary\.txt/);
 });
 
+test("RightSidebarPane keeps the icon rail visible when the right panel is collapsed", async () => {
+  const html = await renderBundledComponent(
+    "right-sidebar-collapsed-rail-render",
+    "./src/components/layout/RightSidebarPane.jsx",
+    "RightSidebarPane",
+    {
+      collapsed: true,
+      activeTab: "chat",
+      detail: {
+        project: {
+          current_status: "plan_ready",
+        },
+      },
+      planDraft: {
+        steps: [],
+      },
+      selectedStepId: "",
+      modelPresets: [],
+      modelCatalog: [],
+      form: {
+        runtime: {
+          generate_word_report: false,
+        },
+      },
+      activeJob: null,
+      busy: false,
+      chat: {
+        messages: [
+          { message_id: "msg-1", role: "assistant", text: "Hello from the right side." },
+        ],
+      },
+      onChangeForm: noop,
+      onSelectChatSession: noop,
+      onStartNewChatSession: noop,
+      onSendChatMessage: noop,
+      onChangeChatModelSelection: noop,
+    },
+  );
+
+  assert.match(html, /rsb--collapsed/);
+  assert.match(html, /title="AI Chat"/);
+  assert.doesNotMatch(html, /Chat model/);
+  assert.doesNotMatch(html, /Hello from the right side\./);
+});
+
 test("RightSidebarPane renders assistant replies with safe markdown while keeping user text plain", async () => {
   const html = await renderBundledComponent(
     "right-sidebar-chat-markdown-render",
@@ -1469,6 +1514,44 @@ test("RunProgressPanel keeps planning progress visible when the bridge job snaps
 
   assert.match(html, /Planning stage 2\/4, Running/);
   assert.match(html, /Planner Agent A/);
+});
+
+test("RunProgressPanel stays hidden while only a chat job is active", async () => {
+  const html = await renderBundledComponent(
+    "run-progress-panel-chat-hidden-render",
+    "./src/components/layout/RunProgressPanel.jsx",
+    "RunProgressPanel",
+    {
+      detail: {
+        project: {
+          current_status: "plan_ready",
+        },
+        plan: {
+          execution_mode: "serial",
+          closeout_status: "not_started",
+          steps: [],
+        },
+        stats: {
+          total_steps: 0,
+          completed_steps: 0,
+          failed_steps: 0,
+          running_steps: 0,
+          remaining_steps: 0,
+        },
+      },
+      planDraft: {
+        execution_mode: "serial",
+        closeout_status: "not_started",
+        steps: [],
+      },
+      activeJob: {
+        status: "running",
+        command: "send-chat-message",
+      },
+    },
+  );
+
+  assert.equal(html.trim(), "");
 });
 
 test("SidebarPane renders a filtered workspace tree without unrelated nodes", async () => {
