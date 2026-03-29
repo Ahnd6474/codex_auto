@@ -2776,6 +2776,122 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         mocked_reset.assert_called_once_with(repo_dir, "safe-revision")
         mocked_commit.assert_called_once()
 
+    def test_execute_verified_repo_pass_falls_back_to_openai_after_gemini_quota_failure(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_verified_repo_provider_fallback_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model_provider="gemini",
+            provider_api_key_env="GEMINI_API_KEY",
+            codex_path="gemini.cmd",
+            model="gemini-2.5-flash",
+            effort="medium",
+            test_cmd="python -m pytest",
+        )
+        observed_providers: list[str] = []
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            context.metadata.current_safe_revision = "safe-revision"
+            context.loop_state.current_safe_revision = "safe-revision"
+            orchestrator.workspace.save_project(context)
+
+            reporter = Reporter(context)
+            runner = mock.Mock()
+            failing_result = CodexRunResult(
+                pass_type="project-closeout-pass",
+                prompt_file=context.paths.logs_dir / "initial.prompt.md",
+                output_file=context.paths.logs_dir / "initial.last_message.txt",
+                event_file=context.paths.logs_dir / "initial.events.jsonl",
+                returncode=1,
+                search_enabled=False,
+                changed_files=[],
+                usage={},
+                last_message="",
+                diagnostics={
+                    "attempts": [
+                        {
+                            "attempt": 1,
+                            "returncode": 1,
+                            "stderr_excerpt": "Gemini failed: You have exhausted your capacity on this model. Your quota will reset after 5s.",
+                        }
+                    ]
+                },
+            )
+            recovered_result = CodexRunResult(
+                pass_type="project-closeout-pass-fallback-openai",
+                prompt_file=context.paths.logs_dir / "fallback.prompt.md",
+                output_file=context.paths.logs_dir / "fallback.last_message.txt",
+                event_file=context.paths.logs_dir / "fallback.events.jsonl",
+                returncode=0,
+                search_enabled=False,
+                changed_files=[],
+                usage={"input_tokens": 11},
+                last_message="fallback closeout pass",
+            )
+            successful_test = TestRunResult(
+                command="python -m pytest",
+                returncode=0,
+                stdout_file=context.paths.logs_dir / "fallback.test.stdout.log",
+                stderr_file=context.paths.logs_dir / "fallback.test.stderr.log",
+                summary="python -m pytest exited with 0",
+            )
+
+            def fake_primary_run_pass(**kwargs):
+                observed_providers.append(str(kwargs["context"].runtime.model_provider))
+                return failing_result
+
+            def fake_fallback_run_pass(*args, **kwargs):
+                observed_providers.append(str(kwargs["context"].runtime.model_provider))
+                return recovered_result
+
+            runner.run_pass.side_effect = fake_primary_run_pass
+
+            with mock.patch("jakal_flow.orchestrator.CodexRunner.run_pass", side_effect=fake_fallback_run_pass) as mocked_fallback_run, mock.patch.object(
+                orchestrator,
+                "_run_test_command",
+                return_value=successful_test,
+            ), mock.patch.object(
+                orchestrator.git,
+                "changed_files",
+                return_value=["README.md"],
+            ), mock.patch.object(orchestrator.git, "has_changes", return_value=True), mock.patch.object(
+                orchestrator.git,
+                "commit_all",
+                return_value="fallback-closeout-commit",
+            ) as mocked_commit, mock.patch.object(orchestrator.git, "hard_reset") as mocked_reset:
+                result = orchestrator._execute_verified_repo_pass(
+                    context=context,
+                    runner=runner,
+                    reporter=reporter,
+                    prompt="Summarize the release closeout.",
+                    pass_type="project-closeout-pass",
+                    block_index=1,
+                    task_name="Release closeout",
+                    safe_revision="safe-revision",
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(observed_providers, ["gemini", "openai"])
+        self.assertEqual(context.runtime.model_provider, "openai")
+        self.assertTrue(result["success"])
+        self.assertEqual(result["commit_hash"], "fallback-closeout-commit")
+        self.assertEqual(result["run_result"].attempt_count, 2)
+        self.assertEqual(result["run_result"].diagnostics["provider_fallback"]["from_provider"], "gemini")
+        self.assertEqual(result["run_result"].diagnostics["provider_fallback"]["to_provider"], "openai")
+        self.assertIn("exhausted your capacity", result["run_result"].diagnostics["provider_fallback"]["trigger_detail"])
+        mocked_fallback_run.assert_called_once()
+        mocked_reset.assert_called_once_with(repo_dir, "safe-revision")
+        mocked_commit.assert_called_once()
+
     def test_parallel_batch_verification_failure_invokes_debugger(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_batch_debugger_test"
         shutil.rmtree(temp_root, ignore_errors=True)

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { preserveProjectDetailSupplement } from "./projectStore.js";
+import { applyProjectDetailState, preserveProjectDetailSupplement } from "./projectStore.js";
 
 test("preserveProjectDetailSupplement keeps the previous workspace tree reference on core refresh", () => {
   const previousWorkspaceTree = [
@@ -55,4 +55,69 @@ test("preserveProjectDetailSupplement keeps full report text while accepting fre
 
   assert.equal(merged.reports.latest_failure.summary, "new failure");
   assert.equal(merged.reports.closeout_report_text, "full report body");
+});
+
+test("applyProjectDetailState preserves the current project_dir when a sparse detail payload omits repo_path", () => {
+  let capturedProjectForm = {
+    project_dir: "C:/repo",
+    display_name: "Existing Repo",
+    branch: "main",
+    origin_url: "https://example.com/repo.git",
+    github_mode: "manual",
+    runtime: { model_provider: "openai" },
+  };
+
+  applyProjectDetailState({
+    detail: {
+      project: {
+        repo_id: "repo-1",
+        repo_path: "",
+        display_name: "Existing Repo",
+        branch: "main",
+        origin_url: "",
+      },
+      runtime: {
+        model_provider: "gemini",
+      },
+      plan: {
+        steps: [],
+      },
+      codex_status: {
+        model_catalog: [],
+      },
+    },
+    refs: {
+      lastAppliedDetailSignatureRef: { current: "" },
+    },
+    state: {
+      projectDetail: {
+        project: {
+          repo_id: "repo-1",
+        },
+      },
+      modelCatalog: [],
+      activeJob: null,
+      defaultRuntime: {
+        model_provider: "openai",
+      },
+      planDirty: false,
+    },
+    setters: {
+      transition: (callback) => callback(),
+      setProjectDetail: () => {},
+      setModelCatalog: () => {},
+      setShareSettings: () => {},
+      setLoadingProjectId: () => {},
+      setProjectForm: (updater) => {
+        capturedProjectForm = typeof updater === "function" ? updater(capturedProjectForm) : updater;
+      },
+      setPlanDraft: () => {},
+      setSelectedStepId: () => {},
+      setPlanDirty: () => {},
+    },
+  });
+
+  assert.equal(capturedProjectForm.project_dir, "C:/repo");
+  assert.equal(capturedProjectForm.display_name, "Existing Repo");
+  assert.equal(capturedProjectForm.runtime.model_provider, "gemini");
 });

@@ -93,7 +93,7 @@ def build_project_command_handlers(
         }
 
     def save_project_setup(ctx: BridgeCommandContext) -> dict:
-        project_dir, runtime, branch, origin_url, display_name = common_project_inputs(ctx.payload)
+        project_dir, runtime, branch, origin_url, display_name = common_project_inputs(ctx.payload, ctx.orchestrator)
         project = ctx.orchestrator.setup_local_project(
             project_dir=project_dir,
             runtime=runtime,
@@ -106,7 +106,7 @@ def build_project_command_handlers(
         return ctx.detail_payload(project)
 
     def generate_plan(ctx: BridgeCommandContext) -> dict:
-        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload)
+        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload, ctx.orchestrator)
         prompt = str(ctx.payload.get("prompt", "")).strip()
         if not prompt:
             raise ValueError("prompt is required.")
@@ -163,7 +163,7 @@ def build_project_command_handlers(
         return ctx.detail_payload(project)
 
     def save_plan(ctx: BridgeCommandContext) -> dict:
-        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload)
+        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload, ctx.orchestrator)
         raw_plan = ctx.payload.get("plan", {})
         if not isinstance(raw_plan, dict):
             raise ValueError("plan payload must be an object.")
@@ -179,7 +179,7 @@ def build_project_command_handlers(
         return ctx.detail_payload(project)
 
     def reset_plan(ctx: BridgeCommandContext) -> dict:
-        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload)
+        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload, ctx.orchestrator)
         existing = ctx.orchestrator.local_project(project_dir)
         if existing is not None:
             execution_stop_registry.request_stop(execution_scope_id(existing))

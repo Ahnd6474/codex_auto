@@ -88,7 +88,7 @@ def build_run_command_handlers(
         return ctx.detail_payload(latest_project)
 
     def run_plan(ctx: BridgeCommandContext) -> dict:
-        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload)
+        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload, ctx.orchestrator)
         raw_plan = ctx.payload.get("plan", {})
         if not isinstance(raw_plan, dict):
             raise ValueError("plan payload must be an object.")
@@ -360,7 +360,7 @@ def build_run_command_handlers(
                 execution_stop_registry.clear(execution_scope_id(latest))
 
     def run_closeout(ctx: BridgeCommandContext) -> dict:
-        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload)
+        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload, ctx.orchestrator)
         raw_plan = ctx.payload.get("plan", {})
         if not isinstance(raw_plan, dict):
             raise ValueError("plan payload must be an object.")

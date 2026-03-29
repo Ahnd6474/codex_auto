@@ -628,11 +628,18 @@ def append_ui_event(context: ProjectContext, event_type: str, message: str, deta
     )
 
 
-def common_project_inputs(payload: dict[str, Any]) -> tuple[Path, RuntimeOptions, str, str, str]:
+def common_project_inputs(
+    payload: dict[str, Any],
+    orchestrator: Orchestrator | None = None,
+) -> tuple[Path, RuntimeOptions, str, str, str]:
     project_dir_value = str(payload.get("project_dir", "")).strip()
-    if not project_dir_value:
-        raise ValueError("project_dir is required.")
-    project_dir = Path(project_dir_value).expanduser().resolve()
+    if project_dir_value:
+        project_dir = Path(project_dir_value).expanduser().resolve()
+    else:
+        repo_id = str(payload.get("repo_id", "")).strip()
+        if not repo_id or orchestrator is None:
+            raise ValueError("project_dir is required.")
+        project_dir = orchestrator.workspace.load_project_by_id(repo_id).metadata.repo_path.resolve()
     runtime_payload = payload.get("runtime", {})
     if not isinstance(runtime_payload, dict):
         raise ValueError("runtime payload must be an object.")

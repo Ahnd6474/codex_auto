@@ -37,6 +37,22 @@ function mergeLoadedSections(currentSections = null, fallbackSections = null, de
   return nextSections;
 }
 
+function preserveProjectIdentityForm(currentForm = null, nextForm = null) {
+  const current = currentForm && typeof currentForm === "object" ? currentForm : {};
+  const next = nextForm && typeof nextForm === "object" ? nextForm : {};
+  if (String(next.project_dir || "").trim() || !String(current.project_dir || "").trim()) {
+    return next;
+  }
+  return {
+    ...next,
+    project_dir: current.project_dir,
+    display_name: next.display_name || current.display_name || "",
+    branch: next.branch || current.branch || "main",
+    origin_url: next.origin_url || current.origin_url || "",
+    github_mode: next.github_mode || current.github_mode || "",
+  };
+}
+
 function mergeReportsSection(primary = null, fallback = null, preserveSparse = false) {
   if (!primary && !fallback) {
     return primary ?? fallback;
@@ -344,7 +360,10 @@ export function applyProjectDetailState({
       if (current.project_dir && preserveDirtyPlan) {
         return current;
       }
-      return projectFormFromDetail(normalizedDetail, state.defaultRuntime);
+      return preserveProjectIdentityForm(
+        current,
+        projectFormFromDetail(normalizedDetail, state.defaultRuntime),
+      );
     });
     if (!preserveDirtyPlan) {
       setters.setPlanDraft(cloneValue(normalizedDetail.plan));

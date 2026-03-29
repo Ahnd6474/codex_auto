@@ -420,6 +420,29 @@ class UIBridgeTests(unittest.TestCase):
 
         self.assertEqual(runtime.codex_path, "codex")
 
+    def test_common_project_inputs_recovers_project_dir_from_repo_id(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            workspace = WorkspaceManager(workspace_root)
+            context = workspace.initialize_local_project(repo_dir, "main", RuntimeOptions())
+            orchestrator = ui_bridge.orchestrator_for(workspace_root)
+
+            project_dir, runtime, branch, origin_url, display_name = ui_bridge.common_project_inputs(
+                {
+                    "repo_id": context.metadata.repo_id,
+                    "project_dir": "",
+                    "runtime": {"model": "gpt-5.4"},
+                },
+                orchestrator,
+            )
+
+        self.assertEqual(project_dir, repo_dir.resolve())
+        self.assertEqual(runtime.model, "gpt-5.4")
+        self.assertEqual(branch, "main")
+        self.assertEqual(origin_url, "")
+        self.assertEqual(display_name, "")
+
     def test_runtime_from_payload_upgrades_legacy_serial_mode_to_parallel(self) -> None:
         runtime = runtime_from_payload({"execution_mode": "serial"})
 

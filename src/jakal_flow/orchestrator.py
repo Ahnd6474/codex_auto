@@ -3473,10 +3473,12 @@ class Orchestrator:
         runtime: RuntimeOptions,
         execution_step: ExecutionStep | None,
         failure_detail: str,
+        provider_selection_source: str = "",
     ) -> RuntimeOptions | None:
-        if execution_step is None:
-            return None
-        if self._execution_step_model_selection_source(execution_step) != "auto":
+        selection_source = str(provider_selection_source or "").strip().lower()
+        if selection_source not in {"auto", "manual"}:
+            selection_source = self._execution_step_model_selection_source(execution_step)
+        if selection_source != "auto":
             return None
         current_provider = normalize_step_model_provider(str(getattr(runtime, "model_provider", "") or ""))
         if current_provider != "gemini":
@@ -3531,9 +3533,15 @@ class Orchestrator:
         safe_revision: str,
         run_result: CodexRunResult,
         execution_step: ExecutionStep | None,
+        provider_selection_source: str = "",
     ) -> CodexRunResult:
         failure_detail = self._run_result_failure_detail(run_result)
-        fallback_runtime = self._auto_provider_fallback_runtime(context.runtime, execution_step, failure_detail)
+        fallback_runtime = self._auto_provider_fallback_runtime(
+            context.runtime,
+            execution_step,
+            failure_detail,
+            provider_selection_source=provider_selection_source,
+        )
         if fallback_runtime is None:
             return run_result
 
@@ -4147,6 +4155,7 @@ class Orchestrator:
                 safe_revision=safe_revision,
                 run_result=run_result,
                 execution_step=None,
+                provider_selection_source="auto",
             )
         run_result.changed_files = self.git.changed_files(context.paths.repo_dir)
 
