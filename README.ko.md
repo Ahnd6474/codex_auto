@@ -63,6 +63,21 @@ python -m jakal_flow run \
   --max-blocks 2
 ```
 
+같은 관리 저장소를 나중에 다시 이어서 실행:
+
+```bash
+python -m jakal_flow resume \
+  --repo-url https://github.com/Ahnd6474/lit.git \
+  --branch main \
+  --workspace-root .jakal-flow-workspace \
+  --model gpt-5.4 \
+  --effort high \
+  --approval-mode never \
+  --sandbox-mode workspace-write \
+  --test-cmd "python -m pytest" \
+  --max-blocks 2
+```
+
 상태 확인:
 
 ```bash
@@ -71,6 +86,8 @@ python -m jakal_flow status --repo-url https://github.com/Ahnd6474/lit.git --bra
 python -m jakal_flow history --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace --limit 20
 python -m jakal_flow report --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
 ```
+
+`list-repos`는 JSON 요약을 출력하고, `report`는 최신 기계 판독용 리포트 파일 경로를 출력합니다.
 
 데스크톱 개발 실행:
 
@@ -237,6 +254,7 @@ python -m jakal_flow run --help
 
 - `planning_effort`
 - `parallel_worker_mode`, `parallel_workers`, `parallel_memory_per_worker_gib`
+- `background_queue_priority`
 - `checkpoint_interval_blocks`
 - `require_checkpoint_approval`
 - `codex_path`

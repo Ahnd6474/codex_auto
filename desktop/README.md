@@ -17,23 +17,23 @@ From the repository root:
 
 ```bash
 cd desktop
-npm.cmd install
-npm.cmd run test
-npm.cmd run tauri:dev
+npm install
+npm run test
+npm run tauri:dev
 ```
 
 Build the desktop app:
 
 ```bash
 cd desktop
-npm.cmd run tauri:build
+npm run tauri:build
 ```
 
 Run the desktop unit tests:
 
 ```bash
 cd desktop
-npm.cmd run test
+npm run test
 ```
 
 ## Architecture
@@ -42,4 +42,4 @@ npm.cmd run test
 - `src-tauri/`: Tauri shell and background job manager
 - `src/jakal_flow/ui_bridge.py`: JSON bridge used by the desktop shell
 
-The desktop shell keeps one background job at a time so project execution stays predictable.
+The desktop shell queues background jobs and respects the configured program-level concurrency limit so project execution stays predictable.

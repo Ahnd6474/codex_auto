@@ -89,6 +89,21 @@ python -m jakal_flow run \
   --max-blocks 2
 ```
 
+Resume the same managed repository later without reinitializing it:
+
+```bash
+python -m jakal_flow resume \
+  --repo-url https://github.com/Ahnd6474/lit.git \
+  --branch main \
+  --workspace-root .jakal-flow-workspace \
+  --model gpt-5.4 \
+  --effort high \
+  --approval-mode never \
+  --sandbox-mode workspace-write \
+  --test-cmd "python -m pytest" \
+  --max-blocks 2
+```
+
 Inspect status later:
 
 ```bash
@@ -97,6 +112,8 @@ python -m jakal_flow status --repo-url https://github.com/Ahnd6474/lit.git --bra
 python -m jakal_flow history --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace --limit 20
 python -m jakal_flow report --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
 ```
+
+`list-repos` prints JSON summaries, and `report` prints the path to the latest machine-readable report file.
 
 Open the desktop shell in development:
 
@@ -280,6 +297,7 @@ The desktop shell additionally manages:
 
 - `planning_effort`
 - `parallel_worker_mode`, `parallel_workers`, and `parallel_memory_per_worker_gib`
+- `background_queue_priority`
 - `checkpoint_interval_blocks`
 - `require_checkpoint_approval`
 - `codex_path`

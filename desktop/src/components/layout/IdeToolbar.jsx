@@ -84,7 +84,8 @@ function PlusSmIcon() {
   );
 }
 
-function ProjectSelector({ projects, selectedProjectId, onSelectProject, onNewProject }) {
+function ProjectSelector({ projects, selectedProjectId, onSelectProject = () => {}, onNewProject = () => {} }) {
+  const { language, t } = useI18n();
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const containerRef = useRef(null);
@@ -116,15 +117,30 @@ function ProjectSelector({ projects, selectedProjectId, onSelectProject, onNewPr
     };
   }, [open]);
 
+  const selectProjectLabel = language === "ko" ? "프로젝트 선택" : "Select project";
+  const selectProjectPlaceholder = language === "ko" ? "프로젝트 선택..." : "Select project...";
+  const searchProjectsPlaceholder = language === "ko" ? "프로젝트 검색..." : "Search projects...";
+  const noProjectsLabel = language === "ko" ? "프로젝트 없음" : "No projects yet";
+
+  function handleNewProject() {
+    setOpen(false);
+    onNewProject();
+  }
+
+  function handleSelectProject(repoId) {
+    onSelectProject(repoId);
+    setOpen(false);
+  }
+
   return (
     <div className="project-selector" ref={containerRef}>
       <button
         className="project-selector__btn"
         onClick={() => setOpen((v) => !v)}
         type="button"
-        title="프로젝트 선택"
+        title={selectProjectLabel}
       >
-        <span>{selectedProject?.display_name || "프로젝트 선택..."}</span>
+        <span>{selectedProject?.display_name || selectProjectPlaceholder}</span>
         <ChevronDown />
       </button>
 
@@ -135,30 +151,30 @@ function ProjectSelector({ projects, selectedProjectId, onSelectProject, onNewPr
               ref={inputRef}
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="프로젝트 검색..."
+              placeholder={searchProjectsPlaceholder}
               type="search"
             />
           </div>
           <button
             className="project-selector__new"
-            onClick={() => { setOpen(false); onNewProject(); }}
+            onClick={handleNewProject}
             type="button"
           >
-            <PlusSmIcon /> 새 프로젝트
+            <PlusSmIcon /> {t("action.new")}
           </button>
           <div className="project-selector__list">
             {filtered.length ? filtered.map((p) => (
               <button
                 key={p.repo_id}
                 className={`project-selector__item${p.repo_id === selectedProjectId ? " active" : ""}`}
-                onClick={() => { onSelectProject(p.repo_id); setOpen(false); }}
+                onClick={() => handleSelectProject(p.repo_id)}
                 type="button"
               >
                 <span className="project-selector__item-name">{p.display_name}</span>
                 <span className={`chip-dot chip-dot--${statusTone(p.status)}`} />
               </button>
             )) : (
-              <div className="project-selector__empty">프로젝트 없음</div>
+              <div className="project-selector__empty">{noProjectsLabel}</div>
             )}
           </div>
         </div>
@@ -212,6 +228,8 @@ export function IdeToolbar({
   busy,
   activeJob,
   activeCenterTab,
+  projectPath,
+  githubUrl,
   shareUrl,
   shareBusy,
   onRefresh,
@@ -246,6 +264,9 @@ export function IdeToolbar({
     planningProgress: projectDetail?.planning_progress,
   });
   const tone = statusTone(projectStatus);
+  const repoPath = String(projectPath || "").trim();
+  const remoteUrl = String(githubUrl || "").trim();
+  const hasProjectLinks = Boolean(repoPath || remoteUrl);
 
   return (
     <header className="ide-toolbar">
@@ -297,29 +318,29 @@ export function IdeToolbar({
       {/* Quick actions */}
       <div className="ide-toolbar__group">
         <button
-          className={`toolbar-btn ${activeCenterTab === "app-settings" ? "toolbar-btn--active" : ""}`}
+          className={`toolbar-btn ${activeCenterTab === "config" ? "toolbar-btn--active" : ""}`}
           onClick={onOpenSettings}
-          title={`${t("toolbar.programSettings")} (Ctrl+6)`}
+          title={t("tab.config")}
           type="button"
-          aria-label={t("toolbar.programSettings")}
+          aria-label={t("tab.config")}
         >
           <SettingsIcon />
         </button>
 
-        <div className="toolbar-divider" />
+        {hasProjectLinks ? <div className="toolbar-divider" /> : null}
 
-        {projectDetail?.project?.repo_path ? (
+        {repoPath ? (
           <>
-            <button className="toolbar-btn toolbar-btn--icon" onClick={onOpenFolder} type="button" title="파일 탐색기에서 열기 (Open in Explorer)">
+            <button className="toolbar-btn toolbar-btn--icon" onClick={onOpenFolder} type="button" title={language === "ko" ? "폴더 열기" : "Open folder"}>
               <FolderIcon />
             </button>
-            <button className="toolbar-btn toolbar-btn--icon" onClick={onOpenVsCode} type="button" title="VS Code에서 열기 (Open in VS Code)">
+            <button className="toolbar-btn toolbar-btn--icon" onClick={onOpenVsCode} type="button" title={language === "ko" ? "외부 에디터에서 열기" : "Open in external editor"}>
               <EditorIcon />
             </button>
           </>
         ) : null}
-        {projectDetail?.github?.origin_url || projectDetail?.github?.repo_url ? (
-          <button className="toolbar-btn toolbar-btn--icon" onClick={onOpenGithub} type="button" title="GitHub에서 열기 (Open on GitHub)">
+        {remoteUrl ? (
+          <button className="toolbar-btn toolbar-btn--icon" onClick={onOpenGithub} type="button" title="Open on GitHub">
             <GithubIcon />
           </button>
         ) : null}

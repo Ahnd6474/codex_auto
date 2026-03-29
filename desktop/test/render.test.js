@@ -708,8 +708,92 @@ test("IdeToolbar renders the active command and DAG-ready progress text", async 
 
   assert.match(html, /Run Remaining Steps/);
   assert.match(html, /Completed 1\/4 steps, ready: ST2, ST3/);
-  assert.match(html, /Program Settings/);
+  assert.match(html, /Project Settings/);
   assert.doesNotMatch(html, />Closeout<\/button>/);
+});
+
+test("IdeToolbar renders the selected project and highlights project settings", async () => {
+  const html = await renderBundledComponent(
+    "ide-toolbar-project-selector-render",
+    "./src/components/layout/IdeToolbar.jsx",
+    "IdeToolbar",
+    {
+      projects: [
+        {
+          repo_id: "demo",
+          display_name: "Demo Project",
+          status: "plan_ready",
+        },
+      ],
+      selectedProjectId: "demo",
+      projectDetail: {
+        project: {
+          display_name: "Demo Project",
+          current_status: "plan_ready",
+        },
+      },
+      planDraft: {
+        execution_mode: "serial",
+        closeout_status: "not_started",
+        steps: [],
+      },
+      busy: false,
+      activeJob: null,
+      activeCenterTab: "config",
+      onSelectProject: noop,
+      onNewProject: noop,
+      onRefresh: noop,
+      onOpenSettings: noop,
+      onGeneratePlan: noop,
+      onRunPlan: noop,
+      onApproveCheckpoint: noop,
+    },
+  );
+
+  assert.match(html, /Demo Project/);
+  assert.match(html, /toolbar-btn toolbar-btn--active/);
+  assert.match(html, /title="Project Settings"/);
+});
+
+test("IdeToolbar keeps project link actions visible when only form-level paths are available", async () => {
+  const html = await renderBundledComponent(
+    "ide-toolbar-project-links-render",
+    "./src/components/layout/IdeToolbar.jsx",
+    "IdeToolbar",
+    {
+      projects: [],
+      selectedProjectId: "",
+      projectDetail: {
+        project: {
+          current_status: "setup_ready",
+        },
+      },
+      planDraft: {
+        execution_mode: "serial",
+        closeout_status: "not_started",
+        steps: [],
+      },
+      projectPath: "C:/demo",
+      githubUrl: "https://github.com/example/demo",
+      busy: false,
+      activeJob: null,
+      activeCenterTab: "config",
+      onSelectProject: noop,
+      onNewProject: noop,
+      onRefresh: noop,
+      onOpenSettings: noop,
+      onGeneratePlan: noop,
+      onRunPlan: noop,
+      onApproveCheckpoint: noop,
+      onOpenFolder: noop,
+      onOpenVsCode: noop,
+      onOpenGithub: noop,
+    },
+  );
+
+  assert.match(html, /title="Open folder"/);
+  assert.match(html, /title="Open in external editor"/);
+  assert.match(html, /title="Open on GitHub"/);
 });
 
 test("IdeToolbar prefers the live plan progress while a run is active", async () => {

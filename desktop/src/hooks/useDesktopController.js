@@ -1785,15 +1785,15 @@ export function useDesktopController() {
     moveStep,
     setSelectedProjectId,
     openRepoInFolder: () => {
-      const path = projectDetail?.project?.repo_path || "";
+      const path = projectDetail?.project?.repo_path || projectForm?.project_dir || "";
       if (path) openInSystem(path).catch(() => {});
     },
     openRepoInVsCode: () => {
-      const path = projectDetail?.project?.repo_path || "";
+      const path = projectDetail?.project?.repo_path || projectForm?.project_dir || "";
       if (path) openInVsCode(path).catch(() => {});
     },
     openRepoOnGithub: () => {
-      const url = projectDetail?.github?.origin_url || projectDetail?.github?.repo_url || "";
+      const url = projectDetail?.github?.origin_url || projectDetail?.github?.repo_url || projectForm?.origin_url || "";
       if (url) openUrl(url.startsWith("http") ? url : `https://github.com/${url.replace(/^git@github\.com:|\.git$/g, "")}`);
     },
     smartShareLink: async () => {

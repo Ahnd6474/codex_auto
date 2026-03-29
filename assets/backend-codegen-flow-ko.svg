@@ -23,9 +23,9 @@
       .section { font: 700 13px 'Segoe UI', 'Bahnschrift', sans-serif; letter-spacing: 0.12em; fill: #294055; }
       .panelTitle { font: 700 19px 'Segoe UI', 'Bahnschrift', 'Malgun Gothic', sans-serif; fill: #162636; }
       .body { font: 500 12px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: #4C6074; }
-      .mono { font: 700 11px 'Consolas', 'Courier New', monospace; fill: #1F3447; }
+      .mono { font: 700 9.5px 'Consolas', 'Courier New', monospace; fill: #1F3447; }
       .chipLabel { font: 700 11px 'Segoe UI', 'Bahnschrift', sans-serif; fill: #FFFFFF; }
-      .chipText { font: 600 10px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: rgba(255,255,255,0.92); }
+      .chipText { font: 600 9px 'Segoe UI', 'Malgun Gothic', sans-serif; fill: rgba(255,255,255,0.92); }
       .panel { fill: #FFFFFF; stroke: #D6E1EB; stroke-width: 1.5; filter: url(#shadow); }
       .soft { fill: #FFFFFF; stroke: #D6E1EB; stroke-width: 1.2; }
       .line { stroke: #60748A; stroke-width: 2.6; fill: none; marker-end: url(#arrow); }
@@ -40,21 +40,21 @@
   <text x="44" y="100" class="subtitle">UI는 진입 표면일 뿐이고, 핵심 경로는 Python 오케스트레이션 코어에 있다.</text>
   <text x="44" y="124" class="subtitle">계획 생성, 실행, 검증, 롤백, 리포트는 저장소별로 격리해 유지한다.</text>
 
-  <rect x="44" y="146" width="132" height="34" rx="12" fill="#1D4ED8"/>
+  <rect x="44" y="146" width="156" height="34" rx="12" fill="#1D4ED8"/>
   <text x="60" y="167" class="chipLabel">계획</text>
   <text x="102" y="167" class="chipText">프롬프트 조립</text>
 
-  <rect x="188" y="146" width="156" height="34" rx="12" fill="#0F766E"/>
-  <text x="204" y="167" class="chipLabel">실행</text>
-  <text x="244" y="167" class="chipText">Codex 패스</text>
+  <rect x="212" y="146" width="176" height="34" rx="12" fill="#0F766E"/>
+  <text x="228" y="167" class="chipLabel">실행</text>
+  <text x="268" y="167" class="chipText">Codex 패스</text>
 
-  <rect x="356" y="146" width="164" height="34" rx="12" fill="#B45309"/>
-  <text x="372" y="167" class="chipLabel">검증</text>
-  <text x="414" y="167" class="chipText">캐시와 디버거</text>
+  <rect x="400" y="146" width="186" height="34" rx="12" fill="#B45309"/>
+  <text x="416" y="167" class="chipLabel">검증</text>
+  <text x="458" y="167" class="chipText">캐시와 디버거</text>
 
-  <rect x="532" y="146" width="176" height="34" rx="12" fill="#475569"/>
-  <text x="548" y="167" class="chipLabel">저장</text>
-  <text x="590" y="167" class="chipText">로그, 메모리, 리포트</text>
+  <rect x="598" y="146" width="198" height="34" rx="12" fill="#475569"/>
+  <text x="614" y="167" class="chipLabel">저장</text>
+  <text x="656" y="167" class="chipText">로그, 메모리, 리포트</text>
 
   <rect x="44" y="192" width="1372" height="74" rx="18" fill="url(#band)" stroke="#D6E1EB" stroke-width="1.5" filter="url(#shadow)"/>
   <text x="64" y="218" class="section">진입점과 런타임</text>
@@ -147,10 +147,11 @@
   <text x="658" y="598" class="body">계획, scope guard, 작업, 메모리,</text>
   <text x="658" y="614" class="body">성공 기준, step 규칙을 프롬프트에 넣는다.</text>
 
-  <rect x="642" y="654" width="246" height="74" rx="14" fill="#ECFDF5" stroke="#BFE5D2"/>
+  <rect x="642" y="654" width="246" height="88" rx="14" fill="#ECFDF5" stroke="#BFE5D2"/>
   <text x="658" y="678" class="panelTitle">실행 패스</text>
-  <text x="658" y="700" class="mono">CodexRunner.run_pass(search_enabled=True)</text>
-  <text x="658" y="716" class="body">repo_dir 안에서 codex exec --json을 호출한다.</text>
+  <text x="658" y="700" class="mono">CodexRunner.run_pass(</text>
+  <text x="658" y="714" class="mono">search_enabled=True)</text>
+  <text x="658" y="730" class="body">repo_dir 안에서 codex exec --json을 호출한다.</text>
 
   <rect x="926" y="286" width="494" height="460" rx="20" class="panel"/>
   <text x="946" y="314" class="section">4. 검증, 복구, 기록</text>
@@ -199,10 +200,11 @@
   <text x="1208" y="624" class="body">실패 번들은 GitHub PR 코멘트로도</text>
   <text x="1208" y="640" class="body">보낼 수 있다.</text>
 
-  <rect x="1192" y="664" width="208" height="62" rx="14" fill="#FFF7F5" stroke="#F0D0CA"/>
-  <text x="1208" y="688" class="panelTitle">실패 산출물</text>
-  <text x="1208" y="710" class="mono">reports/*.prfail.json / .md</text>
-  <text x="1208" y="726" class="mono">reports/latest_pr_failure_status.json</text>
+  <rect x="1192" y="652" width="208" height="74" rx="14" fill="#FFF7F5" stroke="#F0D0CA"/>
+  <text x="1208" y="676" class="panelTitle">실패 산출물</text>
+  <text x="1208" y="698" class="mono">reports/*.prfail.json / .md</text>
+  <text x="1208" y="712" class="mono">reports/latest_pr_</text>
+  <text x="1208" y="726" class="mono">failure_status.json</text>
 
   <path d="M281 497H318" class="line"/>
   <path d="M604 497H622" class="line"/>
@@ -210,7 +212,7 @@
   <path d="M174 256V286" class="line"/>
 
   <path d="M477 728V792" class="line"/>
-  <path d="M764 728V792" class="line"/>
+  <path d="M764 742V792" class="line"/>
   <path d="M1102 728V792" class="line"/>
   <path d="M1296 508V526" class="line"/>
 

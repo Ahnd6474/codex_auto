@@ -184,16 +184,22 @@ export default function App() {
     <main className={`ide-shell ${compact ? "ide-shell--compact" : ""}`.trim()}>
       {/* ── Top toolbar ── */}
       <IdeToolbar
+        projects={controller.filteredProjects}
+        selectedProjectId={controller.selectedProjectId}
+        onSelectProject={controller.loadProject}
+        onNewProject={controller.startNewProject}
         projectDetail={detail}
         planDraft={controller.planDraft}
         pendingCheckpoint={detail?.checkpoints?.pending || null}
         busy={controller.busy}
         activeJob={controller.activeJob}
         activeCenterTab={controller.centerTab}
+        projectPath={detail?.project?.repo_path || controller.projectForm?.project_dir || ""}
+        githubUrl={detail?.github?.origin_url || detail?.github?.repo_url || controller.projectForm?.origin_url || ""}
         shareUrl={controller.workspaceShareDetail?.active_session?.share_url || ""}
         shareBusy={controller.shareBusy}
         onRefresh={controller.forceRefresh}
-        onOpenSettings={() => controller.setCenterTab("app-settings")}
+        onOpenSettings={() => controller.setCenterTab("config")}
         onGeneratePlan={controller.generatePlan}
         onRunPlan={controller.runPlan}
         onApproveCheckpoint={controller.approveCheckpoint}
