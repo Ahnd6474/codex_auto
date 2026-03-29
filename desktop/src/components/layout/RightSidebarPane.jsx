@@ -4,7 +4,6 @@ import { displayStatus } from "../../locale";
 import { effectiveStepStatus, reasoningEffortLabel, runtimeSummary, statusTone } from "../../utils";
 import { openInSystem } from "../../api";
 
-/* ── Rail icons (16×16) ── */
 function RailChatIcon() {
   return (
     <svg aria-hidden="true" className="sidebar-icon__svg" viewBox="0 0 24 24" fill="none">
@@ -97,7 +96,34 @@ function MarkdownDocIcon() {
   );
 }
 
-/* ── Report file card ── */
+function OutputCard({ icon, title, description, enabled, checked, onChange, busy, allowWhileRunning = false, comingSoon, language }) {
+  return (
+    <div className={`output-card ${!enabled ? "output-card--disabled" : ""}`}>
+      <div className="output-card__icon">{icon}</div>
+      <div className="output-card__body">
+        <div className="output-card__title">
+          <strong>{title}</strong>
+          {comingSoon ? (
+            <span className="output-card__badge">{language === "ko" ? "추가 예정" : "Coming soon"}</span>
+          ) : null}
+        </div>
+        <p className="output-card__desc">{description}</p>
+      </div>
+      <label className={`output-card__toggle ${!enabled ? "output-card__toggle--disabled" : ""}`}>
+        <span className={`toggle-track ${checked ? "toggle-track--on" : ""}`}>
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={onChange}
+            disabled={!enabled || (busy && !allowWhileRunning)}
+          />
+          <span className="toggle-thumb" />
+        </span>
+      </label>
+    </div>
+  );
+}
+
 function ReportFileCard({ title, kind, icon, path, available, onOpen, language }) {
   return (
     <div className={`rsb-file-card${available ? " rsb-file-card--ready" : ""}`}>
@@ -115,7 +141,7 @@ function ReportFileCard({ title, kind, icon, path, available, onOpen, language }
       </div>
       <div className="rsb-file-card__actions">
         <span className={`status-badge status-badge--${available ? "success" : "neutral"}`}>
-          {available ? (language === "ko" ? "완료" : "Ready") : (language === "ko" ? "대기" : "Pending")}
+          {available ? (language === "ko" ? "준비됨" : "Ready") : (language === "ko" ? "대기" : "Pending")}
         </span>
         {available && path ? (
           <button
@@ -133,30 +159,27 @@ function ReportFileCard({ title, kind, icon, path, available, onOpen, language }
   );
 }
 
-/* ── Main component ── */
-export function RightSidebarPane({ detail, planDraft, selectedStepId, modelPresets, busy }) {
+export function RightSidebarPane({ detail, planDraft, selectedStepId, modelPresets, form, activeJob, busy, onChangeForm }) {
   const { language, t } = useI18n();
   const [activeTab, setActiveTab] = useState("chat");
-
-  /* Chat state */
   const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState([]);
   const chatBottomRef = useRef(null);
   const outputRef = useRef(null);
 
-  /* Derived data */
   const processOutput = detail?.subprocess_output || detail?.agent_output || detail?.process_log || "";
-  const selectedStep = (planDraft?.steps || []).find((s) => s.step_id === selectedStepId) || null;
+  const selectedStep = (planDraft?.steps || []).find((step) => step.step_id === selectedStepId) || null;
   const pendingCheckpoint = detail?.checkpoints?.pending || null;
   const selectedStepStatus = effectiveStepStatus(selectedStep, detail?.project?.current_status || "");
+  const liveRuntimeEditable = ["running", "queued"].includes(String(activeJob?.status || "").trim().toLowerCase());
 
-  /* Report file paths */
   const closeoutPath = String(detail?.files?.closeout_report_file || "").trim();
   const wordPath = String(detail?.reports?.word_report_path || detail?.files?.word_report_file || "").trim();
   const pptPath = String(
-    detail?.reports?.powerpoint_report_path ||
-    detail?.reports?.powerpoint_report_target_path ||
-    detail?.files?.powerpoint_report_file || ""
+    detail?.reports?.powerpoint_report_path
+    || detail?.reports?.powerpoint_report_target_path
+    || detail?.files?.powerpoint_report_file
+    || "",
   ).trim();
   const webpagePath = String(detail?.reports?.webpage_path || detail?.files?.webpage_file || "").trim();
   const mlReportPath = String(detail?.files?.ml_experiment_report_file || "").trim();
@@ -174,19 +197,21 @@ export function RightSidebarPane({ detail, planDraft, selectedStepId, modelPrese
   function handleSendChat() {
     const text = chatInput.trim();
     if (!text) return;
-    setChatMessages((prev) => [...prev, { role: "user", text, id: Date.now() }]);
+    setChatMessages((current) => [...current, { role: "user", text, id: Date.now() }]);
     setChatInput("");
   }
 
-  function handleChatKeyDown(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
+  function handleChatKeyDown(event) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
       handleSendChat();
     }
   }
 
   function handleOpenFile(path) {
-    if (path) openInSystem(path).catch(() => {});
+    if (path) {
+      openInSystem(path).catch(() => {});
+    }
   }
 
   const hasOutput = Boolean(processOutput);
@@ -221,25 +246,22 @@ export function RightSidebarPane({ detail, planDraft, selectedStepId, modelPrese
 
   return (
     <aside className="details-pane rsb">
-      {/* ── Content panel (left portion) ── */}
       <div className="rsb-panel">
-
-        {/* ── Chat tab ── */}
         {activeTab === "chat" ? (
           <div className="rsb-chat">
             <div className="rsb-chat__messages">
               {chatMessages.length === 0 ? (
                 <div className="rsb-chat__empty">
                   <RailChatIcon />
-                  <p>{language === "ko" ? "AI에게 메시지를 보내 실행을 안내하세요." : "Send a message to guide the AI during execution."}</p>
+                  <p>{language === "ko" ? "실행 중 AI에게 전달할 메시지를 남길 수 있습니다." : "Send a message to guide the AI during execution."}</p>
                 </div>
               ) : (
-                chatMessages.map((msg) => (
-                  <div key={msg.id} className={`sidebar-chat-bubble sidebar-chat-bubble--${msg.role}`}>
+                chatMessages.map((message) => (
+                  <div key={message.id} className={`sidebar-chat-bubble sidebar-chat-bubble--${message.role}`}>
                     <span className="sidebar-chat-bubble__role">
-                      {msg.role === "user" ? (language === "ko" ? "나" : "You") : "AI"}
+                      {message.role === "user" ? (language === "ko" ? "나" : "You") : "AI"}
                     </span>
-                    <p>{msg.text}</p>
+                    <p>{message.text}</p>
                   </div>
                 ))
               )}
@@ -250,9 +272,9 @@ export function RightSidebarPane({ detail, planDraft, selectedStepId, modelPrese
               <textarea
                 className="sidebar-chat-input rsb-chat__textarea"
                 value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
+                onChange={(event) => setChatInput(event.target.value)}
                 onKeyDown={handleChatKeyDown}
-                placeholder={language === "ko" ? "메시지 입력... (Enter로 전송)" : "Type a message… (Enter to send)"}
+                placeholder={language === "ko" ? "메시지 입력... (Enter 전송)" : "Type a message... (Enter to send)"}
                 disabled={busy}
                 rows={3}
               />
@@ -269,7 +291,6 @@ export function RightSidebarPane({ detail, planDraft, selectedStepId, modelPrese
           </div>
         ) : null}
 
-        {/* ── Output tab ── */}
         {activeTab === "output" ? (
           <div className="details-output-panel rsb-output">
             {processOutput ? (
@@ -283,9 +304,53 @@ export function RightSidebarPane({ detail, planDraft, selectedStepId, modelPrese
           </div>
         ) : null}
 
-        {/* ── Files tab ── */}
         {activeTab === "files" ? (
           <div className="rsb-files">
+            <div className="rsb-files__section-label">
+              {language === "ko" ? "문서 생성" : "Document Generation"}
+            </div>
+
+            <div className="rsb-files__generation">
+              <OutputCard
+                icon={<WordDocIcon />}
+                title="Word Report"
+                description={language === "ko" ? "실행 결과를 Word(.docx) 보고서로 저장합니다." : "Save execution results as a Word (.docx) report."}
+                enabled={Boolean(onChangeForm)}
+                checked={Boolean(form?.runtime?.generate_word_report)}
+                onChange={(event) =>
+                  onChangeForm?.((current) => ({
+                    ...current,
+                    runtime: { ...current.runtime, generate_word_report: event.target.checked },
+                  }))
+                }
+                busy={busy}
+                allowWhileRunning={liveRuntimeEditable}
+                language={language}
+              />
+              <OutputCard
+                icon={<PptDocIcon />}
+                title="PowerPoint"
+                description={language === "ko" ? "결과 슬라이드를 PowerPoint로 자동 생성합니다." : "Auto-generate result slides as a PowerPoint presentation."}
+                enabled={false}
+                checked={false}
+                onChange={() => {}}
+                busy={busy}
+                comingSoon={true}
+                language={language}
+              />
+              <OutputCard
+                icon={<WebDocIcon />}
+                title={language === "ko" ? "웹사이트" : "Website"}
+                description={language === "ko" ? "결과를 정적 HTML 사이트로 내보냅니다." : "Export results as a static HTML website."}
+                enabled={false}
+                checked={false}
+                onChange={() => {}}
+                busy={busy}
+                comingSoon={true}
+                language={language}
+              />
+            </div>
+
             <div className="rsb-files__section-label">
               {language === "ko" ? "보고서 및 출력물" : "Reports & Outputs"}
             </div>
@@ -343,14 +408,14 @@ export function RightSidebarPane({ detail, planDraft, selectedStepId, modelPrese
             {detail?.reports?.latest_failure?.artifact_files?.length ? (
               <>
                 <div className="rsb-files__section-label" style={{ marginTop: "12px" }}>
-                  {language === "ko" ? "실패 아티팩트" : "Failure Artifacts"}
+                  {language === "ko" ? "실패 산출물" : "Failure Artifacts"}
                 </div>
-                {(detail.reports.latest_failure.artifact_files || []).slice(0, 6).map((p) => (
-                  <div key={p} className="rsb-artifact-row">
-                    <span className="rsb-artifact-row__path" title={p}>{p}</span>
+                {(detail.reports.latest_failure.artifact_files || []).slice(0, 6).map((path) => (
+                  <div key={path} className="rsb-artifact-row">
+                    <span className="rsb-artifact-row__path" title={path}>{path}</span>
                     <button
                       className="rsb-file-card__open-btn"
-                      onClick={() => handleOpenFile(p)}
+                      onClick={() => handleOpenFile(path)}
                       type="button"
                       title={language === "ko" ? "열기" : "Open"}
                     >
@@ -363,7 +428,6 @@ export function RightSidebarPane({ detail, planDraft, selectedStepId, modelPrese
           </div>
         ) : null}
 
-        {/* ── Inspector tab ── */}
         {activeTab === "inspector" ? (
           <div className="rsb-inspector">
             <section className="details-card">
@@ -422,7 +486,7 @@ export function RightSidebarPane({ detail, planDraft, selectedStepId, modelPrese
                 </div>
               ) : (
                 <div className="details-text" style={{ color: "var(--text-dim)", fontSize: "11px" }}>
-                  {language === "ko" ? "스텝을 선택하면 여기에 표시됩니다." : "Select a step to inspect."}
+                  {language === "ko" ? "단계를 선택하면 여기에 표시됩니다." : "Select a step to inspect."}
                 </div>
               )}
             </section>
@@ -462,10 +526,8 @@ export function RightSidebarPane({ detail, planDraft, selectedStepId, modelPrese
             ) : null}
           </div>
         ) : null}
-
       </div>
 
-      {/* ── Icon rail (right edge, mirrors left sidebar rail) ── */}
       <div className="rsb-rail">
         {railTabs.map(({ id, icon, title, dot }) => (
           <button

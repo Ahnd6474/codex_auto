@@ -576,18 +576,6 @@ export function ConfigEditorView({
                 disabled={busy && !liveRuntimeEditable}
               />
               <ToggleRow
-                checked={Boolean(runtime.generate_word_report)}
-                onChange={(event) =>
-                  onChangeForm((current) => ({
-                    ...current,
-                    runtime: { ...current.runtime, generate_word_report: event.target.checked },
-                  }))
-                }
-                label={language === "ko" ? "Word 보고서 생성" : "Generate Word Report"}
-                hint={language === "ko" ? "마감 후 `.docx` 보고서를 함께 남깁니다." : "Keep a `.docx` closeout report after closeout finishes."}
-                disabled={busy && !liveRuntimeEditable}
-              />
-              <ToggleRow
                 checked={Boolean(runtime.use_fast_mode)}
                 onChange={(event) =>
                   onChangeForm((current) => ({
@@ -788,3 +776,4 @@ export function ConfigEditorView({
     </section>
   );
 }
+

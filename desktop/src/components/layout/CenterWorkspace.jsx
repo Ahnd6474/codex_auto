@@ -311,13 +311,10 @@ export function CenterWorkspace({
           <DashboardView
             detail={detail}
             planDraft={planDraft}
-            form={form}
             programSettings={programSettings}
-            busy={busy}
             modelPresets={modelPresets}
             modelCatalog={modelCatalog}
             activeJob={activeJob}
-            onChangeForm={onChangeForm}
           />
         ) : null}
         {developerMode && activeTab === "reports" ? <ReportsView reports={detail?.reports} /> : null}

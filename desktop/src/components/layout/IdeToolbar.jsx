@@ -3,7 +3,6 @@ import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import { commandLabel, isDebuggingStatus, isPlanningProgressRunning, projectStatusWithJob, statusTone, toolbarProgressCaptionDisplay } from "../../utils";
 
-/* ── Compact SVG icons ── */
 function AppLogo() {
   return (
     <div className="toolbar-logo">
@@ -84,6 +83,14 @@ function PlusSmIcon() {
   );
 }
 
+function FolderIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function ProjectSelector({ projects, selectedProjectId, onSelectProject = () => {}, onNewProject = () => {} }) {
   const { language, t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -91,26 +98,38 @@ function ProjectSelector({ projects, selectedProjectId, onSelectProject = () => 
   const containerRef = useRef(null);
   const inputRef = useRef(null);
 
-  const selectedProject = (projects || []).find((p) => p.repo_id === selectedProjectId);
+  const selectedProject = (projects || []).find((project) => project.repo_id === selectedProjectId);
   const filtered = filter.trim()
-    ? (projects || []).filter((p) => (p.display_name || "").toLowerCase().includes(filter.toLowerCase()))
+    ? (projects || []).filter((project) => (project.display_name || "").toLowerCase().includes(filter.toLowerCase()))
     : (projects || []);
 
   useEffect(() => {
-    if (!open) { setFilter(""); return; }
+    if (!open) {
+      setFilter("");
+      return;
+    }
     const timer = setTimeout(() => inputRef.current?.focus(), 30);
     return () => clearTimeout(timer);
   }, [open]);
 
   useEffect(() => {
-    function onPointerDown(e) {
-      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
+    function onPointerDown(event) {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setOpen(false);
+      }
     }
-    function onKeyDown(e) { if (e.key === "Escape") setOpen(false); }
+
+    function onKeyDown(event) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
     if (open) {
       window.addEventListener("pointerdown", onPointerDown);
       window.addEventListener("keydown", onKeyDown);
     }
+
     return () => {
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
@@ -121,6 +140,8 @@ function ProjectSelector({ projects, selectedProjectId, onSelectProject = () => 
   const selectProjectPlaceholder = language === "ko" ? "프로젝트 선택..." : "Select project...";
   const searchProjectsPlaceholder = language === "ko" ? "프로젝트 검색..." : "Search projects...";
   const noProjectsLabel = language === "ko" ? "프로젝트 없음" : "No projects yet";
+  const selectedProjectName = selectedProject?.display_name || selectProjectPlaceholder;
+  const selectedTone = selectedProject ? statusTone(selectedProject.status) : "neutral";
 
   function handleNewProject() {
     setOpen(false);
@@ -132,18 +153,21 @@ function ProjectSelector({ projects, selectedProjectId, onSelectProject = () => 
     setOpen(false);
   }
 
-  const selectedTone = selectedProject ? statusTone(selectedProject.status) : "neutral";
-
   return (
-    <div className="project-selector" ref={containerRef}>
+    <div className="project-selector project-selector--primary" ref={containerRef}>
       <button
-        className="project-selector__btn project-selector__btn--icon"
-        onClick={() => setOpen((v) => !v)}
+        className="project-selector__btn project-selector__btn--primary"
+        onClick={() => setOpen((value) => !value)}
         type="button"
-        title={selectedProject?.display_name || selectProjectPlaceholder}
+        title={selectedProjectName}
       >
         <FolderIcon />
+        <span className="project-selector__btn-copy">
+          <span className="project-selector__btn-label">{selectProjectLabel}</span>
+          <strong className="project-selector__btn-name">{selectedProjectName}</strong>
+        </span>
         <span className={`chip-dot chip-dot--${selectedTone}`} />
+        {open ? <ChevronDown /> : <ChevronRight />}
       </button>
 
       {open ? (
@@ -152,28 +176,24 @@ function ProjectSelector({ projects, selectedProjectId, onSelectProject = () => 
             <input
               ref={inputRef}
               value={filter}
-              onChange={(e) => setFilter(e.target.value)}
+              onChange={(event) => setFilter(event.target.value)}
               placeholder={searchProjectsPlaceholder}
               type="search"
             />
           </div>
-          <button
-            className="project-selector__new"
-            onClick={handleNewProject}
-            type="button"
-          >
+          <button className="project-selector__new" onClick={handleNewProject} type="button">
             <PlusSmIcon /> {t("action.new")}
           </button>
           <div className="project-selector__list">
-            {filtered.length ? filtered.map((p) => (
+            {filtered.length ? filtered.map((project) => (
               <button
-                key={p.repo_id}
-                className={`project-selector__item${p.repo_id === selectedProjectId ? " active" : ""}`}
-                onClick={() => handleSelectProject(p.repo_id)}
+                key={project.repo_id}
+                className={`project-selector__item${project.repo_id === selectedProjectId ? " active" : ""}`}
+                onClick={() => handleSelectProject(project.repo_id)}
                 type="button"
               >
-                <span className="project-selector__item-name">{p.display_name}</span>
-                <span className={`chip-dot chip-dot--${statusTone(p.status)}`} />
+                <span className="project-selector__item-name">{project.display_name}</span>
+                <span className={`chip-dot chip-dot--${statusTone(project.status)}`} />
               </button>
             )) : (
               <div className="project-selector__empty">{noProjectsLabel}</div>
@@ -190,14 +210,6 @@ function RemoteLinkIcon() {
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function FolderIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -250,6 +262,7 @@ export function IdeToolbar({
     String(activeJob?.status || "").trim().toLowerCase() === "running" || !planningRunning
       ? projectStatusWithActiveJob
       : "running:generate-plan";
+
   const livePlan = String(activeJob?.status || "").trim().toLowerCase() === "running" && projectDetail?.plan ? projectDetail.plan : planDraft;
   const { language, t } = useI18n();
   const normalizedProjectStatus = String(projectStatus || "").trim().toLowerCase();
@@ -260,17 +273,26 @@ export function IdeToolbar({
       ? commandLabel(activeJob.command, language)
       : planningRunning && !isDebuggingStatus(projectDetail?.project?.current_status || "") && normalizedProjectStatus !== "running:merging"
         ? displayStatus("running:generate-plan", language)
-      : displayStatus(projectStatus, language);
+        : displayStatus(projectStatus, language);
+
   const planStatusLabel = toolbarProgressCaptionDisplay(livePlan, language, {
     activeJob,
     planningProgress: projectDetail?.planning_progress,
   });
+
   const tone = statusTone(projectStatus);
   const repoPath = String(projectPath || "").trim();
   const remoteUrl = String(githubUrl || "").trim();
+
   return (
     <header className="ide-toolbar">
-      {/* Logo + Refresh */}
+      <ProjectSelector
+        projects={projects}
+        selectedProjectId={selectedProjectId}
+        onSelectProject={onSelectProject}
+        onNewProject={onNewProject}
+      />
+
       <div className="ide-toolbar__group">
         <AppLogo />
         <button
@@ -284,15 +306,6 @@ export function IdeToolbar({
         </button>
       </div>
 
-      {/* Project selector dropdown */}
-      <ProjectSelector
-        projects={projects}
-        selectedProjectId={selectedProjectId}
-        onSelectProject={onSelectProject}
-        onNewProject={onNewProject}
-      />
-
-      {/* Breadcrumb: Status > Plan */}
       <nav className="ide-toolbar__breadcrumb" aria-label="Navigation">
         <span className={`breadcrumb-segment breadcrumb-segment--${tone}`}>
           <span className={`chip-dot chip-dot--${tone}`} />
@@ -315,7 +328,6 @@ export function IdeToolbar({
         ) : null}
       </nav>
 
-      {/* Quick actions */}
       <div className="ide-toolbar__group">
         <button
           className={`toolbar-btn ${activeCenterTab === "app-settings" ? "toolbar-btn--active" : ""}`}
@@ -365,8 +377,8 @@ export function IdeToolbar({
           onClick={onSmartShareLink}
           type="button"
           disabled={shareBusy || !projectDetail?.project}
-          title={shareUrl ? `클릭하여 링크 복사: ${shareUrl}` : "Remote Control 링크 생성"}
-          aria-label={shareUrl ? "링크 복사" : "Remote Control"}
+          title={shareUrl ? `Copy share link: ${shareUrl}` : "Generate Remote Control link"}
+          aria-label={shareUrl ? "Copy share link" : "Remote Control"}
         >
           <RemoteLinkIcon />
         </button>

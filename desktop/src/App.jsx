@@ -368,7 +368,10 @@ export default function App() {
             planDraft={controller.planDraft}
             selectedStepId={controller.selectedStepId}
             modelPresets={controller.modelPresets}
+            form={controller.projectForm}
+            activeJob={controller.activeJob}
             busy={controller.busy}
+            onChangeForm={controller.setProjectForm}
           />
         </div>
       </div>

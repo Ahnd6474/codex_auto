@@ -1798,6 +1798,11 @@ pre {
   flex-shrink: 0;
 }
 
+.project-selector--primary {
+  min-width: 240px;
+  max-width: 340px;
+}
+
 .project-selector__btn {
   display: inline-flex;
   align-items: center;
@@ -1815,8 +1820,45 @@ pre {
   overflow: hidden;
 }
 
+.project-selector__btn--primary {
+  width: 100%;
+  max-width: none;
+  height: 34px;
+  padding: 0 10px;
+  gap: 8px;
+  justify-content: space-between;
+  background: linear-gradient(180deg, var(--bg-panel), var(--bg-panel-alt));
+  border-color: rgba(95, 151, 214, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
 .project-selector__btn:hover {
   background: var(--bg-panel-hover);
+  color: var(--text);
+}
+
+.project-selector__btn-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.project-selector__btn-label {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-dim);
+}
+
+.project-selector__btn-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.2;
   color: var(--text);
 }
 
@@ -1831,6 +1873,12 @@ pre {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
+}
+
+.project-selector__btn--primary svg:last-child {
+  width: 12px;
+  height: 12px;
+  color: var(--text-dim);
 }
 
 .project-selector__dropdown {
@@ -4768,6 +4816,13 @@ select:focus {
   letter-spacing: 0.08em;
   color: var(--text-dim);
   padding: 4px 2px 2px;
+}
+
+.rsb-files__generation {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 2px;
 }
 
 .rsb-file-card {
