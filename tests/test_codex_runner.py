@@ -308,6 +308,45 @@ class CodexRunnerTests(unittest.TestCase):
             self.assertIn("ollama", observed_commands[0])
             self.assertIn("qwen2.5-coder:0.5b", observed_commands[0])
 
+    def test_run_pass_adds_ollama_alias_flags_for_local_models(self) -> None:
+        with _TemporaryTestDir() as temp_root:
+            repo_dir = temp_root / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            manager = WorkspaceManager(temp_root / "workspace")
+            context = manager.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=RuntimeOptions(
+                    model_provider="ollama",
+                    local_model_provider="lmstudio",
+                    model="qwen2.5-coder:0.5b",
+                    effort="medium",
+                ),
+            )
+            runner = CodexRunner("codex.cmd")
+            observed_commands: list[list[str]] = []
+
+            def fake_run(command, scope_id=None, label="", input_bytes=None, env=None, **_kwargs):
+                observed_commands.append(command)
+                output_file = Path(command[command.index("-o") + 1])
+                output_file.write_text("Ollama response", encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+
+            with mock.patch("jakal_flow.codex_runner.run_subprocess_capture", side_effect=fake_run):
+                runner.run_pass(
+                    context=context,
+                    prompt="Use the Ollama alias provider",
+                    pass_type="demo pass",
+                    block_index=1,
+                    search_enabled=False,
+                )
+
+            self.assertEqual(len(observed_commands), 1)
+            self.assertIn("--oss", observed_commands[0])
+            self.assertIn("--local-provider", observed_commands[0])
+            self.assertIn("ollama", observed_commands[0])
+            self.assertNotIn("lmstudio", observed_commands[0])
+
     def test_run_pass_applies_openrouter_base_url_and_api_key_env(self) -> None:
         with _TemporaryTestDir() as temp_root:
             repo_dir = temp_root / "repo"

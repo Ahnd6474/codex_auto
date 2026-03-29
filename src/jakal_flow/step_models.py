@@ -9,8 +9,11 @@ import shutil
 from typing import Any, Callable
 
 from .codex_app_server import fetch_codex_backend_snapshot, resolve_codex_path
-from .model_constants import VALID_MODEL_PROVIDERS
-from .model_providers import discover_local_model_catalog, provider_preset
+from .model_constants import DEFAULT_LOCAL_MODEL_PROVIDER, VALID_MODEL_PROVIDERS
+from .model_providers import (
+    discover_local_model_catalog,
+    provider_preset,
+)
 from .models import ExecutionStep, RuntimeOptions
 from .platform_defaults import default_codex_path
 from .utils import get_env_or_dotenv
@@ -123,6 +126,12 @@ def provider_statuses_payload(
         "minimax": _provider_status_from_snapshot("minimax", snapshots["claude"]),
         "glm": _provider_status_from_snapshot("glm", snapshots["claude"]),
         "oss": _local_oss_provider_status(local_models, snapshots["openai"]),
+        "ollama": _local_oss_provider_status(
+            local_models,
+            snapshots["openai"],
+            provider="ollama",
+            local_provider=DEFAULT_LOCAL_MODEL_PROVIDER,
+        ),
     }
     statuses["ensemble"] = _ensemble_provider_status(statuses)
     return statuses
@@ -467,22 +476,46 @@ def _provider_status_from_snapshot(provider: str, snapshot: dict[str, Any]) -> d
     }
 
 
-def _local_oss_provider_status(local_models: list[dict[str, Any]], openai_snapshot: dict[str, Any]) -> dict[str, Any]:
-    preset = provider_preset("oss")
+def _local_oss_provider_status(
+    local_models: list[dict[str, Any]],
+    openai_snapshot: dict[str, Any],
+    *,
+    provider: str = "oss",
+    local_provider: str = "",
+) -> dict[str, Any]:
+    preset = provider_preset(provider)
     codex_available = _command_available(default_codex_path("openai"))
-    available_models = [item for item in local_models if isinstance(item, dict) and str(item.get("model", "")).strip()]
+    available_models = []
+    for item in local_models:
+        if not isinstance(item, dict):
+            continue
+        model_name = str(item.get("model", "")).strip()
+        if not model_name:
+            continue
+        item_local_provider = str(item.get("local_provider", "")).strip().lower()
+        if local_provider and item_local_provider != str(local_provider).strip().lower():
+            continue
+        available_models.append(item)
     available = codex_available and bool(available_models)
     configured = bool(available_models)
     usable = available
     default_model = str(available_models[0].get("model", "")).strip().lower() if available_models else ""
-    if usable:
+    provider_label = preset.display_name
+    if provider == "ollama":
+        if usable:
+            reason = f"{provider_label} is ready with {len(available_models)} detected model(s)."
+        elif codex_available:
+            reason = "Ollama requires at least one detected local model from the running Ollama catalog or the bundled repository catalog."
+        else:
+            reason = str(openai_snapshot.get("error", "") or "Codex CLI is not installed.").strip()
+    elif usable:
         reason = f"Local OSS mode is ready with {len(available_models)} detected local model(s)."
     elif codex_available:
         reason = "Local OSS mode requires at least one detected local model from Ollama or the bundled catalog."
     else:
         reason = str(openai_snapshot.get("error", "") or "Codex CLI is not installed.").strip()
     return {
-        "provider": "oss",
+        "provider": provider,
         "display_name": preset.display_name,
         "available": available,
         "configured": configured,

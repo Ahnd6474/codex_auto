@@ -74,6 +74,15 @@ PROVIDER_PRESETS: dict[str, ProviderPreset] = {
         supports_auto_model=False,
         supports_catalog=True,
     ),
+    "ollama": ProviderPreset(
+        provider="ollama",
+        display_name="Ollama",
+        description="Use Codex CLI OSS mode backed by a local Ollama server and its installed models.",
+        default_billing_mode=BILLING_MODE_PER_PASS,
+        supports_auto_model=False,
+        supports_catalog=True,
+        is_local=True,
+    ),
     "qwen_code": ProviderPreset(
         provider="qwen_code",
         display_name="Qwen Code",
@@ -312,6 +321,23 @@ def provider_supports_catalog(value: str) -> bool:
     return provider_preset(value).supports_catalog
 
 
+def provider_uses_oss_mode(value: str) -> bool:
+    normalized = normalize_model_provider(value)
+    return normalized in {"oss", "ollama"}
+
+
+def effective_local_model_provider(value: str, local_provider: str, fallback: str = DEFAULT_LOCAL_MODEL_PROVIDER) -> str:
+    normalized_provider = normalize_model_provider(value)
+    if normalized_provider == "ollama":
+        return DEFAULT_LOCAL_MODEL_PROVIDER
+    if normalized_provider != "oss":
+        return ""
+    normalized_local_provider = normalize_local_model_provider(local_provider, fallback="")
+    if normalized_local_provider:
+        return normalized_local_provider
+    return fallback
+
+
 def provider_backend_kind(value: str, fallback: str = "codex") -> str:
     preset = provider_preset(value)
     backend_kind = str(getattr(preset, "backend_kind", "") or "").strip().lower()
@@ -397,6 +423,21 @@ def discover_local_model_catalog(third_party_root: Path | None = None) -> list[d
             }
         )
     return sorted(entries, key=lambda item: (item["local_provider"], item["model"].lower()))
+
+
+def default_local_model(value: str, local_provider: str, third_party_root: Path | None = None) -> str:
+    target_local_provider = effective_local_model_provider(value, local_provider, fallback="")
+    for item in discover_local_model_catalog(third_party_root=third_party_root):
+        if not isinstance(item, dict):
+            continue
+        model_name = str(item.get("model", "")).strip().lower()
+        if not model_name:
+            continue
+        item_local_provider = normalize_local_model_provider(str(item.get("local_provider", "")).strip(), fallback="")
+        if target_local_provider and item_local_provider != target_local_provider:
+            continue
+        return model_name
+    return ""
 
 
 def _iter_local_models(third_party_root: Path | None = None) -> list[tuple[str, str, str, bool]]:

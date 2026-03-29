@@ -16,7 +16,7 @@ from .codex_runner import CodexRunner
 from .execution_control import ImmediateStopRequested
 from .git_ops import GitOps
 from .memory import MemoryStore
-from .model_providers import normalize_billing_mode, provider_preset, provider_supports_auto_model
+from .model_providers import effective_local_model_provider, normalize_billing_mode, provider_preset, provider_supports_auto_model
 from .provider_fallbacks import (
     build_provider_fallback_runtimes,
     is_provider_fallbackable_error,
@@ -1793,6 +1793,10 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
             next_model_preset = ""
         return {
             "model_provider": choice.provider,
+            "local_model_provider": effective_local_model_provider(
+                choice.provider,
+                str(getattr(runtime, "local_model_provider", "") or "").strip(),
+            ),
             "provider_base_url": str(runtime.provider_base_url or "").strip() if previous_provider == choice.provider else provider.default_base_url,
             "provider_api_key_env": str(runtime.provider_api_key_env or "").strip() if previous_provider == choice.provider else provider.default_api_key_env,
             "billing_mode": normalize_billing_mode(

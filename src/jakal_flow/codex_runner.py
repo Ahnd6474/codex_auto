@@ -16,10 +16,12 @@ from .codex_app_server import cli_backend_kind, is_auto_model, resolve_codex_pat
 from .execution_control import execution_scope_id, run_subprocess_capture
 from .model_selection import normalize_reasoning_effort
 from .model_providers import (
+    effective_local_model_provider,
     provider_backend_kind,
     normalize_local_model_provider,
     normalize_model_provider,
     provider_preset,
+    provider_uses_oss_mode,
     provider_uses_openai_compatible_api,
 )
 from .models import CodexRunResult, ProjectContext
@@ -380,9 +382,12 @@ class CodexRunner:
         if backend == "qwen":
             return self._build_qwen_command(context, prompt_text=prompt_text, execution_layout=execution_layout)
         command = [self.codex_path]
-        if provider == "oss":
+        if provider_uses_oss_mode(provider):
             command.append("--oss")
-            local_provider = normalize_local_model_provider(getattr(context.runtime, "local_model_provider", ""))
+            local_provider = effective_local_model_provider(
+                provider,
+                normalize_local_model_provider(getattr(context.runtime, "local_model_provider", "")),
+            )
             if local_provider:
                 command.extend(["--local-provider", local_provider])
         else:

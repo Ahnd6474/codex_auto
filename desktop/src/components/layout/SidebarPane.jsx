@@ -399,6 +399,7 @@ export function SidebarPane({
   chatMessages = [],
   onSendChatMessage,
   busy = false,
+  planPrompt = "",
 }) {
   const { language, t } = useI18n();
   const deferredProjectFilter = useDeferredValue(projectFilter);
@@ -469,11 +470,9 @@ export function SidebarPane({
 
   const tabs = [
     ["projects", <SidebarProjectsIcon key="projects-icon" />, t("common.project")],
-    ["history", <SidebarHistoryIcon key="history-icon" />, t("tab.history")],
     ["workspace", <SidebarExplorerIcon key="workspace-icon" />, t("sidebar.explorer")],
     ["plans", <SidebarCheckpointsIcon key="plans-icon" />, t("sidebar.checkpoints")],
     ["reservations", <SidebarReservationIcon key="reservations-icon" />, language === "ko" ? "예약" : "Queue"],
-    ["chat", <SidebarChatIcon key="chat-icon" />, language === "ko" ? "AI 채팅" : "AI Chat"],
   ];
 
   return (
@@ -488,6 +487,17 @@ export function SidebarPane({
               <div className="sidebar-panel__header">
                 <strong>{t("common.project")}</strong>
               </div>
+
+              {planPrompt ? (
+                <div className="sidebar-prompt-card">
+                  <span className="sidebar-prompt-card__label">
+                    {language === "ko" ? "프롬프트" : "Prompt"}
+                  </span>
+                  <p className="sidebar-prompt-card__text">
+                    {planPrompt.length > 120 ? `${planPrompt.slice(0, 120)}\u2026` : planPrompt}
+                  </p>
+                </div>
+              ) : null}
 
               <SearchInput
                 value={projectFilter}

@@ -160,6 +160,7 @@ export function RunControlView({
     ["openai", "Codex CLI"],
     ["claude", "Claude Code"],
     ["gemini", "Gemini CLI"],
+    ["ollama", "Ollama"],
     ["qwen_code", "Qwen Code"],
     ["deepseek", "DeepSeek via Claude Code"],
     ["kimi", "Kimi"],
@@ -168,7 +169,7 @@ export function RunControlView({
     ["openrouter", "OpenRouter"],
     ["opencdk", "OpenCDK"],
     ["local_openai", "Local OpenAI-Compatible"],
-    ["oss", "Local OSS"],
+    ["oss", "LM Studio / Local OSS"],
   ];
   const steps = planStepsWithCloseout(planDraft, {
     title: t("run.closeout"),

@@ -1,6 +1,7 @@
 import { useI18n } from "../../i18n";
 import {
   AUTO_REASONING_OPTION,
+  applyProviderDefaults,
   applyConfigRuntimeModelSelection,
   autoRoutingPresetLabel,
   clampReasoningEffort,
@@ -178,6 +179,22 @@ export function ConfigEditorView({
   const selectedCatalogEntry = findModelCatalogEntry(scopedModelCatalog, selectedModel);
   const supportedEfforts = configReasoningOptions(scopedModelCatalog, selectedModel, runtime.effort || "medium");
   const selectedEffort = selectedConfigReasoning(scopedModelCatalog, runtime);
+  const providerOptions = [
+    ["openai", "Codex CLI"],
+    ["ensemble", t("option.providerEnsemble")],
+    ["claude", "Claude Code"],
+    ["gemini", "Gemini CLI"],
+    ["ollama", "Ollama"],
+    ["qwen_code", "Qwen Code"],
+    ["deepseek", "DeepSeek via Claude Code"],
+    ["kimi", "Kimi"],
+    ["minimax", "MiniMax via Claude Code"],
+    ["glm", "GLM via Claude Code"],
+    ["openrouter", "OpenRouter"],
+    ["opencdk", "OpenCDK"],
+    ["local_openai", "Local OpenAI-Compatible"],
+    ["oss", "LM Studio / Local OSS"],
+  ];
 
   const planningRuntime =
     selectedProvider === "ensemble"
@@ -640,6 +657,27 @@ export function ConfigEditorView({
                 <span>{providerReason}</span>
               </div>
             ) : null}
+
+            <label className="field" style={{ marginTop: "4px" }}>
+              <span>{t("field.modelProvider")}</span>
+              <select
+                value={selectedProvider}
+                onChange={(event) => {
+                  const nextRuntime = applyProviderDefaults(runtime, event.target.value);
+                  onChangeForm((current) => ({ ...current, runtime: nextRuntime }));
+                  if (typeof onChangeProgramSettings === "function") {
+                    onChangeProgramSettings((current) => syncProgramSettingsModel(current, nextRuntime));
+                  }
+                }}
+                disabled={busy}
+              >
+                {providerOptions.map(([value, label]) => (
+                  <option key={value} value={value} disabled={!providerAvailable(value, codexStatus)}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             <label className="field" style={{ marginTop: "4px" }}>
               <span>

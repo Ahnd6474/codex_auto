@@ -745,6 +745,59 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(runtime.model, "qwen2.5-coder:0.5b")
         self.assertEqual(runtime.model_preset, "")
 
+    def test_runtime_from_payload_accepts_ollama_provider_alias(self) -> None:
+        runtime = runtime_from_payload(
+            {
+                "model_provider": "ollama",
+                "local_model_provider": "lmstudio",
+                "model": "qwen2.5-coder:0.5b",
+            }
+        )
+
+        self.assertEqual(runtime.model_provider, "ollama")
+        self.assertEqual(runtime.local_model_provider, "ollama")
+        self.assertEqual(runtime.model, "qwen2.5-coder:0.5b")
+
+    def test_provider_statuses_payload_exposes_ollama_status_separately(self) -> None:
+        local_models = [
+            {"model": "qwen2.5-coder:0.5b", "local_provider": "ollama"},
+            {"model": "deepseek-r1:8b", "local_provider": "ollama"},
+        ]
+        fake_snapshot = mock.Mock(
+            to_dict=mock.Mock(
+                return_value={
+                    "available": True,
+                    "account": {"authenticated": True},
+                    "error": "",
+                }
+            )
+        )
+        with mock.patch(
+            "jakal_flow.step_models._command_available",
+            side_effect=lambda command: str(command).strip().lower() == "codex.cmd",
+        ), mock.patch(
+            "jakal_flow.step_models._openai_auth_env_configured",
+            return_value=True,
+        ), mock.patch(
+            "jakal_flow.step_models._claude_auth_env_configured",
+            return_value=False,
+        ), mock.patch(
+            "jakal_flow.step_models._gemini_auth_env_configured",
+            return_value=False,
+        ), mock.patch(
+            "jakal_flow.step_models._gemini_settings_file_configured",
+            return_value=False,
+        ), mock.patch(
+            "jakal_flow.step_models.discover_local_model_catalog",
+            return_value=local_models,
+        ):
+            statuses = provider_statuses_payload(fetch_snapshot=lambda _command: fake_snapshot)
+
+        self.assertTrue(statuses["ollama"]["available"])
+        self.assertTrue(statuses["ollama"]["usable"])
+        self.assertEqual(statuses["ollama"]["default_model"], "qwen2.5-coder:0.5b")
+        self.assertIn("ollama", statuses["ollama"]["reason"].lower())
+
     def test_runtime_from_payload_normalizes_ml_workflow_values(self) -> None:
         runtime = runtime_from_payload(
             {

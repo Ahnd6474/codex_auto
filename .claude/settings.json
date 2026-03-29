@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(powershell -Command \"Get-ChildItem ''c:\\\\Users\\\\alber\\\\OneDrive\\\\문서\\\\GitHub\\\\codex_auto\\\\desktop\\\\src-tauri\\\\src\\\\'' | Select-Object Name\")"
+      "Bash(powershell -Command \"Get-ChildItem ''c:\\\\Users\\\\alber\\\\OneDrive\\\\문서\\\\GitHub\\\\codex_auto\\\\desktop\\\\src-tauri\\\\src\\\\'' | Select-Object Name\")",
+      "Bash(grep -r \"chat\\\\|Chat\\\\|AI\\\\|message\" /c/Users/alber/OneDrive/문서/GitHub/codex_auto/desktop/src/components/layout/ --include=*.jsx)"
     ]
   }
 }

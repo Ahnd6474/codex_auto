@@ -8,6 +8,7 @@ VALID_MODEL_PROVIDERS = {
     "ensemble",
     "claude",
     "gemini",
+    "ollama",
     "qwen_code",
     "deepseek",
     "kimi",

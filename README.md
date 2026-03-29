@@ -186,6 +186,7 @@ npm run tauri:dev
 | `ensemble` | Yes | Uses OpenAI as the default planning/general backend while allowing step-level routing for UI or explicitly pinned work |
 | `claude` | Yes | Claude Code print-mode flow |
 | `gemini` | Yes | Gemini CLI headless flow |
+| `ollama` | Yes | Codex OSS mode with Ollama as the local model source |
 | `qwen_code` | Yes | Qwen Code headless flow |
 | `deepseek` | Yes | Claude Code against DeepSeek's Anthropic-compatible endpoint |
 | `kimi` | Yes | Codex/OpenAI-compatible flow against Moonshot Kimi |
@@ -194,7 +195,7 @@ npm run tauri:dev
 | `openrouter` | Yes | OpenAI-compatible endpoint |
 | `opencdk` | Yes | OpenAI-compatible endpoint |
 | `local_openai` | Yes | Local OpenAI-compatible server such as LM Studio, vLLM, llama.cpp, or LocalAI |
-| `oss` | Yes | Codex OSS mode through a local provider |
+| `oss` | Yes | Codex OSS mode through a local provider such as LM Studio |
 
 Local providers for `--model-provider oss`:
 
@@ -419,15 +420,14 @@ jakal-flow run \
   --max-blocks 1
 ```
 
-Local OSS via Ollama:
+Ollama:
 
 ```bash
 jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
-  --model-provider oss \
-  --local-model-provider ollama \
+  --model-provider ollama \
   --model qwen2.5-coder:0.5b \
   --effort medium \
   --approval-mode never \

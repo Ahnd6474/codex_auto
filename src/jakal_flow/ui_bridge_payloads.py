@@ -9,6 +9,7 @@ from time import perf_counter
 from typing import Any, Callable
 
 from .codex_app_server import fetch_codex_backend_snapshot
+from .model_constants import DEFAULT_LOCAL_MODEL_PROVIDER
 from .model_providers import normalize_local_model_provider, normalize_model_provider, provider_preset
 from .models import ExecutionPlanState, ProjectContext
 from .orchestrator import Orchestrator
@@ -345,7 +346,9 @@ def project_summary(
     runtime_provider = normalize_model_provider(str(getattr(project.runtime, "model_provider", "openai") or "openai").strip())
     local_provider = normalize_local_model_provider(str(getattr(project.runtime, "local_model_provider", "") or "").strip())
     preset = provider_preset(runtime_provider)
-    if runtime_provider == "oss":
+    if runtime_provider == "oss" and local_provider == DEFAULT_LOCAL_MODEL_PROVIDER:
+        provider_summary = provider_preset("ollama").display_name
+    elif runtime_provider == "oss":
         provider_summary = f"{preset.display_name}/{local_provider or 'oss'}"
     else:
         provider_summary = preset.display_name

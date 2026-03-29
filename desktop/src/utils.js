@@ -162,7 +162,7 @@ export function detailApplySignature(detail = null, runningJob = null) {
 export const AUTO_REASONING_OPTION = "auto";
 export const REASONING_OPTIONS = ["low", "medium", "high", "xhigh"];
 export const MODEL_REASONING_OPTIONS = [AUTO_REASONING_OPTION, ...REASONING_OPTIONS];
-export const MODEL_PROVIDER_OPTIONS = ["openai", "ensemble", "claude", "gemini", "qwen_code", "deepseek", "kimi", "minimax", "glm", "openrouter", "opencdk", "local_openai", "oss"];
+export const MODEL_PROVIDER_OPTIONS = ["openai", "ensemble", "claude", "gemini", "ollama", "qwen_code", "deepseek", "kimi", "minimax", "glm", "openrouter", "opencdk", "local_openai", "oss"];
 export const PROGRAM_RUNTIME_KEYS = [
   "model_provider",
   "local_model_provider",
@@ -483,7 +483,7 @@ export function defaultModelForProvider(provider = "openai", runtime = {}) {
     }
     return looksLikeClaudeModel(currentModel) || currentModel.startsWith("gemini") ? "gpt-5.4" : currentModel;
   }
-  if (normalizedProvider === "oss") {
+  if (normalizedProvider === "ollama" || normalizedProvider === "oss") {
     return currentModel;
   }
   return currentModel;
@@ -504,7 +504,13 @@ export function applyProviderDefaults(runtime = {}, nextProvider = "openai", nex
   const nextEnsembleClaudeModel =
     String(runtime?.ensemble_claude_model || "").trim().toLowerCase()
       || (previousProvider === "claude" && previousModel ? previousModel : CLAUDE_DEFAULT_MODEL);
-  const localProvider = provider === "oss" ? (String(nextLocalProvider || runtime?.local_model_provider || "ollama").trim().toLowerCase() === "lmstudio" ? "lmstudio" : "ollama") : "";
+  const previousLocalProvider = normalizedLocalModelProvider(runtime);
+  const localProvider =
+    provider === "ollama"
+      ? "ollama"
+      : provider === "oss"
+        ? (String(nextLocalProvider || runtime?.local_model_provider || "ollama").trim().toLowerCase() === "lmstudio" ? "lmstudio" : "ollama")
+        : "";
   const supportsAuto = providerSupportsAutoModel(provider);
   const currentModel = String(runtime?.model_slug_input || runtime?.model || "").trim().toLowerCase();
   const autoModelBase =
@@ -512,10 +518,16 @@ export function applyProviderDefaults(runtime = {}, nextProvider = "openai", nex
       ? (currentModel || "auto")
       : defaultModelForProvider(provider, { ...runtime, model: "", model_slug_input: "" });
   const ensembleDefaultModel = nextEnsembleOpenAiModel || "gpt-5.4";
+  const keepExistingLocalModel =
+    previousProvider === provider
+    || (provider === "ollama" && previousProvider === "oss" && previousLocalProvider === "ollama")
+    || (provider === "oss" && previousProvider === "ollama");
   const nextModel = supportsAuto
     ? autoModelBase
     : provider === "ensemble"
       ? ensembleDefaultModel
+    : provider === "ollama" || provider === "oss"
+      ? (currentModel === "auto" ? "" : (keepExistingLocalModel ? currentModel : ""))
     : provider === "claude" && !looksLikeClaudeModel(currentModel)
       ? CLAUDE_DEFAULT_MODEL
     : provider === "gemini" && !currentModel.startsWith("gemini")
@@ -1497,6 +1509,7 @@ export function defaultBillingMode(provider = "openai") {
     case "openrouter":
     case "opencdk":
       return "token";
+    case "ollama":
     case "oss":
       return "per_pass";
     default:
@@ -1516,6 +1529,7 @@ export function providerSupportsCatalog(provider = "openai") {
     "ensemble",
     "claude",
     "gemini",
+    "ollama",
     "qwen_code",
     "deepseek",
     "kimi",
@@ -1567,6 +1581,9 @@ export function providerDisplayName(provider = "openai", localProvider = "") {
   if (normalized === "gemini") {
     return "Gemini CLI";
   }
+  if (normalized === "ollama") {
+    return "Ollama";
+  }
   if (normalized === "qwen_code") {
     return "Qwen Code";
   }
@@ -1603,6 +1620,9 @@ export function providerDisplayName(provider = "openai", localProvider = "") {
 
 export function normalizedModelProvider(runtime = {}) {
   const normalized = String(runtime?.model_provider || "openai").trim().toLowerCase();
+  if (normalized === "oss" && normalizedLocalModelProvider(runtime) === "ollama") {
+    return "ollama";
+  }
   return MODEL_PROVIDER_OPTIONS.includes(normalized) ? normalized : "openai";
 }
 
@@ -1637,9 +1657,17 @@ export function filterModelCatalogByProvider(modelCatalog = [], runtime = {}) {
   }
   return (modelCatalog || []).filter((item) => {
     const itemProvider = String(item?.provider || "openai").trim().toLowerCase() || "openai";
-    const matchesProvider = provider === "ensemble" ? itemProvider === "openai" : itemProvider === provider;
+    const matchesProvider =
+      provider === "ensemble"
+        ? itemProvider === "openai"
+        : provider === "ollama"
+          ? itemProvider === "oss"
+          : itemProvider === provider;
     if (!matchesProvider) {
       return false;
+    }
+    if (provider === "ollama") {
+      return String(item?.local_provider || "").trim().toLowerCase() === "ollama";
     }
     if (provider !== "oss") {
       return true;
@@ -1660,7 +1688,7 @@ export function defaultModelForRuntime(modelCatalog = [], runtime = {}) {
   if (preferred?.model) {
     return preferred.model;
   }
-  return provider === "oss" ? "" : "auto";
+  return provider === "oss" || provider === "ollama" ? "" : "auto";
 }
 
 export function supportedReasoningOptions(modelCatalog = [], model = "", fallback = "medium") {

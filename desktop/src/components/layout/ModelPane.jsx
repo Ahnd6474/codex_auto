@@ -14,6 +14,7 @@ const PROVIDER_LABELS = {
   openai: "OpenAI / Codex",
   claude: "Anthropic Claude",
   gemini: "Google Gemini",
+  ollama: "Ollama",
   ensemble: "Ensemble",
   openrouter: "OpenRouter",
   local_openai: "Local (OpenAI-compat)",
@@ -89,7 +90,13 @@ export function ModelPane({ form, modelPresets, modelCatalog, onChangeForm, onHi
             <label className="model-pane__label">Provider</label>
             <select
               value={selectedProvider}
-              onChange={(e) => applyRuntimePatch({ model_provider: e.target.value, model: "" })}
+              onChange={(e) =>
+                applyRuntimePatch({
+                  model_provider: e.target.value,
+                  local_model_provider: e.target.value === "ollama" ? "ollama" : runtime.local_model_provider,
+                  model: "",
+                })
+              }
             >
               {MODEL_PROVIDER_OPTIONS.map((p) => (
                 <option key={p} value={p}>{PROVIDER_LABELS[p] || p}</option>

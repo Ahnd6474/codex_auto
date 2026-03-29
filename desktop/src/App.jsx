@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BottomToolPanel } from "./components/layout/BottomToolPanel";
 import { CenterWorkspace } from "./components/layout/CenterWorkspace";
 import { CommandPalette } from "./components/layout/CommandPalette";
-import { DetailsPane } from "./components/layout/DetailsPane";
+import { RightSidebarPane } from "./components/layout/RightSidebarPane";
 import { IdeToolbar } from "./components/layout/IdeToolbar";
 import { RunProgressPanel } from "./components/layout/RunProgressPanel";
 import { SidebarPane } from "./components/layout/SidebarPane";
@@ -16,8 +16,8 @@ import { toggleStepSelection } from "./utils";
 /* ── Clamp helpers ── */
 const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 500;
-const RIGHT_MIN = 200;
-const RIGHT_MAX = 480;
+const RIGHT_MIN = 280;
+const RIGHT_MAX = 600;
 const BOTTOM_MIN = 120;
 const BOTTOM_MAX = 600;
 
@@ -74,9 +74,9 @@ export default function App() {
         return;
       }
 
-      /* Alt+1..6 → sidebar tool windows */
-      if (event.altKey && !event.ctrlKey && !event.metaKey && event.key >= "1" && event.key <= "6") {
-        const sidebarTabs = ["projects", "history", "workspace", "plans", "reservations", "chat"];
+      /* Alt+1..4 → sidebar tool windows */
+      if (event.altKey && !event.ctrlKey && !event.metaKey && event.key >= "1" && event.key <= "4") {
+        const sidebarTabs = ["projects", "workspace", "plans", "reservations"];
         const target = sidebarTabs[Number.parseInt(event.key, 10) - 1];
         setSidebarTab((current) => nextSidebarTab(current, target));
         event.preventDefault();
@@ -261,6 +261,7 @@ export default function App() {
             workspaceTree={detail?.workspace_tree}
             checkpoints={detail?.checkpoints}
             github={detail?.github}
+            planPrompt={controller.planDraft?.project_prompt || ""}
             onOpenFolder={controller.openRepoInFolder}
             onOpenVsCode={controller.openRepoInVsCode}
             onOpenGithub={controller.openRepoOnGithub}
@@ -358,11 +359,12 @@ export default function App() {
               className="ide-pane ide-pane--details"
               style={{ width: controller.rightWidth, flex: `0 0 ${controller.rightWidth}px` }}
             >
-              <DetailsPane
+              <RightSidebarPane
                 detail={detail}
                 planDraft={controller.planDraft}
                 selectedStepId={controller.selectedStepId}
                 modelPresets={controller.modelPresets}
+                busy={controller.busy}
                 onHide={() => controller.setRightCollapsed(true)}
               />
             </div>

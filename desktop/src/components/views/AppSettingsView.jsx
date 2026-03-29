@@ -7,6 +7,7 @@ import {
   defaultProviderBaseUrl,
   normalizeMemoryBudgetGiB,
   normalizeDashboardVisibility,
+  normalizedModelProvider,
   providerAvailable,
   providerUsable,
   providerStatusReason,
@@ -130,7 +131,7 @@ export function AppSettingsView({
   ];
   const activeShare = shareDetail?.active_session || null;
   const shareServer = shareDetail?.server || null;
-  const selectedProvider = String(settings.model_provider || "openai").trim().toLowerCase();
+  const selectedProvider = normalizedModelProvider(settings);
   const dashboardVisibility = normalizeDashboardVisibility(settings?.dashboard_visibility);
   const runtimeBusy = busy;
   const autoParallelWorkers = String(settings?.parallel_worker_mode || "auto").trim().toLowerCase() !== "manual";
@@ -166,8 +167,9 @@ export function AppSettingsView({
       label_ko: "OSS",
       label_en: "OSS",
       providers: [
+        { value: "ollama",       label: "Ollama" },
         { value: "local_openai", label: "Local OpenAI" },
-        { value: "oss",          label: "Ollama / OSS" },
+        { value: "oss",          label: "LM Studio / OSS" },
       ],
     },
     {
@@ -439,7 +441,7 @@ export function AppSettingsView({
               </label>
             ) : null}
 
-            {selectedProvider !== "oss" ? (
+            {selectedProvider !== "oss" && selectedProvider !== "ollama" ? (
               <label className="field">
                 <span>{t("field.providerBaseUrl")}</span>
                 <input
@@ -450,7 +452,7 @@ export function AppSettingsView({
               </label>
             ) : null}
 
-            {selectedProvider !== "oss" ? (
+            {selectedProvider !== "oss" && selectedProvider !== "ollama" ? (
               <label className="field">
                 <span>{t("field.providerApiKeyEnv")}</span>
                 <input

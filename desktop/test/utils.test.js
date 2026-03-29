@@ -45,6 +45,8 @@ import {
   planningProgressCaptionDisplay,
   progressCaption,
   programSettingsFromRuntime,
+  normalizedModelProvider,
+  filterModelCatalogByProvider,
   providerAvailable,
   providerUsable,
   providerStatusReason,
@@ -447,6 +449,7 @@ test("providerSupportsCatalog enables curated catalogs for first-party provider 
   assert.equal(providerSupportsCatalog("openai"), true);
   assert.equal(providerSupportsCatalog("gemini"), true);
   assert.equal(providerSupportsCatalog("claude"), true);
+  assert.equal(providerSupportsCatalog("ollama"), true);
   assert.equal(providerSupportsCatalog("deepseek"), true);
   assert.equal(providerSupportsCatalog("openrouter"), false);
   assert.equal(providerSupportsCatalog("local_openai"), false);
@@ -473,6 +476,24 @@ test("provider availability helpers read provider statuses from codex payloads",
   assert.equal(providerUsable("claude", codexStatus), false);
   assert.equal(providerUsable("gemini", codexStatus), true);
   assert.equal(providerStatusReason("claude", codexStatus), "Claude Code is not installed.");
+});
+
+test("ollama provider helpers treat legacy oss plus ollama projects as a first-class Ollama selection", () => {
+  const runtime = {
+    model_provider: "oss",
+    local_model_provider: "ollama",
+    model: "qwen2.5-coder:0.5b",
+  };
+  const modelCatalog = [
+    { provider: "oss", local_provider: "ollama", model: "qwen2.5-coder:0.5b", display_name: "Qwen 0.5B" },
+    { provider: "oss", local_provider: "lmstudio", model: "local-model", display_name: "LM Studio Model" },
+  ];
+
+  assert.equal(normalizedModelProvider(runtime), "ollama");
+  assert.deepEqual(
+    filterModelCatalogByProvider(modelCatalog, runtime).map((item) => item.model),
+    ["qwen2.5-coder:0.5b"],
+  );
 });
 
 test("applyProviderDefaults drops the auto sentinel for providers without auto routing", () => {
@@ -602,6 +623,24 @@ test("applyProviderDefaults seeds Kimi defaults on the Codex/OpenAI-compatible p
   assert.equal(runtime.model, KIMI_DEFAULT_MODEL);
   assert.equal(runtime.provider_base_url, "https://api.moonshot.cn/v1");
   assert.equal(runtime.provider_api_key_env, "MOONSHOT_API_KEY");
+});
+
+test("applyProviderDefaults promotes Ollama to a first-class local provider without keeping cloud models", () => {
+  const runtime = applyProviderDefaults(
+    {
+      model_provider: "openai",
+      model: "gpt-5.4",
+      model_slug_input: "gpt-5.4",
+      codex_path: defaultCodexPath(),
+    },
+    "ollama",
+  );
+
+  assert.equal(runtime.model_provider, "ollama");
+  assert.equal(runtime.local_model_provider, "ollama");
+  assert.equal(runtime.model, "");
+  assert.equal(runtime.model_slug_input, "");
+  assert.equal(runtime.codex_path, defaultCodexPath("ollama"));
 });
 
 test("applyProviderDefaults switches the runtime path for the ensemble provider and keeps Codex defaults", () => {
@@ -1597,18 +1636,33 @@ test("runtimeSummary reflects execution mode in preset and direct model summarie
   assert.match(runtimeSummary({ model: "gpt-5.4", effort: "high" }, [], "ko"), /^OpenAI\/Codex \| .* \| gpt-5\.4 .* parallel .*$/);
 });
 
-test("runtimeSummary includes the selected local provider for OSS models", () => {
+test("runtimeSummary includes the selected local provider for generic OSS models", () => {
   assert.equal(
     runtimeSummary(
       {
         model_provider: "oss",
+        local_model_provider: "lmstudio",
+        model: "local-model",
+        effort: "medium",
+      },
+      [],
+    ),
+    "Local/LM Studio | Standard Mode | local-model | reasoning Medium | parallel auto",
+  );
+});
+
+test("runtimeSummary shows Ollama as a first-class backend", () => {
+  assert.equal(
+    runtimeSummary(
+      {
+        model_provider: "ollama",
         local_model_provider: "ollama",
         model: "qwen2.5-coder:0.5b",
         effort: "medium",
       },
       [],
     ),
-    "Local/Ollama | Standard Mode | qwen2.5-coder:0.5b | reasoning Medium | parallel auto",
+    "Ollama | Standard Mode | qwen2.5-coder:0.5b | reasoning Medium | parallel auto",
   );
 });
 

@@ -383,8 +383,7 @@ jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
-  --model-provider oss \
-  --local-model-provider ollama \
+  --model-provider ollama \
   --model qwen2.5-coder:0.5b \
   --effort medium \
   --approval-mode never \
