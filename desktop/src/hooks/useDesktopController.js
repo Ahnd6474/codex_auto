@@ -46,6 +46,7 @@ import {
 } from "../utils";
 import {
   fetchHistoryDetail,
+  fetchProjectChat,
   fetchProjectCheckpoints,
   fetchProjectDetail,
   fetchProjectDetailBySelector,
@@ -117,6 +118,8 @@ export function useDesktopController() {
   const [sidebarWidth, setSidebarWidth] = usePersistentState("jakal-flow:sidebar-width", 312);
   const [projectFilter, setProjectFilter] = usePersistentState("jakal-flow:project-filter", "");
   const [workspaceFilter, setWorkspaceFilter] = usePersistentState("jakal-flow:workspace-filter", "");
+  const [selectedChatSessionId, setSelectedChatSessionId] = useState("");
+  const [chatDraftSession, setChatDraftSession] = useState(false);
   const deferredProjectFilter = useDeferredValue(projectFilter);
   const defaultRuntime = useMemo(() => applyProgramSettings(baseRuntime, storedProgramSettings), [baseRuntime, storedProgramSettings]);
   const wantsExpandedDetail = useMemo(
@@ -253,6 +256,37 @@ export function useDesktopController() {
       setHistoryDetail(null);
     }
   }, [historyProjects, selectedHistoryId, setSelectedHistoryId]);
+
+  useEffect(() => {
+    const detailRepoId = String(projectDetail?.project?.repo_id || "").trim();
+    const currentSelection = String(selectedChatSessionId || "").trim();
+    const activeSessionId = String(projectDetail?.chat?.active_session_id || "").trim();
+    if (!detailRepoId || detailRepoId !== String(selectedProjectId || "").trim()) {
+      if (currentSelection) {
+        setSelectedChatSessionId("");
+      }
+      if (chatDraftSession) {
+        setChatDraftSession(false);
+      }
+      return;
+    }
+    if (chatDraftSession) {
+      return;
+    }
+    if (activeSessionId && currentSelection !== activeSessionId) {
+      setSelectedChatSessionId(activeSessionId);
+      return;
+    }
+    if (!activeSessionId && currentSelection) {
+      setSelectedChatSessionId("");
+    }
+  }, [
+    chatDraftSession,
+    projectDetail?.chat?.active_session_id,
+    projectDetail?.project?.repo_id,
+    selectedChatSessionId,
+    selectedProjectId,
+  ]);
 
   function reapplyProjectJobState(jobItems = jobsRef.current) {
     const nextProjects = sanitizeProjectListForJobState(projectsRef.current, jobItems);
@@ -525,6 +559,11 @@ export function useDesktopController() {
       if (sidebarTab === "workspace" && !projectSectionLoaded("workspace")) {
         supplementRequests.push(fetchProjectWorkspace(bridgeRequest, repoId, workspaceRoot));
       }
+      if (sidebarTab === "chat" && !projectSectionLoaded("chat")) {
+        supplementRequests.push(fetchProjectChat(bridgeRequest, repoId, workspaceRoot, {
+          sessionId: selectedChatSessionId || projectDetail?.chat?.active_session_id || "",
+        }));
+      }
       if (sidebarTab === "plans" && !projectSectionLoaded("checkpoints")) {
         supplementRequests.push(fetchProjectCheckpoints(bridgeRequest, repoId, workspaceRoot));
       }
@@ -567,11 +606,14 @@ export function useDesktopController() {
     loadingProjectId,
     pendingAction,
     programSettings?.developer_mode,
+    projectDetail?.chat?.active_session_id,
+    projectDetail?.loaded_sections?.chat,
     projectDetail?.loaded_sections?.checkpoints,
     projectDetail?.loaded_sections?.history,
     projectDetail?.loaded_sections?.reports,
     projectDetail?.loaded_sections?.workspace,
     projectDetail?.project?.repo_id,
+    selectedChatSessionId,
     selectedHistoryId,
     selectedProjectId,
     sidebarTab,
@@ -691,7 +733,44 @@ export function useDesktopController() {
         const nextSelectedJob = mergeJobUpdate(job);
         reapplyProjectJobState(jobsRef.current);
         const jobStatus = String(job.status || "").trim().toLowerCase();
+        const normalizedCommand = String(job.command || "").trim().toLowerCase();
         const supersededByActiveJob = jobHasNewerActiveReplacement(job, jobsRef.current);
+        if (normalizedCommand === BRIDGE_COMMANDS.SEND_CHAT_MESSAGE) {
+          const resultProjectId = String(job?.result?.project?.repo_id || "").trim();
+          if (
+            job?.result?.chat
+            && !supersededByActiveJob
+            && shouldReplaceVisibleProject(selectedProjectId, resultProjectId)
+          ) {
+            mergeSelectedProjectSupplement(resultProjectId, {
+              chat: job.result.chat,
+              loaded_sections: {
+                chat: true,
+              },
+            });
+            setSelectedChatSessionId(String(job.result.chat.active_session_id || "").trim());
+            setChatDraftSession(Boolean(job.result.chat.draft_session));
+          }
+          if (
+            job?.result?.detail
+            && !supersededByActiveJob
+            && shouldReplaceVisibleProject(selectedProjectId, resultProjectId)
+          ) {
+            applyProjectDetail(job.result.detail, {
+              preserveDirtyPlan: false,
+              runningJob: nextSelectedJob,
+              force: true,
+            });
+          }
+          if (!["queued", "running"].includes(jobStatus) && !cancelled && !supersededByActiveJob) {
+            if (job.result?.error) {
+              setMessage(messagePayload("error", String(job.result.error)));
+            } else {
+              setMessage(null);
+            }
+          }
+          return;
+        }
         if (!["queued", "running"].includes(jobStatus) && !cancelled) {
           if (
             !supersededByActiveJob
@@ -1460,6 +1539,85 @@ export function useDesktopController() {
     }
   }
 
+  async function loadChatSession(sessionId = "") {
+    if (!selectedProjectId || !workspaceRoot) {
+      return null;
+    }
+    try {
+      const supplement = await fetchProjectChat(bridgeRequest, selectedProjectId, workspaceRoot, {
+        sessionId,
+      });
+      mergeSelectedProjectSupplement(selectedProjectId, supplement);
+      const activeSessionId = String(supplement?.chat?.active_session_id || "").trim();
+      setSelectedChatSessionId(activeSessionId);
+      setChatDraftSession(Boolean(supplement?.chat?.draft_session));
+      return supplement;
+    } catch (error) {
+      setMessage(messagePayload("error", String(error)));
+      return null;
+    }
+  }
+
+  function startNewChatSession() {
+    setSelectedChatSessionId("");
+    setChatDraftSession(true);
+    if (!selectedProjectId) {
+      return;
+    }
+    mergeSelectedProjectSupplement(selectedProjectId, {
+      chat: {
+        ...(projectDetail?.chat || {}),
+        active_session_id: "",
+        active_session: null,
+        messages: [],
+        summary_text: "",
+        summary_file: "",
+        transcript_file: "",
+        draft_session: true,
+      },
+      loaded_sections: {
+        chat: true,
+      },
+    });
+  }
+
+  async function sendChatMessage(text, mode = "conversation") {
+    const messageText = String(text || "").trim();
+    if (!projectForm.project_dir.trim()) {
+      setMessage(messagePayload("error", translate(language, "message.openProjectFirst")));
+      return null;
+    }
+    if (!messageText) {
+      return null;
+    }
+    if (["queued", "running"].includes(String(activeJob?.status || "").trim().toLowerCase())) {
+      setMessage(
+        messagePayload(
+          "error",
+          language === "ko"
+            ? "현재 프로젝트에서 다른 백그라운드 작업이 진행 중이라 채팅 요청을 시작할 수 없습니다."
+            : "Another background task is already active for this project.",
+        ),
+      );
+      return null;
+    }
+    const activeSessionId = String(
+      chatDraftSession
+        ? ""
+        : (selectedChatSessionId || projectDetail?.chat?.active_session_id || ""),
+    ).trim();
+    return startJob(
+      BRIDGE_COMMANDS.SEND_CHAT_MESSAGE,
+      {
+        ...buildProjectPayload(projectForm, planDraft),
+        message: messageText,
+        chat_mode: String(mode || "conversation").trim().toLowerCase() || "conversation",
+        session_id: activeSessionId,
+        create_new_session: chatDraftSession || !activeSessionId,
+      },
+    );
+  }
+
   async function requestStop() {
     if (!projectForm.project_dir.trim() || String(activeJob?.status || "").trim().toLowerCase() !== "running") {
       return;
@@ -1736,6 +1894,8 @@ export function useDesktopController() {
     sidebarWidth,
     projectFilter,
     workspaceFilter,
+    selectedChatSessionId,
+    chatDraftSession,
     planDirty,
     setMessage,
     setProjectForm: updateProjectForm,
@@ -1777,6 +1937,9 @@ export function useDesktopController() {
     runPlan,
     runManualDebugger,
     runManualMerger,
+    loadChatSession,
+    startNewChatSession,
+    sendChatMessage,
     requestStop,
     cancelQueuedReservation,
     generateShareLink,

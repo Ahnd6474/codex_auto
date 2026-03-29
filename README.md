@@ -71,6 +71,20 @@ jakal-flow --help
 jakal-flow run --help
 ```
 
+Create a runtime config once and reuse it across commands:
+
+```toml
+[runtime]
+model_provider = "openai"
+model = "gpt-5.4"
+effort = "high"
+approval_mode = "never"
+sandbox_mode = "workspace-write"
+test_cmd = "python -m pytest"
+max_blocks = 2
+plan_prompt = "Build a safe project plan aimed at a finished, well-integrated result with strong verification and closeout."
+```
+
 Initialize a managed repository:
 
 ```bash
@@ -78,12 +92,7 @@ jakal-flow init-repo \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
-  --model gpt-5.4 \
-  --effort high \
-  --plan-prompt "Build a safe project plan aimed at a finished, well-integrated result with strong verification and closeout." \
-  --approval-mode never \
-  --sandbox-mode workspace-write \
-  --test-cmd "python -m pytest"
+  --config .jakal-flow.runtime.toml
 ```
 
 Run a verified improvement loop:
@@ -93,12 +102,7 @@ jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
-  --model gpt-5.4 \
-  --effort high \
-  --approval-mode never \
-  --sandbox-mode workspace-write \
-  --test-cmd "python -m pytest" \
-  --max-blocks 2
+  --config .jakal-flow.runtime.toml
 ```
 
 Resume the same managed repository later without reinitializing it:
@@ -108,12 +112,7 @@ jakal-flow resume \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
-  --model gpt-5.4 \
-  --effort high \
-  --approval-mode never \
-  --sandbox-mode workspace-write \
-  --test-cmd "python -m pytest" \
-  --max-blocks 2
+  --config .jakal-flow.runtime.toml
 ```
 
 Inspect status later:
@@ -291,20 +290,15 @@ Related files:
 
 ## Configuration
 
-`jakal-flow` supports both CLI runtime options and desktop-managed defaults.
+`jakal-flow` supports both config-file driven CLI runtimes and desktop-managed defaults.
 
 ### CLI / Runtime Settings
 
-| Group | Supported settings |
+| Surface | Supported settings |
 | --- | --- |
-| Repository targeting | `--repo-url`, `--branch`, `--workspace-root`, `--plan-file`, `--resume` |
-| Model selection | `--model-provider`, `--local-model-provider`, `--model`, `--effort`, `--fast` |
-| Provider connection | `--provider-base-url`, `--provider-api-key-env` |
-| Cost estimation | `--billing-mode`, `--input-cost-per-million-usd`, `--cached-input-cost-per-million-usd`, `--output-cost-per-million-usd`, `--reasoning-output-cost-per-million-usd`, `--per-pass-cost-usd` |
-| Workflow control | `--workflow-mode`, `--ml-max-cycles`, `--max-blocks`, `--extra-prompt`, `--plan-prompt` |
-| Optimization controls | `--optimization-mode`, `--optimization-large-file-lines`, `--optimization-long-function-lines`, `--optimization-duplicate-block-lines`, `--optimization-max-files` |
-| Safety and validation | `--approval-mode`, `--sandbox-mode`, `--test-cmd`, `--allow-push` |
-| Reporting | `--word-report` |
+| Primary CLI surface | `--repo-url`, `--branch`, `--workspace-root`, `--config`, `--set`, `--plan-file` |
+| Runtime config file | Model/provider selection, cost estimates, workflow mode, approval/sandbox, test command, optimization, Git identity, and checkpoint settings |
+| Legacy compatibility flags | Most historical runtime flags are still accepted for compatibility, but they are no longer the primary help surface |
 
 To inspect the current command surface from your local checkout:
 
