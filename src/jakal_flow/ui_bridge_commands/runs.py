@@ -103,6 +103,7 @@ def build_run_command_handlers(
         scope_id = execution_scope_id(project)
         execution_stop_registry.clear(scope_id)
         save_run_control(project, default_run_control())
+        ctx.orchestrator.clear_latest_failure_status(project)
         append_ui_event(project, "run-started", "Started running the remaining execution steps.")
         try:
             def run_closeout_pass(latest_project, closeout_message: str):
@@ -372,6 +373,7 @@ def build_run_command_handlers(
             origin_url=origin_url,
         )
         execution_stop_registry.clear(execution_scope_id(project))
+        ctx.orchestrator.clear_latest_failure_status(project)
         try:
             append_ui_event(project, "closeout-started", "Started project closeout.")
             try:

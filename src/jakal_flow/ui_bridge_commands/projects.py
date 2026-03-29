@@ -115,6 +115,7 @@ def build_project_command_handlers(
         if existing is not None:
             execution_stop_registry.clear(execution_scope_id(existing))
             save_run_control(existing, default_run_control())
+            ctx.orchestrator.clear_latest_failure_status(existing)
 
         def planning_progress_event(project, event_type: str, message: str, details: dict | None = None) -> None:
             append_ui_event(project, event_type, message, details or {})

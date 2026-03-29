@@ -1,0 +1,1358 @@
+{
+  "content_signature": "577b69c1c6085054a732723c702eede7132c2706",
+  "payload": {
+    "activity": [
+      "2026-03-29T00:45:57+00:00 | closeout-finished | Closeout finished with status completed.",
+      "2026-03-29T00:45:57+00:00 | closeout-started | Started project closeout.",
+      "2026-03-29T00:45:37+00:00 | project-saved | Saved project setup from the desktop shell."
+    ],
+    "bottom_panels": {
+      "codex_status": {},
+      "event_json": {
+        "latest_block": {},
+        "latest_pass": {},
+        "loop_state": {
+          "block_index": 0,
+          "counters": {
+            "empty_cycles": 0,
+            "no_progress_blocks": 0,
+            "regression_failures": 0
+          },
+          "current_checkpoint_id": null,
+          "current_safe_revision": "637db311f09ba761f6e6bdcfc27c847915cf29bb",
+          "current_task": null,
+          "last_block_completed_at": null,
+          "last_candidates": [],
+          "last_commit_hash": null,
+          "pending_checkpoint_approval": false,
+          "plan_locked": true,
+          "repo_id": "1c0ebc2d8bc7d77be28a35b8b23e39853cf5c8e6",
+          "repo_slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+          "stop_reason": null,
+          "stop_requested": false
+        },
+        "run_control": {
+          "request_source": null,
+          "requested_at": null,
+          "stop_after_current_step": false,
+          "stop_immediately": false
+        }
+      },
+      "execution_log_lines": [
+        "2026-03-29T00:45:57+00:00 | closeout-finished | Closeout finished with status completed.",
+        "2026-03-29T00:45:57+00:00 | closeout-started | Started project closeout.",
+        "2026-03-29T00:45:37+00:00 | project-saved | Saved project setup from the desktop shell."
+      ],
+      "git_status": {
+        "branch": "main",
+        "current_checkpoint_id": null,
+        "current_status": "closed_out",
+        "last_commit_hash": null,
+        "origin_url": null,
+        "pending_checkpoint_approval": false,
+        "repo_kind": "local",
+        "safe_revision": "637db311f09ba761f6e6bdcfc27c847915cf29bb"
+      },
+      "runtime_insights": {
+        "cost": {
+          "estimated_total_cost_usd": 0.0,
+          "recent": {
+            "billing_mode": "included",
+            "configured": true,
+            "details": {},
+            "estimated_cost_usd": 0.0,
+            "usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "recent_usage": {
+            "cached_input_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 0
+          },
+          "remaining": {
+            "billing_mode": "included",
+            "configured": true,
+            "details": {},
+            "estimated_cost_usd": 0.0,
+            "usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "remaining_usage": {
+            "cached_input_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 0
+          }
+        },
+        "execution": {
+          "completed_step_count": 1,
+          "effort_baselines": [
+            {
+              "cost": {
+                "billing_mode": "included",
+                "configured": true,
+                "details": {},
+                "estimated_cost_usd": 0.0,
+                "usage": {
+                  "cached_input_tokens": 0,
+                  "input_tokens": 6000,
+                  "output_tokens": 2400,
+                  "reasoning_output_tokens": 600,
+                  "total_tokens": 9000
+                }
+              },
+              "effort": "low",
+              "estimated_duration_seconds": 300.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 6000,
+                "output_tokens": 2400,
+                "reasoning_output_tokens": 600,
+                "total_tokens": 9000
+              }
+            },
+            {
+              "cost": {
+                "billing_mode": "included",
+                "configured": true,
+                "details": {},
+                "estimated_cost_usd": 0.0,
+                "usage": {
+                  "cached_input_tokens": 0,
+                  "input_tokens": 11000,
+                  "output_tokens": 4500,
+                  "reasoning_output_tokens": 1500,
+                  "total_tokens": 17000
+                }
+              },
+              "effort": "medium",
+              "estimated_duration_seconds": 540.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 11000,
+                "output_tokens": 4500,
+                "reasoning_output_tokens": 1500,
+                "total_tokens": 17000
+              }
+            },
+            {
+              "cost": {
+                "billing_mode": "included",
+                "configured": true,
+                "details": {},
+                "estimated_cost_usd": 0.0,
+                "usage": {
+                  "cached_input_tokens": 0,
+                  "input_tokens": 17000,
+                  "output_tokens": 6500,
+                  "reasoning_output_tokens": 3500,
+                  "total_tokens": 27000
+                }
+              },
+              "effort": "high",
+              "estimated_duration_seconds": 840.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 17000,
+                "output_tokens": 6500,
+                "reasoning_output_tokens": 3500,
+                "total_tokens": 27000
+              }
+            },
+            {
+              "cost": {
+                "billing_mode": "included",
+                "configured": true,
+                "details": {},
+                "estimated_cost_usd": 0.0,
+                "usage": {
+                  "cached_input_tokens": 0,
+                  "input_tokens": 24000,
+                  "output_tokens": 8500,
+                  "reasoning_output_tokens": 5500,
+                  "total_tokens": 38000
+                }
+              },
+              "effort": "xhigh",
+              "estimated_duration_seconds": 1200.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 24000,
+                "output_tokens": 8500,
+                "reasoning_output_tokens": 5500,
+                "total_tokens": 38000
+              }
+            }
+          ],
+          "elapsed_seconds": 840.0,
+          "estimated_total_seconds": 840.0,
+          "pending_step_count": 0,
+          "remaining_seconds": 0.0,
+          "running_step_count": 0,
+          "step_estimates": [
+            {
+              "actual_duration_seconds": null,
+              "elapsed_seconds": 840.0,
+              "estimated_duration_seconds": 840.0,
+              "reasoning_effort": "high",
+              "remaining_seconds": 0.0,
+              "source": "heuristic",
+              "status": "completed",
+              "step_id": "ST1"
+            }
+          ]
+        },
+        "parallel": {
+          "cpu_logical_count": 16,
+          "cpu_parallel_limit": 4,
+          "memory_available_bytes": 3192135680,
+          "memory_budget_per_worker_gib": 3.0,
+          "memory_parallel_limit": 1,
+          "memory_total_bytes": 16847327232,
+          "reason": "automatic worker count derived from available compute resources (cpu/4 and memory budget)",
+          "recommended_workers": 1,
+          "requested_workers": 0,
+          "worker_mode": "auto"
+        }
+      },
+      "test_runs": [],
+      "token_usage": {
+        "cached_input_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 0
+      }
+    },
+    "checkpoints": {
+      "items": [
+        {
+          "approved_at": null,
+          "checkpoint_id": "CP1",
+          "commit_hashes": [],
+          "created_at": "2026-03-29T00:45:57+00:00",
+          "plan_refs": [
+            "ST1"
+          ],
+          "pushed": false,
+          "reached_at": null,
+          "review_notes": "",
+          "status": "approved",
+          "target_block": 1,
+          "title": "Already done"
+        }
+      ],
+      "pending": null,
+      "timeline_markdown": "# Checkpoint Timeline\n\nThis timeline is derived from the saved plan and is intended for user review at checkpoint boundaries.\n\n## CP1\n- Title: Already done\n- Target block: 1\n- Plan refs: ST1\n- Status: approved"
+    },
+    "codex_status": {},
+    "config": {
+      "loop_state_json": {
+        "block_index": 0,
+        "counters": {
+          "empty_cycles": 0,
+          "no_progress_blocks": 0,
+          "regression_failures": 0
+        },
+        "current_checkpoint_id": null,
+        "current_safe_revision": "637db311f09ba761f6e6bdcfc27c847915cf29bb",
+        "current_task": null,
+        "last_block_completed_at": null,
+        "last_candidates": [],
+        "last_commit_hash": null,
+        "pending_checkpoint_approval": false,
+        "plan_locked": true,
+        "repo_id": "1c0ebc2d8bc7d77be28a35b8b23e39853cf5c8e6",
+        "repo_slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+        "stop_reason": null,
+        "stop_requested": false
+      },
+      "metadata_json": {
+        "archive_id": null,
+        "archived": false,
+        "archived_at": null,
+        "branch": "main",
+        "created_at": "2026-03-29T00:45:36+00:00",
+        "current_safe_revision": "637db311f09ba761f6e6bdcfc27c847915cf29bb",
+        "current_status": "closed_out",
+        "display_name": "Retry Closeout Demo",
+        "last_run_at": "2026-03-29T00:45:57+00:00",
+        "origin_url": null,
+        "project_root": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+        "repo_id": "1c0ebc2d8bc7d77be28a35b8b23e39853cf5c8e6",
+        "repo_kind": "local",
+        "repo_path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo",
+        "repo_url": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo",
+        "slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+        "source_repo_id": null
+      },
+      "run_control_json": {
+        "request_source": null,
+        "requested_at": null,
+        "stop_after_current_step": false,
+        "stop_immediately": false
+      },
+      "runtime_json": {
+        "allow_background_queue": true,
+        "allow_push": true,
+        "approval_mode": "never",
+        "auto_merge_pull_request": true,
+        "background_queue_priority": 0,
+        "billing_mode": "included",
+        "cached_input_cost_per_million_usd": 0.0,
+        "checkpoint_interval_blocks": 1,
+        "codex_base_slug": "",
+        "codex_path": "codex.cmd",
+        "codex_variant_slug": "",
+        "effort": "high",
+        "effort_selection_mode": "explicit",
+        "empty_cycle_limit": 3,
+        "ensemble_claude_model": "claude-sonnet-4-6",
+        "ensemble_gemini_model": "gemini-3-flash-preview",
+        "ensemble_openai_model": "gpt-5.4",
+        "execution_mode": "parallel",
+        "extra_prompt": "",
+        "generate_word_report": true,
+        "git_user_email": "jakal-flow@example.invalid",
+        "git_user_name": "jakal-flow-bot",
+        "init_plan_prompt": "",
+        "input_cost_per_million_usd": 0.0,
+        "local_model_provider": "",
+        "max_blocks": 5,
+        "ml_max_cycles": 3,
+        "model": "gpt-5.4",
+        "model_preset": "",
+        "model_provider": "openai",
+        "model_selection_mode": "slug",
+        "model_slug_input": "gpt-5.4",
+        "no_progress_limit": 3,
+        "optimization_duplicate_block_lines": 4,
+        "optimization_large_file_lines": 350,
+        "optimization_long_function_lines": 80,
+        "optimization_max_files": 3,
+        "optimization_mode": "light",
+        "output_cost_per_million_usd": 0.0,
+        "parallel_memory_per_worker_gib": 3.0,
+        "parallel_worker_mode": "auto",
+        "parallel_workers": 0,
+        "per_pass_cost_usd": 0.0,
+        "planning_effort": "high",
+        "provider_api_key_env": "OPENAI_API_KEY",
+        "provider_base_url": "",
+        "reasoning_output_cost_per_million_usd": 0.0,
+        "regression_limit": 3,
+        "require_checkpoint_approval": false,
+        "sandbox_mode": "danger-full-access",
+        "save_project_logs": false,
+        "test_cmd": "python -m unittest",
+        "use_fast_mode": false,
+        "workflow_mode": "standard"
+      }
+    },
+    "content_signature": "577b69c1c6085054a732723c702eede7132c2706",
+    "detail_level": "full",
+    "files": {
+      "execution_plan_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\EXECUTION_PLAN.json",
+      "project_root": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+      "repo_dir": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo",
+      "ui_control_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\UI_RUN_CONTROL.json",
+      "ui_event_log_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\jakal-flow-logs\\ui_events.jsonl"
+    },
+    "github": {
+      "branch": "main",
+      "connected": false,
+      "origin_url": null,
+      "repo_url": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo"
+    },
+    "history": {
+      "blocks": [],
+      "flow_svg_path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\EXECUTION_FLOW.svg",
+      "flow_svg_text": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1180\" height=\"328\" viewBox=\"0 0 1180 328\" role=\"img\">\n<rect width=\"100%\" height=\"100%\" fill=\"#f8fafc\" />\n<text x=\"40\" y=\"34\" fill=\"#0f172a\" font-family=\"Segoe UI, Malgun Gothic, sans-serif\" font-size=\"24\" font-weight=\"700\">Retry Closeout Demo execution flow</text>\n<rect x=\"40\" y=\"56\" rx=\"20\" ry=\"20\" width=\"220\" height=\"136\" fill=\"#0f766e\" />\n<text x=\"58\" y=\"84\" fill=\"#ecfeff\" font-family=\"Segoe UI, Malgun Gothic, sans-serif\" font-size=\"14\" font-weight=\"700\">ST1</text>\n<text x=\"58\" y=\"110\" fill=\"#ecfeff\" font-family=\"Segoe UI, Malgun Gothic, sans-serif\" font-size=\"13\">Already done</text>\n<text x=\"58\" y=\"144\" fill=\"#ecfeff\" font-family=\"Segoe UI, Malgun Gothic, sans-serif\" font-size=\"11\">Completed previously</text>\n<text x=\"58\" y=\"180\" fill=\"#ecfeff\" font-family=\"Segoe UI, Malgun Gothic, sans-serif\" font-size=\"11\">completed</text>\n</svg>",
+      "passes": [],
+      "test_runs": [],
+      "ui_events": [
+        {
+          "details": {},
+          "event_type": "project-saved",
+          "message": "Saved project setup from the desktop shell.",
+          "timestamp": "2026-03-29T00:45:37+00:00"
+        },
+        {
+          "details": {},
+          "event_type": "closeout-started",
+          "message": "Started project closeout.",
+          "timestamp": "2026-03-29T00:45:57+00:00"
+        },
+        {
+          "details": {
+            "commit_hash": null,
+            "notes": "Closeout finished successfully.",
+            "status": "completed"
+          },
+          "event_type": "closeout-finished",
+          "message": "Closeout finished with status completed.",
+          "timestamp": "2026-03-29T00:45:57+00:00"
+        }
+      ]
+    },
+    "loop_state": {
+      "block_index": 0,
+      "counters": {
+        "empty_cycles": 0,
+        "no_progress_blocks": 0,
+        "regression_failures": 0
+      },
+      "current_checkpoint_id": null,
+      "current_safe_revision": "637db311f09ba761f6e6bdcfc27c847915cf29bb",
+      "current_task": null,
+      "last_block_completed_at": null,
+      "last_candidates": [],
+      "last_commit_hash": null,
+      "pending_checkpoint_approval": false,
+      "plan_locked": true,
+      "repo_id": "1c0ebc2d8bc7d77be28a35b8b23e39853cf5c8e6",
+      "repo_slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+      "stop_reason": null,
+      "stop_requested": false
+    },
+    "payload_cache_hit": false,
+    "plan": {
+      "closeout_commit_hash": null,
+      "closeout_completed_at": "2026-03-29T00:12:00+00:00",
+      "closeout_notes": "Closeout finished successfully.",
+      "closeout_started_at": "2026-03-29T00:10:00+00:00",
+      "closeout_status": "completed",
+      "default_test_command": "python -m unittest",
+      "execution_mode": "parallel",
+      "last_updated_at": "2026-03-29T00:45:57+00:00",
+      "plan_title": "Retry Closeout Demo",
+      "project_prompt": "Retry closeout",
+      "steps": [
+        {
+          "codex_description": "Completed previously",
+          "commit_hash": null,
+          "completed_at": null,
+          "depends_on": [],
+          "display_description": "Completed previously",
+          "metadata": {},
+          "model": "",
+          "model_provider": "",
+          "notes": "",
+          "owned_paths": [],
+          "parallel_group": "",
+          "reasoning_effort": "high",
+          "started_at": null,
+          "status": "completed",
+          "step_id": "ST1",
+          "success_criteria": "Nothing left to do.",
+          "test_command": "python -m unittest",
+          "title": "Already done"
+        }
+      ],
+      "summary": "Everything is ready.",
+      "workflow_mode": "standard"
+    },
+    "planning_progress": {},
+    "progress": "Completed 1/1 steps, closeout completed",
+    "project": {
+      "archive_id": null,
+      "archived": false,
+      "archived_at": null,
+      "branch": "main",
+      "created_at": "2026-03-29T00:45:36+00:00",
+      "current_safe_revision": "637db311f09ba761f6e6bdcfc27c847915cf29bb",
+      "current_status": "closed_out",
+      "display_name": "Retry Closeout Demo",
+      "last_run_at": "2026-03-29T00:45:57+00:00",
+      "origin_url": null,
+      "project_root": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+      "repo_id": "1c0ebc2d8bc7d77be28a35b8b23e39853cf5c8e6",
+      "repo_kind": "local",
+      "repo_path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo",
+      "repo_url": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo",
+      "slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+      "source_repo_id": null
+    },
+    "recent_blocks": [],
+    "recent_passes": [],
+    "reports": {
+      "attempt_history_text": "# Attempt History",
+      "closeout_report_text": "# Closeout Report\n\nNo closeout has been run yet.",
+      "latest_failure": {},
+      "ml_experiment_report_text": "# ML Experiment Report\n\nNo ML experiment summary has been generated yet.",
+      "ml_results_svg_path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\ML_EXPERIMENT_RESULTS.svg",
+      "word_report_enabled": true,
+      "word_report_path": ""
+    },
+    "run_control": {
+      "request_source": null,
+      "requested_at": null,
+      "stop_after_current_step": false,
+      "stop_immediately": false
+    },
+    "runtime": {
+      "allow_background_queue": true,
+      "allow_push": true,
+      "approval_mode": "never",
+      "auto_merge_pull_request": true,
+      "background_queue_priority": 0,
+      "billing_mode": "included",
+      "cached_input_cost_per_million_usd": 0.0,
+      "checkpoint_interval_blocks": 1,
+      "codex_base_slug": "",
+      "codex_path": "codex.cmd",
+      "codex_variant_slug": "",
+      "effort": "high",
+      "effort_selection_mode": "explicit",
+      "empty_cycle_limit": 3,
+      "ensemble_claude_model": "claude-sonnet-4-6",
+      "ensemble_gemini_model": "gemini-3-flash-preview",
+      "ensemble_openai_model": "gpt-5.4",
+      "execution_mode": "parallel",
+      "extra_prompt": "",
+      "generate_word_report": true,
+      "git_user_email": "jakal-flow@example.invalid",
+      "git_user_name": "jakal-flow-bot",
+      "init_plan_prompt": "",
+      "input_cost_per_million_usd": 0.0,
+      "local_model_provider": "",
+      "max_blocks": 5,
+      "ml_max_cycles": 3,
+      "model": "gpt-5.4",
+      "model_preset": "",
+      "model_provider": "openai",
+      "model_selection_mode": "slug",
+      "model_slug_input": "gpt-5.4",
+      "no_progress_limit": 3,
+      "optimization_duplicate_block_lines": 4,
+      "optimization_large_file_lines": 350,
+      "optimization_long_function_lines": 80,
+      "optimization_max_files": 3,
+      "optimization_mode": "light",
+      "output_cost_per_million_usd": 0.0,
+      "parallel_memory_per_worker_gib": 3.0,
+      "parallel_worker_mode": "auto",
+      "parallel_workers": 0,
+      "per_pass_cost_usd": 0.0,
+      "planning_effort": "high",
+      "provider_api_key_env": "OPENAI_API_KEY",
+      "provider_base_url": "",
+      "reasoning_output_cost_per_million_usd": 0.0,
+      "regression_limit": 3,
+      "require_checkpoint_approval": false,
+      "sandbox_mode": "danger-full-access",
+      "save_project_logs": false,
+      "test_cmd": "python -m unittest",
+      "use_fast_mode": false,
+      "workflow_mode": "standard"
+    },
+    "runtime_insights": {
+      "cost": {
+        "estimated_total_cost_usd": 0.0,
+        "recent": {
+          "billing_mode": "included",
+          "configured": true,
+          "details": {},
+          "estimated_cost_usd": 0.0,
+          "usage": {
+            "cached_input_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 0
+          }
+        },
+        "recent_usage": {
+          "cached_input_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 0
+        },
+        "remaining": {
+          "billing_mode": "included",
+          "configured": true,
+          "details": {},
+          "estimated_cost_usd": 0.0,
+          "usage": {
+            "cached_input_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 0
+          }
+        },
+        "remaining_usage": {
+          "cached_input_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 0
+        }
+      },
+      "execution": {
+        "completed_step_count": 1,
+        "effort_baselines": [
+          {
+            "cost": {
+              "billing_mode": "included",
+              "configured": true,
+              "details": {},
+              "estimated_cost_usd": 0.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 6000,
+                "output_tokens": 2400,
+                "reasoning_output_tokens": 600,
+                "total_tokens": 9000
+              }
+            },
+            "effort": "low",
+            "estimated_duration_seconds": 300.0,
+            "usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 6000,
+              "output_tokens": 2400,
+              "reasoning_output_tokens": 600,
+              "total_tokens": 9000
+            }
+          },
+          {
+            "cost": {
+              "billing_mode": "included",
+              "configured": true,
+              "details": {},
+              "estimated_cost_usd": 0.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 11000,
+                "output_tokens": 4500,
+                "reasoning_output_tokens": 1500,
+                "total_tokens": 17000
+              }
+            },
+            "effort": "medium",
+            "estimated_duration_seconds": 540.0,
+            "usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 11000,
+              "output_tokens": 4500,
+              "reasoning_output_tokens": 1500,
+              "total_tokens": 17000
+            }
+          },
+          {
+            "cost": {
+              "billing_mode": "included",
+              "configured": true,
+              "details": {},
+              "estimated_cost_usd": 0.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 17000,
+                "output_tokens": 6500,
+                "reasoning_output_tokens": 3500,
+                "total_tokens": 27000
+              }
+            },
+            "effort": "high",
+            "estimated_duration_seconds": 840.0,
+            "usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 17000,
+              "output_tokens": 6500,
+              "reasoning_output_tokens": 3500,
+              "total_tokens": 27000
+            }
+          },
+          {
+            "cost": {
+              "billing_mode": "included",
+              "configured": true,
+              "details": {},
+              "estimated_cost_usd": 0.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 24000,
+                "output_tokens": 8500,
+                "reasoning_output_tokens": 5500,
+                "total_tokens": 38000
+              }
+            },
+            "effort": "xhigh",
+            "estimated_duration_seconds": 1200.0,
+            "usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 24000,
+              "output_tokens": 8500,
+              "reasoning_output_tokens": 5500,
+              "total_tokens": 38000
+            }
+          }
+        ],
+        "elapsed_seconds": 840.0,
+        "estimated_total_seconds": 840.0,
+        "pending_step_count": 0,
+        "remaining_seconds": 0.0,
+        "running_step_count": 0,
+        "step_estimates": [
+          {
+            "actual_duration_seconds": null,
+            "elapsed_seconds": 840.0,
+            "estimated_duration_seconds": 840.0,
+            "reasoning_effort": "high",
+            "remaining_seconds": 0.0,
+            "source": "heuristic",
+            "status": "completed",
+            "step_id": "ST1"
+          }
+        ]
+      },
+      "parallel": {
+        "cpu_logical_count": 16,
+        "cpu_parallel_limit": 4,
+        "memory_available_bytes": 3192135680,
+        "memory_budget_per_worker_gib": 3.0,
+        "memory_parallel_limit": 1,
+        "memory_total_bytes": 16847327232,
+        "reason": "automatic worker count derived from available compute resources (cpu/4 and memory budget)",
+        "recommended_workers": 1,
+        "requested_workers": 0,
+        "worker_mode": "auto"
+      }
+    },
+    "share": {
+      "active_session": null,
+      "project_active_session": null,
+      "server": {
+        "base_url": null,
+        "config": {
+          "access_token": "",
+          "bind_host": "0.0.0.0",
+          "preferred_port": 0,
+          "public_base_url": ""
+        },
+        "host": "0.0.0.0",
+        "port": null,
+        "public_tunnel": {
+          "available": true,
+          "command_path": "C:\\Users\\ahnd6\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Cloudflare.cloudflared_Microsoft.Winget.Source_8wekyb3d8bbwe\\cloudflared.EXE",
+          "pid": null,
+          "provider": "cloudflare-quick-tunnel",
+          "public_url": null,
+          "running": false,
+          "started_at": null,
+          "target_url": null
+        },
+        "running": false,
+        "share_base_url": null,
+        "share_base_url_source": null,
+        "viewer_path": "/share/view"
+      },
+      "sessions": []
+    },
+    "snapshot": {
+      "codex_status": {},
+      "latest_block": {},
+      "latest_pass": {},
+      "loop_state": {
+        "block_index": 0,
+        "counters": {
+          "empty_cycles": 0,
+          "no_progress_blocks": 0,
+          "regression_failures": 0
+        },
+        "current_checkpoint_id": null,
+        "current_safe_revision": "637db311f09ba761f6e6bdcfc27c847915cf29bb",
+        "current_task": null,
+        "last_block_completed_at": null,
+        "last_candidates": [],
+        "last_commit_hash": null,
+        "pending_checkpoint_approval": false,
+        "plan_locked": true,
+        "repo_id": "1c0ebc2d8bc7d77be28a35b8b23e39853cf5c8e6",
+        "repo_slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+        "stop_reason": null,
+        "stop_requested": false
+      },
+      "plan": {
+        "closeout_commit_hash": null,
+        "closeout_completed_at": "2026-03-29T00:12:00+00:00",
+        "closeout_notes": "Closeout finished successfully.",
+        "closeout_started_at": "2026-03-29T00:10:00+00:00",
+        "closeout_status": "completed",
+        "default_test_command": "python -m unittest",
+        "execution_mode": "parallel",
+        "last_updated_at": "2026-03-29T00:45:57+00:00",
+        "plan_title": "Retry Closeout Demo",
+        "project_prompt": "Retry closeout",
+        "steps": [
+          {
+            "codex_description": "Completed previously",
+            "commit_hash": null,
+            "completed_at": null,
+            "depends_on": [],
+            "display_description": "Completed previously",
+            "metadata": {},
+            "model": "",
+            "model_provider": "",
+            "notes": "",
+            "owned_paths": [],
+            "parallel_group": "",
+            "reasoning_effort": "high",
+            "started_at": null,
+            "status": "completed",
+            "step_id": "ST1",
+            "success_criteria": "Nothing left to do.",
+            "test_command": "python -m unittest",
+            "title": "Already done"
+          }
+        ],
+        "summary": "Everything is ready.",
+        "workflow_mode": "standard"
+      },
+      "project": {
+        "archive_id": null,
+        "archived": false,
+        "archived_at": null,
+        "branch": "main",
+        "created_at": "2026-03-29T00:45:36+00:00",
+        "current_safe_revision": "637db311f09ba761f6e6bdcfc27c847915cf29bb",
+        "current_status": "closed_out",
+        "display_name": "Retry Closeout Demo",
+        "last_run_at": "2026-03-29T00:45:57+00:00",
+        "origin_url": null,
+        "project_root": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+        "repo_id": "1c0ebc2d8bc7d77be28a35b8b23e39853cf5c8e6",
+        "repo_kind": "local",
+        "repo_path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo",
+        "repo_url": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo",
+        "slug": "c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b",
+        "source_repo_id": null
+      },
+      "recent_blocks": [],
+      "recent_passes": [],
+      "recent_usage": {
+        "cached_input_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 0
+      },
+      "run_control": {
+        "request_source": null,
+        "requested_at": null,
+        "stop_after_current_step": false,
+        "stop_immediately": false
+      },
+      "runtime": {
+        "allow_background_queue": true,
+        "allow_push": true,
+        "approval_mode": "never",
+        "auto_merge_pull_request": true,
+        "background_queue_priority": 0,
+        "billing_mode": "included",
+        "cached_input_cost_per_million_usd": 0.0,
+        "checkpoint_interval_blocks": 1,
+        "codex_base_slug": "",
+        "codex_path": "codex.cmd",
+        "codex_variant_slug": "",
+        "effort": "high",
+        "effort_selection_mode": "explicit",
+        "empty_cycle_limit": 3,
+        "ensemble_claude_model": "claude-sonnet-4-6",
+        "ensemble_gemini_model": "gemini-3-flash-preview",
+        "ensemble_openai_model": "gpt-5.4",
+        "execution_mode": "parallel",
+        "extra_prompt": "",
+        "generate_word_report": true,
+        "git_user_email": "jakal-flow@example.invalid",
+        "git_user_name": "jakal-flow-bot",
+        "init_plan_prompt": "",
+        "input_cost_per_million_usd": 0.0,
+        "local_model_provider": "",
+        "max_blocks": 5,
+        "ml_max_cycles": 3,
+        "model": "gpt-5.4",
+        "model_preset": "",
+        "model_provider": "openai",
+        "model_selection_mode": "slug",
+        "model_slug_input": "gpt-5.4",
+        "no_progress_limit": 3,
+        "optimization_duplicate_block_lines": 4,
+        "optimization_large_file_lines": 350,
+        "optimization_long_function_lines": 80,
+        "optimization_max_files": 3,
+        "optimization_mode": "light",
+        "output_cost_per_million_usd": 0.0,
+        "parallel_memory_per_worker_gib": 3.0,
+        "parallel_worker_mode": "auto",
+        "parallel_workers": 0,
+        "per_pass_cost_usd": 0.0,
+        "planning_effort": "high",
+        "provider_api_key_env": "OPENAI_API_KEY",
+        "provider_base_url": "",
+        "reasoning_output_cost_per_million_usd": 0.0,
+        "regression_limit": 3,
+        "require_checkpoint_approval": false,
+        "sandbox_mode": "danger-full-access",
+        "save_project_logs": false,
+        "test_cmd": "python -m unittest",
+        "use_fast_mode": false,
+        "workflow_mode": "standard"
+      },
+      "runtime_insights": {
+        "cost": {
+          "estimated_total_cost_usd": 0.0,
+          "recent": {
+            "billing_mode": "included",
+            "configured": true,
+            "details": {},
+            "estimated_cost_usd": 0.0,
+            "usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "recent_usage": {
+            "cached_input_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 0
+          },
+          "remaining": {
+            "billing_mode": "included",
+            "configured": true,
+            "details": {},
+            "estimated_cost_usd": 0.0,
+            "usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "remaining_usage": {
+            "cached_input_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 0
+          }
+        },
+        "execution": {
+          "completed_step_count": 1,
+          "effort_baselines": [
+            {
+              "cost": {
+                "billing_mode": "included",
+                "configured": true,
+                "details": {},
+                "estimated_cost_usd": 0.0,
+                "usage": {
+                  "cached_input_tokens": 0,
+                  "input_tokens": 6000,
+                  "output_tokens": 2400,
+                  "reasoning_output_tokens": 600,
+                  "total_tokens": 9000
+                }
+              },
+              "effort": "low",
+              "estimated_duration_seconds": 300.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 6000,
+                "output_tokens": 2400,
+                "reasoning_output_tokens": 600,
+                "total_tokens": 9000
+              }
+            },
+            {
+              "cost": {
+                "billing_mode": "included",
+                "configured": true,
+                "details": {},
+                "estimated_cost_usd": 0.0,
+                "usage": {
+                  "cached_input_tokens": 0,
+                  "input_tokens": 11000,
+                  "output_tokens": 4500,
+                  "reasoning_output_tokens": 1500,
+                  "total_tokens": 17000
+                }
+              },
+              "effort": "medium",
+              "estimated_duration_seconds": 540.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 11000,
+                "output_tokens": 4500,
+                "reasoning_output_tokens": 1500,
+                "total_tokens": 17000
+              }
+            },
+            {
+              "cost": {
+                "billing_mode": "included",
+                "configured": true,
+                "details": {},
+                "estimated_cost_usd": 0.0,
+                "usage": {
+                  "cached_input_tokens": 0,
+                  "input_tokens": 17000,
+                  "output_tokens": 6500,
+                  "reasoning_output_tokens": 3500,
+                  "total_tokens": 27000
+                }
+              },
+              "effort": "high",
+              "estimated_duration_seconds": 840.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 17000,
+                "output_tokens": 6500,
+                "reasoning_output_tokens": 3500,
+                "total_tokens": 27000
+              }
+            },
+            {
+              "cost": {
+                "billing_mode": "included",
+                "configured": true,
+                "details": {},
+                "estimated_cost_usd": 0.0,
+                "usage": {
+                  "cached_input_tokens": 0,
+                  "input_tokens": 24000,
+                  "output_tokens": 8500,
+                  "reasoning_output_tokens": 5500,
+                  "total_tokens": 38000
+                }
+              },
+              "effort": "xhigh",
+              "estimated_duration_seconds": 1200.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 24000,
+                "output_tokens": 8500,
+                "reasoning_output_tokens": 5500,
+                "total_tokens": 38000
+              }
+            }
+          ],
+          "elapsed_seconds": 840.0,
+          "estimated_total_seconds": 840.0,
+          "pending_step_count": 0,
+          "remaining_seconds": 0.0,
+          "running_step_count": 0,
+          "step_estimates": [
+            {
+              "actual_duration_seconds": null,
+              "elapsed_seconds": 840.0,
+              "estimated_duration_seconds": 840.0,
+              "reasoning_effort": "high",
+              "remaining_seconds": 0.0,
+              "source": "heuristic",
+              "status": "completed",
+              "step_id": "ST1"
+            }
+          ]
+        },
+        "parallel": {
+          "cpu_logical_count": 16,
+          "cpu_parallel_limit": 4,
+          "memory_available_bytes": 3192135680,
+          "memory_budget_per_worker_gib": 3.0,
+          "memory_parallel_limit": 1,
+          "memory_total_bytes": 16847327232,
+          "reason": "automatic worker count derived from available compute resources (cpu/4 and memory budget)",
+          "recommended_workers": 1,
+          "requested_workers": 0,
+          "worker_mode": "auto"
+        }
+      }
+    },
+    "stats": {
+      "completed_steps": 1,
+      "failed_steps": 0,
+      "remaining_steps": 0,
+      "running_steps": 0,
+      "total_steps": 1
+    },
+    "summary": "Name: Retry Closeout Demo\nDirectory: C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\nGitHub: Not connected\nBranch: main\nStatus: closed_out\nWorkflow: standard\nModel: gpt-5.4  (high) [OpenAI / Codex Cloud]\nVerification: python -m unittest\nRemaining Steps: None\nCloseout: completed\nPlan Title: Retry Closeout Demo\nLast Run: 2026-03-29T00:45:57+00:00",
+    "workspace_tree": [
+      {
+        "children": [
+          {
+            "children": [
+              {
+                "kind": "dir",
+                "label": "hooks",
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git\\hooks"
+              },
+              {
+                "kind": "dir",
+                "label": "info",
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git\\info"
+              },
+              {
+                "kind": "dir",
+                "label": "logs",
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git\\logs"
+              },
+              {
+                "kind": "dir",
+                "label": "objects",
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git\\objects"
+              },
+              {
+                "kind": "dir",
+                "label": "refs",
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git\\refs"
+              },
+              {
+                "kind": "file",
+                "label": "COMMIT_EDITMSG",
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git\\COMMIT_EDITMSG"
+              },
+              {
+                "kind": "file",
+                "label": "config",
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git\\config"
+              },
+              {
+                "kind": "file",
+                "label": "description",
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git\\description"
+              }
+            ],
+            "kind": "dir",
+            "label": ".git",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.git"
+          },
+          {
+            "children": [
+              {
+                "kind": "dir",
+                "label": "Include",
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.venv\\Include"
+              },
+              {
+                "kind": "dir",
+                "label": "Lib",
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.venv\\Lib"
+              },
+              {
+                "kind": "dir",
+                "label": "Scripts",
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.venv\\Scripts"
+              },
+              {
+                "kind": "file",
+                "label": "pyvenv.cfg",
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.venv\\pyvenv.cfg"
+              }
+            ],
+            "kind": "dir",
+            "label": ".venv",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.venv"
+          },
+          {
+            "children": [
+              {
+                "kind": "file",
+                "label": "ui_bridge_perf.jsonl",
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\jakal-flow-logs\\ui_bridge_perf.jsonl"
+              },
+              {
+                "kind": "file",
+                "label": "ui_events.jsonl",
+                "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\jakal-flow-logs\\ui_events.jsonl"
+              }
+            ],
+            "kind": "dir",
+            "label": "jakal-flow-logs",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\jakal-flow-logs"
+          },
+          {
+            "kind": "file",
+            "label": ".gitignore",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\.gitignore"
+          }
+        ],
+        "kind": "dir",
+        "label": "Repository",
+        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo"
+      },
+      {
+        "children": [
+          {
+            "kind": "file",
+            "label": "ACTIVE_TASK.md",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\ACTIVE_TASK.md"
+          },
+          {
+            "kind": "file",
+            "label": "attempt_history.md",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\attempt_history.md"
+          },
+          {
+            "kind": "file",
+            "label": "BLOCK_REVIEW.md",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\BLOCK_REVIEW.md"
+          },
+          {
+            "kind": "file",
+            "label": "CHECKPOINT_TIMELINE.md",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\CHECKPOINT_TIMELINE.md"
+          },
+          {
+            "kind": "file",
+            "label": "CLOSEOUT_REPORT.md",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\CLOSEOUT_REPORT.md"
+          },
+          {
+            "kind": "file",
+            "label": "EXECUTION_FLOW.svg",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\EXECUTION_FLOW.svg"
+          },
+          {
+            "kind": "file",
+            "label": "MID_TERM_PLAN.md",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\MID_TERM_PLAN.md"
+          },
+          {
+            "kind": "file",
+            "label": "ML_EXPERIMENT_REPORT.md",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\ML_EXPERIMENT_REPORT.md"
+          },
+          {
+            "kind": "file",
+            "label": "ML_EXPERIMENT_RESULTS.svg",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\ML_EXPERIMENT_RESULTS.svg"
+          },
+          {
+            "kind": "file",
+            "label": "PLAN.md",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\PLAN.md"
+          },
+          {
+            "kind": "file",
+            "label": "RESEARCH_NOTES.md",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\RESEARCH_NOTES.md"
+          },
+          {
+            "kind": "file",
+            "label": "SCOPE_GUARD.md",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs\\SCOPE_GUARD.md"
+          }
+        ],
+        "kind": "dir",
+        "label": "Docs",
+        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\docs"
+      },
+      {
+        "children": [
+          {
+            "kind": "file",
+            "label": "20260328000000_closeout_failed.prfail.json",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\reports\\20260328000000_closeout_failed.prfail.json"
+          },
+          {
+            "kind": "file",
+            "label": "20260328000000_closeout_failed.prfail.md",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\reports\\20260328000000_closeout_failed.prfail.md"
+          }
+        ],
+        "kind": "dir",
+        "label": "Reports",
+        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\reports"
+      },
+      {
+        "children": [
+          {
+            "children": [],
+            "kind": "dir",
+            "label": "ml_experiments",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\ml_experiments"
+          },
+          {
+            "kind": "file",
+            "label": "CHECKPOINTS.json",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\CHECKPOINTS.json"
+          },
+          {
+            "kind": "file",
+            "label": "EXECUTION_PLAN.json",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\EXECUTION_PLAN.json"
+          },
+          {
+            "kind": "file",
+            "label": "LOOP_STATE.json",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\LOOP_STATE.json"
+          },
+          {
+            "kind": "file",
+            "label": "ML_MODE_STATE.json",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\ML_MODE_STATE.json"
+          },
+          {
+            "kind": "file",
+            "label": "PROJECT_DETAIL_CACHE_FULL.json",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\PROJECT_DETAIL_CACHE_FULL.json"
+          },
+          {
+            "kind": "file",
+            "label": "UI_RUN_CONTROL.json",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state\\UI_RUN_CONTROL.json"
+          }
+        ],
+        "kind": "dir",
+        "label": "State",
+        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\state"
+      },
+      {
+        "children": [
+          {
+            "kind": "file",
+            "label": "ui_bridge_perf.jsonl",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\jakal-flow-logs\\ui_bridge_perf.jsonl"
+          },
+          {
+            "kind": "file",
+            "label": "ui_events.jsonl",
+            "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\jakal-flow-logs\\ui_events.jsonl"
+          }
+        ],
+        "kind": "dir",
+        "label": "Logs",
+        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\repo\\jakal-flow-logs"
+      },
+      {
+        "children": [],
+        "kind": "dir",
+        "label": "Memory",
+        "path": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\Jakal-flow\\.tub\\c9c022296\\workspace\\projects\\c-users-ahnd6-onedrive-github-jakal-flow-tub-c9c022296-repo-main-1c0ebc2d8b\\memory"
+      }
+    ]
+  },
+  "version": 9
+}

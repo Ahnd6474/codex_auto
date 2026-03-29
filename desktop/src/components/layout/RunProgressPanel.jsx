@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import {
@@ -42,7 +42,10 @@ function runningStepLabels(steps = [], maxVisible = 3) {
 
 export function RunProgressPanel({ detail, planDraft, activeJob }) {
   const { language, t } = useI18n();
-  const progress = deriveExecutionProgress(detail, planDraft, activeJob);
+  const progress = useMemo(
+    () => deriveExecutionProgress(detail, planDraft, activeJob),
+    [activeJob, detail, planDraft],
+  );
   const runtimeInsights = detail?.runtime_insights || {};
   const executionEstimate = runtimeInsights?.execution || {};
   const costEstimate = runtimeInsights?.cost || {};

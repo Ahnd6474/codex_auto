@@ -35,6 +35,7 @@ import {
   firstSelectableStepId,
   inheritProjectIdentityForm,
   isDuplicateProjectJobError,
+  jobHasNewerActiveReplacement,
   planDependencyValidationMessage,
   projectJobFromJobs,
   programSettingsFromRuntime,
@@ -635,7 +636,9 @@ export function useDesktopController() {
           shouldLoadDetail ? selectedProjectId : "",
           {
             refreshCodexStatus: false,
-            detailLevel: wantsExpandedDetail ? "full" : "core",
+            // Keep event-driven refreshes on the lean core payload. Heavy sections
+            // stay loaded from the existing detail state and on-demand supplements.
+            detailLevel: "core",
             refreshListing,
           },
         );
@@ -692,8 +695,13 @@ export function useDesktopController() {
         const nextSelectedJob = mergeJobUpdate(job);
         reapplyProjectJobState(jobsRef.current);
         const jobStatus = String(job.status || "").trim().toLowerCase();
+        const supersededByActiveJob = jobHasNewerActiveReplacement(job, jobsRef.current);
         if (!["queued", "running"].includes(jobStatus) && !cancelled) {
-          if (job.result?.project && shouldReplaceVisibleProject(selectedProjectId, job.result.project.repo_id)) {
+          if (
+            !supersededByActiveJob
+            && job.result?.project
+            && shouldReplaceVisibleProject(selectedProjectId, job.result.project.repo_id)
+          ) {
             applyProjectDetail(job.result, { preserveDirtyPlan: false, runningJob: nextSelectedJob, force: true });
           }
           if (
@@ -720,6 +728,9 @@ export function useDesktopController() {
             setWorkspaceStats,
           });
           projectsRef.current = nextProjects;
+          if (supersededByActiveJob) {
+            return;
+          }
           setMessage(
             job.status === "completed"
               ? messagePayload(
@@ -785,7 +796,6 @@ export function useDesktopController() {
   }, [
     language,
     selectedProjectId,
-    wantsExpandedDetail,
     workspaceRoot,
   ]);
 
@@ -1335,6 +1345,17 @@ export function useDesktopController() {
     try {
       setMessage(null);
       const job = await startBridgeJob(command, payload, workspaceRoot || null);
+      const selectedRepoId = String(projectDetail?.project?.repo_id || "").trim();
+      const selectedProjectDir = String(projectDetail?.project?.repo_path || "").trim();
+      if (
+        selectedRepoId
+        && (
+          (targetProject.repo_id && selectedRepoId === targetProject.repo_id)
+          || (targetProject.project_dir && selectedProjectDir === targetProject.project_dir)
+        )
+      ) {
+        mergeSelectedProjectSupplement(selectedRepoId, { reports: { latest_failure: {} } });
+      }
       mergeJobUpdate(job);
       reapplyProjectJobState(jobsRef.current);
       setCenterTab("run");

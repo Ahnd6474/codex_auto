@@ -2039,6 +2039,277 @@ class UIBridgeTests(unittest.TestCase):
             self.assertTrue(any(path.endswith("project-closeout-pass.prompt.md") for path in detail["reports"]["latest_failure"]["artifact_files"]))
             self.assertTrue(any("closeout-finished" in line and "Failure report:" in line for line in detail["activity"]))
 
+    def test_generate_plan_clears_latest_failure_when_restarting_after_failure(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Retry Planning Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                saved = run_command("save-project-setup", workspace_root, payload)
+
+            project_root = Path(saved["project"]["project_root"])
+            latest_failure_file = project_root / "reports" / "latest_pr_failure_status.json"
+            report_md = project_root / "reports" / "20260328000000_plan_failed.prfail.md"
+            report_json = project_root / "reports" / "20260328000000_plan_failed.prfail.json"
+            report_md.write_text("planning failed\n", encoding="utf-8")
+            report_json.write_text(json.dumps({"summary": "Planning failed previously."}), encoding="utf-8")
+            latest_failure_file.write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-03-28T00:00:00+00:00",
+                        "failure_type": "planning_failed",
+                        "posted": False,
+                        "result": {"reason": "test"},
+                        "report_markdown_file": str(report_md),
+                        "report_json_file": str(report_json),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            def fake_generate_execution_plan(self, project_dir, runtime, project_prompt, branch="main", max_steps=5, origin_url="", progress_callback=None):
+                context = self.local_project(project_dir)
+                assert context is not None
+                assert not latest_failure_file.exists()
+                plan_state = ExecutionPlanState(
+                    plan_title="Retry Planning Demo",
+                    project_prompt=project_prompt,
+                    summary="Regenerated plan.",
+                    workflow_mode="standard",
+                    execution_mode="parallel",
+                    default_test_command=runtime.test_cmd,
+                    steps=[
+                        ExecutionStep(
+                            step_id="ST1",
+                            title="Retry planning",
+                            display_description="Generate a clean retry plan.",
+                            codex_description="Generate a clean retry plan.",
+                            success_criteria="Plan is ready.",
+                            test_command=runtime.test_cmd,
+                            reasoning_effort="high",
+                        )
+                    ],
+                )
+                project, saved_state = self.update_execution_plan(
+                    project_dir=project_dir,
+                    runtime=runtime,
+                    plan_state=plan_state,
+                    branch=branch,
+                    origin_url=origin_url,
+                )
+                return project, saved_state
+
+            with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()), mock.patch(
+                "jakal_flow.orchestrator.Orchestrator.generate_execution_plan",
+                new=fake_generate_execution_plan,
+            ):
+                detail = run_command(
+                    "generate-plan",
+                    workspace_root,
+                    {
+                        **payload,
+                        "prompt": "Regenerate the plan",
+                        "max_steps": 3,
+                    },
+                )
+
+            self.assertEqual(detail["reports"]["latest_failure"], {})
+            self.assertFalse(latest_failure_file.exists())
+
+    def test_run_plan_clears_latest_failure_when_restarting_after_failure(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Retry Run Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+            completed_plan = {
+                "plan_title": "Retry Run Demo",
+                "project_prompt": "Retry the saved plan",
+                "summary": "No remaining steps.",
+                "workflow_mode": "standard",
+                "execution_mode": "parallel",
+                "default_test_command": "python -m unittest",
+                "closeout_status": "completed",
+                "steps": [
+                    {
+                        "step_id": "ST1",
+                        "title": "Already done",
+                        "display_description": "Completed previously",
+                        "codex_description": "Completed previously",
+                        "success_criteria": "Nothing left to do.",
+                        "test_command": "python -m unittest",
+                        "reasoning_effort": "high",
+                        "status": "completed",
+                    }
+                ],
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                saved = run_command("save-project-setup", workspace_root, payload)
+
+            project_root = Path(saved["project"]["project_root"])
+            latest_failure_file = project_root / "reports" / "latest_pr_failure_status.json"
+            report_md = project_root / "reports" / "20260328000000_run_failed.prfail.md"
+            report_json = project_root / "reports" / "20260328000000_run_failed.prfail.json"
+            report_md.write_text("run failed\n", encoding="utf-8")
+            report_json.write_text(json.dumps({"summary": "Run failed previously."}), encoding="utf-8")
+            latest_failure_file.write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-03-28T00:00:00+00:00",
+                        "failure_type": "run_failed",
+                        "posted": False,
+                        "result": {"reason": "test"},
+                        "report_markdown_file": str(report_md),
+                        "report_json_file": str(report_json),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
+                detail = run_command(
+                    "run-plan",
+                    workspace_root,
+                    {
+                        **payload,
+                        "plan": completed_plan,
+                    },
+                )
+
+            self.assertEqual(detail["reports"]["latest_failure"], {})
+            self.assertFalse(latest_failure_file.exists())
+
+    def test_run_closeout_clears_latest_failure_when_restarting_after_failure(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Retry Closeout Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+            completed_plan = {
+                "plan_title": "Retry Closeout Demo",
+                "project_prompt": "Retry closeout",
+                "summary": "Everything is ready.",
+                "workflow_mode": "standard",
+                "execution_mode": "parallel",
+                "default_test_command": "python -m unittest",
+                "steps": [
+                    {
+                        "step_id": "ST1",
+                        "title": "Already done",
+                        "display_description": "Completed previously",
+                        "codex_description": "Completed previously",
+                        "success_criteria": "Nothing left to do.",
+                        "test_command": "python -m unittest",
+                        "reasoning_effort": "high",
+                        "status": "completed",
+                    }
+                ],
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                saved = run_command("save-project-setup", workspace_root, payload)
+
+            project_root = Path(saved["project"]["project_root"])
+            latest_failure_file = project_root / "reports" / "latest_pr_failure_status.json"
+            report_md = project_root / "reports" / "20260328000000_closeout_failed.prfail.md"
+            report_json = project_root / "reports" / "20260328000000_closeout_failed.prfail.json"
+            report_md.write_text("closeout failed\n", encoding="utf-8")
+            report_json.write_text(json.dumps({"summary": "Closeout failed previously."}), encoding="utf-8")
+            latest_failure_file.write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-03-28T00:00:00+00:00",
+                        "failure_type": "closeout_failed",
+                        "posted": False,
+                        "result": {"reason": "test"},
+                        "report_markdown_file": str(report_md),
+                        "report_json_file": str(report_json),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            def fake_run_execution_closeout(self, project_dir, runtime, branch="main", origin_url=""):
+                context = self.local_project(project_dir)
+                assert context is not None
+                assert not latest_failure_file.exists()
+                plan_state = self.load_execution_plan_state(context)
+                plan_state.closeout_status = "completed"
+                plan_state.closeout_started_at = "2026-03-29T00:10:00+00:00"
+                plan_state.closeout_completed_at = "2026-03-29T00:12:00+00:00"
+                plan_state.closeout_notes = "Closeout finished successfully."
+                saved_state = self.save_execution_plan_state(context, plan_state)
+                context.metadata.current_status = self._status_from_plan_state(saved_state)
+                self.workspace.save_project(context)
+                return context, saved_state
+
+            with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()), mock.patch(
+                "jakal_flow.orchestrator.Orchestrator.run_execution_closeout",
+                new=fake_run_execution_closeout,
+            ):
+                detail = run_command(
+                    "run-closeout",
+                    workspace_root,
+                    {
+                        **payload,
+                        "plan": completed_plan,
+                    },
+                )
+
+            self.assertEqual(detail["reports"]["latest_failure"], {})
+            self.assertFalse(latest_failure_file.exists())
+
     def test_run_plan_routes_single_hybrid_task_batches_through_lineage_execution(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"

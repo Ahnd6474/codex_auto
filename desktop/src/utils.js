@@ -120,6 +120,21 @@ export function projectJobFromJobs(jobs = [], project = {}) {
   })[0] || null;
 }
 
+export function jobHasNewerActiveReplacement(job = null, jobs = []) {
+  const targetJobId = String(job?.id || "").trim();
+  if (!targetJobId) {
+    return false;
+  }
+  const replacement = projectJobFromJobs(jobs, {
+    repo_id: job?.repo_id,
+    project_dir: job?.project_dir,
+  });
+  if (!replacement || String(replacement?.id || "").trim() === targetJobId) {
+    return false;
+  }
+  return ["queued", "running"].includes(String(replacement?.status || "").trim().toLowerCase());
+}
+
 export function projectStatusWithJob(status = "", activeJob = null) {
   const currentStatus = String(status || "").trim();
   const jobStatus = String(activeJob?.status || "").trim().toLowerCase();

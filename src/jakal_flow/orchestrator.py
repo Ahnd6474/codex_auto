@@ -3414,6 +3414,161 @@ class Orchestrator:
             merged["sandbox_mode"] = sandbox_mode
         return RuntimeOptions.from_dict(merged)
 
+    def _execution_step_model_selection_source(self, step: ExecutionStep | None) -> str:
+        if step is None:
+            return ""
+        metadata = step.metadata if isinstance(step.metadata, dict) else {}
+        source = str(metadata.get("model_selection_source", "")).strip().lower()
+        if source in {"auto", "manual"}:
+            return source
+        return "manual" if str(getattr(step, "model_provider", "") or "").strip() else "auto"
+
+    def _run_result_failure_detail(self, run_result: CodexRunResult) -> str:
+        if run_result.last_message:
+            detail = compact_text(str(run_result.last_message).strip(), max_chars=280)
+            if detail:
+                return detail
+        attempts = run_result.diagnostics.get("attempts", []) if isinstance(run_result.diagnostics, dict) else []
+        for attempt in reversed(attempts if isinstance(attempts, list) else []):
+            if not isinstance(attempt, dict):
+                continue
+            for key in ("stderr_excerpt", "last_message_excerpt", "stdout_excerpt"):
+                detail = compact_text(str(attempt.get(key) or "").strip(), max_chars=280)
+                if detail:
+                    return detail
+        return ""
+
+    def _is_auto_provider_fallback_error(self, detail: str) -> bool:
+        lowered = str(detail or "").strip().lower()
+        if not lowered:
+            return False
+        markers = (
+            "please set an auth method",
+            "authentication failed",
+            "invalid api key",
+            "unauthorized",
+            "not authenticated",
+            "login required",
+            "exhausted your capacity",
+            "quota will reset",
+            "rate limit",
+            "resource exhausted",
+            "too many requests",
+        )
+        return any(marker in lowered for marker in markers)
+
+    def _openai_fallback_model(self, runtime: RuntimeOptions) -> str:
+        candidate = normalize_step_model(str(getattr(runtime, "ensemble_openai_model", "") or ""))
+        if candidate:
+            return candidate
+        current_provider = normalize_step_model_provider(str(getattr(runtime, "model_provider", "") or ""))
+        if current_provider in {"openai", "ensemble"}:
+            candidate = normalize_step_model(str(getattr(runtime, "model", "") or getattr(runtime, "model_slug_input", "")))
+            if candidate:
+                return candidate
+        return "auto"
+
+    def _auto_provider_fallback_runtime(
+        self,
+        runtime: RuntimeOptions,
+        execution_step: ExecutionStep | None,
+        failure_detail: str,
+    ) -> RuntimeOptions | None:
+        if execution_step is None:
+            return None
+        if self._execution_step_model_selection_source(execution_step) != "auto":
+            return None
+        current_provider = normalize_step_model_provider(str(getattr(runtime, "model_provider", "") or ""))
+        if current_provider != "gemini":
+            return None
+        if not self._is_auto_provider_fallback_error(failure_detail):
+            return None
+
+        fallback_provider = "openai"
+        fallback_model = self._openai_fallback_model(runtime)
+        if provider_supports_auto_model(fallback_provider) and fallback_model == "auto":
+            fallback_model_preset = str(getattr(runtime, "model_preset", "") or "").strip().lower() or (
+                "auto"
+                if normalize_reasoning_effort(str(getattr(runtime, "effort", "") or ""), fallback="medium") == "medium"
+                else normalize_reasoning_effort(str(getattr(runtime, "effort", "") or ""), fallback="medium")
+            )
+        else:
+            fallback_model_preset = ""
+        preset = provider_preset(fallback_provider)
+        return RuntimeOptions.from_dict(
+            {
+                **runtime.to_dict(),
+                "model_provider": fallback_provider,
+                "provider_base_url": preset.default_base_url,
+                "provider_api_key_env": preset.default_api_key_env,
+                "billing_mode": normalize_billing_mode("", fallback_provider, fallback=preset.default_billing_mode),
+                "codex_path": default_codex_path(fallback_provider),
+                "model": fallback_model,
+                "model_slug_input": fallback_model,
+                "model_preset": fallback_model_preset,
+                "model_selection_mode": "slug",
+                "effort_selection_mode": (
+                    "auto"
+                    if provider_supports_auto_model(fallback_provider) and fallback_model == "auto"
+                    else "explicit"
+                ),
+            }
+        )
+
+    def _provider_fallback_pass_name(self, pass_name: str, provider: str) -> str:
+        normalized_pass_name = str(pass_name or "").strip() or "codex-pass"
+        provider_slug = "".join(char if char.isalnum() or char in {"-", "_"} else "-" for char in str(provider or "").strip().lower()).strip("-") or "fallback"
+        return f"{normalized_pass_name}-fallback-{provider_slug}"
+
+    def _retry_run_with_auto_provider_fallback(
+        self,
+        *,
+        context: ProjectContext,
+        prompt: str,
+        pass_name: str,
+        block_index: int,
+        search_enabled: bool,
+        safe_revision: str,
+        run_result: CodexRunResult,
+        execution_step: ExecutionStep | None,
+    ) -> CodexRunResult:
+        failure_detail = self._run_result_failure_detail(run_result)
+        fallback_runtime = self._auto_provider_fallback_runtime(context.runtime, execution_step, failure_detail)
+        if fallback_runtime is None:
+            return run_result
+
+        primary_runtime = context.runtime
+        from_provider = normalize_step_model_provider(str(getattr(primary_runtime, "model_provider", "") or "")) or str(getattr(primary_runtime, "model_provider", "") or "").strip() or "unknown"
+        to_provider = normalize_step_model_provider(str(getattr(fallback_runtime, "model_provider", "") or "")) or str(getattr(fallback_runtime, "model_provider", "") or "").strip() or "unknown"
+        self.git.hard_reset(context.paths.repo_dir, safe_revision)
+        context.runtime = fallback_runtime
+        fallback_runner = CodexRunner(context.runtime.codex_path)
+        try:
+            fallback_result = fallback_runner.run_pass(
+                context=context,
+                prompt=prompt,
+                pass_type=self._provider_fallback_pass_name(pass_name, to_provider),
+                block_index=block_index,
+                search_enabled=search_enabled,
+            )
+        except ImmediateStopRequested:
+            self.git.hard_reset(context.paths.repo_dir, safe_revision)
+            raise
+
+        fallback_result.attempt_count += run_result.attempt_count
+        fallback_diagnostics = deepcopy(fallback_result.diagnostics) if isinstance(fallback_result.diagnostics, dict) else {}
+        fallback_diagnostics["provider_fallback"] = {
+            "used": True,
+            "from_provider": from_provider,
+            "to_provider": to_provider,
+            "trigger_detail": failure_detail,
+            "previous_returncode": run_result.returncode,
+            "previous_attempt_count": run_result.attempt_count,
+            "previous_diagnostics": deepcopy(run_result.diagnostics) if isinstance(run_result.diagnostics, dict) else run_result.diagnostics,
+        }
+        fallback_result.diagnostics = fallback_diagnostics
+        return fallback_result
+
     def _parallel_worker_plan(self, runtime: RuntimeOptions):
         return build_parallel_resource_plan(
             getattr(runtime, "parallel_worker_mode", "auto"),
@@ -3487,6 +3642,7 @@ class Orchestrator:
             block_log_file=logs_dir / "blocks.jsonl",
             checkpoint_state_file=state_dir / "CHECKPOINTS.json",
             execution_plan_file=state_dir / "EXECUTION_PLAN.json",
+            lineage_state_file=state_dir / "LINEAGES.json",
             ml_mode_state_file=state_dir / "ML_MODE_STATE.json",
             ml_step_report_file=state_dir / "ML_STEP_REPORT.json",
             ml_experiment_reports_dir=state_dir / "ml_experiments",
@@ -3981,6 +4137,17 @@ class Orchestrator:
         except ImmediateStopRequested:
             self.git.hard_reset(context.paths.repo_dir, safe_revision)
             raise
+        if run_result.returncode != 0:
+            run_result = self._retry_run_with_auto_provider_fallback(
+                context=context,
+                prompt=prompt,
+                pass_name=pass_type,
+                block_index=block_index,
+                search_enabled=False,
+                safe_revision=safe_revision,
+                run_result=run_result,
+                execution_step=None,
+            )
         run_result.changed_files = self.git.changed_files(context.paths.repo_dir)
 
         commit_hash: str | None = None
@@ -5525,6 +5692,17 @@ class Orchestrator:
         except ImmediateStopRequested:
             self.git.hard_reset(context.paths.repo_dir, safe_revision)
             raise
+        if run_result.returncode != 0:
+            run_result = self._retry_run_with_auto_provider_fallback(
+                context=context,
+                prompt=prompt,
+                pass_name=pass_name,
+                block_index=block_index,
+                search_enabled=search_enabled,
+                safe_revision=safe_revision,
+                run_result=run_result,
+                execution_step=execution_step,
+            )
         run_result.changed_files = self.git.changed_files(context.paths.repo_dir)
         if run_result.returncode != 0:
             self.git.hard_reset(context.paths.repo_dir, safe_revision)
@@ -5793,6 +5971,13 @@ class Orchestrator:
                 "report_json_file": bundle.get("report_json_file", ""),
             },
         )
+
+    def clear_latest_failure_status(self, context: ProjectContext) -> None:
+        latest_failure_file = context.paths.reports_dir / "latest_pr_failure_status.json"
+        try:
+            latest_failure_file.unlink(missing_ok=True)
+        except OSError:
+            write_json(latest_failure_file, {})
 
     def _maybe_open_pull_request(
         self,

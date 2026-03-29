@@ -291,12 +291,13 @@ export function ParallelRunControlView({
   const parallelLimitDetails = parallelLimitDescription(parallelInsight, language);
   const parallelLimitCardTone = parallelLimitTone(parallelInsight);
   const projectStatus = projectStatusWithJob(detail?.project?.current_status || "", activeJob);
+  const activeJobStatus = String(activeJob?.status || "").trim().toLowerCase();
   const selectedStepStatus = effectiveStepStatus(selectedStep, projectStatus);
   const closeoutStatus = String(livePlan?.closeout_status || "not_started").trim().toLowerCase();
   const showCloseoutStatus = closeoutStatus && closeoutStatus !== "not_started";
   const showEstimatedCost = shouldShowEstimatedCost(detail?.runtime || {}, costEstimate);
   const activeQueuePosition =
-    String(activeJob?.status || "").trim().toLowerCase() === "queued"
+    activeJobStatus === "queued"
       ? queuedPosition(activeJob?.queue_position)
       : 0;
   const latestFailure = detail?.reports?.latest_failure || {};
@@ -304,8 +305,15 @@ export function ParallelRunControlView({
     () => (Array.isArray(latestFailure?.artifact_files) ? latestFailure.artifact_files.slice(0, 8) : []),
     [latestFailure?.artifact_files],
   );
+  const hideFailureCard = activeJobStatus === "queued" || activeJobStatus === "running";
   const showFailureCard = Boolean(
-    latestFailure?.summary || latestFailure?.report_markdown_file || latestFailure?.report_json_file || failureArtifacts.length,
+    !hideFailureCard
+      && (
+        latestFailure?.summary
+        || latestFailure?.report_markdown_file
+        || latestFailure?.report_json_file
+        || failureArtifacts.length
+      ),
   );
 
   useEffect(() => {

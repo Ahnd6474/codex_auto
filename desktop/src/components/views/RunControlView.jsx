@@ -172,21 +172,26 @@ export function RunControlView({
   const flowColumns = 3;
   const selectedSystemStep = isSystemStep(selectedStep);
   const projectStatus = projectStatusWithJob(detail?.project?.current_status || "", activeJob);
+  const activeJobStatus = String(activeJob?.status || "").trim().toLowerCase();
   const selectedStepStatus = effectiveStepStatus(selectedStep, projectStatus);
   const closeoutStatus = String(planDraft?.closeout_status || "not_started").trim().toLowerCase();
   const showCloseoutStatus = closeoutStatus && closeoutStatus !== "not_started";
   const showEstimatedCost = shouldShowEstimatedCost(detail?.runtime || {}, costEstimate);
   const isPlanningJobRunning =
-    String(activeJob?.status || "").trim().toLowerCase() === "running"
+    activeJobStatus === "running"
     && String(activeJob?.command || "").trim().toLowerCase() === "generate-plan";
   const canResetPlan = !busy || isPlanningJobRunning;
   const latestFailure = detail?.reports?.latest_failure || {};
   const failureArtifacts = Array.isArray(latestFailure?.artifact_files) ? latestFailure.artifact_files.slice(0, 8) : [];
+  const hideFailureCard = activeJobStatus === "queued" || activeJobStatus === "running";
   const showFailureCard = Boolean(
-    latestFailure?.summary
-      || latestFailure?.report_markdown_file
-      || latestFailure?.report_json_file
-      || failureArtifacts.length,
+    !hideFailureCard
+      && (
+        latestFailure?.summary
+        || latestFailure?.report_markdown_file
+        || latestFailure?.report_json_file
+        || failureArtifacts.length
+      ),
   );
 
   return (

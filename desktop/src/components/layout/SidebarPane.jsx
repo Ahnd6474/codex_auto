@@ -244,23 +244,33 @@ export function SidebarPane({
 }) {
   const { language, t } = useI18n();
   const [contextMenu, setContextMenu] = useState(null);
+  const workspaceTabActive = activeTab === "workspace";
   const deferredWorkspaceFilter = useDeferredValue(workspaceFilter);
   const workspaceFilterCacheRef = useRef(new Map());
-  const normalizedWorkspaceTree = useMemo(() => (workspaceTree || []).map((node) => normalizeTree(node)), [workspaceTree]);
+  const normalizedWorkspaceTree = useMemo(
+    () => (workspaceTabActive ? (workspaceTree || []).map((node) => normalizeTree(node)) : []),
+    [workspaceTabActive, workspaceTree],
+  );
 
   const visibleCheckpoints = useMemo(() => {
+    if (activeTab !== "plans") {
+      return [];
+    }
     const items = Array.isArray(checkpoints?.items) ? checkpoints.items.filter(Boolean) : [];
     const pending = checkpoints?.pending && typeof checkpoints.pending === "object" ? checkpoints.pending : null;
     if (!pending) return items;
     if (items.some((item) => item?.checkpoint_id === pending.checkpoint_id)) return items;
     return [pending, ...items];
-  }, [checkpoints]);
+  }, [activeTab, checkpoints]);
 
   useEffect(() => {
     workspaceFilterCacheRef.current.clear();
   }, [normalizedWorkspaceTree]);
 
   const filteredWorkspaceTree = useMemo(() => {
+    if (!workspaceTabActive) {
+      return [];
+    }
     const normalizedQuery = deferredWorkspaceFilter.trim().toLowerCase();
     const cached = workspaceFilterCacheRef.current.get(normalizedQuery);
     if (cached) return cached;
@@ -273,7 +283,7 @@ export function SidebarPane({
     }
     workspaceFilterCacheRef.current.set(normalizedQuery, nextTree);
     return nextTree;
-  }, [deferredWorkspaceFilter, normalizedWorkspaceTree]);
+  }, [deferredWorkspaceFilter, normalizedWorkspaceTree, workspaceTabActive]);
 
   useEffect(() => {
     function handlePointerDown() {

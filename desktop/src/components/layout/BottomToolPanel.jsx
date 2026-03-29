@@ -19,7 +19,10 @@ export function BottomToolPanel({ activeTab, onChangeTab, data, onHide }) {
   const account = codexStatus.account || {};
   const gitStatus = data?.git_status || {};
   const testRuns = data?.test_runs || [];
-  const serializedEventJson = useMemo(() => JSON.stringify(data?.event_json || {}, null, 2), [data?.event_json]);
+  const serializedEventJson = useMemo(
+    () => (activeTab === "json" ? JSON.stringify(data?.event_json || {}, null, 2) : ""),
+    [activeTab, data?.event_json],
+  );
   const { language, t } = useI18n();
   const usageBuckets = codexUsageBuckets(codexStatus, language);
   const showEstimatedCost = shouldShowEstimatedCost(data?.runtime || {}, costEstimate);

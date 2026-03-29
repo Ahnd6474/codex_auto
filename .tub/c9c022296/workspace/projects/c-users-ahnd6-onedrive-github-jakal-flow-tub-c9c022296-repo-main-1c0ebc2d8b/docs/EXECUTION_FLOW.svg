@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="328" viewBox="0 0 1180 328" role="img">
+<rect width="100%" height="100%" fill="#f8fafc" />
+<text x="40" y="34" fill="#0f172a" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="24" font-weight="700">Retry Closeout Demo execution flow</text>
+<rect x="40" y="56" rx="20" ry="20" width="220" height="136" fill="#0f766e" />
+<text x="58" y="84" fill="#ecfeff" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="14" font-weight="700">ST1</text>
+<text x="58" y="110" fill="#ecfeff" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="13">Already done</text>
+<text x="58" y="144" fill="#ecfeff" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="11">Completed previously</text>
+<text x="58" y="180" fill="#ecfeff" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="11">completed</text>
+</svg>

@@ -44,8 +44,8 @@ function mergeReportsSection(primary = null, fallback = null, preserveSparse = f
   const primaryReports = primary && typeof primary === "object" ? primary : {};
   const fallbackReports = fallback && typeof fallback === "object" ? fallback : {};
   const nextReports = {
-    ...cloneValue(fallbackReports),
-    ...cloneValue(primaryReports),
+    ...fallbackReports,
+    ...primaryReports,
   };
   const textKeys = [
     "closeout_report_text",
@@ -66,7 +66,7 @@ function mergeReportsSection(primary = null, fallback = null, preserveSparse = f
   nextReports.word_report_enabled =
     primaryReports?.word_report_enabled ?? fallbackReports?.word_report_enabled ?? false;
   if (!hasOwnValue(primaryReports, "latest_failure")) {
-    nextReports.latest_failure = cloneValue(fallbackReports?.latest_failure || {});
+    nextReports.latest_failure = fallbackReports?.latest_failure || {};
   } else {
     const primaryFailure = primaryReports?.latest_failure;
     const fallbackFailure = fallbackReports?.latest_failure;
@@ -74,7 +74,7 @@ function mergeReportsSection(primary = null, fallback = null, preserveSparse = f
       primaryFailure && typeof primaryFailure === "object" && Object.keys(primaryFailure).length > 0;
     nextReports.latest_failure =
       preserveSparse && !primaryHasContent && fallbackFailure && typeof fallbackFailure === "object"
-        ? cloneValue(fallbackFailure)
+        ? fallbackFailure
         : cloneValue(primaryFailure || {});
   }
   return nextReports;
@@ -87,26 +87,26 @@ function mergeCheckpointsSection(primary = null, fallback = null, preserveSparse
   const primaryCheckpoints = primary && typeof primary === "object" ? primary : {};
   const fallbackCheckpoints = fallback && typeof fallback === "object" ? fallback : {};
   const nextCheckpoints = {
-    ...cloneValue(fallbackCheckpoints),
-    ...cloneValue(primaryCheckpoints),
+    ...fallbackCheckpoints,
+    ...primaryCheckpoints,
   };
   if (!hasOwnValue(primaryCheckpoints, "items")) {
-    nextCheckpoints.items = cloneValue(fallbackCheckpoints?.items || []);
+    nextCheckpoints.items = fallbackCheckpoints?.items || [];
   } else {
     const primaryItems = Array.isArray(primaryCheckpoints?.items) ? primaryCheckpoints.items : [];
     const fallbackItems = Array.isArray(fallbackCheckpoints?.items) ? fallbackCheckpoints.items : [];
     nextCheckpoints.items =
       preserveSparse && primaryItems.length === 0 && fallbackItems.length > 0
-        ? cloneValue(fallbackItems)
+        ? fallbackItems
         : cloneValue(primaryItems);
   }
   if (!hasOwnValue(primaryCheckpoints, "pending")) {
-    nextCheckpoints.pending = cloneValue(fallbackCheckpoints?.pending ?? null);
+    nextCheckpoints.pending = fallbackCheckpoints?.pending ?? null;
   } else {
     const primaryPending = primaryCheckpoints?.pending ?? null;
     nextCheckpoints.pending =
       preserveSparse && primaryPending == null && fallbackCheckpoints?.pending != null
-        ? cloneValue(fallbackCheckpoints.pending)
+        ? fallbackCheckpoints.pending
         : cloneValue(primaryPending);
   }
   if (!hasOwnValue(primaryCheckpoints, "timeline_markdown")) {
@@ -127,19 +127,19 @@ function mergeHistorySection(primary = null, fallback = null, preserveSparse = f
   const primaryHistory = primary && typeof primary === "object" ? primary : {};
   const fallbackHistory = fallback && typeof fallback === "object" ? fallback : {};
   const nextHistory = {
-    ...cloneValue(fallbackHistory),
-    ...cloneValue(primaryHistory),
+    ...fallbackHistory,
+    ...primaryHistory,
   };
   ["ui_events", "blocks", "passes", "test_runs"].forEach((key) => {
     if (!hasOwnValue(primaryHistory, key)) {
-      nextHistory[key] = cloneValue(fallbackHistory?.[key] || []);
+      nextHistory[key] = fallbackHistory?.[key] || [];
       return;
     }
     const primaryItems = Array.isArray(primaryHistory?.[key]) ? primaryHistory[key] : [];
     const fallbackItems = Array.isArray(fallbackHistory?.[key]) ? fallbackHistory[key] : [];
     nextHistory[key] =
       preserveSparse && primaryItems.length === 0 && fallbackItems.length > 0
-        ? cloneValue(fallbackItems)
+        ? fallbackItems
         : cloneValue(primaryItems);
   });
   ["flow_svg_path", "flow_svg_text"].forEach((key) => {
@@ -162,11 +162,11 @@ function mergeConfigSection(primary = null, fallback = null, preserveSparse = fa
   const fallbackConfig = fallback && typeof fallback === "object" ? fallback : {};
   const primaryHasEntries = Object.keys(primaryConfig).length > 0;
   if (preserveSparse && !primaryHasEntries && Object.keys(fallbackConfig).length > 0) {
-    return cloneValue(fallbackConfig);
+    return fallbackConfig;
   }
   return {
-    ...cloneValue(fallbackConfig),
-    ...cloneValue(primaryConfig),
+    ...fallbackConfig,
+    ...primaryConfig,
   };
 }
 
@@ -192,7 +192,7 @@ export function preserveProjectDetailSupplement(detail, previousDetail = null) {
       loadedSections.workspace
         ? (Array.isArray(detail?.workspace_tree) && detail.workspace_tree.length > 0
           ? cloneValue(detail.workspace_tree)
-          : cloneValue(previousDetail?.workspace_tree || []))
+          : previousDetail?.workspace_tree || [])
         : detail?.workspace_tree,
     reports: loadedSections.reports
       ? mergeReportsSection(detail?.reports, previousDetail?.reports, true)
