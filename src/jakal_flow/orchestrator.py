@@ -3535,6 +3535,7 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
         block_index = context.loop_state.block_index
         context.metadata.current_status = f"running:block:{block_index}"
         context.metadata.last_run_at = now_utc_iso()
+        ensure_gitignore(context.paths.repo_dir)
         safe_revision = context.metadata.current_safe_revision or self.git.current_revision(context.paths.repo_dir)
 
         if candidate_override is None:
