@@ -167,13 +167,56 @@ function ReportFileCard({ title, kind, icon, path, available, onOpen, language }
   );
 }
 
+function chatModelOptionValue(item = {}) {
+  const provider = String(item?.provider || "openai").trim().toLowerCase() || "openai";
+  const localProvider = String(item?.local_provider || "").trim().toLowerCase();
+  const model = String(item?.model || "").trim().toLowerCase();
+  return model ? [provider, localProvider, model].join("::") : "";
+}
+
+function parseChatModelOptionValue(value = "") {
+  const [provider = "", localProvider = "", model = ""] = String(value || "").split("::");
+  return {
+    provider: String(provider || "").trim().toLowerCase(),
+    localProvider: String(localProvider || "").trim().toLowerCase(),
+    model: String(model || "").trim().toLowerCase(),
+  };
+}
+
+function chatProviderLabel(provider = "", localProvider = "", language = "en") {
+  const normalizedProvider = String(provider || "").trim().toLowerCase();
+  const normalizedLocalProvider = String(localProvider || "").trim().toLowerCase();
+  if (normalizedProvider === "openai") return "OpenAI";
+  if (normalizedProvider === "claude") return "Claude";
+  if (normalizedProvider === "gemini") return "Gemini";
+  if (normalizedProvider === "ensemble") return language === "ko" ? "Ensemble" : "Ensemble";
+  if (normalizedProvider === "ollama") return "Ollama";
+  if (normalizedProvider === "oss") {
+    return normalizedLocalProvider === "lmstudio" ? "LM Studio" : "Ollama";
+  }
+  if (normalizedProvider === "qwen_code") return "Qwen Code";
+  if (normalizedProvider === "deepseek") return "DeepSeek";
+  if (normalizedProvider === "kimi") return "Kimi";
+  if (normalizedProvider === "minimax") return "MiniMax";
+  if (normalizedProvider === "glm") return "GLM";
+  if (normalizedProvider === "openrouter") return "OpenRouter";
+  if (normalizedProvider === "opencdk") return "OpenCDK";
+  if (normalizedProvider === "local_openai") return "Local OpenAI";
+  return normalizedProvider || "OpenAI";
+}
+
 function ProjectChatPane({
   chat,
+  detail,
+  modelCatalog = [],
+  modelPresets = [],
+  chatSettings = {},
   selectedChatSessionId,
   chatDraftSession,
   onSelectChatSession,
   onStartNewChatSession,
   onSendChatMessage,
+  onChangeChatModelSelection,
   busy,
   language,
 }) {
@@ -181,12 +224,35 @@ function ProjectChatPane({
   const remoteMessages = Array.isArray(chat?.messages) ? chat.messages : [];
   const activeSessionId = String(selectedChatSessionId || chat?.active_session_id || "").trim();
   const summaryFile = String(chat?.summary_file || "").trim();
+  const selectedChatProvider = String(chatSettings?.chat_model_provider || "").trim().toLowerCase();
+  const selectedChatLocalProvider = String(chatSettings?.chat_local_model_provider || "").trim().toLowerCase();
+  const selectedChatModel = String(chatSettings?.chat_model || "").trim().toLowerCase();
+  const projectRuntime = detail?.runtime || {};
   const [input, setInput] = useState("");
   const [pendingMode, setPendingMode] = useState("conversation");
   const [menuOpen, setMenuOpen] = useState(false);
   const [localMessages, setLocalMessages] = useState(remoteMessages);
   const bottomRef = useRef(null);
   const menuRef = useRef(null);
+  const availableChatModels = (Array.isArray(modelCatalog) ? modelCatalog : []).filter((item) => {
+    const model = String(item?.model || "").trim();
+    return Boolean(model) && !item?.hidden;
+  });
+  const selectedChatValue = selectedChatModel ? [selectedChatProvider || "openai", selectedChatLocalProvider, selectedChatModel].join("::") : "";
+  const selectedChatEntry =
+    availableChatModels.find((item) => chatModelOptionValue(item) === selectedChatValue)
+    || (selectedChatModel
+      ? {
+          model: selectedChatModel,
+          display_name: selectedChatModel,
+          provider: selectedChatProvider || "openai",
+          local_provider: selectedChatLocalProvider,
+        }
+      : null);
+  const projectDefaultSummary = runtimeSummary(projectRuntime, modelPresets, language, modelCatalog);
+  const chatTargetSummary = selectedChatEntry
+    ? `${selectedChatEntry.display_name || selectedChatEntry.model} · ${chatProviderLabel(selectedChatEntry.provider, selectedChatEntry.local_provider, language)}`
+    : `${language === "ko" ? "Project default" : "Project default"} · ${projectDefaultSummary}`;
 
   useEffect(() => {
     setLocalMessages(remoteMessages);
@@ -277,6 +343,15 @@ function ProjectChatPane({
     void Promise.resolve(onSelectChatSession?.(nextSessionId)).catch(() => {});
   }
 
+  function handleChatModelChange(event) {
+    const nextValue = String(event.target.value || "").trim();
+    if (!nextValue) {
+      onChangeChatModelSelection?.(null);
+      return;
+    }
+    onChangeChatModelSelection?.(parseChatModelOptionValue(nextValue));
+  }
+
   const selectedSessionValue = chatDraftSession ? "" : activeSessionId;
 
   return (
@@ -286,6 +361,30 @@ function ProjectChatPane({
         <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>
           {language === "ko" ? "Conversation or manual recovery" : "Conversation or manual recovery"}
         </span>
+      </div>
+
+      <div className="sidebar-chat-config" style={{ margin: "8px 10px 0" }}>
+        <div className="sidebar-chat-config__header">
+          <strong>{language === "ko" ? "Chat model" : "Chat model"}</strong>
+          <span>{chatTargetSummary}</span>
+        </div>
+        <select
+          className="sidebar-chat-config__select"
+          value={selectedChatValue}
+          onChange={handleChatModelChange}
+        >
+          <option value="">{language === "ko" ? "Project default" : "Project default"}</option>
+          {selectedChatEntry && !availableChatModels.some((item) => chatModelOptionValue(item) === selectedChatValue) ? (
+            <option value={selectedChatValue}>
+              {selectedChatEntry.display_name || selectedChatEntry.model} · {chatProviderLabel(selectedChatEntry.provider, selectedChatEntry.local_provider, language)}
+            </option>
+          ) : null}
+          {availableChatModels.map((item) => (
+            <option key={chatModelOptionValue(item)} value={chatModelOptionValue(item)}>
+              {(item.display_name || item.model) + " · " + chatProviderLabel(item.provider, item.local_provider, language)}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="sidebar-chat-toolbar" style={{ padding: "0 10px" }}>
@@ -431,16 +530,19 @@ export function RightSidebarPane({
   planDraft,
   selectedStepId,
   modelPresets,
+  modelCatalog = [],
   form,
   activeJob,
   busy,
   onChangeForm,
   chat,
+  chatSettings = {},
   selectedChatSessionId,
   chatDraftSession,
   onSelectChatSession,
   onStartNewChatSession,
   onSendChatMessage,
+  onChangeChatModelSelection,
 }) {
   const { language, t } = useI18n();
   const [activeTab, setActiveTab] = useState("chat");
@@ -511,11 +613,16 @@ export function RightSidebarPane({
         {activeTab === "chat" ? (
           <ProjectChatPane
             chat={chat}
+            detail={detail}
+            modelCatalog={modelCatalog}
+            modelPresets={modelPresets}
+            chatSettings={chatSettings}
             selectedChatSessionId={selectedChatSessionId}
             chatDraftSession={chatDraftSession}
             onSelectChatSession={onSelectChatSession}
             onStartNewChatSession={onStartNewChatSession}
             onSendChatMessage={onSendChatMessage}
+            onChangeChatModelSelection={onChangeChatModelSelection}
             busy={busy}
             language={language}
           />

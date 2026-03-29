@@ -224,6 +224,12 @@ def normalize_runtime_payload(
         str(merged.get("model_provider", DEFAULT_MODEL_PROVIDER)),
         fallback=DEFAULT_MODEL_PROVIDER,
     )
+    raw_chat_model_provider = str(merged.get("chat_model_provider", "")).strip().lower()
+    merged["chat_model_provider"] = (
+        normalize_model_provider(raw_chat_model_provider, fallback=DEFAULT_MODEL_PROVIDER)
+        if raw_chat_model_provider
+        else ""
+    )
     provider = provider_preset(merged["model_provider"])
     merged["local_model_provider"] = normalize_local_model_provider(
         str(merged.get("local_model_provider", "")),
@@ -233,6 +239,14 @@ def normalize_runtime_payload(
         merged["model_provider"],
         merged["local_model_provider"],
         fallback=DEFAULT_LOCAL_MODEL_PROVIDER,
+    )
+    merged["chat_local_model_provider"] = (
+        normalize_local_model_provider(
+            str(merged.get("chat_local_model_provider", "")),
+            fallback="",
+        )
+        if merged["chat_model_provider"] in {"oss", "ollama"}
+        else ""
     )
     merged["provider_base_url"] = str(merged.get("provider_base_url", "")).strip()
     if not merged["provider_base_url"] and provider.default_base_url:
@@ -264,6 +278,7 @@ def normalize_runtime_payload(
         or default_codex_path(merged["model_provider"])
     )
     merged["model"] = str(merged.get("model", "")).strip().lower()
+    merged["chat_model"] = str(merged.get("chat_model", "")).strip().lower()
     merged["model_preset"] = normalize_model_preset_id(str(merged.get("model_preset", "")), fallback="")
     merged["effort_selection_mode"] = str(merged.get("effort_selection_mode", "")).strip().lower()
     if merged["effort_selection_mode"] not in {"auto", "explicit"}:
@@ -331,6 +346,8 @@ def normalize_runtime_payload(
         merged["model"] = merged["model_slug_input"]
     if not merged["model"] and merged["model_slug_input"]:
         merged["model"] = merged["model_slug_input"]
+    if merged["chat_model_provider"] and not provider_supports_auto_model(merged["chat_model_provider"]) and merged["chat_model"] == AUTO_MODEL_SLUG:
+        merged["chat_model"] = ""
     return merged
 
 

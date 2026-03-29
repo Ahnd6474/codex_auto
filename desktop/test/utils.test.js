@@ -244,6 +244,8 @@ test("program settings helpers keep global runtime controls separate from projec
   assert.deepEqual(settings, {
     model_provider: "openai",
     local_model_provider: "ollama",
+    chat_model_provider: "",
+    chat_local_model_provider: "",
     provider_base_url: "",
     provider_api_key_env: "OPENAI_API_KEY",
     billing_mode: "included",
@@ -251,6 +253,7 @@ test("program settings helpers keep global runtime controls separate from projec
     ensemble_gemini_model: GEMINI_DEFAULT_MODEL,
     ensemble_claude_model: CLAUDE_DEFAULT_MODEL,
     model: "gpt-5.4",
+    chat_model: "",
     planning_effort: "medium",
     model_preset: "",
     model_selection_mode: "slug",
@@ -301,12 +304,15 @@ test("program settings helpers keep global runtime controls separate from projec
       test_cmd: "pytest -q",
       model_provider: "openai",
       local_model_provider: "ollama",
+      chat_model_provider: "",
+      chat_local_model_provider: "",
       provider_base_url: "",
       provider_api_key_env: "OPENAI_API_KEY",
       ensemble_openai_model: "gpt-5.4",
       ensemble_gemini_model: GEMINI_DEFAULT_MODEL,
       ensemble_claude_model: CLAUDE_DEFAULT_MODEL,
       model: "gpt-5.4",
+      chat_model: "",
       planning_effort: "medium",
       model_preset: "",
       model_selection_mode: "slug",
@@ -343,12 +349,15 @@ test("program settings helpers keep global runtime controls separate from projec
       project_dir: "demo",
       runtime: {
         model: "gpt-5.4",
+        chat_model: "",
         model_preset: "",
         model_selection_mode: "slug",
         model_slug_input: "gpt-5.4",
         test_cmd: "pytest -q",
         model_provider: "openai",
         local_model_provider: "ollama",
+        chat_model_provider: "",
+        chat_local_model_provider: "",
         provider_base_url: "",
         provider_api_key_env: "OPENAI_API_KEY",
         ensemble_openai_model: "gpt-5.4",
@@ -378,6 +387,8 @@ test("program settings normalize provider selection to GPT Codex only defaults",
     model_provider: "gemini",
     model: "gemini-3-flash-preview",
     model_slug_input: "gemini-3-flash-preview",
+    chat_model_provider: "gemini",
+    chat_model: "gemini-3-flash-preview",
     provider_base_url: "https://generativelanguage.googleapis.com",
     provider_api_key_env: "GEMINI_API_KEY",
     codex_path: defaultCodexPath("gemini"),
@@ -386,6 +397,8 @@ test("program settings normalize provider selection to GPT Codex only defaults",
   assert.equal(settings.model_provider, "openai");
   assert.equal(settings.model, "gpt-5.4");
   assert.equal(settings.model_slug_input, "gpt-5.4");
+  assert.equal(settings.chat_model_provider, "gemini");
+  assert.equal(settings.chat_model, "gemini-3-flash-preview");
   assert.equal(settings.provider_base_url, "");
   assert.equal(settings.provider_api_key_env, "OPENAI_API_KEY");
   assert.equal(settings.codex_path, defaultCodexPath());

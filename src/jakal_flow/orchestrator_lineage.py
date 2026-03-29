@@ -10,6 +10,17 @@ from pathlib import Path
 from uuid import uuid4
 
 from .commit_naming import build_commit_descriptor, build_initial_commit_descriptor
+from .contract_wave import (
+    build_lineage_manifest,
+    classify_completed_lineage_step,
+    current_spine_version,
+    load_lineage_manifests,
+    manifest_summary_markdown,
+    normalize_execution_step_policy,
+    policy_summary,
+    save_lineage_manifest,
+    update_contract_wave_artifacts_for_completion,
+)
 from .environment import ensure_gitignore, ensure_virtualenv
 from . import execution_plan_support
 from .codex_runner import CodexRunner
@@ -131,6 +142,7 @@ class OrchestratorLineageMixin:
         logs_dir = WorkspaceManager.repo_logs_dir(worktree_dir)
         reports_dir = lineage_root / "reports"
         state_dir = lineage_root / "state"
+        lineage_manifests_dir = state_dir / "lineage_manifests"
         for directory in [lineage_root, docs_dir, memory_dir, logs_dir, reports_dir, state_dir]:
             ensure_dir(directory)
         self.workspace.migrate_logs_dir(legacy_logs_dir, logs_dir)
@@ -163,9 +175,12 @@ class OrchestratorLineageMixin:
             checkpoint_state_file=state_dir / "CHECKPOINTS.json",
             execution_plan_file=state_dir / "EXECUTION_PLAN.json",
             lineage_state_file=state_dir / "LINEAGES.json",
+            spine_file=state_dir / "SPINE.json",
+            common_requirements_file=state_dir / "COMMON_REQUIREMENTS.json",
             ml_mode_state_file=state_dir / "ML_MODE_STATE.json",
             ml_step_report_file=state_dir / "ML_STEP_REPORT.json",
             ml_experiment_reports_dir=state_dir / "ml_experiments",
+            lineage_manifests_dir=lineage_manifests_dir,
             ui_control_file=state_dir / "UI_RUN_CONTROL.json",
             ui_event_log_file=logs_dir / "ui_events.jsonl",
             execution_flow_svg_file=docs_dir / "EXECUTION_FLOW.svg",
@@ -174,6 +189,7 @@ class OrchestratorLineageMixin:
             closeout_report_pptx_file=reports_dir / "CLOSEOUT_REPORT.pptx",
             ml_experiment_report_file=docs_dir / "ML_EXPERIMENT_REPORT.md",
             ml_experiment_results_svg_file=docs_dir / "ML_EXPERIMENT_RESULTS.svg",
+            shared_contracts_file=docs_dir / "SHARED_CONTRACTS.md",
         )
     def _sync_lineage_support_files(self, context: ProjectContext, lineage_paths: ProjectPaths) -> None:
         for source_dir, target_dir in [
@@ -186,6 +202,8 @@ class OrchestratorLineageMixin:
         for source_path, target_path in [
             (context.paths.execution_plan_file, lineage_paths.execution_plan_file),
             (context.paths.checkpoint_state_file, lineage_paths.checkpoint_state_file),
+            (context.paths.spine_file, lineage_paths.spine_file),
+            (context.paths.common_requirements_file, lineage_paths.common_requirements_file),
             (context.paths.ml_mode_state_file, lineage_paths.ml_mode_state_file),
             (context.paths.ui_control_file, lineage_paths.ui_control_file),
         ]:
@@ -193,6 +211,9 @@ class OrchestratorLineageMixin:
                 continue
             ensure_dir(target_path.parent)
             shutil.copy2(source_path, target_path)
+        if context.paths.lineage_manifests_dir.exists():
+            ensure_dir(lineage_paths.lineage_manifests_dir)
+            shutil.copytree(context.paths.lineage_manifests_dir, lineage_paths.lineage_manifests_dir, dirs_exist_ok=True)
     def _persist_context_files(self, context: ProjectContext) -> None:
         write_json(context.paths.metadata_file, context.metadata.to_dict())
         write_json(context.paths.project_config_file, context.runtime.to_dict())

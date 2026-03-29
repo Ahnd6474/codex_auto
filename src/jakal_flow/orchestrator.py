@@ -10,6 +10,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from .commit_naming import build_commit_descriptor, build_initial_commit_descriptor
+from .contract_wave import current_spine_version, ensure_contract_wave_artifacts, normalize_execution_step_policy, policy_summary
 from .environment import ensure_gitignore, ensure_virtualenv
 from . import execution_plan_support
 from .codex_runner import CodexRunner
@@ -609,6 +610,7 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
         execution_mode: str,
     ) -> list[ExecutionStep]:
         fallback_effort = normalize_reasoning_effort(context.runtime.effort, fallback="high")
+        spine_version = current_spine_version(context.paths)
         raw_ids: list[str] = []
         seen_ids: set[str] = set()
         for index, step in enumerate(steps, start=1):
@@ -644,7 +646,8 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
                     owned_paths.append(normalized_path)
                 metadata = self._normalize_parallel_step_metadata(raw_id, metadata, id_map)
             normalized_steps.append(
-                ExecutionStep(
+                normalize_execution_step_policy(
+                    ExecutionStep(
                     step_id=id_map[raw_id],
                     title=step.title.strip(),
                     display_description=step.display_description.strip(),
@@ -654,6 +657,15 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
                     model=normalize_step_model(step.model),
                     test_command=step.test_command.strip() or default_test_command or context.runtime.test_cmd,
                     success_criteria=step.success_criteria.strip(),
+                    step_type=step.step_type,
+                    scope_class=step.scope_class,
+                    spine_version=step.spine_version,
+                    shared_contracts=list(step.shared_contracts),
+                    verification_profile=step.verification_profile,
+                    promotion_class=step.promotion_class,
+                    primary_scope_paths=list(step.primary_scope_paths),
+                    shared_reviewed_paths=list(step.shared_reviewed_paths),
+                    forbidden_core_paths=list(step.forbidden_core_paths),
                     reasoning_effort=normalize_reasoning_effort(step.reasoning_effort, fallback=fallback_effort),
                     parallel_group=step.parallel_group.strip() if execution_mode == "parallel" else "",
                     depends_on=depends_on,
@@ -664,6 +676,9 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
                     commit_hash=step.commit_hash,
                     notes=step.notes.strip(),
                     metadata=metadata,
+                    ),
+                    step_kind=self._step_kind(step),
+                    current_spine_version=spine_version,
                 )
             )
         if execution_mode == "parallel":
@@ -2330,6 +2345,7 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
         logs_dir = WorkspaceManager.repo_logs_dir(worktree_dir)
         reports_dir = worker_root / "reports"
         state_dir = worker_root / "state"
+        lineage_manifests_dir = state_dir / "lineage_manifests"
         for directory in [worker_root, docs_dir, memory_dir, logs_dir, reports_dir, state_dir]:
             ensure_dir(directory)
         self.workspace.migrate_logs_dir(legacy_logs_dir, logs_dir)
@@ -2362,9 +2378,12 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
             checkpoint_state_file=state_dir / "CHECKPOINTS.json",
             execution_plan_file=state_dir / "EXECUTION_PLAN.json",
             lineage_state_file=state_dir / "LINEAGES.json",
+            spine_file=state_dir / "SPINE.json",
+            common_requirements_file=state_dir / "COMMON_REQUIREMENTS.json",
             ml_mode_state_file=state_dir / "ML_MODE_STATE.json",
             ml_step_report_file=state_dir / "ML_STEP_REPORT.json",
             ml_experiment_reports_dir=state_dir / "ml_experiments",
+            lineage_manifests_dir=lineage_manifests_dir,
             ui_control_file=state_dir / "UI_RUN_CONTROL.json",
             ui_event_log_file=logs_dir / "ui_events.jsonl",
             execution_flow_svg_file=docs_dir / "EXECUTION_FLOW.svg",
@@ -2373,6 +2392,7 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
             closeout_report_pptx_file=reports_dir / "CLOSEOUT_REPORT.pptx",
             ml_experiment_report_file=docs_dir / "ML_EXPERIMENT_REPORT.md",
             ml_experiment_results_svg_file=docs_dir / "ML_EXPERIMENT_RESULTS.svg",
+            shared_contracts_file=docs_dir / "SHARED_CONTRACTS.md",
         )
 
     def _copy_parallel_worker_support_files(self, context: ProjectContext, worker_paths: ProjectPaths) -> None:
@@ -3574,6 +3594,8 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
 
     def _ensure_project_documents(self, context: ProjectContext) -> None:
         ensure_dir(context.paths.ml_experiment_reports_dir)
+        ensure_dir(context.paths.lineage_manifests_dir)
+        ensure_contract_wave_artifacts(context.paths)
         for file_path, starter in [
             (context.paths.active_task_file, "# Active Task\n\nNo active task selected yet.\n"),
             (context.paths.block_review_file, "# Block Review\n\nNo completed blocks yet.\n"),
@@ -3605,6 +3627,7 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
             write_text(context.paths.ml_experiment_results_svg_file, self._ml_results_svg([]))
 
     def _execution_step_rationale(self, step: ExecutionStep, test_command: str) -> str:
+        normalize_execution_step_policy(step)
         details = step.codex_description or step.display_description or "Complete the saved execution checkpoint with a small, safe change."
         success = step.success_criteria or "The verification command exits successfully."
         ui_hint = step.display_description.strip()
@@ -3614,12 +3637,13 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
         kind_hint = ""
         if step_kind != "task":
             kind_hint = f" Step kind: {step_kind}."
+        policy_hint = f" Policy: {policy_summary(step)}."
         metadata_hint = ""
         if step.metadata:
             metadata_hint = f" Metadata: {json.dumps(step.metadata, ensure_ascii=False, sort_keys=True)}."
         if ui_hint and ui_hint != details:
-            return f"UI description: {ui_hint}. Execution instruction: {details}.{kind_hint}{dependency_hint}{ownership_hint}{metadata_hint} Verification command: {test_command}. Success criteria: {success}"
-        return f"{details}.{kind_hint}{dependency_hint}{ownership_hint}{metadata_hint} Verification command: {test_command}. Success criteria: {success}"
+            return f"UI description: {ui_hint}. Execution instruction: {details}.{kind_hint}{dependency_hint}{ownership_hint}{policy_hint}{metadata_hint} Verification command: {test_command}. Success criteria: {success}"
+        return f"{details}.{kind_hint}{dependency_hint}{ownership_hint}{policy_hint}{metadata_hint} Verification command: {test_command}. Success criteria: {success}"
 
     def _all_steps_completed(self, steps: list[ExecutionStep]) -> bool:
         return bool(steps) and all(step.status == "completed" for step in steps)

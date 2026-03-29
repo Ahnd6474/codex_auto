@@ -144,6 +144,7 @@ class WorkspaceManager:
         logs_dir = resolved_root / "logs"
         reports_dir = resolved_root / "reports"
         state_dir = resolved_root / "state"
+        lineage_manifests_dir = state_dir / "lineage_manifests"
         return ProjectPaths(
             workspace_root=self.workspace_root,
             projects_root=self.projects_root,
@@ -173,9 +174,12 @@ class WorkspaceManager:
             checkpoint_state_file=state_dir / "CHECKPOINTS.json",
             execution_plan_file=state_dir / "EXECUTION_PLAN.json",
             lineage_state_file=state_dir / "LINEAGES.json",
+            spine_file=state_dir / "SPINE.json",
+            common_requirements_file=state_dir / "COMMON_REQUIREMENTS.json",
             ml_mode_state_file=state_dir / "ML_MODE_STATE.json",
             ml_step_report_file=state_dir / "ML_STEP_REPORT.json",
             ml_experiment_reports_dir=state_dir / "ml_experiments",
+            lineage_manifests_dir=lineage_manifests_dir,
             ui_control_file=state_dir / "UI_RUN_CONTROL.json",
             ui_event_log_file=logs_dir / "ui_events.jsonl",
             execution_flow_svg_file=docs_dir / "EXECUTION_FLOW.svg",
@@ -184,6 +188,7 @@ class WorkspaceManager:
             closeout_report_pptx_file=reports_dir / "CLOSEOUT_REPORT.pptx",
             ml_experiment_report_file=docs_dir / "ML_EXPERIMENT_REPORT.md",
             ml_experiment_results_svg_file=docs_dir / "ML_EXPERIMENT_RESULTS.svg",
+            shared_contracts_file=docs_dir / "SHARED_CONTRACTS.md",
         )
 
     def initialize_project(
@@ -204,6 +209,7 @@ class WorkspaceManager:
             paths.reports_dir,
             paths.state_dir,
             paths.ml_experiment_reports_dir,
+            paths.lineage_manifests_dir,
         ]:
             ensure_dir(directory)
 

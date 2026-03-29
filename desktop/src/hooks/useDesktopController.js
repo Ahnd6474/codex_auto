@@ -1082,6 +1082,26 @@ export function useDesktopController() {
     });
   }
 
+  function setChatModelSelection(selection = null) {
+    const nextSettings = programSettingsFromRuntime({
+      ...programSettings,
+      chat_model_provider: String(selection?.provider || "").trim().toLowerCase(),
+      chat_local_model_provider: String(selection?.localProvider || "").trim().toLowerCase(),
+      chat_model: String(selection?.model || "").trim().toLowerCase(),
+    });
+    setStoredProgramSettings(nextSettings);
+    setProgramSettings(nextSettings);
+    setProjectForm((current) => ({
+      ...(current || {}),
+      runtime: {
+        ...(current?.runtime || {}),
+        chat_model_provider: nextSettings.chat_model_provider,
+        chat_local_model_provider: nextSettings.chat_local_model_provider,
+        chat_model: nextSettings.chat_model,
+      },
+    }));
+  }
+
   function saveProgramSettings() {
     const nextSettings = programSettingsFromRuntime(programSettings);
     applyProgramSettingsNow(nextSettings);
@@ -1633,10 +1653,17 @@ export function useDesktopController() {
         ? ""
         : (selectedChatSessionId || projectDetail?.chat?.active_session_id || ""),
     ).trim();
+    const basePayload = buildProjectPayload(projectForm, planDraft);
     return startJob(
       BRIDGE_COMMANDS.SEND_CHAT_MESSAGE,
       {
-        ...buildProjectPayload(projectForm, planDraft),
+        ...basePayload,
+        runtime: {
+          ...(basePayload.runtime || {}),
+          chat_model_provider: String(programSettings?.chat_model_provider || "").trim().toLowerCase(),
+          chat_local_model_provider: String(programSettings?.chat_local_model_provider || "").trim().toLowerCase(),
+          chat_model: String(programSettings?.chat_model || "").trim().toLowerCase(),
+        },
         message: messageText,
         chat_mode: String(mode || "conversation").trim().toLowerCase() || "conversation",
         session_id: activeSessionId,
@@ -1943,6 +1970,7 @@ export function useDesktopController() {
     setSelectedStepId,
     setSelectedHistoryId,
     setProgramSettings: updateProgramSettings,
+    setChatModelSelection,
     setCenterTab,
     setBottomTab,
     setSidebarTab,

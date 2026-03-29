@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import os
 from pathlib import Path
+import re
+import shutil
 import tempfile
 from typing import Any
 from uuid import uuid4
@@ -20,14 +23,27 @@ CHAT_CONVERSATION_PROMPT_FILENAME = "CHAT_CONVERSATION_PROMPT.txt"
 CHAT_SESSIONS_FILENAME = "CHAT_SESSIONS.txt"
 CHAT_ACTIVE_SESSION_FILENAME = "CHAT_ACTIVE_SESSION.txt"
 CHAT_SESSIONS_DIRNAME = "chat_sessions"
+CHAT_ACTIVE_DIRNAME = "active"
+CHAT_STORAGE_LOGS_DIRNAME = "logs"
+CHAT_STORAGE_MEMORY_DIRNAME = "memory"
+CHAT_HOME_ENV_VAR = "JAKAL_FLOW_CHAT_HOME"
 CHAT_MESSAGE_LOG_SUFFIX = ".messages.txt"
 CHAT_SUMMARY_SUFFIX = ".summary.txt"
 CHAT_TRANSCRIPT_SUFFIX = ".transcript.txt"
+_WINDOWS_RESERVED_NAMES = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *(f"COM{index}" for index in range(1, 10)),
+    *(f"LPT{index}" for index in range(1, 10)),
+}
 
 
 @dataclass(slots=True)
 class ChatSessionMeta:
     session_id: str
+    repo_id: str
     title: str
     created_at: str
     updated_at: str
@@ -40,6 +56,7 @@ class ChatSessionMeta:
     def to_dict(self) -> dict[str, Any]:
         return {
             "session_id": self.session_id,
+            "repo_id": self.repo_id,
             "title": self.title,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
@@ -54,7 +71,8 @@ class ChatSessionMeta:
     def from_dict(cls, data: dict[str, Any]) -> "ChatSessionMeta":
         return cls(
             session_id=str(data.get("session_id", "")).strip(),
-            title=str(data.get("title", "")).strip() or "Conversation",
+            repo_id=str(data.get("repo_id", "")).strip(),
+            title=str(data.get("title", "")).strip() or "Conversation.txt",
             created_at=str(data.get("created_at", "")).strip(),
             updated_at=str(data.get("updated_at", "")).strip(),
             message_count=max(0, int(data.get("message_count", 0) or 0)),
@@ -100,19 +118,50 @@ class ChatMessageEntry:
         )
 
 
+def _default_chat_home_root(context: ProjectContext) -> Path:
+    module_path = Path(__file__).resolve()
+    for parent in module_path.parents:
+        if (parent / "pyproject.toml").exists() and (parent / "src" / "jakal_flow").exists():
+            return parent / CHAT_SESSIONS_DIRNAME
+    return context.paths.workspace_root / CHAT_SESSIONS_DIRNAME
+
+
+def chat_storage_root(context: ProjectContext) -> Path:
+    override = str(os.environ.get(CHAT_HOME_ENV_VAR, "")).strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return _default_chat_home_root(context)
+
+
 def chat_sessions_registry_file(context: ProjectContext) -> Path:
-    return context.paths.state_dir / CHAT_SESSIONS_FILENAME
+    return chat_storage_root(context) / CHAT_SESSIONS_FILENAME
 
 
 def chat_active_session_file(context: ProjectContext) -> Path:
-    return context.paths.state_dir / CHAT_ACTIVE_SESSION_FILENAME
+    return chat_storage_root(context) / CHAT_ACTIVE_DIRNAME / f"{context.metadata.repo_id}.txt"
 
 
 def chat_logs_dir(context: ProjectContext) -> Path:
-    return context.paths.logs_dir / CHAT_SESSIONS_DIRNAME
+    return chat_storage_root(context) / CHAT_STORAGE_LOGS_DIRNAME
 
 
 def chat_memory_dir(context: ProjectContext) -> Path:
+    return chat_storage_root(context) / CHAT_STORAGE_MEMORY_DIRNAME
+
+
+def _legacy_chat_sessions_registry_file(context: ProjectContext) -> Path:
+    return context.paths.state_dir / CHAT_SESSIONS_FILENAME
+
+
+def _legacy_chat_active_session_file(context: ProjectContext) -> Path:
+    return context.paths.state_dir / CHAT_ACTIVE_SESSION_FILENAME
+
+
+def _legacy_chat_logs_dir(context: ProjectContext) -> Path:
+    return context.paths.logs_dir / CHAT_SESSIONS_DIRNAME
+
+
+def _legacy_chat_memory_dir(context: ProjectContext) -> Path:
     return context.paths.memory_dir / CHAT_SESSIONS_DIRNAME
 
 
@@ -120,12 +169,43 @@ def chat_message_log_file(context: ProjectContext, session_id: str) -> Path:
     return chat_logs_dir(context) / f"{session_id}{CHAT_MESSAGE_LOG_SUFFIX}"
 
 
-def chat_summary_file(context: ProjectContext, session_id: str) -> Path:
-    return chat_memory_dir(context) / f"{session_id}{CHAT_SUMMARY_SUFFIX}"
+def _sanitize_chat_filename_fragment(value: str) -> str:
+    normalized = " ".join(str(value or "").split()).strip()
+    if normalized.lower().endswith(".txt"):
+        normalized = normalized[:-4].rstrip()
+    normalized = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', " ", normalized)
+    normalized = normalized.rstrip(". ").strip()
+    normalized = compact_text(normalized, max_chars=72)
+    if not normalized:
+        normalized = "Conversation"
+    if normalized.upper() in _WINDOWS_RESERVED_NAMES:
+        normalized = f"{normalized} chat"
+    return normalized
 
 
-def chat_transcript_file(context: ProjectContext, session_id: str) -> Path:
-    return chat_memory_dir(context) / f"{session_id}{CHAT_TRANSCRIPT_SUFFIX}"
+def _timestamp_slug_from(value: str) -> str:
+    digits = "".join(char for char in str(value or "") if char.isdigit())
+    return digits[:14] or _session_timestamp_slug()
+
+
+def _session_title_filename(title_hint: str, created_at: str) -> str:
+    return f"{_sanitize_chat_filename_fragment(title_hint)} {_timestamp_slug_from(created_at)}.txt"
+
+
+def _session_memory_stem(title: str, session_id: str, created_at: str) -> str:
+    current = Path(str(title or "").strip()).stem.strip()
+    if current:
+        return current
+    return Path(_session_title_filename(session_id, created_at)).stem
+
+
+def _session_summary_file(context: ProjectContext, title: str, session_id: str, created_at: str) -> Path:
+    return chat_memory_dir(context) / f"{_session_memory_stem(title, session_id, created_at)}{CHAT_SUMMARY_SUFFIX}"
+
+
+def _session_transcript_file(context: ProjectContext, title: str, created_at: str) -> Path:
+    normalized_title = str(title or "").strip() or _session_title_filename("Conversation", created_at)
+    return chat_memory_dir(context) / normalized_title
 
 
 def _safe_chat_mode(value: str) -> str:
@@ -136,8 +216,7 @@ def _safe_chat_mode(value: str) -> str:
 
 
 def _session_title(value: str) -> str:
-    normalized = " ".join(str(value or "").split())
-    return compact_text(normalized, max_chars=72) or "Conversation"
+    return _session_title_filename(str(value or "").strip() or "Conversation", now_utc_iso())
 
 
 def _session_timestamp_slug() -> str:
@@ -164,21 +243,125 @@ def _write_jsonl_txt(path: Path, items: list[dict[str, Any]]) -> None:
     write_text(path, f"{content}\n" if content else "")
 
 
-def load_chat_sessions(context: ProjectContext) -> list[ChatSessionMeta]:
+def _read_registry_sessions(path: Path) -> list[ChatSessionMeta]:
     sessions = [
         ChatSessionMeta.from_dict(item)
-        for item in _read_jsonl_txt(chat_sessions_registry_file(context))
+        for item in _read_jsonl_txt(path)
         if str(item.get("session_id", "")).strip()
     ]
     sessions.sort(key=lambda item: (item.updated_at, item.created_at, item.session_id), reverse=True)
     return sessions
 
 
-def save_chat_sessions(context: ProjectContext, sessions: list[ChatSessionMeta]) -> None:
-    ensure_dir(chat_sessions_registry_file(context).parent)
+def _save_registry_sessions(path: Path, sessions: list[ChatSessionMeta]) -> None:
+    ensure_dir(path.parent)
     deduped: dict[str, ChatSessionMeta] = {session.session_id: session for session in sessions if session.session_id}
     ordered = sorted(deduped.values(), key=lambda item: (item.updated_at, item.created_at, item.session_id), reverse=True)
-    _write_jsonl_txt(chat_sessions_registry_file(context), [item.to_dict() for item in ordered])
+    _write_jsonl_txt(path, [item.to_dict() for item in ordered])
+
+
+def _relocate_session_memory_files(context: ProjectContext, session: ChatSessionMeta) -> ChatSessionMeta:
+    title = str(session.title or "").strip() or _session_title_filename("Conversation", session.created_at)
+    if not title.lower().endswith(".txt"):
+        title = _session_title_filename(title, session.created_at)
+    session.title = title
+
+    target_summary = _session_summary_file(context, session.title, session.session_id, session.created_at)
+    target_transcript = _session_transcript_file(context, session.title, session.created_at)
+    target_log = chat_message_log_file(context, session.session_id)
+    ensure_dir(target_summary.parent)
+    ensure_dir(target_transcript.parent)
+    ensure_dir(target_log.parent)
+
+    for source_raw, target in (
+        (session.summary_file, target_summary),
+        (session.transcript_file, target_transcript),
+        (session.log_file, target_log),
+    ):
+        source = Path(str(source_raw or "").strip()) if str(source_raw or "").strip() else None
+        if source is None or not source.exists():
+            continue
+        if source.resolve() == target.resolve():
+            continue
+        if target.exists():
+            if source.read_bytes() == target.read_bytes():
+                source.unlink(missing_ok=True)
+                continue
+            target = target.with_name(f"{target.stem}-{session.session_id[:6]}{target.suffix}")
+        shutil.move(str(source), str(target))
+
+    session.summary_file = str(target_summary)
+    session.transcript_file = str(target_transcript)
+    session.log_file = str(target_log)
+    return session
+
+
+def _cleanup_legacy_chat_dirs(context: ProjectContext) -> None:
+    for directory in (_legacy_chat_logs_dir(context), _legacy_chat_memory_dir(context)):
+        if not directory.exists():
+            continue
+        try:
+            next(directory.iterdir())
+        except StopIteration:
+            directory.rmdir()
+        except OSError:
+            continue
+
+
+def _migrate_legacy_project_chat_storage(context: ProjectContext) -> None:
+    legacy_registry = _legacy_chat_sessions_registry_file(context)
+    legacy_active = _legacy_chat_active_session_file(context)
+    has_legacy_state = (
+        legacy_registry.exists()
+        or legacy_active.exists()
+        or _legacy_chat_logs_dir(context).exists()
+        or _legacy_chat_memory_dir(context).exists()
+    )
+    if not has_legacy_state:
+        return
+
+    global_sessions = _read_registry_sessions(chat_sessions_registry_file(context))
+    by_id: dict[str, ChatSessionMeta] = {session.session_id: session for session in global_sessions}
+    migrated_any = False
+    for session in _read_registry_sessions(legacy_registry):
+        session.repo_id = session.repo_id or context.metadata.repo_id
+        session = _relocate_session_memory_files(context, session)
+        by_id[session.session_id] = session
+        migrated_any = True
+
+    if migrated_any:
+        _save_registry_sessions(chat_sessions_registry_file(context), list(by_id.values()))
+
+    active_session_id = read_text(legacy_active).strip()
+    if active_session_id:
+        save_active_chat_session_id(context, active_session_id)
+
+    legacy_registry.unlink(missing_ok=True)
+    legacy_active.unlink(missing_ok=True)
+    _cleanup_legacy_chat_dirs(context)
+
+
+def load_chat_sessions(context: ProjectContext) -> list[ChatSessionMeta]:
+    _migrate_legacy_project_chat_storage(context)
+    sessions = [
+        session
+        for session in _read_registry_sessions(chat_sessions_registry_file(context))
+        if session.repo_id == context.metadata.repo_id
+    ]
+    return sessions
+
+
+def save_chat_sessions(context: ProjectContext, sessions: list[ChatSessionMeta]) -> None:
+    current_repo_id = context.metadata.repo_id
+    existing = _read_registry_sessions(chat_sessions_registry_file(context))
+    preserved = [session for session in existing if session.repo_id != current_repo_id]
+    normalized: list[ChatSessionMeta] = []
+    for session in sessions:
+        if not session.session_id:
+            continue
+        session.repo_id = current_repo_id
+        normalized.append(_relocate_session_memory_files(context, session))
+    _save_registry_sessions(chat_sessions_registry_file(context), [*preserved, *normalized])
 
 
 def load_active_chat_session_id(context: ProjectContext) -> str:
@@ -196,14 +379,16 @@ def _session_by_id(context: ProjectContext) -> dict[str, ChatSessionMeta]:
 def create_chat_session(context: ProjectContext, *, title_hint: str = "") -> ChatSessionMeta:
     created_at = now_utc_iso()
     session_id = f"chat-{_session_timestamp_slug()}-{uuid4().hex[:6]}"
-    summary_path = chat_summary_file(context, session_id)
-    transcript_path = chat_transcript_file(context, session_id)
+    title = _session_title_filename(title_hint or "Conversation", created_at)
+    summary_path = _session_summary_file(context, title, session_id, created_at)
+    transcript_path = _session_transcript_file(context, title, created_at)
     log_path = chat_message_log_file(context, session_id)
     for directory in (summary_path.parent, transcript_path.parent, log_path.parent):
         ensure_dir(directory)
     session = ChatSessionMeta(
         session_id=session_id,
-        title=_session_title(title_hint),
+        repo_id=context.metadata.repo_id,
+        title=title,
         created_at=created_at,
         updated_at=created_at,
         message_count=0,
@@ -333,9 +518,9 @@ def _sync_chat_session_metadata(
     session.message_count = len(messages)
     session.last_mode = _safe_chat_mode(last_mode)
     if title_hint and (session.title == "Conversation" or session.message_count <= 1):
-        session.title = _session_title(title_hint)
-    session.summary_file = str(chat_summary_file(context, session_key))
-    session.transcript_file = str(chat_transcript_file(context, session_key))
+        session.title = _session_title_filename(title_hint, session.created_at)
+    session.repo_id = context.metadata.repo_id
+    session = _relocate_session_memory_files(context, session)
     session.log_file = str(chat_message_log_file(context, session_key))
     by_id[session_key] = session
     save_chat_sessions(context, list(by_id.values()))
@@ -349,8 +534,8 @@ def rebuild_chat_session_files(context: ProjectContext, session_id: str) -> None
     if session is None:
         return
     messages = load_chat_messages(context, session.session_id)
-    summary_path = Path(session.summary_file or chat_summary_file(context, session.session_id))
-    transcript_path = Path(session.transcript_file or chat_transcript_file(context, session.session_id))
+    summary_path = Path(session.summary_file or _session_summary_file(context, session.title, session.session_id, session.created_at))
+    transcript_path = Path(session.transcript_file or _session_transcript_file(context, session.title, session.created_at))
     ensure_dir(summary_path.parent)
     ensure_dir(transcript_path.parent)
 
@@ -509,6 +694,41 @@ def _chat_run_error_message(error_text: str, diagnostics: dict[str, Any] | None 
     return compact_text(combined, max_chars=1400) or "Conversation mode could not produce a reply."
 
 
+def _conversation_context(context: ProjectContext) -> ProjectContext:
+    raw_chat_provider = str(getattr(context.runtime, "chat_model_provider", "") or "").strip().lower()
+    raw_chat_model = str(getattr(context.runtime, "chat_model", "") or "").strip().lower()
+    raw_chat_local_provider = str(getattr(context.runtime, "chat_local_model_provider", "") or "").strip().lower()
+    if not raw_chat_provider and not raw_chat_model:
+        return context
+
+    current_provider = normalize_model_provider(getattr(context.runtime, "model_provider", ""))
+    payload: dict[str, Any] = {}
+    if raw_chat_provider:
+        chat_provider = normalize_model_provider(raw_chat_provider, fallback=current_provider or "openai")
+        payload["model_provider"] = chat_provider
+        if chat_provider in {"oss", "ollama"} and raw_chat_local_provider:
+            payload["local_model_provider"] = raw_chat_local_provider
+        if chat_provider != current_provider:
+            payload["provider_base_url"] = ""
+            payload["provider_api_key_env"] = ""
+            payload["codex_path"] = default_codex_path(chat_provider)
+    if raw_chat_model:
+        payload["model"] = raw_chat_model
+        payload["model_slug_input"] = raw_chat_model
+        payload["model_preset"] = ""
+        payload["model_selection_mode"] = "slug"
+    if not payload:
+        return context
+
+    runtime = runtime_from_payload(payload, defaults=context.runtime.to_dict())
+    return ProjectContext(
+        metadata=context.metadata,
+        runtime=runtime,
+        paths=context.paths,
+        loop_state=context.loop_state,
+    )
+
+
 def _run_conversation_reply(
     context: ProjectContext,
     *,
@@ -602,8 +822,9 @@ def execute_conversation_turn(
         recent_messages=[*prior_messages[-7:], user_entry],
         user_message=cleaned_user_message,
     )
+    conversation_context = _conversation_context(context)
     returncode, assistant_text = _run_conversation_reply(
-        context,
+        conversation_context,
         prompt=prompt,
         session_id=session.session_id,
     )

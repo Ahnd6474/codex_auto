@@ -2516,6 +2516,37 @@ select:focus {
   font-weight: 600;
 }
 
+.sidebar-chat-config {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel-alt);
+  flex-shrink: 0;
+}
+
+.sidebar-chat-config__header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.sidebar-chat-config__header strong {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.sidebar-chat-config__select {
+  width: 100%;
+  min-width: 0;
+  font-size: 12px;
+  padding: 7px 9px;
+}
+
 .sidebar-chat-messages {
   flex: 1;
   min-height: 0;

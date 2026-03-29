@@ -533,6 +533,14 @@ test("RightSidebarPane renders the project chat on the right rail by default", a
       },
       selectedStepId: "",
       modelPresets: [],
+      modelCatalog: [
+        {
+          model: "gpt-5.4-mini",
+          display_name: "GPT-5.4 Mini",
+          hidden: false,
+          provider: "openai",
+        },
+      ],
       form: {
         runtime: {
           generate_word_report: false,
@@ -550,16 +558,23 @@ test("RightSidebarPane renders the project chat on the right rail by default", a
         ],
         summary_file: "C:/demo/chat.summary.txt",
       },
+      chatSettings: {
+        chat_model_provider: "openai",
+        chat_model: "gpt-5.4-mini",
+      },
       selectedChatSessionId: "chat-1",
       chatDraftSession: false,
       onChangeForm: noop,
       onSelectChatSession: noop,
       onStartNewChatSession: noop,
       onSendChatMessage: noop,
+      onChangeChatModelSelection: noop,
     },
   );
 
   assert.match(html, /AI Chat/);
+  assert.match(html, /Chat model/);
+  assert.match(html, /GPT-5\.4 Mini · OpenAI/);
   assert.match(html, /Release/);
   assert.match(html, /Hello from the right side\./);
   assert.match(html, /chat\.summary\.txt/);

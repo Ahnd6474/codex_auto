@@ -17,11 +17,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from jakal_flow.cli import build_parser, main as cli_main, runtime_from_args
 from jakal_flow.bridge_events import bridge_event_context
+from jakal_flow.chat_sessions import CHAT_HOME_ENV_VAR, execute_conversation_turn, load_chat_sessions
 from jakal_flow.errors import RuntimeConfigError
 from jakal_flow.execution_control import ImmediateStopRequested
 import jakal_flow.ui_bridge as ui_bridge
 import jakal_flow.ui_bridge_payloads as ui_bridge_payloads
-from jakal_flow.models import ExecutionPlanState, ExecutionStep, RuntimeOptions
+from jakal_flow.models import ExecutionPlanState, ExecutionStep, LoopState, ProjectContext, ProjectPaths, RepoMetadata, RuntimeOptions
 from jakal_flow.share import share_server_status_payload
 from jakal_flow.status_views import effective_project_status
 from jakal_flow.ui_bridge import default_workspace_root, progress_caption, run_command, runtime_from_payload
@@ -110,6 +111,100 @@ def fake_codex_snapshot() -> mock.Mock:
         "error": "",
     }
     return mock.Mock(model_catalog=payload["model_catalog"], to_dict=mock.Mock(return_value=payload))
+
+
+def build_test_project_context(
+    temp_dir: Path,
+    *,
+    repo_id: str = "repo-1",
+    slug: str = "repo-1",
+    display_name: str = "Repo",
+) -> ProjectContext:
+    workspace_root = temp_dir / "workspace"
+    project_root = workspace_root / "projects" / slug
+    repo_dir = temp_dir / "repo"
+    docs_dir = project_root / "docs"
+    memory_dir = project_root / "memory"
+    logs_dir = project_root / "logs"
+    reports_dir = project_root / "reports"
+    state_dir = project_root / "state"
+    lineage_manifests_dir = state_dir / "lineage_manifests"
+
+    for directory in (workspace_root, project_root, repo_dir, docs_dir, memory_dir, logs_dir, reports_dir, state_dir, lineage_manifests_dir):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    for path, content in (
+        (docs_dir / "PLAN.md", "# Plan\n"),
+        (docs_dir / "SCOPE_GUARD.md", "# Scope Guard\n"),
+        (docs_dir / "RESEARCH_NOTES.md", "# Research Notes\n"),
+    ):
+        path.write_text(content, encoding="utf-8")
+
+    metadata = RepoMetadata(
+        repo_id=repo_id,
+        slug=slug,
+        repo_url=f"https://example.invalid/{slug}.git",
+        branch="main",
+        project_root=project_root,
+        repo_path=repo_dir,
+        created_at="2026-03-29T00:00:00+00:00",
+        current_status="setup_ready",
+        repo_kind="local",
+        display_name=display_name,
+    )
+    paths = ProjectPaths(
+        workspace_root=workspace_root,
+        projects_root=workspace_root / "projects",
+        project_root=project_root,
+        repo_dir=repo_dir,
+        docs_dir=docs_dir,
+        memory_dir=memory_dir,
+        logs_dir=logs_dir,
+        reports_dir=reports_dir,
+        state_dir=state_dir,
+        metadata_file=project_root / "metadata.json",
+        project_config_file=project_root / "project_config.json",
+        loop_state_file=state_dir / "LOOP_STATE.json",
+        plan_file=docs_dir / "PLAN.md",
+        mid_term_plan_file=docs_dir / "MID_TERM_PLAN.md",
+        scope_guard_file=docs_dir / "SCOPE_GUARD.md",
+        active_task_file=docs_dir / "ACTIVE_TASK.md",
+        block_review_file=docs_dir / "BLOCK_REVIEW.md",
+        checkpoint_timeline_file=docs_dir / "CHECKPOINT_TIMELINE.md",
+        research_notes_file=docs_dir / "RESEARCH_NOTES.md",
+        attempt_history_file=docs_dir / "attempt_history.md",
+        success_patterns_file=memory_dir / "success_patterns.jsonl",
+        failure_patterns_file=memory_dir / "failure_patterns.jsonl",
+        task_summaries_file=memory_dir / "task_summaries.jsonl",
+        pass_log_file=logs_dir / "passes.jsonl",
+        block_log_file=logs_dir / "blocks.jsonl",
+        checkpoint_state_file=state_dir / "CHECKPOINTS.json",
+        execution_plan_file=state_dir / "EXECUTION_PLAN.json",
+        lineage_state_file=state_dir / "LINEAGES.json",
+        spine_file=state_dir / "SPINE.json",
+        common_requirements_file=docs_dir / "COMMON_REQUIREMENTS.md",
+        ml_mode_state_file=state_dir / "ML_MODE_STATE.json",
+        ml_step_report_file=state_dir / "ML_STEP_REPORT.json",
+        ml_experiment_reports_dir=state_dir / "ml_experiments",
+        lineage_manifests_dir=lineage_manifests_dir,
+        ui_control_file=state_dir / "UI_RUN_CONTROL.json",
+        ui_event_log_file=logs_dir / "ui_events.jsonl",
+        execution_flow_svg_file=docs_dir / "EXECUTION_FLOW.svg",
+        closeout_report_file=docs_dir / "CLOSEOUT_REPORT.md",
+        closeout_report_docx_file=reports_dir / "CLOSEOUT_REPORT.docx",
+        closeout_report_pptx_file=reports_dir / "CLOSEOUT_REPORT.pptx",
+        ml_experiment_report_file=docs_dir / "ML_EXPERIMENT_REPORT.md",
+        ml_experiment_results_svg_file=docs_dir / "ML_EXPERIMENT_RESULTS.svg",
+        shared_contracts_file=docs_dir / "SHARED_CONTRACTS.md",
+    )
+    runtime = RuntimeOptions(
+        model_provider="openai",
+        model="gpt-5.4",
+        test_cmd="python -m unittest",
+        max_blocks=5,
+    )
+    loop_state = LoopState(repo_id=repo_id, repo_slug=slug)
+    return ProjectContext(metadata=metadata, runtime=runtime, paths=paths, loop_state=loop_state)
 
 
 class UIBridgeTests(unittest.TestCase):
@@ -2876,18 +2971,148 @@ class UIBridgeTests(unittest.TestCase):
 
     def test_send_chat_message_conversation_persists_txt_session_artifacts(self) -> None:
         with TemporaryTestDir() as temp_dir:
+            chat_home = temp_dir / "jakal-flow-chat"
+            context = build_test_project_context(
+                temp_dir,
+                repo_id="chat-conversation-demo",
+                slug="chat-conversation-demo",
+                display_name="Chat Conversation Demo",
+            )
+            plan_state = ExecutionPlanState(
+                plan_title="Chat Conversation Demo",
+                project_prompt="Summarize the current repository state.",
+                summary="Chat conversation test plan.",
+            )
+
+            with mock.patch.dict(os.environ, {CHAT_HOME_ENV_VAR: str(chat_home)}), mock.patch(
+                "jakal_flow.chat_sessions._run_conversation_reply",
+                return_value=(0, "Conversation reply."),
+            ):
+                result = execute_conversation_turn(
+                    context,
+                    plan_state=plan_state,
+                    user_message="Summarize the current repository state.",
+                )
+
+            self.assertEqual(result["error"], "")
+            self.assertEqual(result["chat"]["active_session_id"], result["chat"]["active_session"]["session_id"])
+            self.assertEqual([item["role"] for item in result["chat"]["messages"]], ["user", "assistant"])
+            self.assertEqual(result["chat"]["messages"][-1]["text"], "Conversation reply.")
+
+            summary_path = Path(result["chat"]["summary_file"])
+            transcript_path = Path(result["chat"]["transcript_file"])
+            registry_path = chat_home / "CHAT_SESSIONS.txt"
+            active_path = chat_home / "active" / f"{context.metadata.repo_id}.txt"
+
+            self.assertTrue(summary_path.exists())
+            self.assertTrue(transcript_path.exists())
+            self.assertTrue(registry_path.exists())
+            self.assertTrue(active_path.exists())
+            self.assertEqual(summary_path.suffix, ".txt")
+            self.assertEqual(transcript_path.suffix, ".txt")
+            self.assertEqual(result["chat"]["active_session"]["title"], transcript_path.name)
+            self.assertTrue(str(summary_path).startswith(str(chat_home)))
+            self.assertTrue(str(transcript_path).startswith(str(chat_home)))
+            self.assertTrue(transcript_path.name.startswith("Summarize the current repository state"))
+            self.assertIn("Summarize the current repository state.", transcript_path.read_text(encoding="utf-8"))
+            self.assertIn("Conversation reply.", transcript_path.read_text(encoding="utf-8"))
+            self.assertIn("Rolling Summary", summary_path.read_text(encoding="utf-8"))
+
+    def test_load_chat_sessions_migrates_legacy_project_chat_storage_into_global_chat_home(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            chat_home = temp_dir / "jakal-flow-chat"
+            context = build_test_project_context(
+                temp_dir,
+                repo_id="legacy-chat-demo",
+                slug="legacy-chat-demo",
+                display_name="Legacy Chat Demo",
+            )
+            session_id = "chat-20260329010101-legacy"
+            legacy_registry = context.paths.state_dir / "CHAT_SESSIONS.txt"
+            legacy_active = context.paths.state_dir / "CHAT_ACTIVE_SESSION.txt"
+            legacy_logs_dir = context.paths.logs_dir / "chat_sessions"
+            legacy_memory_dir = context.paths.memory_dir / "chat_sessions"
+            legacy_logs_dir.mkdir(parents=True, exist_ok=True)
+            legacy_memory_dir.mkdir(parents=True, exist_ok=True)
+
+            legacy_log_path = legacy_logs_dir / f"{session_id}.messages.txt"
+            legacy_summary_path = legacy_memory_dir / f"{session_id}.summary.txt"
+            legacy_transcript_path = legacy_memory_dir / f"{session_id}.transcript.txt"
+            legacy_log_path.write_text(
+                json.dumps(
+                    {
+                        "message_id": "msg-1",
+                        "role": "user",
+                        "text": "Legacy chat title source",
+                        "created_at": "2026-03-29T01:01:01+00:00",
+                        "mode": "conversation",
+                        "status": "completed",
+                        "metadata": {},
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            legacy_summary_path.write_text("legacy summary\n", encoding="utf-8")
+            legacy_transcript_path.write_text("legacy transcript\n", encoding="utf-8")
+            legacy_registry.write_text(
+                json.dumps(
+                    {
+                        "session_id": session_id,
+                        "title": "Legacy chat title source",
+                        "created_at": "2026-03-29T01:01:01+00:00",
+                        "updated_at": "2026-03-29T01:01:01+00:00",
+                        "message_count": 1,
+                        "last_mode": "conversation",
+                        "summary_file": str(legacy_summary_path),
+                        "transcript_file": str(legacy_transcript_path),
+                        "log_file": str(legacy_log_path),
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            legacy_active.write_text(f"{session_id}\n", encoding="utf-8")
+
+            with mock.patch.dict(os.environ, {CHAT_HOME_ENV_VAR: str(chat_home)}):
+                sessions = load_chat_sessions(context)
+
+            self.assertEqual(len(sessions), 1)
+            session = sessions[0]
+            self.assertEqual(session.repo_id, context.metadata.repo_id)
+            self.assertEqual(session.title, Path(session.transcript_file).name)
+            self.assertTrue(session.title.startswith("Legacy chat title source"))
+            self.assertTrue(Path(session.summary_file).exists())
+            self.assertTrue(Path(session.transcript_file).exists())
+            self.assertTrue(Path(session.log_file).exists())
+            self.assertTrue(str(Path(session.transcript_file)).startswith(str(chat_home)))
+            self.assertFalse(legacy_registry.exists())
+            self.assertFalse(legacy_active.exists())
+            self.assertFalse(legacy_log_path.exists())
+            self.assertFalse(legacy_summary_path.exists())
+            self.assertFalse(legacy_transcript_path.exists())
+
+    def test_send_chat_message_conversation_uses_chat_model_override(self) -> None:
+        with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"
             repo_dir = temp_dir / "repo"
             repo_dir.mkdir(parents=True, exist_ok=True)
 
             payload = {
                 "project_dir": str(repo_dir),
-                "display_name": "Chat Conversation Demo",
+                "display_name": "Chat Override Demo",
                 "branch": "main",
                 "origin_url": "",
                 "runtime": {
+                    "model_provider": "openai",
                     "model": "gpt-5.4",
-                    "model_preset": "high",
+                    "model_slug_input": "gpt-5.4",
+                    "chat_model_provider": "gemini",
+                    "chat_model": "gemini-2.5-pro",
                     "effort": "high",
                     "test_cmd": "python -m unittest",
                     "max_blocks": 5,
@@ -2900,46 +3125,30 @@ class UIBridgeTests(unittest.TestCase):
             ):
                 detail = run_command("save-project-setup", workspace_root, payload)
 
-            project_root = Path(detail["project"]["project_root"])
-            core_cache = project_root / "state" / "PROJECT_DETAIL_CACHE_CORE.json"
-            cache_mtime = core_cache.stat().st_mtime_ns if core_cache.exists() else None
+            captured: dict[str, str] = {}
 
-            with mock.patch("jakal_flow.chat_sessions._run_conversation_reply", return_value=(0, "Conversation reply.")):
+            def fake_run_conversation_reply(context, *, prompt, session_id):
+                captured["provider"] = context.runtime.model_provider
+                captured["model"] = context.runtime.model
+                captured["codex_path"] = context.runtime.codex_path
+                return 0, "Conversation reply."
+
+            with mock.patch("jakal_flow.chat_sessions._run_conversation_reply", side_effect=fake_run_conversation_reply):
                 result = run_command(
                     "send-chat-message",
                     workspace_root,
                     {
                         **payload,
                         "repo_id": detail["project"]["repo_id"],
-                        "message": "Summarize the current repository state.",
+                        "message": "Use the chat override.",
                         "chat_mode": "conversation",
                     },
                 )
 
-            self.assertEqual(result["chat_mode"], "conversation")
             self.assertEqual(result["error"], "")
-            self.assertFalse(result["emit_project_changed"])
-            self.assertEqual(result["chat"]["active_session_id"], result["chat"]["active_session"]["session_id"])
-            self.assertEqual([item["role"] for item in result["chat"]["messages"]], ["user", "assistant"])
-            self.assertEqual(result["chat"]["messages"][-1]["text"], "Conversation reply.")
-
-            summary_path = Path(result["chat"]["summary_file"])
-            transcript_path = Path(result["chat"]["transcript_file"])
-            registry_path = project_root / "state" / "CHAT_SESSIONS.txt"
-            active_path = project_root / "state" / "CHAT_ACTIVE_SESSION.txt"
-
-            self.assertTrue(summary_path.exists())
-            self.assertTrue(transcript_path.exists())
-            self.assertTrue(registry_path.exists())
-            self.assertTrue(active_path.exists())
-            self.assertEqual(summary_path.suffix, ".txt")
-            self.assertEqual(transcript_path.suffix, ".txt")
-            self.assertIn("Summarize the current repository state.", transcript_path.read_text(encoding="utf-8"))
-            self.assertIn("Conversation reply.", transcript_path.read_text(encoding="utf-8"))
-            self.assertIn("Rolling Summary", summary_path.read_text(encoding="utf-8"))
-
-            if cache_mtime is not None:
-                self.assertEqual(core_cache.stat().st_mtime_ns, cache_mtime)
+            self.assertEqual(captured["provider"], "gemini")
+            self.assertEqual(captured["model"], "gemini-2.5-pro")
+            self.assertIn("gemini", captured["codex_path"])
 
     def test_send_chat_message_debugger_routes_message_into_manual_recovery(self) -> None:
         with TemporaryTestDir() as temp_dir:
