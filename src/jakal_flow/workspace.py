@@ -59,13 +59,82 @@ class WorkspaceManager:
     def build_paths(self, slug: str) -> ProjectPaths:
         return self.build_paths_from_root(self.projects_root / slug)
 
+    @staticmethod
+    def repo_logs_dir(repo_dir: Path) -> Path:
+        return repo_dir.resolve() / LOCAL_PROJECT_LOG_DIRNAME
+
     def _apply_local_repo_log_paths(self, paths: ProjectPaths, repo_dir: Path) -> ProjectPaths:
-        repo_logs_dir = repo_dir.resolve() / LOCAL_PROJECT_LOG_DIRNAME
+        repo_logs_dir = self.repo_logs_dir(repo_dir)
         paths.logs_dir = repo_logs_dir
         paths.pass_log_file = repo_logs_dir / "passes.jsonl"
         paths.block_log_file = repo_logs_dir / "blocks.jsonl"
         paths.ui_event_log_file = repo_logs_dir / "ui_events.jsonl"
         return paths
+
+    def _migration_conflict_path(self, target_path: Path) -> Path:
+        candidate = target_path.with_name(f"{target_path.stem}.workspace-legacy{target_path.suffix}")
+        index = 1
+        while candidate.exists():
+            candidate = target_path.with_name(f"{target_path.stem}.workspace-legacy-{index}{target_path.suffix}")
+            index += 1
+        return candidate
+
+    def _prepend_jsonl_file(self, source_path: Path, target_path: Path) -> None:
+        source_bytes = source_path.read_bytes()
+        target_bytes = target_path.read_bytes()
+        if not source_bytes:
+            source_path.unlink(missing_ok=True)
+            return
+        if not target_bytes:
+            target_path.write_bytes(source_bytes)
+            source_path.unlink(missing_ok=True)
+            return
+        combined = bytearray(source_bytes)
+        if not source_bytes.endswith(b"\n"):
+            combined.extend(b"\n")
+        combined.extend(target_bytes)
+        target_path.write_bytes(bytes(combined))
+        source_path.unlink(missing_ok=True)
+
+    def _merge_logs_file(self, source_path: Path, target_path: Path) -> None:
+        ensure_dir(target_path.parent)
+        if not target_path.exists():
+            shutil.move(str(source_path), str(target_path))
+            return
+        if target_path.is_dir():
+            shutil.move(str(source_path), str(self._migration_conflict_path(target_path.parent / source_path.name)))
+            return
+        if source_path.read_bytes() == target_path.read_bytes():
+            source_path.unlink(missing_ok=True)
+            return
+        if source_path.suffix == ".jsonl" and target_path.suffix == ".jsonl":
+            self._prepend_jsonl_file(source_path, target_path)
+            return
+        shutil.move(str(source_path), str(self._migration_conflict_path(target_path)))
+
+    def _merge_logs_directory(self, source_dir: Path, target_dir: Path) -> None:
+        if target_dir.exists() and not target_dir.is_dir():
+            shutil.move(str(target_dir), str(self._migration_conflict_path(target_dir)))
+        ensure_dir(target_dir)
+        for child in list(source_dir.iterdir()):
+            destination = target_dir / child.name
+            if child.is_dir():
+                self._merge_logs_directory(child, destination)
+            else:
+                self._merge_logs_file(child, destination)
+        remove_tree(source_dir, ignore_errors=True)
+
+    def migrate_logs_dir(self, source_logs_dir: Path, target_logs_dir: Path) -> None:
+        if not source_logs_dir.exists():
+            return
+        resolved_source = source_logs_dir.resolve()
+        resolved_target = target_logs_dir.resolve()
+        if resolved_source == resolved_target:
+            return
+        self._merge_logs_directory(source_logs_dir, target_logs_dir)
+
+    def _migrate_local_project_logs(self, project_root: Path, repo_dir: Path) -> None:
+        self.migrate_logs_dir(project_root.resolve() / "logs", self.repo_logs_dir(repo_dir))
 
     def build_paths_from_root(self, project_root: Path) -> ProjectPaths:
         resolved_root = project_root.resolve()
@@ -193,6 +262,7 @@ class WorkspaceManager:
         ]:
             ensure_dir(directory)
         ensure_dir(resolved_dir)
+        self._migrate_local_project_logs(paths.project_root, resolved_dir)
 
         registry = self._read_registry()
         if repo_id in registry["projects"]:
@@ -254,6 +324,7 @@ class WorkspaceManager:
         if context.metadata.repo_kind == "local":
             context.paths.repo_dir = context.metadata.repo_path
             context.paths = self._apply_local_repo_log_paths(context.paths, context.metadata.repo_path)
+            self._migrate_local_project_logs(resolved_root, context.metadata.repo_path)
         else:
             context.metadata.repo_path = context.paths.repo_dir
         return context
@@ -386,6 +457,7 @@ class WorkspaceManager:
         if metadata.repo_kind == "local":
             paths.repo_dir = metadata.repo_path
             paths = self._apply_local_repo_log_paths(paths, metadata.repo_path)
+            self._migrate_local_project_logs(paths.project_root, metadata.repo_path)
         else:
             metadata.repo_path = paths.repo_dir
         if "parallel_worker_mode" not in runtime_data and "parallel_workers" in runtime_data:

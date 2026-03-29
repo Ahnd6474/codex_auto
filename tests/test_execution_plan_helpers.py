@@ -489,6 +489,66 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         mocked_remove.assert_called_once_with(repo_dir, worktree_dir, force=True)
         mocked_delete.assert_called_once_with(repo_dir, "jakal-flow-integration", force=True)
 
+    def test_build_lineage_paths_writes_logs_under_worktree_repo_root_and_migrates_legacy_logs(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_lineage_repo_logs_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        worktree_dir = temp_root / "lineage-worktree"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        worktree_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium")
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            legacy_logs_dir = context.paths.project_root / ".lineages" / "ln1" / "logs"
+            legacy_logs_dir.mkdir(parents=True, exist_ok=True)
+            (legacy_logs_dir / "passes.jsonl").write_text('{"event":"legacy"}\n', encoding="utf-8")
+            (legacy_logs_dir / "block_0001").mkdir(parents=True, exist_ok=True)
+            (legacy_logs_dir / "block_0001" / "debug.txt").write_text("legacy-lineage", encoding="utf-8")
+
+            repo_logs_dir = worktree_dir / "jakal-flow-logs"
+            repo_logs_dir.mkdir(parents=True, exist_ok=True)
+            (repo_logs_dir / "passes.jsonl").write_text('{"event":"current"}\n', encoding="utf-8")
+
+            lineage_paths = orchestrator._build_lineage_paths(context, "LN1", worktree_dir)
+            self.assertEqual(lineage_paths.logs_dir, repo_logs_dir.resolve())
+            self.assertFalse(legacy_logs_dir.exists())
+            self.assertEqual(
+                read_jsonl_tail(lineage_paths.pass_log_file, 10),
+                [{"event": "legacy"}, {"event": "current"}],
+            )
+            self.assertEqual((lineage_paths.logs_dir / "block_0001" / "debug.txt").read_text(encoding="utf-8"), "legacy-lineage")
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+    def test_build_integration_paths_writes_logs_under_worktree_repo_root(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_integration_repo_logs_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        worktree_dir = temp_root / "integration-worktree"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        worktree_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium")
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            integration_paths = orchestrator._build_integration_paths(context, "token-demo", worktree_dir)
+            self.assertEqual(integration_paths.logs_dir, worktree_dir.resolve() / "jakal-flow-logs")
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
     def test_pending_execution_batches_uses_dependency_ready_waves(self) -> None:
         orchestrator = Orchestrator(Path.cwd() / ".tmp_pending_batches_workspace")
         plan_state = ExecutionPlanState(
@@ -3540,6 +3600,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             shutil.rmtree(temp_root, ignore_errors=True)
 
         self.assertEqual(worker_paths.lineage_state_file, worker_paths.state_dir / "LINEAGES.json")
+        self.assertEqual(worker_paths.logs_dir, repo_dir.resolve() / "jakal-flow-logs")
 
     def test_parallel_batch_merge_conflict_invokes_merger_and_continues(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_merge_debugger_test"

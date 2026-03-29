@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import { commandLabel, isDebuggingStatus, isPlanningProgressRunning, projectStatusWithJob, statusTone, toolbarProgressCaptionDisplay } from "../../utils";
@@ -67,6 +68,105 @@ function ChevronRight() {
   );
 }
 
+function ChevronDown() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
+function PlusSmIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function ProjectSelector({ projects, selectedProjectId, onSelectProject, onNewProject }) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+  const containerRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const selectedProject = (projects || []).find((p) => p.repo_id === selectedProjectId);
+  const filtered = filter.trim()
+    ? (projects || []).filter((p) => (p.display_name || "").toLowerCase().includes(filter.toLowerCase()))
+    : (projects || []);
+
+  useEffect(() => {
+    if (!open) { setFilter(""); return; }
+    const timer = setTimeout(() => inputRef.current?.focus(), 30);
+    return () => clearTimeout(timer);
+  }, [open]);
+
+  useEffect(() => {
+    function onPointerDown(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
+    }
+    function onKeyDown(e) { if (e.key === "Escape") setOpen(false); }
+    if (open) {
+      window.addEventListener("pointerdown", onPointerDown);
+      window.addEventListener("keydown", onKeyDown);
+    }
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div className="project-selector" ref={containerRef}>
+      <button
+        className="project-selector__btn"
+        onClick={() => setOpen((v) => !v)}
+        type="button"
+        title="프로젝트 선택"
+      >
+        <span>{selectedProject?.display_name || "프로젝트 선택..."}</span>
+        <ChevronDown />
+      </button>
+
+      {open ? (
+        <div className="project-selector__dropdown">
+          <div className="project-selector__search">
+            <input
+              ref={inputRef}
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="프로젝트 검색..."
+              type="search"
+            />
+          </div>
+          <button
+            className="project-selector__new"
+            onClick={() => { setOpen(false); onNewProject(); }}
+            type="button"
+          >
+            <PlusSmIcon /> 새 프로젝트
+          </button>
+          <div className="project-selector__list">
+            {filtered.length ? filtered.map((p) => (
+              <button
+                key={p.repo_id}
+                className={`project-selector__item${p.repo_id === selectedProjectId ? " active" : ""}`}
+                onClick={() => { onSelectProject(p.repo_id); setOpen(false); }}
+                type="button"
+              >
+                <span className="project-selector__item-name">{p.display_name}</span>
+                <span className={`chip-dot chip-dot--${statusTone(p.status)}`} />
+              </button>
+            )) : (
+              <div className="project-selector__empty">프로젝트 없음</div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function RemoteLinkIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -76,7 +176,36 @@ function RemoteLinkIcon() {
   );
 }
 
+function FolderIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function EditorIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M9 9l3 3-3 3M13 15h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function GithubIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function IdeToolbar({
+  projects,
+  selectedProjectId,
+  onSelectProject,
+  onNewProject,
   projectDetail,
   planDraft,
   pendingCheckpoint,
@@ -90,7 +219,10 @@ export function IdeToolbar({
   onGeneratePlan,
   onRunPlan,
   onApproveCheckpoint,
-  onGenerateShareLink,
+  onSmartShareLink,
+  onOpenFolder,
+  onOpenVsCode,
+  onOpenGithub,
 }) {
   const planningRunning = isPlanningProgressRunning(projectDetail?.planning_progress);
   const projectStatusWithActiveJob = projectStatusWithJob(projectDetail?.project?.current_status || "idle", activeJob) || "idle";
@@ -99,7 +231,6 @@ export function IdeToolbar({
       ? projectStatusWithActiveJob
       : "running:generate-plan";
   const livePlan = String(activeJob?.status || "").trim().toLowerCase() === "running" && projectDetail?.plan ? projectDetail.plan : planDraft;
-  const projectName = projectDetail?.project?.display_name || projectDetail?.project?.slug || null;
   const { language, t } = useI18n();
   const normalizedProjectStatus = String(projectStatus || "").trim().toLowerCase();
   const statusLabel =
@@ -132,12 +263,16 @@ export function IdeToolbar({
         </button>
       </div>
 
-      {/* Breadcrumb: Project > Status > Plan */}
+      {/* Project selector dropdown */}
+      <ProjectSelector
+        projects={projects}
+        selectedProjectId={selectedProjectId}
+        onSelectProject={onSelectProject}
+        onNewProject={onNewProject}
+      />
+
+      {/* Breadcrumb: Status > Plan */}
       <nav className="ide-toolbar__breadcrumb" aria-label="Navigation">
-        <span className="breadcrumb-segment">
-          <strong>{projectName || t("project.none")}</strong>
-        </span>
-        <ChevronRight />
         <span className={`breadcrumb-segment breadcrumb-segment--${tone}`}>
           <span className={`chip-dot chip-dot--${tone}`} />
           {statusLabel}
@@ -173,15 +308,33 @@ export function IdeToolbar({
 
         <div className="toolbar-divider" />
 
+        {projectDetail?.project?.repo_path ? (
+          <>
+            <button className="toolbar-btn toolbar-btn--icon" onClick={onOpenFolder} type="button" title="파일 탐색기에서 열기 (Open in Explorer)">
+              <FolderIcon />
+            </button>
+            <button className="toolbar-btn toolbar-btn--icon" onClick={onOpenVsCode} type="button" title="VS Code에서 열기 (Open in VS Code)">
+              <EditorIcon />
+            </button>
+          </>
+        ) : null}
+        {projectDetail?.github?.origin_url || projectDetail?.github?.repo_url ? (
+          <button className="toolbar-btn toolbar-btn--icon" onClick={onOpenGithub} type="button" title="GitHub에서 열기 (Open on GitHub)">
+            <GithubIcon />
+          </button>
+        ) : null}
+
+        <div className="toolbar-divider" />
+
         <button
           className={`toolbar-btn toolbar-btn--remote${shareUrl ? " toolbar-btn--active" : ""}`}
-          onClick={onGenerateShareLink}
+          onClick={onSmartShareLink}
           type="button"
           disabled={shareBusy || !projectDetail?.project}
-          title={shareUrl ? `Remote Control: ${shareUrl}` : (t("action.generateShareLink") || "Remote Control")}
+          title={shareUrl ? `클릭하여 링크 복사: ${shareUrl}` : "Remote Control 링크 생성"}
         >
           <RemoteLinkIcon />
-          <span>Remote Control</span>
+          <span>{shareUrl ? "링크 복사" : "Remote Control"}</span>
         </button>
 
         <div className="toolbar-divider" />

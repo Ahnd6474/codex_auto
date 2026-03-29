@@ -6,7 +6,9 @@
       "Bash(powershell -Command \"Get-Content ''c:\\\\Users\\\\alber\\\\OneDrive\\\\문서\\\\GitHub\\\\codex_auto\\\\desktop\\\\src-tauri\\\\lib.rs'' -TotalCount 80\")",
       "Bash(powershell -Command \"Get-ChildItem ''c:\\\\Users\\\\alber\\\\OneDrive\\\\문서\\\\GitHub\\\\codex_auto\\\\desktop\\\\src-tauri\\\\'' | Select-Object Name\")",
       "Bash(powershell -Command \"Get-Content ''c:\\\\Users\\\\alber\\\\OneDrive\\\\문서\\\\GitHub\\\\codex_auto\\\\desktop\\\\src-tauri\\\\Cargo.toml''\")",
-      "Bash(powershell -Command \"Get-Content ''c:\\\\Users\\\\alber\\\\OneDrive\\\\문서\\\\GitHub\\\\codex_auto\\\\desktop\\\\src-tauri\\\\src\\\\lib.rs''\")"
+      "Bash(powershell -Command \"Get-Content ''c:\\\\Users\\\\alber\\\\OneDrive\\\\문서\\\\GitHub\\\\codex_auto\\\\desktop\\\\src-tauri\\\\src\\\\lib.rs''\")",
+      "Bash(powershell -Command \"Get-Content ''c:\\\\Users\\\\alber\\\\OneDrive\\\\문서\\\\GitHub\\\\codex_auto\\\\desktop\\\\src-tauri\\\\src\\\\lib.rs'' | Select-String -Pattern ''pub fn run|cancel_bridge_job'' -Context 0,3\")",
+      "Bash(powershell -Command \":*)"
     ]
   }
 }

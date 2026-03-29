@@ -181,6 +181,34 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(events[0]["event_type"], "step-started")
             self.assertEqual(events[0]["details"]["step_id"], "ST1")
 
+    def test_loading_local_project_migrates_legacy_workspace_logs_into_repo_root_folder(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            project_dir = temp_dir / "repo"
+            workspace = WorkspaceManager(workspace_root)
+            context = workspace.initialize_local_project(project_dir, "main", runtime_from_payload({}), display_name="Demo")
+
+            legacy_logs_dir = context.paths.project_root / "logs"
+            legacy_logs_dir.mkdir(parents=True, exist_ok=True)
+            (legacy_logs_dir / "passes.jsonl").write_text('{"event":"legacy"}\n', encoding="utf-8")
+            legacy_block_dir = legacy_logs_dir / "block_0001"
+            legacy_block_dir.mkdir(parents=True, exist_ok=True)
+            (legacy_block_dir / "debug.txt").write_text("legacy-debug", encoding="utf-8")
+
+            context.paths.logs_dir.mkdir(parents=True, exist_ok=True)
+            context.paths.pass_log_file.write_text('{"event":"current"}\n', encoding="utf-8")
+
+            loaded = workspace.load_project_from_root(context.paths.project_root)
+
+            self.assertEqual(loaded.paths.logs_dir, project_dir.resolve() / "jakal-flow-logs")
+            self.assertFalse(legacy_logs_dir.exists())
+            self.assertTrue((loaded.paths.logs_dir / "block_0001" / "debug.txt").exists())
+            self.assertEqual((loaded.paths.logs_dir / "block_0001" / "debug.txt").read_text(encoding="utf-8"), "legacy-debug")
+            self.assertEqual(
+                read_jsonl(loaded.paths.pass_log_file),
+                [{"event": "legacy"}, {"event": "current"}],
+            )
+
     def test_start_share_server_process_replaces_stale_state_file(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"
@@ -3176,8 +3204,7 @@ class UIBridgeTests(unittest.TestCase):
             self.assertIn("duration_ms", latest_bridge)
             self.assertIn("result_size_bytes", latest_bridge)
 
-            project_root = Path(detail["project"]["project_root"])
-            detail_perf_entries = read_jsonl(project_root / "logs" / "ui_bridge_perf.jsonl")
+            detail_perf_entries = read_jsonl(repo_dir / "jakal-flow-logs" / "ui_bridge_perf.jsonl")
             self.assertTrue(detail_perf_entries)
             latest_detail = detail_perf_entries[-1]
             self.assertEqual(latest_detail["event_type"], "project-detail-built")

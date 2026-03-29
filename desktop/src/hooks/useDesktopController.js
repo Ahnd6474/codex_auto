@@ -1,6 +1,6 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { confirm as confirmDialog, open } from "@tauri-apps/plugin-dialog";
-import { bridgeRequest, cancelBridgeJob, configureBridgeScheduler, startBridgeJob, subscribeBridgeEvents } from "../api";
+import { bridgeRequest, cancelBridgeJob, configureBridgeScheduler, openInSystem, openInVsCode, openUrl, startBridgeJob, subscribeBridgeEvents } from "../api";
 import { BRIDGE_COMMANDS } from "../bridgeProtocol";
 import { bridgeEventJob, bridgeEventProject, isJobUpdatedEvent, isProjectChangedEvent, isProjectUiEvent } from "../controller/bridgeEvents";
 import {
@@ -1784,5 +1784,25 @@ export function useDesktopController() {
     deleteStep,
     moveStep,
     setSelectedProjectId,
+    openRepoInFolder: () => {
+      const path = projectDetail?.project?.repo_path || "";
+      if (path) openInSystem(path).catch(() => {});
+    },
+    openRepoInVsCode: () => {
+      const path = projectDetail?.project?.repo_path || "";
+      if (path) openInVsCode(path).catch(() => {});
+    },
+    openRepoOnGithub: () => {
+      const url = projectDetail?.github?.origin_url || projectDetail?.github?.repo_url || "";
+      if (url) openUrl(url.startsWith("http") ? url : `https://github.com/${url.replace(/^git@github\.com:|\.git$/g, "")}`);
+    },
+    smartShareLink: async () => {
+      const existingUrl = workspaceShareDetail?.active_session?.share_url || "";
+      if (existingUrl) {
+        copyShareLink();
+      } else {
+        generateShareLink();
+      }
+    },
   };
 }

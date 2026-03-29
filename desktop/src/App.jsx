@@ -197,7 +197,10 @@ export default function App() {
         onGeneratePlan={controller.generatePlan}
         onRunPlan={controller.runPlan}
         onApproveCheckpoint={controller.approveCheckpoint}
-        onGenerateShareLink={controller.generateShareLink}
+        onSmartShareLink={controller.smartShareLink}
+        onOpenFolder={controller.openRepoInFolder}
+        onOpenVsCode={controller.openRepoInVsCode}
+        onOpenGithub={controller.openRepoOnGithub}
       />
 
       {/* ── Live run progress banner ── */}
@@ -243,6 +246,9 @@ export default function App() {
             workspaceTree={detail?.workspace_tree}
             checkpoints={detail?.checkpoints}
             github={detail?.github}
+            onOpenFolder={controller.openRepoInFolder}
+            onOpenVsCode={controller.openRepoInVsCode}
+            onOpenGithub={controller.openRepoOnGithub}
           />
         </div>
 

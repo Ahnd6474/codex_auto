@@ -1,25 +1,9 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import { statusTone } from "../../utils";
 
 /* ── Rail icons ── */
-function SidebarProjectsIcon() {
-  return (
-    <svg aria-hidden="true" className="sidebar-icon__svg" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M4.75 7.25A2.5 2.5 0 0 1 7.25 4.75h5.1c.66 0 1.3.26 1.77.73l5.15 5.15c.47.47.73 1.1.73 1.77v4.35a2.5 2.5 0 0 1-2.5 2.5h-10a2.5 2.5 0 0 1-2.5-2.5v-9.5Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinejoin="round"
-      />
-      <path d="M13 4.9v5.35a1 1 0 0 0 1 1h5.1" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-      <path d="M8.5 14.25h7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M8.5 17.25h5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 function SidebarExplorerIcon() {
   return (
     <svg aria-hidden="true" className="sidebar-icon__svg" viewBox="0 0 24 24" fill="none">
@@ -219,31 +203,27 @@ function SearchInput({ value, onChange, placeholder }) {
   );
 }
 
+/* ── Project card small icons ── */
+function CardGithubIcon() {
+  return <svg viewBox="0 0 24 24" fill="none"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+function CardEditorIcon() {
+  return <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.6" /><path d="M9 9l3 3-3 3M13 15h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+function CardFolderIcon() {
+  return <svg viewBox="0 0 24 24" fill="none"><path d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>;
+}
+
 /* ── Main SidebarPane ── */
 export function SidebarPane({
   activeTab,
   onChangeTab,
-  projects,
-  historyProjects,
-  selectedProjectId,
-  selectedHistoryId,
-  loadingProjectId,
-  projectFilter,
   workspaceFilter,
-  onProjectFilterChange,
   onWorkspaceFilterChange,
-  onSelectProject,
-  onSelectHistory,
-  onNewProject,
-  onArchiveProject,
-  onDeleteProject,
-  onDeleteHistoryEntry,
   workspaceTree,
   checkpoints,
-  github,
 }) {
   const { language, t } = useI18n();
-  const [contextMenu, setContextMenu] = useState(null);
   const workspaceTabActive = activeTab === "workspace";
   const deferredWorkspaceFilter = useDeferredValue(workspaceFilter);
   const workspaceFilterCacheRef = useRef(new Map());
@@ -263,9 +243,7 @@ export function SidebarPane({
     return [pending, ...items];
   }, [activeTab, checkpoints]);
 
-  useEffect(() => {
-    workspaceFilterCacheRef.current.clear();
-  }, [normalizedWorkspaceTree]);
+  useEffect(() => { workspaceFilterCacheRef.current.clear(); }, [normalizedWorkspaceTree]);
 
   const filteredWorkspaceTree = useMemo(() => {
     if (!workspaceTabActive) {
@@ -285,24 +263,7 @@ export function SidebarPane({
     return nextTree;
   }, [deferredWorkspaceFilter, normalizedWorkspaceTree, workspaceTabActive]);
 
-  useEffect(() => {
-    function handlePointerDown() {
-      setContextMenu(null);
-    }
-    function handleKeyDown(event) {
-      if (event.key === "Escape") setContextMenu(null);
-    }
-    window.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
-
   const tabs = [
-    ["projects", <SidebarProjectsIcon key="projects-icon" />, t("common.project")],
-    ["history", <SidebarHistoryIcon key="history-icon" />, t("tab.history")],
     ["workspace", <SidebarExplorerIcon key="workspace-icon" />, t("sidebar.explorer")],
     ["plans", <SidebarCheckpointsIcon key="plans-icon" />, t("sidebar.checkpoints")],
   ];
@@ -313,227 +274,6 @@ export function SidebarPane({
 
       {activeTab ? (
         <div className="sidebar-panel">
-
-          {/* ── Projects tab ── */}
-          {activeTab === "projects" ? (
-            <>
-              <div className="sidebar-panel__header">
-                <strong>{t("common.project")}</strong>
-                {projects.length > 0 ? (
-                  <span className="sidebar-count-badge">{projects.length}</span>
-                ) : null}
-              </div>
-
-              <SearchInput
-                value={projectFilter}
-                onChange={onProjectFilterChange}
-                placeholder={t("sidebar.searchProjects")}
-              />
-
-              <button className="sidebar-add-btn" onClick={onNewProject} type="button">
-                <PlusIcon />
-                {t("action.new")}
-              </button>
-
-              <div className="sidebar-list">
-                {projects.length ? (
-                  projects.map((project) => {
-                    const tone = statusTone(project.status);
-                    const stats = project.stats || {};
-                    const total = stats.total_steps || 0;
-                    const completed = stats.completed_steps || 0;
-                    const fillPct = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
-                    return (
-                      <button
-                        key={project.repo_id}
-                        className={`sidebar-project sidebar-project--${tone} ${project.repo_id === selectedProjectId ? "selected" : ""} ${
-                          project.repo_id === loadingProjectId ? "loading" : ""
-                        }`}
-                        onClick={() => onSelectProject(project.repo_id)}
-                        onContextMenu={(event) => {
-                          event.preventDefault();
-                          setContextMenu({ kind: "project", id: project.repo_id, x: event.clientX, y: event.clientY });
-                        }}
-                        title={t("sidebar.projectContextDelete")}
-                        type="button"
-                      >
-                        {fillPct > 0 ? (
-                          <span
-                            className="sidebar-project__fill"
-                            aria-hidden="true"
-                            style={{ width: `${fillPct}%` }}
-                          />
-                        ) : null}
-                        <div className="sidebar-project__title">
-                          <strong>{project.display_name}</strong>
-                          <span className={`status-badge status-badge--${tone}`}>
-                            {displayStatus(project.status, language)}
-                          </span>
-                        </div>
-                        {project.detail ? <span style={{ fontSize: "11.5px", color: "var(--text-dim)" }}>{project.detail}</span> : null}
-                        {total > 0 ? (
-                          <div className="sidebar-project__steps">
-                            <div className="sidebar-project__steps-bar">
-                              <div className="sidebar-project__steps-fill" style={{ width: `${fillPct}%` }} />
-                            </div>
-                            <span>{completed}/{total}</span>
-                          </div>
-                        ) : null}
-                      </button>
-                    );
-                  })
-                ) : (
-                  <div className="empty-block">
-                    <EmptyProjectsIcon />
-                    <span>{t("sidebar.emptyProjects")}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* GitHub info */}
-              <div className="sidebar-item">
-                <div className="sidebar-item__title">
-                  <strong>{t("sidebar.repositoryLink")}</strong>
-                  <span className={`status-badge status-badge--${github?.connected ? "success" : "neutral"}`}>
-                    {github?.connected ? t("common.connected") : t("common.localOnly")}
-                  </span>
-                </div>
-                <span style={{ fontSize: "11.5px", wordBreak: "break-all" }}>{github?.origin_url || t("sidebar.noGithubOrigin")}</span>
-              </div>
-              <div className="sidebar-item">
-                <strong>{t("common.branch")}</strong>
-                <span style={{ fontSize: "11.5px" }}>{github?.branch || t("common.unknown")}</span>
-              </div>
-              <div className="sidebar-item">
-                <strong>{t("common.repoUrl")}</strong>
-                <span style={{ fontSize: "11.5px", wordBreak: "break-all" }}>{github?.repo_url || t("common.unavailable")}</span>
-              </div>
-
-              {contextMenu?.kind === "project" ? (
-                <div
-                  className="context-menu"
-                  style={{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }}
-                  onPointerDown={(event) => event.stopPropagation()}
-                >
-                  <button
-                    className="context-menu__item"
-                    onClick={() => {
-                      const repoId = contextMenu.id;
-                      setContextMenu(null);
-                      onArchiveProject(repoId);
-                    }}
-                    type="button"
-                  >
-                    {t("action.archiveProject")}
-                  </button>
-                  <button
-                    className="context-menu__item"
-                    onClick={() => {
-                      const repoId = contextMenu.id;
-                      setContextMenu(null);
-                      onDeleteProject(repoId);
-                    }}
-                    type="button"
-                    style={{ color: "var(--danger)" }}
-                  >
-                    {t("action.deleteProject")}
-                  </button>
-                </div>
-              ) : null}
-            </>
-          ) : null}
-
-          {/* ── History tab ── */}
-          {activeTab === "history" ? (
-            <>
-              <div className="sidebar-panel__header">
-                <strong>{t("tab.history")}</strong>
-                {historyProjects.length > 0 ? (
-                  <span className="sidebar-count-badge">{historyProjects.length}</span>
-                ) : null}
-              </div>
-
-              <SearchInput
-                value={projectFilter}
-                onChange={onProjectFilterChange}
-                placeholder={t("sidebar.searchProjects")}
-              />
-
-              <div className="sidebar-list">
-                {historyProjects.length ? (
-                  historyProjects.map((project) => {
-                    const tone = statusTone(project.status);
-                    const stats = project.stats || {};
-                    const total = stats.total_steps || 0;
-                    const completed = stats.completed_steps || 0;
-                    const fillPct = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
-                    return (
-                      <button
-                        key={project.archive_id || project.repo_id}
-                        className={`sidebar-project sidebar-project--${tone} ${project.archive_id === selectedHistoryId ? "selected" : ""}`}
-                        onClick={() => onSelectHistory(project.archive_id)}
-                        onContextMenu={(event) => {
-                          event.preventDefault();
-                          setContextMenu({ kind: "history", id: project.archive_id, x: event.clientX, y: event.clientY });
-                        }}
-                        title={t("sidebar.projectContextDelete")}
-                        type="button"
-                      >
-                        {fillPct > 0 ? (
-                          <span
-                            className="sidebar-project__fill"
-                            aria-hidden="true"
-                            style={{ width: `${fillPct}%` }}
-                          />
-                        ) : null}
-                        <div className="sidebar-project__title">
-                          <strong>{project.display_name}</strong>
-                          <span className={`status-badge status-badge--${tone}`}>
-                            {displayStatus(project.status, language)}
-                          </span>
-                        </div>
-                        {project.detail ? <span style={{ fontSize: "11.5px", color: "var(--text-dim)" }}>{project.detail}</span> : null}
-                        {total > 0 ? (
-                          <div className="sidebar-project__steps">
-                            <div className="sidebar-project__steps-bar">
-                              <div className="sidebar-project__steps-fill" style={{ width: `${fillPct}%` }} />
-                            </div>
-                            <span>{completed}/{total}</span>
-                          </div>
-                        ) : null}
-                      </button>
-                    );
-                  })
-                ) : (
-                  <div className="empty-block">
-                    <EmptyHistoryIcon />
-                    <span>{t("history.noSavedRuns")}</span>
-                  </div>
-                )}
-              </div>
-
-              {contextMenu?.kind === "history" ? (
-                <div
-                  className="context-menu"
-                  style={{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }}
-                  onPointerDown={(event) => event.stopPropagation()}
-                >
-                  <button
-                    className="context-menu__item"
-                    onClick={() => {
-                      const archiveId = contextMenu.id;
-                      setContextMenu(null);
-                      onDeleteHistoryEntry(archiveId);
-                    }}
-                    type="button"
-                    style={{ color: "var(--danger)" }}
-                  >
-                    {t("action.deleteArchivedRun")}
-                  </button>
-                </div>
-              ) : null}
-            </>
-          ) : null}
 
           {/* ── Workspace explorer tab ── */}
           {activeTab === "workspace" ? (

@@ -288,6 +288,7 @@ export function ParallelRunControlView({
   const livePlan = activeJob?.status === "running" && detail?.plan ? detail.plan : planDraft;
   const promptValue = livePlan?.project_prompt || "";
   const [promptDraft, setPromptDraft] = useState(promptValue);
+  const [failureDismissed, setFailureDismissed] = useState(false);
   const steps = useMemo(
     () =>
       planStepsWithCloseout(livePlan, {
@@ -316,6 +317,7 @@ export function ParallelRunControlView({
     [steps],
   );
   const selectedSystemStep = isSystemStep(selectedStep);
+  const selectedStepIndex = selectedStep ? steps.findIndex((s) => s.step_id === selectedStepId) : -1;
   const parallelLimitValue = parallelWorkerLabel(parallelInsight.recommended_workers ?? 1, language);
   const parallelLimitDetails = parallelLimitDescription(parallelInsight, language);
   const parallelLimitCardTone = parallelLimitTone(parallelInsight);
@@ -346,6 +348,10 @@ export function ParallelRunControlView({
   );
 
   useEffect(() => {
+    setFailureDismissed(false);
+  }, [latestFailure?.summary, latestFailure?.report_markdown_file, latestFailure?.report_json_file]);
+
+  useEffect(() => {
     setPromptDraft(promptValue);
   }, [promptValue]);
 
@@ -358,6 +364,13 @@ export function ParallelRunControlView({
     }, 180);
     return () => window.clearTimeout(timer);
   }, [onPromptChange, promptDraft, promptValue]);
+
+  useEffect(() => {
+    if (!selectedStep) return undefined;
+    const handler = (e) => { if (e.key === "Escape") onSelectStep?.(null); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedStep, onSelectStep]);
 
   return (
     <section className="workspace-view run-view">
@@ -400,11 +413,18 @@ export function ParallelRunControlView({
       </div>
 
       {/* ── Failure card ── */}
-      {showFailureCard ? (
+      {showFailureCard && !failureDismissed ? (
         <div className="content-card" style={{ borderColor: "rgba(200,93,97,0.4)" }}>
           <div className="content-card__header">
             <strong style={{ color: "var(--danger)" }}>{t("test.failed")}</strong>
             <span className={`status-badge status-badge--${statusTone("failed")}`}>{displayStatus("failed", language)}</span>
+            <button
+              className="step-editor-close"
+              onClick={() => setFailureDismissed(true)}
+              type="button"
+              title={language === "ko" ? "닫기" : "Dismiss"}
+              aria-label={language === "ko" ? "닫기" : "Dismiss"}
+            >✕</button>
           </div>
           <div className="step-editor-grid">
             {latestFailure?.summary ? <div className="field field--wide"><span>{t("common.status")}</span><p>{latestFailure.summary}</p></div> : null}
@@ -470,9 +490,19 @@ export function ParallelRunControlView({
         <div className="run-step-editor">
           <div className="run-step-editor__header">
             <strong>{selectedStep.step_id}: {selectedStep.title || t("run.selectedStep")}</strong>
+            {selectedStepIndex >= 0 ? (
+              <span className="step-position-badge">{selectedStepIndex + 1}/{steps.length}</span>
+            ) : null}
             <span className={`status-badge status-badge--${statusTone(selectedStepStatus)}`}>
               {displayStatus(selectedStepStatus, language)}
             </span>
+            <button
+              className="step-editor-close"
+              onClick={() => onSelectStep?.(null)}
+              type="button"
+              title={language === "ko" ? "닫기 (Esc)" : "Close (Esc)"}
+              aria-label={language === "ko" ? "닫기" : "Close"}
+            >✕</button>
           </div>
 
           {selectedSystemStep ? (
