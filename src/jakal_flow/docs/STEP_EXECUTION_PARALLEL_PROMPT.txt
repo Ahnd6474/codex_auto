@@ -6,6 +6,9 @@ Do not expand scope beyond the active task, dependency boundary, and scope guard
 Managed planning documents live outside the repo at {docs_dir}.
 Verification command for this step: {test_command}.
 
+Repository AGENTS.md summary:
+{agents_summary}
+
 Current task:
 - Title: {task_title}
 - UI description: {display_description}
@@ -46,6 +49,8 @@ Required workflow:
 6. Do not edit README.md during normal execution steps. Reserve README updates for planning artifacts outside the repo or the final closeout pass unless the user explicitly says otherwise.
 7. Record concise research or implementation notes in {research_notes_file} when they materially help traceability.
 8. If the task cannot be completed safely in one pass, explain why in docs/BLOCK_REVIEW.md instead of making speculative edits.
+9. Use shell syntax that matches the active environment. On Windows PowerShell, do not emit bash heredocs like `python - <<'PY'`; use PowerShell-compatible here-strings, `python -c`, or temp files instead.
+10. Use the AGENTS.md summary above as the repository constraint source. Do not probe parent directories outside the managed repo just to look for another AGENTS.md file.
 
 Execution rules:
 - Treat the owned paths above as the primary write scope for this node.

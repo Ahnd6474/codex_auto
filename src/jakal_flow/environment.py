@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -37,6 +38,9 @@ def ensure_virtualenv(project_dir: Path, python_executable: str | None = None) -
         timeout_seconds=VENV_CREATION_TIMEOUT_SECONDS,
     )
     if completed.returncode != 0:
+        venv_python = venv_dir / ("Scripts" if os.name == "nt" else "bin") / ("python.exe" if os.name == "nt" else "python")
+        if venv_python.exists():
+            return venv_dir
         stderr = decode_process_output(completed.stderr).strip()
         raise RuntimeError(f"Failed to create .venv in {project_dir}: {stderr or completed.returncode}")
     return venv_dir

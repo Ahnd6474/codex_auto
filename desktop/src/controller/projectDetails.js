@@ -76,6 +76,32 @@ export async function loadProjectCheckpoints(bridgeRequest, selector, workspaceR
   };
 }
 
+export async function loadProjectChat(bridgeRequest, selector, workspaceRoot, options = {}) {
+  const chat = await bridgeRequest(
+    BRIDGE_COMMANDS.LOAD_PROJECT_CHAT,
+    {
+      ...selectorPayload(selector),
+      ...(options.sessionId ? { session_id: options.sessionId } : {}),
+    },
+    workspaceRoot || null,
+  );
+  return {
+    chat: chat?.chat || {
+      sessions: [],
+      active_session_id: "",
+      active_session: null,
+      messages: [],
+      summary_text: "",
+      summary_file: "",
+      transcript_file: "",
+      draft_session: true,
+    },
+    loaded_sections: {
+      chat: true,
+    },
+  };
+}
+
 export async function loadProjectHistory(bridgeRequest, selector, workspaceRoot) {
   const history = await bridgeRequest(
     BRIDGE_COMMANDS.LOAD_PROJECT_HISTORY,

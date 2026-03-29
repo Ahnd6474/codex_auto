@@ -1,6 +1,7 @@
 import { listBridgeJobs } from "../api.js";
 import { BRIDGE_COMMANDS } from "../bridgeProtocol.js";
 import {
+  loadProjectChat,
   loadHistoryDetail,
   loadProjectCheckpoints,
   loadProjectDetail,
@@ -67,6 +68,16 @@ export async function fetchProjectCheckpointsBySelector(bridgeRequest, selector,
 
 export async function fetchProjectCheckpoints(bridgeRequest, repoId, workspaceRoot) {
   return fetchProjectCheckpointsBySelector(bridgeRequest, { repoId }, workspaceRoot);
+}
+
+export async function fetchProjectChatBySelector(bridgeRequest, selector, workspaceRoot, options = {}) {
+  return loadProjectChat(bridgeRequest, selector, workspaceRoot || null, {
+    sessionId: options.sessionId || "",
+  });
+}
+
+export async function fetchProjectChat(bridgeRequest, repoId, workspaceRoot, options = {}) {
+  return fetchProjectChatBySelector(bridgeRequest, { repoId }, workspaceRoot, options);
 }
 
 export async function fetchProjectHistoryBySelector(bridgeRequest, selector, workspaceRoot) {

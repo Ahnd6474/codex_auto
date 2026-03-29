@@ -12,7 +12,7 @@ import {
   workspaceStatsFromProjects,
 } from "../utils.js";
 
-const PROJECT_DETAIL_SECTION_KEYS = ["reports", "workspace", "checkpoints", "history", "config"];
+const PROJECT_DETAIL_SECTION_KEYS = ["reports", "workspace", "checkpoints", "history", "config", "chat"];
 
 function hasOwnValue(value, key) {
   return Boolean(value) && Object.prototype.hasOwnProperty.call(value, key);
@@ -180,6 +180,46 @@ function mergeConfigSection(primary = null, fallback = null, preserveSparse = fa
   };
 }
 
+function mergeChatSection(primary = null, fallback = null, preserveSparse = false) {
+  if (!primary && !fallback) {
+    return primary ?? fallback;
+  }
+  const primaryChat = primary && typeof primary === "object" ? primary : {};
+  const fallbackChat = fallback && typeof fallback === "object" ? fallback : {};
+  const nextChat = {
+    ...fallbackChat,
+    ...primaryChat,
+  };
+  ["sessions", "messages"].forEach((key) => {
+    if (!hasOwnValue(primaryChat, key)) {
+      nextChat[key] = fallbackChat?.[key] || [];
+      return;
+    }
+    const primaryItems = Array.isArray(primaryChat?.[key]) ? primaryChat[key] : [];
+    const fallbackItems = Array.isArray(fallbackChat?.[key]) ? fallbackChat[key] : [];
+    nextChat[key] =
+      preserveSparse && primaryItems.length === 0 && fallbackItems.length > 0
+        ? fallbackItems
+        : cloneValue(primaryItems);
+  });
+  ["active_session_id", "summary_text", "summary_file", "transcript_file"].forEach((key) => {
+    if (!hasOwnValue(primaryChat, key)) {
+      nextChat[key] = String(fallbackChat?.[key] || "");
+      return;
+    }
+    const primaryText = String(primaryChat?.[key] || "");
+    const fallbackText = String(fallbackChat?.[key] || "");
+    nextChat[key] = preserveSparse && !primaryText.trim() && fallbackText.trim() ? fallbackText : primaryText;
+  });
+  if (!hasOwnValue(primaryChat, "active_session")) {
+    nextChat.active_session = fallbackChat?.active_session ?? null;
+  } else {
+    nextChat.active_session = cloneValue(primaryChat?.active_session ?? null);
+  }
+  nextChat.draft_session = primaryChat?.draft_session ?? fallbackChat?.draft_session ?? false;
+  return nextChat;
+}
+
 export function preserveProjectDetailSupplement(detail, previousDetail = null) {
   if (!detail) {
     return detail;
@@ -216,6 +256,9 @@ export function preserveProjectDetailSupplement(detail, previousDetail = null) {
     config: loadedSections.config
       ? mergeConfigSection(detail?.config, previousDetail?.config, true)
       : detail?.config,
+    chat: loadedSections.chat
+      ? mergeChatSection(detail?.chat, previousDetail?.chat, true)
+      : detail?.chat,
     loaded_sections: loadedSections,
   };
 }
@@ -240,6 +283,9 @@ export function mergeProjectDetailSupplement(detail, supplement = {}) {
       : {}),
     ...(hasOwnValue(supplement, "config")
       ? { config: mergeConfigSection(supplement.config, detail?.config, false) }
+      : {}),
+    ...(hasOwnValue(supplement, "chat")
+      ? { chat: mergeChatSection(supplement.chat, detail?.chat, false) }
       : {}),
     loaded_sections: mergeLoadedSections(
       supplement?.loaded_sections,

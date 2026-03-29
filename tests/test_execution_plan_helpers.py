@@ -57,6 +57,7 @@ from jakal_flow.planning import (
     load_reference_guide_text,
     load_source_prompt_template,
     load_step_execution_prompt_template,
+    implementation_prompt,
     parse_execution_plan_response,
     prompt_to_plan_decomposition_prompt,
     prompt_to_execution_plan_prompt,
@@ -4345,13 +4346,17 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("{planner_outline}", ml_plan_template)
         self.assertIn("{workflow_mode}", ml_plan_template)
         self.assertEqual(STEP_EXECUTION_PROMPT_FILENAME, STEP_EXECUTION_PARALLEL_PROMPT_FILENAME)
+        self.assertIn("{agents_summary}", parallel_step_template)
         self.assertIn("{step_metadata}", parallel_step_template)
         self.assertIn("step_metadata.step_kind", parallel_step_template)
         self.assertIn("saved DAG execution tree", parallel_step_template)
         self.assertIn("primary write scope", parallel_step_template)
+        self.assertIn("do not emit bash heredocs", parallel_step_template.lower())
         self.assertIn("Do not edit README.md during normal execution steps.", parallel_step_template)
+        self.assertIn("{agents_summary}", ml_step_template)
         self.assertIn("{ml_step_report_file}", ml_step_template)
         self.assertIn("Step metadata", ml_step_template)
+        self.assertIn("do not emit bash heredocs", ml_step_template.lower())
         self.assertIn("Do not edit README.md during normal execution steps.", ml_step_template)
         self.assertEqual(DEBUGGER_PROMPT_FILENAME, DEBUGGER_PARALLEL_PROMPT_FILENAME)
         self.assertIn("{step_metadata}", parallel_debugger_template)
@@ -4466,6 +4471,68 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("finished, handoff-quality result", plan_prompt)
         self.assertIn("finished, handoff-quality implementation", bootstrap_prompt)
 
+    def test_implementation_prompt_embeds_agents_summary_and_shell_guidance(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_step_prompt_guidance_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        repo_dir = temp_root / "repo"
+        managed_docs = temp_root / "managed-docs"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        managed_docs.mkdir(parents=True, exist_ok=True)
+        (repo_dir / "AGENTS.md").write_text("Keep changes scoped to src only.", encoding="utf-8")
+        (managed_docs / "PLAN.md").write_text("Plan snapshot", encoding="utf-8")
+        (managed_docs / "MID_TERM_PLAN.md").write_text("Mid term", encoding="utf-8")
+        (managed_docs / "SCOPE_GUARD.md").write_text("Scope guard", encoding="utf-8")
+        (managed_docs / "RESEARCH_NOTES.md").write_text("Research notes", encoding="utf-8")
+
+        context = SimpleNamespace(
+            paths=SimpleNamespace(
+                repo_dir=repo_dir,
+                docs_dir=managed_docs,
+                plan_file=managed_docs / "PLAN.md",
+                mid_term_plan_file=managed_docs / "MID_TERM_PLAN.md",
+                scope_guard_file=managed_docs / "SCOPE_GUARD.md",
+                research_notes_file=managed_docs / "RESEARCH_NOTES.md",
+                ml_step_report_file=managed_docs / "ML_STEP_REPORT.json",
+                ml_experiment_report_file=managed_docs / "ML_EXPERIMENT_REPORT.md",
+            ),
+            runtime=SimpleNamespace(
+                workflow_mode="standard",
+                execution_mode="parallel",
+                test_cmd="python -m pytest",
+                extra_prompt="",
+            ),
+        )
+        candidate = CandidateTask(
+            candidate_id="cand-1",
+            title="Harden shell guidance",
+            rationale="Keep shell usage compatible with the runtime.",
+            plan_refs=[],
+            score=1.0,
+        )
+        step = ExecutionStep(
+            step_id="ST1",
+            title="Harden shell guidance",
+            display_description="Add runtime-safe execution instructions.",
+            codex_description="Update the prompt to keep shell commands compatible with the active environment.",
+            test_command="python -m pytest",
+            owned_paths=["src/jakal_flow/docs"],
+        )
+
+        try:
+            prompt = implementation_prompt(
+                context,
+                candidate,
+                memory_context="None.",
+                pass_name="block-search-pass",
+                execution_step=step,
+            )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertIn("Keep changes scoped to src only.", prompt)
+        self.assertIn("do not emit bash heredocs", prompt.lower())
+        self.assertIn("Do not probe parent directories outside the managed repo", prompt)
+
     def test_scan_repository_inputs_compacts_large_docs_inventory(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_large_docs_summary_test"
         shutil.rmtree(temp_root, ignore_errors=True)
@@ -4486,6 +4553,30 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertLessEqual(len(repo_inputs["docs"]), 2600)
         self.assertIn("omitted to keep planning context compact", repo_inputs["docs"])
         self.assertIn("note_1.md", repo_inputs["docs"])
+
+    def test_parallel_worker_summary_prefers_logged_failure_detail(self) -> None:
+        orchestrator = Orchestrator(Path(__file__).resolve().parents[1] / ".tmp_parallel_worker_summary_test")
+        summary = orchestrator._parallel_worker_summary(
+            {"status": "failed", "test_summary": "", "rollback_status": "rolled_back_to_safe_revision"},
+            {
+                "rollback_status": "rolled_back_to_safe_revision",
+                "codex_diagnostics": {
+                    "attempts": [
+                        {
+                            "stderr_excerpt": (
+                                "YOLO mode is enabled. All tool calls will be automatically approved.\n"
+                                "Loaded cached credentials.\n"
+                                "TerminalQuotaError: You have exhausted your capacity on this model."
+                            )
+                        }
+                    ]
+                },
+            },
+        )
+
+        self.assertIn("Parallel worker failed. Cause:", summary)
+        self.assertIn("TerminalQuotaError", summary)
+        self.assertNotIn("Loaded cached credentials.", summary)
 
     def test_generate_execution_plan_runs_planner_agent_a_then_agent_b(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_dual_planner_test"

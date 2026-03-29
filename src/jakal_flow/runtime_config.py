@@ -9,6 +9,7 @@ from typing import Any, Mapping
 from .errors import RuntimeConfigError
 from .model_constants import AUTO_MODEL_SLUG, DEFAULT_LOCAL_MODEL_PROVIDER, DEFAULT_MODEL_PROVIDER
 from .model_providers import (
+    effective_local_model_provider,
     normalize_billing_mode,
     normalize_local_model_provider,
     normalize_model_provider,
@@ -228,11 +229,11 @@ def normalize_runtime_payload(
         str(merged.get("local_model_provider", "")),
         fallback="",
     )
-    if merged["model_provider"] == "oss":
-        if not merged["local_model_provider"]:
-            merged["local_model_provider"] = DEFAULT_LOCAL_MODEL_PROVIDER
-    else:
-        merged["local_model_provider"] = ""
+    merged["local_model_provider"] = effective_local_model_provider(
+        merged["model_provider"],
+        merged["local_model_provider"],
+        fallback=DEFAULT_LOCAL_MODEL_PROVIDER,
+    )
     merged["provider_base_url"] = str(merged.get("provider_base_url", "")).strip()
     if not merged["provider_base_url"] and provider.default_base_url:
         merged["provider_base_url"] = provider.default_base_url
