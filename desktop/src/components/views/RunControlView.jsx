@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import {
@@ -104,18 +105,31 @@ function stepModelPlaceholder(step, runtime) {
 }
 
 function FlowNode({ step, projectStatus, selected, onSelect, language, t }) {
+  const [tooltipVisible, setTooltipVisible] = useState(false);
   const stepStatus = effectiveStepStatus(step, projectStatus);
   const tone = statusTone(stepStatus);
   const summary = step.display_description || step.success_criteria || t("run.noSummary");
   return (
-    <button className={`run-node run-node--${tone} ${selected ? "selected" : ""}`} onClick={() => onSelect(step.step_id)} type="button">
-      <div className="run-node__meta">
-        <span className="run-node__id">{step.step_id}</span>
-        <span className={`status-badge status-badge--${tone}`}>{displayStatus(stepStatus, language)}</span>
-      </div>
-      <strong>{step.title}</strong>
-      <p>{summary}</p>
-    </button>
+    <div
+      className="run-node-wrapper"
+      onMouseEnter={() => setTooltipVisible(true)}
+      onMouseLeave={() => setTooltipVisible(false)}
+    >
+      <button
+        className={`run-node run-node--${tone} ${selected ? "selected" : ""}`}
+        onClick={() => { onSelect(step.step_id); setTooltipVisible((v) => !v); }}
+        type="button"
+      >
+        <div className="run-node__meta">
+          <span className="run-node__id">{step.step_id}</span>
+          <span className={`status-badge status-badge--${tone}`}>{displayStatus(stepStatus, language)}</span>
+        </div>
+        <strong>{step.title}</strong>
+      </button>
+      {tooltipVisible && summary ? (
+        <div className="run-node__tooltip" role="tooltip">{summary}</div>
+      ) : null}
+    </div>
   );
 }
 

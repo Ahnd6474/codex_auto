@@ -280,11 +280,13 @@ export function CenterWorkspace({
             shareSettings={shareSettings}
             autoRunAfterPlan={autoRunAfterPlan}
             selectedStepId={selectedStepId}
+            form={form}
             busy={busy}
             canRequestStop={canRequestStop}
             canCancelReservation={canCancelReservation}
             queuedJobs={queuedJobs}
             onPromptChange={onPromptChange}
+            onChangeForm={onChangeForm}
             onGeneratePlan={onGeneratePlan}
             onSavePlan={onSavePlan}
             onResetPlan={onResetPlan}
@@ -329,6 +331,7 @@ export function CenterWorkspace({
             modelCatalog={modelCatalog}
             codexStatus={detail?.codex_status}
             busy={busy}
+            activeJob={activeJob}
             onChangeForm={onChangeForm}
             onChangeProgramSettings={onChangeProgramSettings}
             onSaveProject={onSaveProject}

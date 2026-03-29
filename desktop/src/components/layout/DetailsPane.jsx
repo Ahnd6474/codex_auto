@@ -1,19 +1,44 @@
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import { effectiveStepStatus, reasoningEffortLabel, runtimeSummary, statusTone } from "../../utils";
 
 export function DetailsPane({ detail, planDraft, selectedStepId, modelPresets, onHide }) {
   const { t } = useI18n();
+  const [detailsTab, setDetailsTab] = useState("inspector");
+  const outputRef = useRef(null);
   const selectedStep = (planDraft?.steps || []).find((step) => step.step_id === selectedStepId) || null;
   const pendingCheckpoint = detail?.checkpoints?.pending || null;
   const selectedStepStatus = effectiveStepStatus(selectedStep, detail?.project?.current_status || "");
+  const processOutput = detail?.subprocess_output || detail?.agent_output || detail?.process_log || "";
+
+  // Auto-scroll output to bottom when new content arrives
+  useEffect(() => {
+    if (detailsTab === "output" && outputRef.current) {
+      outputRef.current.scrollTop = outputRef.current.scrollHeight;
+    }
+  }, [processOutput, detailsTab]);
 
   return (
     <aside className="details-pane">
       {/* Header with title + hide */}
       <div className="tool-window__header" style={{ margin: "-8px -8px 0", padding: "0 6px", borderBottom: "1px solid var(--border)" }}>
         <div className="tool-tabs">
-          <span className="tool-tab active">Inspector</span>
+          <button
+            className={`tool-tab ${detailsTab === "inspector" ? "active" : ""}`}
+            onClick={() => setDetailsTab("inspector")}
+            type="button"
+          >
+            Inspector
+          </button>
+          <button
+            className={`tool-tab ${detailsTab === "output" ? "active" : ""}`}
+            onClick={() => setDetailsTab("output")}
+            type="button"
+          >
+            Output
+            {processOutput ? <span className="details-output-dot" /> : null}
+          </button>
         </div>
         {onHide ? (
           <div className="tool-window__header-actions">
@@ -33,6 +58,25 @@ export function DetailsPane({ detail, planDraft, selectedStepId, modelPresets, o
         ) : null}
       </div>
 
+      {/* ── Output tab ── */}
+      {detailsTab === "output" ? (
+        <div className="details-output-panel">
+          {processOutput ? (
+            <pre ref={outputRef} className="details-output-pre">{processOutput}</pre>
+          ) : (
+            <div className="details-output-empty">
+              <svg viewBox="0 0 24 24" fill="none" width="24" height="24">
+                <rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
+                <path d="M7 8h2M7 12h10M7 16h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+              <span>No output yet</span>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {/* ── Inspector tab ── */}
+      {detailsTab === "inspector" ? <>
       <section className="details-card">
         <div className="details-card__header">
           <strong>{t("common.project")}</strong>
@@ -117,6 +161,7 @@ export function DetailsPane({ detail, planDraft, selectedStepId, modelPresets, o
           </div>
         </section>
       ) : null}
+      </> : null}
     </aside>
   );
 }

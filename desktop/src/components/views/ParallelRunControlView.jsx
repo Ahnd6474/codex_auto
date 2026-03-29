@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import { ExecutionFlowChart } from "../common/ExecutionFlowChart";
@@ -250,11 +250,13 @@ export function ParallelRunControlView({
   activeJob,
   autoRunAfterPlan,
   selectedStepId,
+  form,
   busy,
   canRequestStop = false,
   canCancelReservation = false,
   queuedJobs = [],
   onPromptChange,
+  onChangeForm,
   onGeneratePlan,
   onSavePlan,
   onResetPlan,
@@ -271,6 +273,7 @@ export function ParallelRunControlView({
   onDeleteStep,
 }) {
   const { language, t } = useI18n();
+  const promptRef = useRef(null);
   const providerOptions = [
     ["ensemble", t("option.providerEnsemble")],
     ["openai", "Codex CLI"],
@@ -372,6 +375,14 @@ export function ParallelRunControlView({
     return () => window.clearTimeout(timer);
   }, [onPromptChange, promptDraft, promptValue]);
 
+  // Auto-resize textarea based on content
+  useEffect(() => {
+    const el = promptRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+  }, [promptDraft]);
+
   useEffect(() => {
     if (!selectedStep) return undefined;
     const handler = (e) => { if (e.key === "Escape") onSelectStep?.(null); };
@@ -455,9 +466,29 @@ export function ParallelRunControlView({
       <div className="run-prompt-strip">
         <div className="run-prompt-strip__label">
           <span>{language === "ko" ? "프롬프트" : "Prompt"}</span>
-          <span className="run-prompt-strip__count">{livePlan?.project_prompt?.length || 0} {language === "ko" ? "자" : "chars"}</span>
+          <div className="run-prompt-strip__label-right">
+            <span className="run-prompt-strip__count">{livePlan?.project_prompt?.length || 0} {language === "ko" ? "자" : "chars"}</span>
+            {/* Effort pill */}
+            <select
+              className="run-effort-pill"
+              value={form?.runtime?.effort || detail?.runtime?.effort || "high"}
+              onChange={(event) =>
+                onChangeForm?.((current) => ({
+                  ...current,
+                  runtime: { ...current.runtime, effort: event.target.value },
+                }))
+              }
+              disabled={busy}
+              title={language === "ko" ? "모델 추론 강도" : "Reasoning strength"}
+            >
+              {REASONING_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>{reasoningEffortLabel(opt, language)}</option>
+              ))}
+            </select>
+          </div>
         </div>
         <textarea
+          ref={promptRef}
           className="run-prompt-strip__input"
           value={promptDraft}
           onChange={(event) => setPromptDraft(event.target.value)}

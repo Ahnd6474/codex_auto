@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useI18n } from "../../i18n";
 import {
   applyProviderDefaults,
@@ -117,8 +118,16 @@ export function AppSettingsView({
   onRevokeShareLink,
   onChangeShareSettings,
 }) {
+  const [settingsTab, setSettingsTab] = useState("app");
   const { language, languageOptions, setLanguage, t } = useI18n();
   const planningReasoningLabel = language === "ko" ? "계획 추론" : "Planning Reasoning";
+
+  const settingsTabs = [
+    { key: "app",       label: language === "ko" ? "애플리케이션" : "Application" },
+    { key: "execution", label: language === "ko" ? "실행 설정"   : "Execution" },
+    { key: "dashboard", label: language === "ko" ? "대시보드"    : "Dashboard" },
+    { key: "share",     label: language === "ko" ? "공유"        : "Share" },
+  ];
   const activeShare = shareDetail?.active_session || null;
   const shareServer = shareDetail?.server || null;
   const selectedProvider = String(settings.model_provider || "openai").trim().toLowerCase();
@@ -220,11 +229,25 @@ export function AppSettingsView({
         </button>
       </div>
 
-      <div className="form-layout">
-        {/* ── Left column ── */}
-        <div className="form-section">
+      {/* ── Sub-category tab bar ── */}
+      <div className="settings-subtabs">
+        {settingsTabs.map((tab) => (
+          <button
+            key={tab.key}
+            className={`settings-subtab ${settingsTab === tab.key ? "settings-subtab--active" : ""}`}
+            onClick={() => setSettingsTab(tab.key)}
+            type="button"
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-          {/* Application section */}
+      <div className="form-layout">
+
+        {/* ── Application tab ── */}
+        {settingsTab === "app" ? (
+        <div className="form-section" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
               icon={<AppIcon />}
@@ -279,8 +302,12 @@ export function AppSettingsView({
               />
             ) : null}
           </div>
+        </div>
+        ) : null}
 
-          {/* Dashboard Preferences */}
+        {/* ── Dashboard tab ── */}
+        {settingsTab === "dashboard" ? (
+        <div className="form-section" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
               icon={<DashboardIcon />}
@@ -315,9 +342,11 @@ export function AppSettingsView({
             </div>
           </div>
         </div>
+        ) : null}
 
-        {/* ── Right column ── */}
-        <div className="form-section">
+        {/* ── Execution tab ── */}
+        {settingsTab === "execution" ? (
+        <div className="form-section" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
               icon={<ExecutionIcon />}
@@ -652,8 +681,10 @@ export function AppSettingsView({
             </div>
           </div>
         </div>
+        ) : null}
 
-        {/* ── Remote Monitor (full width row) ── */}
+        {/* ── Share tab ── */}
+        {settingsTab === "share" ? (
         <div className="form-section" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
@@ -717,6 +748,8 @@ export function AppSettingsView({
             </div>
           </div>
         </div>
+        ) : null}
+
       </div>
     </section>
   );

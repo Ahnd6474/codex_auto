@@ -156,6 +156,7 @@ export function ConfigEditorView({
   modelCatalog,
   codexStatus,
   busy,
+  activeJob,
   onChangeForm,
   onChangeProgramSettings,
   onSaveProject,
@@ -165,6 +166,7 @@ export function ConfigEditorView({
 }) {
   const runtime = form.runtime || {};
   const { language, t } = useI18n();
+  const isRunning = ["running", "queued"].includes(String(activeJob?.status || "").trim().toLowerCase());
   const planningReasoningLabel = language === "ko" ? "계획 추론" : "Planning Reasoning";
   const selectedProvider = normalizedModelProvider(runtime);
   const providerHasCatalog = providerSupportsCatalog(selectedProvider);
@@ -265,8 +267,9 @@ export function ConfigEditorView({
             className="toolbar-button"
             onClick={onDeleteProject}
             type="button"
-            disabled={busy || !form.project_dir?.trim()}
-            style={{ color: "var(--danger)" }}
+            disabled={busy || !form.project_dir?.trim() || isRunning}
+            style={{ color: isRunning ? "var(--text-dim)" : "var(--danger)" }}
+            title={isRunning ? (language === "ko" ? "실행 중인 프로젝트는 삭제할 수 없습니다." : "Cannot delete a running project.") : undefined}
           >
             {t("action.deleteProject")}
           </button>
@@ -346,22 +349,6 @@ export function ConfigEditorView({
 
             <div className="choice-grid" style={{ marginTop: "4px" }}>
               <label className="field">
-                <span>{t("config.maxPlannedSteps")}</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={runtime.max_blocks || 5}
-                  onChange={(event) =>
-                    onChangeForm((current) => ({
-                      ...current,
-                      runtime: { ...current.runtime, max_blocks: Math.max(1, Number.parseInt(event.target.value || "1", 10) || 1) },
-                    }))
-                  }
-                  disabled={busy}
-                />
-              </label>
-
-              <label className="field">
                 <span>{t("field.workflowMode")}</span>
                 <select
                   value={runtime.workflow_mode || "standard"}
@@ -377,6 +364,47 @@ export function ConfigEditorView({
                   <option value="ml">{t("option.workflowML")}</option>
                 </select>
               </label>
+
+              {/* Unified step limit: max steps for standard, ML cycles for ml mode */}
+              {runtime.workflow_mode === "ml" ? (
+                <label className="field">
+                  <span>{t("field.mlMaxCycles")}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={runtime.ml_max_cycles || 3}
+                    onChange={(event) =>
+                      onChangeForm((current) => ({
+                        ...current,
+                        runtime: { ...current.runtime, ml_max_cycles: Math.max(1, Number.parseInt(event.target.value || "1", 10) || 1) },
+                      }))
+                    }
+                    disabled={busy}
+                  />
+                  <small style={{ fontSize: "11px", color: "var(--text-dim)" }}>
+                    {language === "ko" ? "ML 실험 최대 반복 횟수" : "Max ML experiment iterations"}
+                  </small>
+                </label>
+              ) : (
+                <label className="field">
+                  <span>{t("config.maxPlannedSteps")}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={runtime.max_blocks || 5}
+                    onChange={(event) =>
+                      onChangeForm((current) => ({
+                        ...current,
+                        runtime: { ...current.runtime, max_blocks: Math.max(1, Number.parseInt(event.target.value || "1", 10) || 1) },
+                      }))
+                    }
+                    disabled={busy}
+                  />
+                  <small style={{ fontSize: "11px", color: "var(--text-dim)" }}>
+                    {language === "ko" ? "실행 계획의 최대 단계 수" : "Maximum steps in execution plan"}
+                  </small>
+                </label>
+              )}
 
               <label className="field">
                 <span>{planningReasoningLabel}</span>
@@ -394,22 +422,6 @@ export function ConfigEditorView({
                     <option key={effort} value={effort}>{reasoningEffortLabel(effort, language)}</option>
                   ))}
                 </select>
-              </label>
-
-              <label className="field">
-                <span>{t("field.mlMaxCycles")}</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={runtime.ml_max_cycles || 3}
-                  onChange={(event) =>
-                    onChangeForm((current) => ({
-                      ...current,
-                      runtime: { ...current.runtime, ml_max_cycles: Math.max(1, Number.parseInt(event.target.value || "1", 10) || 1) },
-                    }))
-                  }
-                  disabled={busy}
-                />
               </label>
 
               <label className="field">
@@ -447,25 +459,6 @@ export function ConfigEditorView({
                           event.target.value,
                           current.runtime?.parallel_memory_per_worker_gib || 3,
                         ),
-                      },
-                    }))
-                  }
-                  disabled={busy}
-                />
-              </label>
-
-              <label className="field">
-                <span>{t("field.backgroundQueuePriority")}</span>
-                <input
-                  type="number"
-                  step="1"
-                  value={Number.parseInt(String(runtime.background_queue_priority ?? 0), 10) || 0}
-                  onChange={(event) =>
-                    onChangeForm((current) => ({
-                      ...current,
-                      runtime: {
-                        ...current.runtime,
-                        background_queue_priority: Number.parseInt(event.target.value || "0", 10) || 0,
                       },
                     }))
                   }

@@ -105,6 +105,32 @@ function EmptyCheckpointsIcon() {
   );
 }
 
+function SidebarChatIcon() {
+  return (
+    <svg aria-hidden="true" className="sidebar-icon__svg" viewBox="0 0 24 24" fill="none">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function SidebarReservationIcon() {
+  return (
+    <svg aria-hidden="true" className="sidebar-icon__svg" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+      <path d="M16 2v4M8 2v4M3 10h18" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M8 14h4M8 17h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SendIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 /* ── Rail tab list ── */
 function SidebarSectionTabs({ activeTab, onChange, tabs }) {
   return (
@@ -223,6 +249,133 @@ function CardFolderIcon() {
   return <svg viewBox="0 0 24 24" fill="none"><path d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>;
 }
 
+function queuedPosition(value) {
+  return Math.max(1, Number.parseInt(String(value || 0), 10) || 1);
+}
+
+function reservationLabel(job, fallback) {
+  return String(job?.display_name || "").trim() || String(job?.repo_id || "").trim() || fallback;
+}
+
+function ReservationsPanel({ queuedJobs, onCancelQueuedJob, language, t }) {
+  return (
+    <>
+      <div className="sidebar-panel__header">
+        <strong>{language === "ko" ? "예약 대기열" : "Job Queue"}</strong>
+        {queuedJobs.length > 0 ? (
+          <span className="sidebar-count-badge">{queuedJobs.length}</span>
+        ) : null}
+      </div>
+      <div className="sidebar-list">
+        {queuedJobs.length ? (
+          queuedJobs.map((job) => (
+            <div key={job.id} className="sidebar-item sidebar-reservation-item">
+              <div className="sidebar-item__title">
+                <strong style={{ fontSize: "12px" }}>#{queuedPosition(job?.queue_position)} {reservationLabel(job, t("project.none"))}</strong>
+                <span className="status-badge status-badge--info" style={{ fontSize: "10px" }}>
+                  {language === "ko" ? "대기 중" : "queued"}
+                </span>
+              </div>
+              {job?.project_dir ? (
+                <span style={{ fontSize: "11px", color: "var(--text-dim)", wordBreak: "break-all" }}>{job.project_dir}</span>
+              ) : null}
+              <button
+                className="sidebar-cancel-btn"
+                onClick={() => onCancelQueuedJob?.(job.id)}
+                type="button"
+              >
+                {language === "ko" ? "예약 취소" : "Cancel"}
+              </button>
+            </div>
+          ))
+        ) : (
+          <div className="empty-block">
+            <SidebarReservationIcon />
+            <span>{language === "ko" ? "대기 중인 작업이 없습니다." : "No queued jobs."}</span>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function ChatPanel({ chatMessages, onSendChatMessage, busy, language, t }) {
+  const [input, setInput] = useState("");
+  const [localMessages, setLocalMessages] = useState(Array.isArray(chatMessages) ? chatMessages : []);
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [localMessages]);
+
+  function handleSend() {
+    const text = input.trim();
+    if (!text) return;
+    const msg = { role: "user", text, id: Date.now() };
+    setLocalMessages((prev) => [...prev, msg]);
+    setInput("");
+    onSendChatMessage?.(text);
+  }
+
+  function handleKeyDown(event) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      handleSend();
+    }
+  }
+
+  return (
+    <>
+      <div className="sidebar-panel__header">
+        <strong>{language === "ko" ? "AI 채팅" : "AI Chat"}</strong>
+        <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>
+          {language === "ko" ? "실행 중 개입 가능" : "Intervene anytime"}
+        </span>
+      </div>
+
+      <div className="sidebar-chat-messages">
+        {localMessages.length === 0 ? (
+          <div className="sidebar-chat-empty">
+            <SidebarChatIcon />
+            <span>{language === "ko" ? "메시지를 입력하여 AI에 지시하세요." : "Send a message to guide the AI."}</span>
+          </div>
+        ) : (
+          localMessages.map((msg) => (
+            <div key={msg.id} className={`sidebar-chat-bubble sidebar-chat-bubble--${msg.role}`}>
+              <span className="sidebar-chat-bubble__role">
+                {msg.role === "user" ? (language === "ko" ? "나" : "You") : "AI"}
+              </span>
+              <p>{msg.text}</p>
+            </div>
+          ))
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="sidebar-chat-input-row">
+        <textarea
+          className="sidebar-chat-input"
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={language === "ko" ? "메시지 입력... (Enter로 전송)" : "Type a message… (Enter to send)"}
+          disabled={busy}
+          rows={2}
+        />
+        <button
+          className="sidebar-chat-send"
+          onClick={handleSend}
+          type="button"
+          disabled={busy || !input.trim()}
+          title={language === "ko" ? "전송" : "Send"}
+        >
+          <SendIcon />
+        </button>
+      </div>
+    </>
+  );
+}
+
 /* ── Main SidebarPane ── */
 export function SidebarPane({
   activeTab,
@@ -241,6 +394,11 @@ export function SidebarPane({
   onNewProject = () => {},
   workspaceTree,
   checkpoints,
+  queuedJobs = [],
+  onCancelQueuedJob,
+  chatMessages = [],
+  onSendChatMessage,
+  busy = false,
 }) {
   const { language, t } = useI18n();
   const deferredProjectFilter = useDeferredValue(projectFilter);
@@ -314,6 +472,8 @@ export function SidebarPane({
     ["history", <SidebarHistoryIcon key="history-icon" />, t("tab.history")],
     ["workspace", <SidebarExplorerIcon key="workspace-icon" />, t("sidebar.explorer")],
     ["plans", <SidebarCheckpointsIcon key="plans-icon" />, t("sidebar.checkpoints")],
+    ["reservations", <SidebarReservationIcon key="reservations-icon" />, language === "ko" ? "예약" : "Queue"],
+    ["chat", <SidebarChatIcon key="chat-icon" />, language === "ko" ? "AI 채팅" : "AI Chat"],
   ];
 
   return (
@@ -442,6 +602,16 @@ export function SidebarPane({
                 )}
               </div>
             </>
+          ) : null}
+
+          {/* ── Reservations tab ── */}
+          {activeTab === "reservations" ? (
+            <ReservationsPanel queuedJobs={queuedJobs} onCancelQueuedJob={onCancelQueuedJob} language={language} t={t} />
+          ) : null}
+
+          {/* ── AI Chat tab ── */}
+          {activeTab === "chat" ? (
+            <ChatPanel chatMessages={chatMessages} onSendChatMessage={onSendChatMessage} busy={busy} language={language} t={t} />
           ) : null}
 
           {/* ── Checkpoints tab ── */}
