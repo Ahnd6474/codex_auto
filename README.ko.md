@@ -45,6 +45,20 @@ jakal-flow --help
 jakal-flow run --help
 ```
 
+??? ?? ??? ? ? ??? ?? ???? ???? ? ????:
+
+```toml
+[runtime]
+model_provider = "openai"
+model = "gpt-5.4"
+effort = "high"
+approval_mode = "never"
+sandbox_mode = "workspace-write"
+test_cmd = "python -m pytest"
+max_blocks = 2
+plan_prompt = "??? ?? ??? ?? ?? ? ?? ??? ??? ??? ???? ??? ????."
+```
+
 관리 저장소 초기화:
 
 ```bash
@@ -52,12 +66,7 @@ jakal-flow init-repo \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
-  --model gpt-5.4 \
-  --effort high \
-  --plan-prompt "완성도 높은 결과물과 강한 검증, 마감 정리를 목표로 안전한 프로젝트 계획을 만들어라." \
-  --approval-mode never \
-  --sandbox-mode workspace-write \
-  --test-cmd "python -m pytest"
+  --config .jakal-flow.runtime.toml
 ```
 
 검증 포함 개선 루프 실행:
@@ -67,12 +76,7 @@ jakal-flow run \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
-  --model gpt-5.4 \
-  --effort high \
-  --approval-mode never \
-  --sandbox-mode workspace-write \
-  --test-cmd "python -m pytest" \
-  --max-blocks 2
+  --config .jakal-flow.runtime.toml
 ```
 
 같은 관리 저장소를 나중에 다시 이어서 실행:
@@ -82,12 +86,7 @@ jakal-flow resume \
   --repo-url https://github.com/Ahnd6474/lit.git \
   --branch main \
   --workspace-root .jakal-flow-workspace \
-  --model gpt-5.4 \
-  --effort high \
-  --approval-mode never \
-  --sandbox-mode workspace-write \
-  --test-cmd "python -m pytest" \
-  --max-blocks 2
+  --config .jakal-flow.runtime.toml
 ```
 
 상태 확인:

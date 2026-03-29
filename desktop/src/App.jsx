@@ -267,6 +267,12 @@ export default function App() {
             onOpenGithub={controller.openRepoOnGithub}
             queuedJobs={controller.queuedJobs}
             onCancelQueuedJob={controller.cancelQueuedReservation}
+            chat={detail?.chat}
+            selectedChatSessionId={controller.selectedChatSessionId}
+            chatDraftSession={controller.chatDraftSession}
+            onSelectChatSession={controller.loadChatSession}
+            onStartNewChatSession={controller.startNewChatSession}
+            onSendChatMessage={controller.sendChatMessage}
             busy={controller.busy}
           />
         </div>
