@@ -1,0 +1,16 @@
+{
+  "attempt_count": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "duration_seconds": 1124.938,
+      "last_message_excerpt": "Implemented the concrete adapter in [src/lit_gui/session.py](C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\lit\\src\\lit_gui\\session.py) with a pure snapshot builder in [src/lit_gui/backend/snapshot.py](C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\lit\\src\\lit_gui\\backend\\snapshot.py) and exports in [src/lit_gui/backend/__init__.py](C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\lit\\src\\lit_gui\\backend\\__init__.py). The session now opens or initializes repositories, wraps `Repository`, `merge_revision`, and `rebase_onto`, refreshe...",
+      "returncode": 0,
+      "stderr_excerpt": "2026-03-27T01:50:24.077188Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: UTF-8 encoding error: failed to convert header to a str for header name 'x-codex-turn-metadata' with value: \"{\\\"turn_id\\\":\\\"\\\",\\\"workspaces\\\":{\\\"C:\\\\Users\\\\ahnd6\\\\OneDrive\\\\\\xeb\\xac\\xb8\\xec\\x84\\x9c\\\\GitHub\\\\lit\\\":{\\\"associated_remote_urls\\\":{\\\"origin\\\":\\\"https://github.com/Ahnd6474/lit.git\\\"},\\\"latest_git_commit_hash\\\":\\\"79d2adcbeec2da36db93683c1053dd4b2d951f97\\\",\\\"has_changes\\\":false}}...",
+      "stdout_excerpt": "{\"type\":\"thread.started\",\"thread_id\":\"019d2cfc-413e-7a30-b791-041aaee914e3\"}\n{\"type\":\"turn.started\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 2/5 (stream disconnected before completion: UTF-8 encoding error: failed to convert header to a str for header name 'x-codex-turn-metadata' with value: \\\"{\\\\\\\"turn_id\\\\\\\":\\\\\\\"019d2cfc-4320-7822-a371-0f6967cec13d\\\\\\\",\\\\\\\"workspaces\\\\\\\":{\\\\\\\"C:\\\\\\\\Users\\\\\\\\ahnd6\\\\\\\\OneDrive\\\\\\\\\\\\xeb\\\\xac\\\\xb8\\\\xec\\\\x84\\\\x9c\\\\\\\\GitHub\\\\\\\\lit\\\\\\\":{\\\\\\\"associated_remote_ur...",
+      "unexpected_token_detected": false
+    }
+  ],
+  "recovered_after_retry": false,
+  "unexpected_token_detected": false
+}

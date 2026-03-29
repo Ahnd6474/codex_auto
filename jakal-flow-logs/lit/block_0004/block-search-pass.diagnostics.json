@@ -1,0 +1,16 @@
+{
+  "attempt_count": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "duration_seconds": 864.672,
+      "last_message_excerpt": "Implemented the Changes and History workspace end to end. The placeholder center views were replaced with real widgets in [changes/view.py](C:/Users/ahnd6/OneDrive/\ubb38\uc11c/GitHub/lit/src/lit_gui/views/changes/view.py) and [history/view.py](C:/Users/ahnd6/OneDrive/\ubb38\uc11c/GitHub/lit/src/lit_gui/views/history/view.py), both reusing the shared preview component in [diff_panel.py](C:/Users/ahnd6/OneDrive/\ubb38\uc11c/GitHub/lit/src/lit_gui/widgets/shared/diff_panel.py).\n\nKey behavior shipped:\n- Changes now shows `St...",
+      "returncode": 0,
+      "stderr_excerpt": "2026-03-27T02:30:24.040594Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: UTF-8 encoding error: failed to convert header to a str for header name 'x-codex-turn-metadata' with value: \"{\\\"turn_id\\\":\\\"\\\",\\\"workspaces\\\":{\\\"C:\\\\Users\\\\ahnd6\\\\OneDrive\\\\\\xeb\\xac\\xb8\\xec\\x84\\x9c\\\\GitHub\\\\lit\\\":{\\\"associated_remote_urls\\\":{\\\"origin\\\":\\\"https://github.com/Ahnd6474/lit.git\\\"},\\\"latest_git_commit_hash\\\":\\\"2dbfe84bed66e50c7aacdce27ed28091b70f56d9\\\",\\\"has_changes\\\":false}}...",
+      "stdout_excerpt": "{\"type\":\"thread.started\",\"thread_id\":\"019d2d20-db9f-7c32-8a74-69eb9f2162d0\"}\n{\"type\":\"turn.started\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 2/5 (stream disconnected before completion: UTF-8 encoding error: failed to convert header to a str for header name 'x-codex-turn-metadata' with value: \\\"{\\\\\\\"turn_id\\\\\\\":\\\\\\\"019d2d20-e036-7041-a3d9-62efe520cd17\\\\\\\",\\\\\\\"workspaces\\\\\\\":{\\\\\\\"C:\\\\\\\\Users\\\\\\\\ahnd6\\\\\\\\OneDrive\\\\\\\\\\\\xeb\\\\xac\\\\xb8\\\\xec\\\\x84\\\\x9c\\\\\\\\GitHub\\\\\\\\lit\\\\\\\":{\\\\\\\"associated_remote_ur...",
+      "unexpected_token_detected": false
+    }
+  ],
+  "recovered_after_retry": false,
+  "unexpected_token_detected": false
+}

@@ -1,0 +1,293 @@
+{
+  "title": "lit-v1-autonomous-workflow-release",
+  "strategy_summary": "This needs a contract-first refactor rather than scattered feature patches. Freeze the v1 repository layout, revision/checkpoint schema, and service boundary first, then land the core persistence/safety work, then fan out into verification, lineage, and artifacts, and only after that rebuild the CLI and desktop UI on the same backend surface. The safest parallel shape is sequential core foundation, a parallel domain-feature wave, a service-layer convergence step, then parallel product-surface work and final hardening.",
+  "shared_contracts": [
+    "repo_layout_v1: freeze the .lit v1 path and ref namespaces for heads, checkpoints, lineages, journals, locks, verification cache, migrations, and repo-local artifact link manifests before feature work spreads",
+    "revision_schema_v1: unify ordinary commits and safe checkpoints under one tolerant persisted revision/provenance model that accepts legacy commit JSON with missing fields",
+    "mutation_transaction_v1: every mutating operation runs under a repository lock and journaled transaction boundary so crash recovery and rollback bookkeeping are consistent",
+    "verification_key_v1: verification cache identity is state fingerprint plus environment fingerprint plus command identity, with result records separated from presentation",
+    "backend_api_v1: CLI, desktop UI, and future Jakal Flow integration consume one narrow service/DTO adapter instead of reaching into repository internals or hardcoding on-disk paths"
+  ],
+  "skeleton_step": {
+    "block_id": "SK1",
+    "needed": true,
+    "task_title": "Freeze V1 Contracts And Plan",
+    "purpose": "A small up-front contract step reduces later merge risk by moving the new product vocabulary out of ad hoc changes to repository.py, refs.py, and GUI DTOs. It also satisfies the explicit requirement to write a brief implementation plan inside the repo before the broad refactor starts.",
+    "contract_docstring": "Canonical lit v1 contracts for autonomous local workflows. Persisted revision, checkpoint, lineage, verification, artifact, and operation records serialize only through these versioned dataclasses and layout helpers; readers must tolerate legacy v0 commit JSON and absent fields. CLI, GUI, export, and future Jakal Flow adapters talk to a narrow backend API and must not hardcode .lit paths or invent metadata keys independently.",
+    "candidate_owned_paths": [
+      "docs/lit-v1-implementation-plan.md",
+      "src/lit/domain.py",
+      "src/lit/layout.py",
+      "src/lit/backend_api.py"
+    ],
+    "success_criteria": "The repo contains a short implementation plan plus importable v1 contract/layout modules that define names, fields, and boundaries for revisions, checkpoints, lineages, verification, artifacts, and service methods without yet doing the full feature work."
+  },
+  "candidate_blocks": [
+    {
+      "block_id": "B1",
+      "goal": "Versioned repository layout, migration, locking, and crash-safe journaling are real and wired into the repository core.",
+      "work_items": [
+        "Extract or introduce central layout helpers for new v1 directories and ref namespaces.",
+        "Add atomic write/replace helpers and repository lock acquisition/release.",
+        "Add a journaled mutation wrapper for multi-step operations.",
+        "Implement lightweight migration/open logic so existing v0 repositories still load and can be upgraded in place.",
+        "Cover interrupted-operation recovery and concurrent local operation rejection."
+      ],
+      "implementation_notes": "Keep the content-addressed object model and deduplicated trees/blobs, but stop scattering path knowledge across repository.py and command handlers. This block should also stop direct write_text/write_json mutations for stateful operations and move them behind transaction helpers so later checkpoint, lineage, verification, and artifact code inherits recoverability instead of reinventing it.",
+      "testable_boundary": "A legacy repository still opens, a v1 repository creates the new layout safely, a second concurrent mutator is blocked, and an interrupted journaled operation can be recovered or cleanly aborted.",
+      "candidate_owned_paths": [
+        "src/lit/layout.py",
+        "src/lit/storage.py",
+        "src/lit/state.py",
+        "src/lit/migrations.py",
+        "src/lit/transactions.py",
+        "src/lit/repository.py",
+        "tests/test_bootstrap.py",
+        "tests/test_repository_resilience.py"
+      ],
+      "parallelizable_after": [
+        "SK1"
+      ],
+      "parallel_notes": "This is a true foundation block and should stay single-owner. Most later engine work should wait until the transaction and layout rules exist."
+    },
+    {
+      "block_id": "B2",
+      "goal": "Structured provenance, first-class safe checkpoints, and rollback become core repository behaviors instead of CLI labels.",
+      "work_items": [
+        "Replace minimal commit metadata with the v1 provenance and relationship model.",
+        "Introduce first-class checkpoint records or refs with safe state, pin state, approval state, and notes.",
+        "Implement latest-safe and selected-safe rollback primitives.",
+        "Preserve provenance fields through commit creation, merge, rebase, promotion, and rollback bookkeeping.",
+        "Add history and inspection helpers that surface checkpoints alongside ordinary revisions."
+      ],
+      "implementation_notes": "Prefer a single persisted revision envelope or a tightly related pair of record types so provenance, rewrite lineage, and verification links do not fork into incompatible shapes. Backward compatibility is mandatory, so parsing must tolerate old commit objects and synthesize safe defaults without rewriting everything immediately.",
+      "testable_boundary": "The engine can create a revision with rich provenance, mark and inspect safe checkpoints, pin and unpin them, roll back to latest or selected safe state, and still read older repositories and commits.",
+      "candidate_owned_paths": [
+        "src/lit/commits.py",
+        "src/lit/checkpoints.py",
+        "src/lit/refs.py",
+        "src/lit/repository.py",
+        "src/lit/merge_ops.py",
+        "src/lit/rebase_ops.py",
+        "tests/test_checkpoints.py",
+        "tests/test_bootstrap.py"
+      ],
+      "parallelizable_after": [
+        "B1"
+      ],
+      "parallel_notes": "This still touches shared engine roots, so keep it serialized after B1. Verification, lineage, and most product surfaces should wait for this schema to settle."
+    },
+    {
+      "block_id": "B3",
+      "goal": "Verification runs, cached replay, stale detection, and verification-aware checkpoint status exist as real repository services.",
+      "work_items": [
+        "Add repository-configured verification command definitions.",
+        "Implement persisted verification result records with timestamps, return code, output references, and fingerprints.",
+        "Implement cache replay and stale detection across state and environment changes.",
+        "Link verification results to revisions and checkpoints.",
+        "Make safe-checkpoint promotion and inspection verification-aware."
+      ],
+      "implementation_notes": "Keep command execution, cache lookup, and result persistence separate so the CLI and GUI can inspect past results without rerunning commands. Large outputs should be referenced by an output-ref helper rather than stuffed into small state files, even if the artifact-store integration remains a thin seam here.",
+      "testable_boundary": "Repeated verification on the same state can return cached_pass or cached_fail, changed environment or state becomes stale, and checkpoint inspection shows the correct verification status and summary.",
+      "candidate_owned_paths": [
+        "src/lit/verification.py",
+        "src/lit/repository.py",
+        "src/lit/storage.py",
+        "tests/test_verification.py"
+      ],
+      "parallelizable_after": [
+        "B2"
+      ],
+      "parallel_notes": "This can run in parallel with lineage and artifact work once revision and checkpoint contracts are stable, as long as repository.py integration stays thin."
+    },
+    {
+      "block_id": "B4",
+      "goal": "Lineages become first-class isolated work units with owned-path reservation, promotion, discard, and conflict preview.",
+      "work_items": [
+        "Introduce lineage records and lineage refs with base checkpoint, current head, owned paths, and lifecycle status.",
+        "Implement create, list, inspect, switch, promote, and discard lineage flows.",
+        "Enforce owned-path overlap rules by default or through an explicit override path.",
+        "Implement promotion conflict preview against the target checkpoint or head.",
+        "Record promoted_from and related provenance links during lineage promotion."
+      ],
+      "implementation_notes": "Branches can remain as a compatibility mechanism, but lineage metadata should become authoritative for autonomous parallel work. Promotion and discard should reuse the same lock and journal boundary from B1 so path reservations, refs, and working-tree rewrites cannot half-apply.",
+      "testable_boundary": "Overlapping owned paths are rejected by default, a lineage can be switched safely, promotion previews conflicts before mutation, and promotion or discard updates lineage status and related provenance correctly.",
+      "candidate_owned_paths": [
+        "src/lit/lineage.py",
+        "src/lit/repository.py",
+        "src/lit/refs.py",
+        "src/lit/merge_ops.py",
+        "tests/test_lineage.py"
+      ],
+      "parallelizable_after": [
+        "B2"
+      ],
+      "parallel_notes": "This is parallel-safe with verification and artifact work once checkpoint semantics are real, but it should avoid reopening ref-name debates after SK1."
+    },
+    {
+      "block_id": "B5",
+      "goal": "A lit-native global artifact store handles large local artifacts with deduplication, pinning, linkage, and garbage collection.",
+      "work_items": [
+        "Implement configurable global storage home resolution under the user home.",
+        "Add content-addressed artifact storage and lightweight repo-local link manifests.",
+        "Add pin, unpin, quota, and size reporting.",
+        "Add resumable write flow for large local artifacts.",
+        "Implement garbage collection that respects pins and repository references."
+      ],
+      "implementation_notes": "Heavy artifact data should live outside individual repositories by default, while repositories retain inspectable manifests and links to specific commits, checkpoints, and lineages. Reuse the atomic write and hashing helpers from B1 so resumable writes and GC are robust rather than special-cased.",
+      "testable_boundary": "The same artifact is deduplicated across writes, interrupted writes can resume safely, quota and usage reports are deterministic, and GC removes only unpinned unreferenced data.",
+      "candidate_owned_paths": [
+        "src/lit/artifacts.py",
+        "src/lit/global_store.py",
+        "src/lit/repository.py",
+        "tests/test_artifacts.py"
+      ],
+      "parallelizable_after": [
+        "B2"
+      ],
+      "parallel_notes": "This can run beside B3 and B4 if the artifact-link and global-home rules were frozen in SK1 and B1."
+    },
+    {
+      "block_id": "B6",
+      "goal": "A stable service layer exists for Jakal Flow, repository health inspection, and pragmatic Git export.",
+      "work_items": [
+        "Implement the narrow backend adapter methods required for Jakal Flow-like repository operations.",
+        "Add doctor checks for refs, journals, locks, migrations, verification cache, and artifact linkage.",
+        "Implement export of a current lineage or safe checkpoint into a Git-compatible representation.",
+        "Map provenance into Git trailers, notes, or an explicit sidecar manifest.",
+        "Add honest limitation reporting for interoperability."
+      ],
+      "implementation_notes": "This block should become the main orchestration seam above the raw repository and feature modules. The adapter and doctor surfaces should be read-mostly and deterministic, while export should be explicit about what is bridged and what remains lit-native.",
+      "testable_boundary": "A Jakal Flow-shaped client can drive revision lookup, commit, checkpoint lookup, rollback, lineage operations, verification lookup, and artifact linkage through one API; doctor flags broken state; export produces a usable Git-compatible result with provenance mapping.",
+      "candidate_owned_paths": [
+        "src/lit/backend_api.py",
+        "src/lit/doctor.py",
+        "src/lit/git_export.py",
+        "tests/test_backend_api.py",
+        "tests/test_doctor.py",
+        "tests/test_git_export.py"
+      ],
+      "parallelizable_after": [
+        "B3",
+        "B4",
+        "B5"
+      ],
+      "parallel_notes": "This should land before CLI and GUI fan out so both surfaces depend on one adapter instead of duplicating engine orchestration."
+    },
+    {
+      "block_id": "B7",
+      "goal": "The CLI becomes a coherent v1 product surface with task-oriented commands and structured JSON output.",
+      "work_items": [
+        "Update parser identity, versioning, and help text away from prototype local-git framing.",
+        "Add or expand checkpoint, rollback, verify, lineage, artifact, doctor, gc, and export git commands.",
+        "Add provenance-aware commit flags and structured JSON output where inspection is needed.",
+        "Keep familiar commands working as compatibility paths where useful.",
+        "Route command handlers through the backend adapter instead of embedding business logic in argparse modules."
+      ],
+      "implementation_notes": "Human output should stay concise by default, while JSON output should be stable enough for automation and multi-agent tooling. This block should minimize direct edits in engine files and treat the adapter surface from B6 as the public runtime boundary.",
+      "testable_boundary": "End-to-end CLI workflows cover init, commit with provenance, safe checkpoints, verification and cache hits, lineage isolation and promotion, rollback, artifact inspection, doctor, and export in both human-readable and JSON modes.",
+      "candidate_owned_paths": [
+        "src/lit/cli.py",
+        "src/lit/output.py",
+        "src/lit/commands/__init__.py",
+        "src/lit/commands/",
+        "tests/test_cli_v1.py"
+      ],
+      "parallelizable_after": [
+        "B6"
+      ],
+      "parallel_notes": "This can run in parallel with the desktop UI once B6 is stable. Keep CLI ownership off repository.py and feature modules."
+    },
+    {
+      "block_id": "B8",
+      "goal": "The desktop UI becomes a real v1 surface for checkpoints, provenance, verification, lineages, rollback, artifacts, and repository health.",
+      "work_items": [
+        "Expand immutable DTOs and session methods for checkpoint timelines, provenance details, verification results, lineage operations, artifact usage, and doctor status.",
+        "Update snapshot building to aggregate new backend adapter data.",
+        "Extend the current shell views or action panels for rollback, promotion, conflict review, and artifact inspection.",
+        "Keep all mutations routed through the session and backend boundary.",
+        "Extend GUI tests to cover the new product workflows."
+      ],
+      "implementation_notes": "The existing three-pane shell and immutable snapshot model are good enough and should be preserved. The safest shape is to extend existing Home, Changes, History, Branches, and Files surfaces with new groups and details rather than introduce a second GUI architecture mid-release.",
+      "testable_boundary": "A user can inspect provenance and checkpoint history, trigger verification and see cache hits, create and promote or discard lineages, review conflicts, roll back safely, inspect artifacts, and run doctor views through the desktop shell.",
+      "candidate_owned_paths": [
+        "src/lit_gui/contracts.py",
+        "src/lit_gui/session.py",
+        "src/lit_gui/backend/snapshot.py",
+        "src/lit_gui/views/",
+        "src/lit_gui/shell/window.py",
+        "tests/gui/",
+        "tests/test_lit_gui_bootstrap.py"
+      ],
+      "parallelizable_after": [
+        "B6"
+      ],
+      "parallel_notes": "Parallel-safe with the CLI after B6, but keep contracts.py, session.py, and backend/snapshot.py under one owner because they are the main GUI shared roots."
+    },
+    {
+      "block_id": "B9",
+      "goal": "Packaging, installability, product documentation, website copy, and upgrade notes all reflect the shipped v1 product honestly.",
+      "work_items": [
+        "Make GUI dependencies optional if that does not break the documented install path.",
+        "Update package metadata, versions, and entrypoint documentation.",
+        "Replace prototype and local-git positioning in README and website with autonomous local workflow identity.",
+        "Write the concrete design and product document covering checkpoints, provenance, verification, lineage, artifacts, Git export boundaries, and Jakal Flow readiness.",
+        "Write a short upgrade note for existing users and repositories."
+      ],
+      "implementation_notes": "This block should describe the implemented behavior, not planned behavior. Packaging should keep core CLI use lightweight while making the desktop install path clear and practical.",
+      "testable_boundary": "A fresh install can run the CLI and the optional GUI path as documented, the docs match the actual commands and workflows, and the release and upgrade notes explain repository compatibility and migration honestly.",
+      "candidate_owned_paths": [
+        "pyproject.toml",
+        "README.md",
+        "docs/lit-v1-product.md",
+        "docs/lit-v1-upgrade.md",
+        "docs/gui-architecture.md",
+        "website/index.html",
+        "website/styles.css",
+        "src/lit/__init__.py",
+        "src/lit_gui/__init__.py"
+      ],
+      "parallelizable_after": [
+        "B7",
+        "B8"
+      ],
+      "parallel_notes": "Keep this late to avoid copy churn while command names, DTO fields, and install semantics are still moving."
+    },
+    {
+      "block_id": "B10",
+      "goal": "Cross-cutting end-to-end, backward-compatibility, resilience, and performance smoke coverage makes the release credible.",
+      "work_items": [
+        "Add legacy repository fixtures and migration/backward-compatibility tests.",
+        "Add cross-feature end-to-end tests for checkpoint, verification, lineage, rollback, artifact, doctor, and export flows.",
+        "Add crash-recovery and concurrent-lock validation around journaled operations.",
+        "Add simple smoke benchmarks for repeated checkpointing, rollback, lineage promotion, and verification cache hits.",
+        "Close any remaining gaps between CLI and GUI behavior claims."
+      ],
+      "implementation_notes": "Earlier blocks should land their own focused tests, but this block owns the cross-feature fixtures and long-path validation. Keep benchmark expectations loose but real enough to catch obvious regressions on low-end local machines.",
+      "testable_boundary": "Pytest passes against both new and legacy repository fixtures, resilience scenarios are exercised, and smoke benchmarks produce repeatable outputs for the required workflows.",
+      "candidate_owned_paths": [
+        "tests/fixtures/",
+        "tests/e2e/",
+        "tests/perf/",
+        "tests/test_bootstrap.py",
+        "tests/gui/"
+      ],
+      "parallelizable_after": [
+        "B7",
+        "B8",
+        "B9"
+      ],
+      "parallel_notes": "This is the final convergence block and should not become first-time feature implementation. It will touch broad assertions, so it should be scheduled after the main surfaces settle."
+    }
+  ],
+  "packing_notes": [
+    "Wave 0 should be SK1 alone. It creates the in-repo implementation plan the mission explicitly asks for and freezes the names and boundaries that later blocks depend on.",
+    "Do not parallelize B1 and B2. They both influence the most shared engine roots and are the highest-risk place to accidentally fork the on-disk format.",
+    "After B2, the cleanest parallel wave is B3, B4, and B5 if each mostly owns its new module and limits repository.py edits to narrow integration shims.",
+    "Land B6 before B7 and B8 so CLI and desktop work against one backend adapter and one DTO vocabulary.",
+    "Keep single ownership at any given time for src/lit/repository.py, src/lit/refs.py, src/lit_gui/contracts.py, src/lit_gui/session.py, src/lit_gui/backend/snapshot.py, pyproject.toml, README.md, and tests/test_bootstrap.py.",
+    "Start splitting new tests into focused files early instead of continuing to accrete everything into tests/test_bootstrap.py and the existing broad GUI test files.",
+    "B9 should stay late because product language, optional dependency rules, and version/help text will otherwise churn while the feature surface is still changing.",
+    "B10 is a final hardening and compatibility wave, not a dumping ground for unfinished core behavior."
+  ]
+}

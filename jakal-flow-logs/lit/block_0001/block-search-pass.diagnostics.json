@@ -1,0 +1,16 @@
+{
+  "attempt_count": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "duration_seconds": 980.203,
+      "last_message_excerpt": "Added the GUI skeleton and entrypoint. [pyproject.toml](C:/Users/ahnd6/OneDrive/\ubb38\uc11c/GitHub/lit/pyproject.toml) now declares `PySide6` and `lit-gui`; [contracts.py](C:/Users/ahnd6/OneDrive/\ubb38\uc11c/GitHub/lit/src/lit_gui/contracts.py) defines frozen DTOs, `SessionSnapshot`, and the abstract `RepositorySession` boundary with the required contract docstring. [app.py](C:/Users/ahnd6/OneDrive/\ubb38\uc11c/GitHub/lit/src/lit_gui/app.py) provides a preview session and launcher, while [window.py](C:/Users/ahnd6/OneDr...",
+      "returncode": 0,
+      "stderr_excerpt": "2026-03-27T01:33:41.915765Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: UTF-8 encoding error: failed to convert header to a str for header name 'x-codex-turn-metadata' with value: \"{\\\"turn_id\\\":\\\"\\\",\\\"workspaces\\\":{\\\"C:\\\\Users\\\\ahnd6\\\\OneDrive\\\\\\xeb\\xac\\xb8\\xec\\x84\\x9c\\\\GitHub\\\\lit\\\":{\\\"associated_remote_urls\\\":{\\\"origin\\\":\\\"https://github.com/Ahnd6474/lit.git\\\"},\\\"latest_git_commit_hash\\\":\\\"73a1587cacc47b4a39883cc0374da457cf896f6a\\\",\\\"has_changes\\\":false}}...",
+      "stdout_excerpt": "{\"type\":\"thread.started\",\"thread_id\":\"019d2cec-f0dd-7891-953e-3d96c7b1992d\"}\n{\"type\":\"turn.started\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 2/5 (stream disconnected before completion: UTF-8 encoding error: failed to convert header to a str for header name 'x-codex-turn-metadata' with value: \\\"{\\\\\\\"turn_id\\\\\\\":\\\\\\\"019d2cec-f5a0-77f2-87d6-345ad38d279d\\\\\\\",\\\\\\\"workspaces\\\\\\\":{\\\\\\\"C:\\\\\\\\Users\\\\\\\\ahnd6\\\\\\\\OneDrive\\\\\\\\\\\\xeb\\\\xac\\\\xb8\\\\xec\\\\x84\\\\x9c\\\\\\\\GitHub\\\\\\\\lit\\\\\\\":{\\\\\\\"associated_remote_ur...",
+      "unexpected_token_detected": false
+    }
+  ],
+  "recovered_after_retry": false,
+  "unexpected_token_detected": false
+}

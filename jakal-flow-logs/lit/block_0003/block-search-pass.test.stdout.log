@@ -1,0 +1,13 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.0.2, pluggy-1.6.0
+rootdir: C:\Users\ahnd6\OneDrive\문서\GitHub\lit
+configfile: pyproject.toml
+testpaths: tests
+collected 29 items
+
+tests\gui\backend\test_session.py .....                                  [ 17%]
+tests\gui\views\test_home_files.py ..                                    [ 24%]
+tests\test_bootstrap.py ..................                               [ 86%]
+tests\test_lit_gui_bootstrap.py ....                                     [100%]
+
+============================= 29 passed in 9.34s ==============================

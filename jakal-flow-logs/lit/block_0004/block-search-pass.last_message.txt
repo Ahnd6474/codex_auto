@@ -1,0 +1,8 @@
+Implemented the Changes and History workspace end to end. The placeholder center views were replaced with real widgets in [changes/view.py](C:/Users/ahnd6/OneDrive/문서/GitHub/lit/src/lit_gui/views/changes/view.py) and [history/view.py](C:/Users/ahnd6/OneDrive/문서/GitHub/lit/src/lit_gui/views/history/view.py), both reusing the shared preview component in [diff_panel.py](C:/Users/ahnd6/OneDrive/문서/GitHub/lit/src/lit_gui/widgets/shared/diff_panel.py).
+
+Key behavior shipped:
+- Changes now shows `Staged`, `Modified`, `Deleted`, and `Untracked` groups with counts, diff inspection, staging by selected path, group, or typed file/directory path, and commit creation only when staged content exists and the message is non-blank.
+- History now renders a readable commit timeline, shows commit metadata and changed files, and lets the user inspect per-file commit diffs through the new session-backed history file selection in [snapshot.py](C:/Users/ahnd6/OneDrive/문서/GitHub/lit/src/lit_gui/backend/snapshot.py) and [session.py](C:/Users/ahnd6/OneDrive/문서/GitHub/lit/src/lit_gui/session.py).
+- GUI coverage for both workflows was added in [test_changes_history.py](C:/Users/ahnd6/OneDrive/문서/GitHub/lit/tests/gui/views/test_changes_history.py), and the fake Qt test scaffold was extended just enough to support commit-message validation.
+
+Verification: `python -m pytest` passed (`31` tests).

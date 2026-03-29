@@ -1,0 +1,16 @@
+{
+  "attempt_count": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "duration_seconds": 450.484,
+      "last_message_excerpt": "{\n  \"title\": \"lit-v1-autonomous-workflow-release\",\n  \"strategy_summary\": \"This needs a contract-first refactor rather than scattered feature patches. Freeze the v1 repository layout, revision/checkpoint schema, and service boundary first, then land the core persistence/safety work, then fan out into verification, lineage, and artifacts, and only after that rebuild the CLI and desktop UI on the same backend surface. The safest parallel shape is sequential core foundation, a parallel domain-fea...",
+      "returncode": 0,
+      "stderr_excerpt": "2026-03-27T15:54:57.049728Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: UTF-8 encoding error: failed to convert header to a str for header name 'x-codex-turn-metadata' with value: \"{\\\"session_id\\\":\\\"019d3001-7531-75e0-a567-8867e74b59ab\\\",\\\"turn_id\\\":\\\"\\\",\\\"workspaces\\\":{\\\"C:\\\\Users\\\\ahnd6\\\\OneDrive\\\\\\xeb\\xac\\xb8\\xec\\x84\\x9c\\\\GitHub\\\\lit\\\":{\\\"associated_remote_urls\\\":{\\\"origin\\\":\\\"https://github.com/Ahnd6474/lit.git\\\"},\\\"latest_git_commit_hash\\\":\\\"773e8fc2f5...",
+      "stdout_excerpt": "{\"type\":\"thread.started\",\"thread_id\":\"019d3001-7531-75e0-a567-8867e74b59ab\"}\n{\"type\":\"turn.started\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 2/5 (stream disconnected before completion: UTF-8 encoding error: failed to convert header to a str for header name 'x-codex-turn-metadata' with value: \\\"{\\\\\\\"session_id\\\\\\\":\\\\\\\"019d3001-7531-75e0-a567-8867e74b59ab\\\\\\\",\\\\\\\"turn_id\\\\\\\":\\\\\\\"019d3001-77ed-7d81-9db5-9e218dcc1207\\\\\\\",\\\\\\\"workspaces\\\\\\\":{\\\\\\\"C:\\\\\\\\Users\\\\\\\\ahnd6\\\\\\\\OneDrive\\\\\\\\\\\\xeb\\\\xac\\\\x...",
+      "unexpected_token_detected": false
+    }
+  ],
+  "recovered_after_retry": false,
+  "unexpected_token_detected": false
+}
