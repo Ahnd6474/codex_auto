@@ -357,25 +357,20 @@ export default function App() {
           ) : null}
         </div>
 
-        {/* Right splitter + details inspector */}
-        {!controller.rightCollapsed ? (
-          <>
-            <Splitter axis="vertical" onResize={rightSplitter.onResize} onDragEnd={rightSplitter.onDragEnd} title="Resize inspector" />
-            <div
-              className="ide-pane ide-pane--details"
-              style={{ width: controller.rightWidth, flex: `0 0 ${controller.rightWidth}px` }}
-            >
-              <RightSidebarPane
-                detail={detail}
-                planDraft={controller.planDraft}
-                selectedStepId={controller.selectedStepId}
-                modelPresets={controller.modelPresets}
-                busy={controller.busy}
-                onHide={() => controller.setRightCollapsed(true)}
-              />
-            </div>
-          </>
-        ) : null}
+        {/* Right splitter + sidebar */}
+        <Splitter axis="vertical" onResize={rightSplitter.onResize} onDragEnd={rightSplitter.onDragEnd} title="Resize right sidebar" />
+        <div
+          className="ide-pane ide-pane--details"
+          style={{ width: controller.rightWidth, flex: `0 0 ${controller.rightWidth}px` }}
+        >
+          <RightSidebarPane
+            detail={detail}
+            planDraft={controller.planDraft}
+            selectedStepId={controller.selectedStepId}
+            modelPresets={controller.modelPresets}
+            busy={controller.busy}
+          />
+        </div>
       </div>
 
       {/* ── Status bar ── */}
@@ -385,9 +380,9 @@ export default function App() {
         queuedJobs={controller.queuedJobs}
         modelPresets={controller.modelPresets}
         bottomCollapsed={controller.bottomCollapsed}
-        rightCollapsed={controller.rightCollapsed}
+        rightCollapsed={false}
         onToggleBottom={() => controller.setBottomCollapsed((v) => !v)}
-        onToggleRight={() => controller.setRightCollapsed((v) => !v)}
+        onToggleRight={() => {}}
       />
 
       {/* ── Command palette (Double Shift / Ctrl+Shift+A) ── */}

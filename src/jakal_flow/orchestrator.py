@@ -1007,7 +1007,7 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
 
         reporter = Reporter(context)
         base_revision = context.metadata.current_safe_revision or self.git.current_revision(context.paths.repo_dir)
-        batch_token = f"{now_utc_iso().replace(':', '').replace('-', '').replace('+', '').replace('T', 't')}-{uuid4().hex[:8]}"
+        batch_token = self._parallel_batch_token()
         worker_results: list[dict[str, object]] = []
         merged_commit_hashes: list[str] = []
         merged_commit_by_step_id: dict[str, str] = {}
@@ -2210,6 +2210,9 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
 
     def _parallel_worker_count(self, runtime: RuntimeOptions) -> int:
         return self._parallel_worker_plan(runtime).recommended_workers
+
+    def _parallel_batch_token(self) -> str:
+        return f"pr-{uuid4().hex[:10]}"
 
     def _parallel_worker_slug(self, step: ExecutionStep, worker_index: int) -> str:
         raw = f"{worker_index:02d}-{step.step_id.strip().lower() or 'step'}"
@@ -3585,6 +3588,7 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorMlMixin, OrchestratorRe
         block_index = context.loop_state.block_index
         context.metadata.current_status = f"running:block:{block_index}"
         context.metadata.last_run_at = now_utc_iso()
+        ensure_gitignore(context.paths.repo_dir)
         safe_revision = context.metadata.current_safe_revision or self.git.current_revision(context.paths.repo_dir)
 
         if candidate_override is None:

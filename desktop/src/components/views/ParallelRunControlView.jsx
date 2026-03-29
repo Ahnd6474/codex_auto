@@ -212,7 +212,7 @@ function effortDescription(value, language) {
 /* ── Model chip label helpers ── */
 const PROVIDER_SHORT = {
   openai: "Codex", claude: "Claude", gemini: "Gemini", ensemble: "Ensemble",
-  deepseek: "DeepSeek", qwen_code: "Qwen", kimi: "Kimi", minimax: "MiniMax",
+  ollama: "Ollama", deepseek: "DeepSeek", qwen_code: "Qwen", kimi: "Kimi", minimax: "MiniMax",
   glm: "GLM", openrouter: "OpenRouter", opencdk: "CDK", local_openai: "Local", oss: "OSS",
 };
 
