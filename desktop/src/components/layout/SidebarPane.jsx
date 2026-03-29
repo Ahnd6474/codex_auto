@@ -345,13 +345,48 @@ function ChatPanel({
     };
   }, [menuOpen]);
 
+  function roleLabel(role) {
+    if (role === "user") {
+      return language === "ko" ? "사용자" : "You";
+    }
+    if (role === "system") {
+      return language === "ko" ? "시스템" : "System";
+    }
+    return "AI";
+  }
+
+  function modeLabel(mode) {
+    if (mode === "debugger") {
+      return language === "ko" ? "디버거" : "Debugger";
+    }
+    if (mode === "merger") {
+      return language === "ko" ? "머저" : "Merger";
+    }
+    return language === "ko" ? "대화" : "Conversation";
+  }
+
+  function sessionLabel(session) {
+    const title = String(session?.title || "").trim() || (language === "ko" ? "대화" : "Conversation");
+    const count = Number.parseInt(String(session?.message_count || 0), 10) || 0;
+    return `${title} · ${count}`;
+  }
+
   function handleSend() {
     const text = input.trim();
-    if (!text) return;
-    const msg = { role: "user", text, id: Date.now() };
+    if (!text || busy) return;
+    const mode = pendingMode;
+    const msg = {
+      role: "user",
+      text,
+      mode,
+      status: "pending",
+      message_id: `local-${Date.now()}`,
+    };
     setLocalMessages((prev) => [...prev, msg]);
     setInput("");
-    onSendChatMessage?.(text);
+    setPendingMode("conversation");
+    setMenuOpen(false);
+    void Promise.resolve(onSendChatMessage?.(text, mode)).catch(() => {});
   }
 
   function handleKeyDown(event) {
@@ -361,12 +396,58 @@ function ChatPanel({
     }
   }
 
+  function handleSessionChange(event) {
+    const nextSessionId = String(event.target.value || "").trim();
+    if (!nextSessionId) {
+      onStartNewChatSession?.();
+      return;
+    }
+    void Promise.resolve(onSelectChatSession?.(nextSessionId)).catch(() => {});
+  }
+
+  const selectedSessionValue = chatDraftSession ? "" : activeSessionId;
+
   return (
     <>
       <div className="sidebar-panel__header">
         <strong>{language === "ko" ? "AI 채팅" : "AI Chat"}</strong>
         <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>
-          {language === "ko" ? "실행 중 개입 가능" : "Intervene anytime"}
+          {language === "ko" ? "대화 또는 수동 복구 호출" : "Conversation or manual recovery"}
+        </span>
+      </div>
+
+      <div className="sidebar-chat-toolbar">
+        <select
+          className="sidebar-chat-session-select"
+          value={selectedSessionValue}
+          onChange={handleSessionChange}
+          disabled={busy}
+        >
+          <option value="">{language === "ko" ? "새 대화" : "New conversation"}</option>
+          {sessions.map((session) => (
+            <option key={session.session_id} value={session.session_id}>
+              {sessionLabel(session)}
+            </option>
+          ))}
+        </select>
+        <button
+          className="sidebar-chat-new"
+          onClick={() => {
+            setPendingMode("conversation");
+            setMenuOpen(false);
+            onStartNewChatSession?.();
+          }}
+          type="button"
+          disabled={busy}
+        >
+          {language === "ko" ? "새로" : "New"}
+        </button>
+      </div>
+
+      <div className="sidebar-chat-summary-path">
+        <strong>{language === "ko" ? "요약 txt" : "Summary txt"}</strong>
+        <span title={summaryFile || ""}>
+          {summaryFile || (language === "ko" ? "첫 메시지를 보내면 생성됩니다." : "Created after the first message.")}
         </span>
       </div>
 
@@ -374,13 +455,21 @@ function ChatPanel({
         {localMessages.length === 0 ? (
           <div className="sidebar-chat-empty">
             <SidebarChatIcon />
-            <span>{language === "ko" ? "메시지를 입력하여 AI에 지시하세요." : "Send a message to guide the AI."}</span>
+            <span>
+              {language === "ko"
+                ? "메시지를 보내면 대화 기록 txt를 만들고 이어서 응답합니다."
+                : "Send a message to continue the session from the saved txt history."}
+            </span>
           </div>
         ) : (
-          localMessages.map((msg) => (
-            <div key={msg.id} className={`sidebar-chat-bubble sidebar-chat-bubble--${msg.role}`}>
+          localMessages.map((msg, index) => (
+            <div
+              key={msg.message_id || msg.id || `${msg.role || "assistant"}-${index}`}
+              className={`sidebar-chat-bubble sidebar-chat-bubble--${msg.role || "assistant"}`}
+            >
               <span className="sidebar-chat-bubble__role">
-                {msg.role === "user" ? (language === "ko" ? "나" : "You") : "AI"}
+                {roleLabel(msg.role)}
+                {msg.mode && String(msg.mode).trim().toLowerCase() !== "conversation" ? ` · ${modeLabel(msg.mode)}` : ""}
               </span>
               <p>{msg.text}</p>
             </div>
@@ -389,25 +478,77 @@ function ChatPanel({
         <div ref={bottomRef} />
       </div>
 
-      <div className="sidebar-chat-input-row">
-        <textarea
-          className="sidebar-chat-input"
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={language === "ko" ? "메시지 입력... (Enter로 전송)" : "Type a message… (Enter to send)"}
-          disabled={busy}
-          rows={2}
-        />
-        <button
-          className="sidebar-chat-send"
-          onClick={handleSend}
-          type="button"
-          disabled={busy || !input.trim()}
-          title={language === "ko" ? "전송" : "Send"}
-        >
-          <SendIcon />
-        </button>
+      <div className="sidebar-chat-composer">
+        <div className="sidebar-chat-modebar" ref={menuRef}>
+          <div className="sidebar-chat-mode-picker">
+            <button
+              className="sidebar-chat-plus"
+              onClick={() => setMenuOpen((current) => !current)}
+              type="button"
+              disabled={busy}
+              title={language === "ko" ? "디버거 또는 머저 선택" : "Choose debugger or merger"}
+            >
+              <PlusIcon />
+            </button>
+            {menuOpen ? (
+              <div className="sidebar-chat-mode-menu">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPendingMode("debugger");
+                    setMenuOpen(false);
+                  }}
+                >
+                  {modeLabel("debugger")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPendingMode("merger");
+                    setMenuOpen(false);
+                  }}
+                >
+                  {modeLabel("merger")}
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          {pendingMode === "conversation" ? (
+            <span className="sidebar-chat-mode-chip">
+              {language === "ko" ? "기본: 대화 모드" : "Default: conversation"}
+            </span>
+          ) : (
+            <button
+              className="sidebar-chat-mode-chip sidebar-chat-mode-chip--active"
+              onClick={() => setPendingMode("conversation")}
+              type="button"
+            >
+              {language === "ko" ? "다음 전송:" : "Next send:"} {modeLabel(pendingMode)}
+            </button>
+          )}
+        </div>
+
+        <div className="sidebar-chat-input-row">
+          <textarea
+            className="sidebar-chat-input"
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={language === "ko" ? "메시지 입력... (Enter 전송)" : "Type a message... (Enter to send)"}
+            disabled={busy}
+            rows={2}
+          />
+          <button
+            className="sidebar-chat-send"
+            onClick={handleSend}
+            type="button"
+            disabled={busy || !input.trim()}
+            title={language === "ko" ? "전송" : "Send"}
+          >
+            <SendIcon />
+          </button>
+        </div>
       </div>
     </>
   );
