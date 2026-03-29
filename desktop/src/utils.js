@@ -1957,6 +1957,7 @@ export function planStepsWithCloseout(plan, labels = {}) {
     display_description: labels.description || labels.title || "Closeout",
     codex_description: labels.description || labels.title || "Closeout",
     success_criteria: labels.successCriteria || labels.description || labels.title || "Closeout",
+    deadline_at: "",
     reasoning_effort: "high",
     parallel_group: "",
     depends_on: steps.map((step) => step.step_id).filter((stepId) => stepId && stepId !== CLOSEOUT_STEP_ID),

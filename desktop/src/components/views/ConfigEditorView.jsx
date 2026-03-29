@@ -167,6 +167,7 @@ export function ConfigEditorView({
   const runtime = form.runtime || {};
   const { language, t } = useI18n();
   const isRunning = ["running", "queued"].includes(String(activeJob?.status || "").trim().toLowerCase());
+  const liveRuntimeEditable = isRunning;
   const planningReasoningLabel = language === "ko" ? "계획 추론" : "Planning Reasoning";
   const selectedProvider = normalizedModelProvider(runtime);
   const providerHasCatalog = providerSupportsCatalog(selectedProvider);
@@ -251,7 +252,7 @@ export function ConfigEditorView({
             className="toolbar-button toolbar-button--accent"
             onClick={onSaveProject}
             type="button"
-            disabled={busy || !form.project_dir?.trim()}
+            disabled={(!liveRuntimeEditable && busy) || !form.project_dir?.trim()}
           >
             {t("action.saveConfiguration")}
           </button>
@@ -346,6 +347,17 @@ export function ConfigEditorView({
               title={language === "ko" ? "실행 설정" : "Execution Parameters"}
               description={language === "ko" ? "단계 수, 병렬 실행, 최적화" : "Step limits, parallel workers and optimization"}
             />
+
+            {liveRuntimeEditable ? (
+              <div className="info-callout" style={{ marginTop: "8px" }}>
+                <InfoIcon />
+                <span>
+                  {language === "ko"
+                    ? "실행 중에도 체크포인트와 보고서처럼 안전한 런타임 설정은 저장해서 다음 단계부터 반영할 수 있습니다."
+                    : "Safe runtime settings like checkpoints and report output can still be saved while a run is active."}
+                </span>
+              </div>
+            ) : null}
 
             <div className="choice-grid" style={{ marginTop: "4px" }}>
               <label className="field">
@@ -467,6 +479,25 @@ export function ConfigEditorView({
               </label>
 
               <label className="field">
+                <span>{t("field.checkpointInterval")}</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={runtime.checkpoint_interval_blocks || 1}
+                  onChange={(event) =>
+                    onChangeForm((current) => ({
+                      ...current,
+                      runtime: {
+                        ...current.runtime,
+                        checkpoint_interval_blocks: Math.max(1, Number.parseInt(event.target.value || "1", 10) || 1),
+                      },
+                    }))
+                  }
+                  disabled={busy && !liveRuntimeEditable}
+                />
+              </label>
+
+              <label className="field">
                 <span>{t("field.optimizationMode")}</span>
                 <select
                   value={runtime.optimization_mode || "light"}
@@ -514,6 +545,30 @@ export function ConfigEditorView({
                 }
                 label={t("field.allowBackgroundQueue")}
                 disabled={busy}
+              />
+              <ToggleRow
+                checked={Boolean(runtime.require_checkpoint_approval)}
+                onChange={(event) =>
+                  onChangeForm((current) => ({
+                    ...current,
+                    runtime: { ...current.runtime, require_checkpoint_approval: event.target.checked },
+                  }))
+                }
+                label={t("option.requireCheckpointApproval")}
+                hint={language === "ko" ? "체크포인트에 도달하면 다음 단계 전에 검토를 요청합니다." : "Pause for review when a checkpoint is reached."}
+                disabled={busy && !liveRuntimeEditable}
+              />
+              <ToggleRow
+                checked={Boolean(runtime.generate_word_report)}
+                onChange={(event) =>
+                  onChangeForm((current) => ({
+                    ...current,
+                    runtime: { ...current.runtime, generate_word_report: event.target.checked },
+                  }))
+                }
+                label={language === "ko" ? "Word 보고서 생성" : "Generate Word Report"}
+                hint={language === "ko" ? "마감 후 `.docx` 보고서를 함께 남깁니다." : "Keep a `.docx` closeout report after closeout finishes."}
+                disabled={busy && !liveRuntimeEditable}
               />
               <ToggleRow
                 checked={Boolean(runtime.use_fast_mode)}

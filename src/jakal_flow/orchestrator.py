@@ -529,6 +529,7 @@ class Orchestrator:
             execution_flow_svg_file=docs_dir / "EXECUTION_FLOW.svg",
             closeout_report_file=docs_dir / "CLOSEOUT_REPORT.md",
             closeout_report_docx_file=reports_dir / "CLOSEOUT_REPORT.docx",
+            closeout_report_pptx_file=reports_dir / "CLOSEOUT_REPORT.pptx",
             ml_experiment_report_file=docs_dir / "ML_EXPERIMENT_REPORT.md",
             ml_experiment_results_svg_file=docs_dir / "ML_EXPERIMENT_RESULTS.svg",
         )
@@ -1405,6 +1406,7 @@ class Orchestrator:
             execution_flow_svg_file=docs_dir / "EXECUTION_FLOW.svg",
             closeout_report_file=docs_dir / "CLOSEOUT_REPORT.md",
             closeout_report_docx_file=reports_dir / "CLOSEOUT_REPORT.docx",
+            closeout_report_pptx_file=reports_dir / "CLOSEOUT_REPORT.pptx",
             ml_experiment_report_file=docs_dir / "ML_EXPERIMENT_REPORT.md",
             ml_experiment_results_svg_file=docs_dir / "ML_EXPERIMENT_RESULTS.svg",
         )
@@ -1770,6 +1772,7 @@ class Orchestrator:
                     title=step.title.strip(),
                     display_description=step.display_description.strip(),
                     codex_description=step.codex_description.strip() or step.display_description.strip() or step.title.strip(),
+                    deadline_at=step.deadline_at.strip(),
                     model_provider=normalize_step_model_provider(step.model_provider),
                     model=normalize_step_model(step.model),
                     test_command=step.test_command.strip() or default_test_command or context.runtime.test_cmd,
@@ -3279,6 +3282,7 @@ class Orchestrator:
             execution_flow_svg_file=docs_dir / "EXECUTION_FLOW.svg",
             closeout_report_file=docs_dir / "CLOSEOUT_REPORT.md",
             closeout_report_docx_file=reports_dir / "CLOSEOUT_REPORT.docx",
+            closeout_report_pptx_file=reports_dir / "CLOSEOUT_REPORT.pptx",
             ml_experiment_report_file=docs_dir / "ML_EXPERIMENT_REPORT.md",
             ml_experiment_results_svg_file=docs_dir / "ML_EXPERIMENT_RESULTS.svg",
         )
@@ -4800,6 +4804,7 @@ class Orchestrator:
                     title=step.title,
                     plan_refs=[step.step_id],
                     target_block=index,
+                    deadline_at=str(step.deadline_at or "").strip(),
                     status=status,
                     created_at=step.started_at or now_utc_iso(),
                     reached_at=step.completed_at if step.status == "completed" else step.started_at,

@@ -649,6 +649,11 @@ export function SidebarPane({
                           <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>
                             {t("sidebar.targetBlock", { block: checkpoint.target_block })}
                           </span>
+                          {checkpoint.deadline_at ? (
+                            <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>
+                              {language === "ko" ? `마감 ${checkpoint.deadline_at}` : `Deadline ${checkpoint.deadline_at}`}
+                            </span>
+                          ) : null}
                         </div>
                       );
                     })

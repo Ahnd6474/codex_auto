@@ -3371,6 +3371,65 @@ select:focus {
   overflow-y: auto;
 }
 
+.details-documents {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+.details-document {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--bg-panel-alt);
+}
+
+.details-document--muted {
+  opacity: 0.8;
+}
+
+.details-document__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(95, 151, 214, 0.12);
+  color: var(--info);
+}
+
+.details-document__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.details-document__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.details-document__body strong {
+  font-size: 11.5px;
+}
+
+.details-document__kind,
+.details-document__path {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.details-document__path {
+  word-break: break-all;
+}
+
 /* ═══════════════════════════════════════════════════
    RESPONSIVE — update for new layout
    ═══════════════════════════════════════════════════ */

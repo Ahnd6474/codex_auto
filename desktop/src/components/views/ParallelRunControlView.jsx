@@ -555,6 +555,7 @@ export function ParallelRunControlView({
           {selectedSystemStep ? (
             <div className="step-editor-grid">
               <div className="field field--wide"><span>{t("field.description")}</span><p>{selectedStep.display_description || t("run.noSummary")}</p></div>
+              {selectedStep.deadline_at ? <div className="field field--wide"><span>{language === "ko" ? "마감" : "Deadline"}</span><p>{selectedStep.deadline_at}</p></div> : null}
               <div className="field field--wide"><span>{t("field.dependsOn")}</span><p>{(selectedStep.depends_on || []).join(", ") || t("common.none")}</p></div>
               {selectedStep.notes ? <div className="field field--wide"><span>{t("common.status")}</span><p>{selectedStep.notes}</p></div> : null}
               {selectedStep.step_id === CLOSEOUT_STEP_ID ? (
@@ -580,6 +581,16 @@ export function ParallelRunControlView({
               ) : null}
 
               <label className="field field--wide"><span>{t("field.title")}</span><input value={selectedStep.title || ""} onChange={(event) => onUpdateStepField("title", event.target.value)} disabled={!editableStep} /></label>
+
+              <label className="field">
+                <span>{language === "ko" ? "마감" : "Deadline"}</span>
+                <input
+                  value={selectedStep.deadline_at || ""}
+                  onChange={(event) => onUpdateStepField("deadline_at", event.target.value)}
+                  disabled={!editableStep}
+                  placeholder={language === "ko" ? "예: 2026-04-05 18:00" : "Example: 2026-04-05 18:00"}
+                />
+              </label>
 
               <label className="field"><span>{t("field.gptReasoning")}</span>
                 <select value={selectedStep.reasoning_effort || detail?.runtime?.effort || "high"} onChange={(event) => onUpdateStepField("reasoning_effort", event.target.value)} disabled={!editableStep}>

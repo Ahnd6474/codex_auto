@@ -1964,6 +1964,136 @@ test("ConfigEditorView no longer renders the advanced settings section", async (
   assert.match(html, />Delete Project<\/button>/);
 });
 
+test("ConfigEditorView keeps checkpoint and report controls editable during an active run", async () => {
+  const html = await renderBundledComponent(
+    "config-editor-live-runtime-render",
+    "./src/components/views/ConfigEditorView.jsx",
+    "ConfigEditorView",
+    {
+      form: {
+        project_dir: "C:/demo",
+        display_name: "Demo",
+        branch: "main",
+        github_mode: "existing",
+        origin_url: "",
+        runtime: {
+          model_provider: "openai",
+          model: "gpt-5.4",
+          model_preset: "",
+          model_slug_input: "gpt-5.4",
+          effort: "medium",
+          workflow_mode: "standard",
+          execution_mode: "parallel",
+          parallel_worker_mode: "auto",
+          parallel_workers: 0,
+          parallel_memory_per_worker_gib: 3,
+          checkpoint_interval_blocks: 2,
+          require_checkpoint_approval: true,
+          generate_word_report: true,
+          ml_max_cycles: 3,
+          max_blocks: 5,
+        },
+      },
+      modelPresets: [],
+      modelCatalog: [
+        {
+          model: "gpt-5.4",
+          display_name: "GPT-5.4",
+          hidden: false,
+          default_reasoning_effort: "medium",
+          supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
+        },
+      ],
+      busy: true,
+      activeJob: {
+        status: "running",
+        command: "run-plan",
+      },
+      onChangeForm: noop,
+      onSaveProject: noop,
+      onChooseDirectory: noop,
+      onArchiveProject: noop,
+      onDeleteProject: noop,
+    },
+  );
+
+  assert.match(html, /Save Configuration/);
+  const saveButtonMatch = html.match(/<button[^>]*>Save Configuration<\/button>/);
+  assert.ok(saveButtonMatch, "Save Configuration button should exist");
+  assert.doesNotMatch(saveButtonMatch[0], /disabled=""/);
+  assert.match(html, /Checkpoint Interval/);
+  assert.match(html, /Generate Word Report/);
+});
+
+test("DetailsPane shows report documents and checkpoint deadlines in the inspector", async () => {
+  const html = await renderBundledComponent(
+    "details-pane-documents-render",
+    "./src/components/layout/DetailsPane.jsx",
+    "DetailsPane",
+    {
+      detail: {
+        project: {
+          current_status: "running:parallel",
+          display_name: "Demo",
+          slug: "demo",
+          branch: "main",
+          repo_path: "C:/demo",
+          current_safe_revision: "abc123",
+        },
+        runtime: {
+          model: "gpt-5.4",
+          effort: "medium",
+          generate_word_report: true,
+        },
+        checkpoints: {
+          pending: {
+            checkpoint_id: "CP1",
+            title: "Prepare release",
+            target_block: 1,
+            status: "awaiting_review",
+            deadline_at: "2026-04-05 18:00",
+          },
+        },
+        reports: {
+          closeout_report_text: "# Closeout Report",
+          word_report_path: "C:/demo/reports/CLOSEOUT_REPORT.docx",
+          powerpoint_report_path: "",
+          powerpoint_report_target_path: "C:/demo/reports/CLOSEOUT_REPORT.pptx",
+          ml_experiment_report_text: "",
+        },
+        files: {
+          closeout_report_file: "C:/demo/docs/CLOSEOUT_REPORT.md",
+          word_report_file: "C:/demo/reports/CLOSEOUT_REPORT.docx",
+          powerpoint_report_file: "C:/demo/reports/CLOSEOUT_REPORT.pptx",
+          ml_experiment_report_file: "C:/demo/docs/ML_EXPERIMENT_REPORT.md",
+        },
+      },
+      planDraft: {
+        steps: [
+          {
+            step_id: "ST1",
+            title: "Prepare release",
+            display_description: "Prepare release checkpoint",
+            success_criteria: "Release notes updated",
+            reasoning_effort: "medium",
+            deadline_at: "2026-04-05 18:00",
+            status: "pending",
+          },
+        ],
+      },
+      selectedStepId: "ST1",
+      modelPresets: [],
+      onHide: noop,
+    },
+  );
+
+  assert.match(html, /Documents/);
+  assert.match(html, /PowerPoint Report/);
+  assert.match(html, /C:\/demo\/reports\/CLOSEOUT_REPORT\.pptx/);
+  assert.match(html, /Deadline:/);
+  assert.match(html, /2026-04-05 18:00/);
+});
+
 test("ConfigEditorView keeps a selected model visible even when the catalog omits it", async () => {
   const html = await renderBundledComponent(
     "config-editor-selected-model-render",

@@ -28,7 +28,7 @@ function Stat({ label, value, tone = "neutral", icon, sub }) {
 }
 
 /* ── Output generation card ── */
-function OutputCard({ icon, title, description, enabled, checked, onChange, busy, comingSoon, language }) {
+function OutputCard({ icon, title, description, enabled, checked, onChange, busy, allowWhileRunning = false, comingSoon, language }) {
   return (
     <div className={`output-card ${!enabled ? "output-card--disabled" : ""}`}>
       <div className="output-card__icon">{icon}</div>
@@ -47,7 +47,7 @@ function OutputCard({ icon, title, description, enabled, checked, onChange, busy
             type="checkbox"
             checked={checked}
             onChange={onChange}
-            disabled={!enabled || busy}
+            disabled={!enabled || (busy && !allowWhileRunning)}
           />
           <span className="toggle-thumb" />
         </span>
@@ -137,6 +137,7 @@ export function DashboardView({ detail, planDraft, form, busy, modelPresets, mod
   const activeStatusKey = projectStatusWithJob(projectStatus, activeJob) || "idle";
   const activeStatus = displayStatus(activeStatusKey, language);
   const tone = statusTone(activeStatusKey);
+  const liveRuntimeEditable = ["running", "queued"].includes(String(activeJob?.status || "").trim().toLowerCase());
 
   const metricItems = [
     { key: "remaining_steps", label: t("dashboard.remainingSteps"), value: pendingSteps.length, tone: "info" },
@@ -275,6 +276,7 @@ export function DashboardView({ detail, planDraft, form, busy, modelPresets, mod
               }))
             }
             busy={busy}
+            allowWhileRunning={liveRuntimeEditable}
             language={language}
           />
           <OutputCard

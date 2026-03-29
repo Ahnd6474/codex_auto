@@ -1164,6 +1164,7 @@ def build_checkpoint_timeline(plan_text: str, checkpoint_interval_blocks: int) -
                 title="Initial stabilization checkpoint",
                 plan_refs=[],
                 target_block=max(1, checkpoint_interval_blocks),
+                deadline_at="",
                 created_at=now_utc_iso(),
             )
         ]
@@ -1175,6 +1176,7 @@ def build_checkpoint_timeline(plan_text: str, checkpoint_interval_blocks: int) -
                 title=item.text,
                 plan_refs=[item.item_id],
                 target_block=max(1, index * checkpoint_interval_blocks),
+                deadline_at="",
                 created_at=now_utc_iso(),
             )
         )
@@ -1195,6 +1197,7 @@ def checkpoint_timeline_markdown(checkpoints: list[Checkpoint]) -> str:
                 f"## {checkpoint.checkpoint_id}",
                 f"- Title: {checkpoint.title}",
                 f"- Target block: {checkpoint.target_block}",
+                f"- Deadline: {checkpoint.deadline_at or 'none'}",
                 f"- Plan refs: {refs}",
                 f"- Status: {checkpoint.status}",
                 "",

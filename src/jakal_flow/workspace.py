@@ -180,6 +180,7 @@ class WorkspaceManager:
             execution_flow_svg_file=docs_dir / "EXECUTION_FLOW.svg",
             closeout_report_file=docs_dir / "CLOSEOUT_REPORT.md",
             closeout_report_docx_file=reports_dir / "CLOSEOUT_REPORT.docx",
+            closeout_report_pptx_file=reports_dir / "CLOSEOUT_REPORT.pptx",
             ml_experiment_report_file=docs_dir / "ML_EXPERIMENT_REPORT.md",
             ml_experiment_results_svg_file=docs_dir / "ML_EXPERIMENT_RESULTS.svg",
         )

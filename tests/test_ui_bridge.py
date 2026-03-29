@@ -1053,6 +1053,90 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(loaded["reports"]["word_report_path"], str(word_report_path))
             self.assertIn(str(word_report_path), loaded["summary"])
 
+    def test_load_project_exposes_powerpoint_report_target_path(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Report Target Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "effort": "medium",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            self.assertTrue(detail["files"]["powerpoint_report_file"].endswith("CLOSEOUT_REPORT.pptx"))
+            self.assertTrue(detail["reports"]["powerpoint_report_target_path"].endswith("CLOSEOUT_REPORT.pptx"))
+            self.assertEqual(detail["reports"]["powerpoint_report_path"], "")
+
+    def test_save_plan_propagates_checkpoint_deadline_into_project_detail(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Checkpoint Deadline Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "effort": "medium",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+            plan = ExecutionPlanState(
+                plan_title="Deadline Plan",
+                project_prompt="Track deadlines.",
+                workflow_mode="standard",
+                execution_mode="parallel",
+                default_test_command="python -m unittest",
+                steps=[
+                    ExecutionStep(
+                        step_id="ST1",
+                        title="Prepare release",
+                        display_description="Prepare release checkpoint",
+                        codex_description="Prepare release checkpoint",
+                        success_criteria="Release notes updated",
+                        deadline_at="2026-04-05 18:00",
+                        status="pending",
+                    )
+                ],
+            ).to_dict()
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                saved = run_command("save-project-setup", workspace_root, payload)
+                detail = run_command(
+                    "save-plan",
+                    workspace_root,
+                    {
+                        **payload,
+                        "repo_id": saved["project"]["repo_id"],
+                        "plan": plan,
+                    },
+                )
+
+            self.assertEqual(detail["checkpoints"]["items"][0]["deadline_at"], "2026-04-05 18:00")
+            self.assertIn("- Deadline: 2026-04-05 18:00", detail["checkpoints"]["timeline_markdown"])
+
     def test_archive_project_moves_managed_workspace_and_allows_same_repo_restart(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"
