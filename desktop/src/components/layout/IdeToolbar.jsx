@@ -297,7 +297,7 @@ export function IdeToolbar({
         onNewProject={onNewProject}
       />
 
-      <div className="ide-toolbar__group">
+      <div className="ide-toolbar__group ide-toolbar__group--utility">
         <AppLogo />
         <button
           className="toolbar-btn toolbar-btn--icon"
@@ -332,7 +332,7 @@ export function IdeToolbar({
         ) : null}
       </nav>
 
-      <div className="ide-toolbar__group">
+      <div className="ide-toolbar__group ide-toolbar__group--actions">
         <button
           className={`toolbar-btn ${activeCenterTab === "app-settings" ? "toolbar-btn--active" : ""}`}
           onClick={onOpenSettings}
@@ -359,7 +359,7 @@ export function IdeToolbar({
           className="toolbar-btn toolbar-btn--icon"
           onClick={onOpenVsCode}
           type="button"
-          title={language === "ko" ? "외부 에디터에서 열기" : "Open in external editor"}
+          title={language === "ko" ? "외부 편집기에서 열기" : "Open in external editor"}
           disabled={!repoPath}
         >
           <EditorIcon />

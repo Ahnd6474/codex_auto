@@ -158,7 +158,9 @@ pre {
   background: var(--toolbar-surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  overflow: hidden;
+  position: relative;
+  z-index: 8;
+  overflow: visible;
 }
 
 .ide-toolbar__group {
@@ -166,6 +168,15 @@ pre {
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.ide-toolbar__group--utility {
+  flex-shrink: 0;
+}
+
+.ide-toolbar__group--actions {
+  flex-shrink: 0;
+  justify-content: flex-end;
 }
 
 .ide-toolbar__group--grow {
@@ -1797,13 +1808,14 @@ pre {
 /* ── Project selector (toolbar) ── */
 .project-selector {
   position: relative;
-  flex: 0 1 320px;
+  flex: 1 1 280px;
   min-width: 0;
+  max-width: 360px;
 }
 
 .project-selector--primary {
   min-width: 220px;
-  max-width: 320px;
+  max-width: 360px;
 }
 
 .project-selector__btn {
@@ -1911,7 +1923,7 @@ pre {
   z-index: 200;
   width: 100%;
   min-width: 220px;
-  max-width: 320px;
+  max-width: 360px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -3855,6 +3867,40 @@ select:focus {
    ═══════════════════════════════════════════════════ */
 
 @media (max-width: 920px) {
+  .ide-toolbar {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    align-items: center;
+  }
+
+  .project-selector,
+  .project-selector--primary {
+    order: 1;
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .project-selector__dropdown {
+    min-width: min(220px, 100vw - 20px);
+    max-width: min(420px, calc(100vw - 20px));
+  }
+
+  .ide-toolbar__group--utility {
+    order: 2;
+  }
+
+  .ide-toolbar__breadcrumb {
+    order: 3;
+    flex: 1 1 180px;
+    min-width: 140px;
+  }
+
+  .ide-toolbar__group--actions {
+    order: 4;
+    margin-left: auto;
+  }
+
   .ide-body {
     flex-direction: column;
   }
@@ -3885,6 +3931,37 @@ select:focus {
   .sidebar-icon {
     width: 36px;
     height: 36px;
+  }
+}
+
+@media (max-width: 680px) {
+  .ide-toolbar {
+    gap: 8px;
+  }
+
+  .project-selector__btn-label {
+    display: none;
+  }
+
+  .ide-toolbar__group--actions {
+    gap: 4px;
+  }
+
+  .ide-toolbar__group--actions .toolbar-btn {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .ide-toolbar__group--actions .toolbar-btn span {
+    display: none;
+  }
+
+  .ide-toolbar__group--actions .toolbar-btn--icon {
+    padding: 4px;
+  }
+
+  .toolbar-divider {
+    margin: 0;
   }
 }
 
