@@ -104,6 +104,8 @@ function SectionHeader({ icon, title, description, badge }) {
   );
 }
 
+const SETTINGS_TAB_KEYS = new Set(["app", "execution", "dashboard", "share"]);
+
 export function AppSettingsView({
   settings,
   codexStatus,
@@ -112,6 +114,7 @@ export function AppSettingsView({
   busy,
   shareBusy = false,
   dirty = false,
+  initialSettingsTab = "app",
   onChangeSettings,
   onSaveSettings,
   onGenerateShareLink,
@@ -119,7 +122,9 @@ export function AppSettingsView({
   onRevokeShareLink,
   onChangeShareSettings,
 }) {
-  const [settingsTab, setSettingsTab] = useState("app");
+  const [settingsTab, setSettingsTab] = useState(() => (
+    SETTINGS_TAB_KEYS.has(initialSettingsTab) ? initialSettingsTab : "app"
+  ));
   const { language, languageOptions, setLanguage, t } = useI18n();
   const planningReasoningLabel = language === "ko" ? "계획 추론" : "Planning Reasoning";
 

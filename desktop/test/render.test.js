@@ -774,11 +774,11 @@ test("IdeToolbar renders the active command and DAG-ready progress text", async 
 
   assert.match(html, /Run Remaining Steps/);
   assert.match(html, /Completed 1\/4 steps, ready: ST2, ST3/);
-  assert.match(html, /Project Settings/);
+  assert.match(html, /Program Settings/);
   assert.doesNotMatch(html, />Closeout<\/button>/);
 });
 
-test("IdeToolbar renders the selected project and highlights project settings", async () => {
+test("IdeToolbar renders the selected project and highlights program settings", async () => {
   const html = await renderBundledComponent(
     "ide-toolbar-project-selector-render",
     "./src/components/layout/IdeToolbar.jsx",
@@ -805,7 +805,7 @@ test("IdeToolbar renders the selected project and highlights project settings", 
       },
       busy: false,
       activeJob: null,
-      activeCenterTab: "config",
+      activeCenterTab: "app-settings",
       onSelectProject: noop,
       onNewProject: noop,
       onRefresh: noop,
@@ -818,7 +818,7 @@ test("IdeToolbar renders the selected project and highlights project settings", 
 
   assert.match(html, /Demo Project/);
   assert.match(html, /toolbar-btn toolbar-btn--active/);
-  assert.match(html, /title="Project Settings"/);
+  assert.match(html, /title="Program Settings"/);
 });
 
 test("IdeToolbar keeps project link actions visible when only form-level paths are available", async () => {
@@ -1137,7 +1137,8 @@ test("AppSettingsView omits the removed subsection helper copy", async () => {
   assert.doesNotMatch(html, /These defaults are reused across projects unless a project-specific field replaces them\./);
   assert.match(html, /Application/);
   assert.match(html, /Dashboard/);
-  assert.match(html, /Execution Defaults/);
+  assert.match(html, /Execution/);
+  assert.match(html, /Share/);
 });
 
 test("RunProgressPanel renders current work, progress, and recent activity", async () => {
@@ -1807,7 +1808,7 @@ test("DashboardView hides cost metrics for included billing", async () => {
   assert.doesNotMatch(html, /Actual Cost/);
 });
 
-test("AppSettingsView exposes dashboard visibility controls", async () => {
+test("AppSettingsView exposes dashboard visibility controls in the dashboard tab", async () => {
   const html = await renderBundledComponent(
     "app-settings-view-render",
     "./src/components/views/AppSettingsView.jsx",
@@ -1843,6 +1844,7 @@ test("AppSettingsView exposes dashboard visibility controls", async () => {
       },
       busy: false,
       dirty: true,
+      initialSettingsTab: "dashboard",
       onChangeSettings: noop,
       onSaveSettings: noop,
       onGenerateShareLink: noop,
@@ -1854,18 +1856,15 @@ test("AppSettingsView exposes dashboard visibility controls", async () => {
 
   assert.doesNotMatch(html, /Show only the dashboard cards you want to keep visible\./);
   assert.match(html, /Save Program Settings/);
+  assert.match(html, /Dashboard/);
   assert.match(html, /Status/);
   assert.match(html, /5h Usage/);
   assert.match(html, /7d Usage/);
   assert.match(html, /Closeout Report/);
   assert.match(html, /Codex Spark/);
-  assert.doesNotMatch(html, /Custom Model Slug/);
-  assert.match(html, /Planning Reasoning/);
-  assert.match(html, /Concurrent Background Jobs/);
-  assert.match(html, /Memory \/ Worker \(GiB\)/);
   assert.match(html, /Codex Usage/);
-  assert.doesNotMatch(html, /Billing Mode/);
-  assert.doesNotMatch(html, /Input \$ \/ 1M/);
+  assert.doesNotMatch(html, /Planning Reasoning/);
+  assert.doesNotMatch(html, /Custom Model Slug/);
 });
 
 test("AppSettingsView remote monitor fixes sharing to 0.0.0.0 and share link only", async () => {
@@ -1908,6 +1907,7 @@ test("AppSettingsView remote monitor fixes sharing to 0.0.0.0 and share link onl
         },
       },
       busy: false,
+      initialSettingsTab: "share",
       onChangeSettings: noop,
       onGenerateShareLink: noop,
       onCopyShareLink: noop,
@@ -1962,6 +1962,7 @@ test("AppSettingsView keeps share actions enabled while a run is active", async 
       },
       busy: true,
       shareBusy: false,
+      initialSettingsTab: "share",
       onChangeSettings: noop,
       onGenerateShareLink: noop,
       onCopyShareLink: noop,
@@ -2030,7 +2031,7 @@ test("ConfigEditorView no longer renders the advanced settings section", async (
   assert.match(html, />Delete Project<\/button>/);
 });
 
-test("ConfigEditorView keeps checkpoint and report controls editable during an active run", async () => {
+test("ConfigEditorView keeps checkpoint controls editable during an active run", async () => {
   const html = await renderBundledComponent(
     "config-editor-live-runtime-render",
     "./src/components/views/ConfigEditorView.jsx",
@@ -2087,8 +2088,10 @@ test("ConfigEditorView keeps checkpoint and report controls editable during an a
   const saveButtonMatch = html.match(/<button[^>]*>Save Configuration<\/button>/);
   assert.ok(saveButtonMatch, "Save Configuration button should exist");
   assert.doesNotMatch(saveButtonMatch[0], /disabled=""/);
+  assert.match(html, /Safe runtime settings like checkpoints and report output can still be saved while a run is active\./);
   assert.match(html, /Checkpoint Interval/);
-  assert.match(html, /Generate Word Report/);
+  assert.match(html, /Require checkpoint approval/);
+  assert.doesNotMatch(html, /Word Report Creation/);
 });
 
 test("DetailsPane shows report documents and checkpoint deadlines in the inspector", async () => {
@@ -2275,7 +2278,7 @@ test("ConfigEditorView renders provider-scoped catalog models for Gemini CLI pro
   assert.doesNotMatch(html, /GPT-5\.4/);
 });
 
-test("ConfigEditorView renders three ensemble model selectors in project settings", async () => {
+test("ConfigEditorView renders the current ensemble model selectors in project settings", async () => {
   const html = await renderBundledComponent(
     "config-editor-ensemble-model-render",
     "./src/components/views/ConfigEditorView.jsx",
@@ -2343,11 +2346,11 @@ test("ConfigEditorView renders three ensemble model selectors in project setting
   );
 
   assert.match(html, /Codex Model/);
-  assert.match(html, /Gemini Model/);
+  assert.match(html, /GPT Model/);
   assert.match(html, /Claude Model/);
   assert.match(html, /GPT-5\.4 Mini/);
-  assert.match(html, /Gemini 2\.5 Pro/);
   assert.match(html, /Claude 3\.7 Sonnet/);
+  assert.doesNotMatch(html, /Gemini Model/);
 });
 
 test("AppSettingsView keeps direct model slug editing for OpenRouter only", async () => {
@@ -2379,6 +2382,7 @@ test("AppSettingsView keeps direct model slug editing for OpenRouter only", asyn
       shareDetail: {},
       busy: false,
       shareBusy: false,
+      initialSettingsTab: "execution",
       onChangeSettings: noop,
       onGenerateShareLink: noop,
       onCopyShareLink: noop,
@@ -2390,18 +2394,18 @@ test("AppSettingsView keeps direct model slug editing for OpenRouter only", asyn
   assert.match(html, /Custom Model Slug/);
 });
 
-test("AppSettingsView disables providers that are not installed in the current environment", async () => {
+test("AppSettingsView surfaces provider availability warnings in the execution tab", async () => {
   const html = await renderBundledComponent(
     "app-settings-provider-availability-render",
     "./src/components/views/AppSettingsView.jsx",
     "AppSettingsView",
     {
       settings: {
-        model_provider: "openai",
-        provider_api_key_env: "OPENAI_API_KEY",
+        model_provider: "claude",
+        provider_api_key_env: "ANTHROPIC_API_KEY",
         provider_base_url: "",
-        model: "gpt-5.4",
-        model_slug_input: "gpt-5.4",
+        model: "claude-3.7-sonnet",
+        model_slug_input: "claude-3.7-sonnet",
         approval_mode: "never",
         sandbox_mode: "danger-full-access",
         checkpoint_interval_blocks: 1,
@@ -2427,6 +2431,7 @@ test("AppSettingsView disables providers that are not installed in the current e
       shareDetail: {},
       busy: false,
       shareBusy: false,
+      initialSettingsTab: "execution",
       onChangeSettings: noop,
       onGenerateShareLink: noop,
       onCopyShareLink: noop,
@@ -2435,9 +2440,10 @@ test("AppSettingsView disables providers that are not installed in the current e
     },
   );
 
-  assert.match(html, /option value="ensemble"[^>]*disabled=""/);
-  assert.match(html, /option value="claude"[^>]*disabled=""/);
-  assert.match(html, /option value="gemini"[^>]*disabled=""/);  // all non-openai providers disabled in program settings
+  assert.match(html, /not installed/);
+  assert.match(html, /Claude Code is not installed\./);
+  assert.match(html, /provider-sub-card active/);
+  assert.match(html, /Gemini/);
 });
 
 test("ReportsView shows the saved Word report path next to the closeout report", async () => {
