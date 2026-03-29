@@ -421,7 +421,7 @@ export function IdeToolbar({
           className={`toolbar-btn toolbar-btn--icon toolbar-btn--remote${shareUrl ? " toolbar-btn--active" : ""}`}
           onClick={onSmartShareLink}
           type="button"
-          disabled={shareBusy || !projectDetail?.project}
+          disabled={shareBusy}
           title={shareUrl ? `Copy share link: ${shareUrl}` : "Generate Remote Control link"}
           aria-label={shareUrl ? "Copy share link" : "Remote Control"}
         >

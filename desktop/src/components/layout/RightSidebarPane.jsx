@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { openInSystem } from "../../api";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
@@ -526,6 +526,8 @@ function ProjectChatPane({
 }
 
 export function RightSidebarPane({
+  activeTab = "chat",
+  onChangeTab,
   detail,
   planDraft,
   selectedStepId,
@@ -545,7 +547,6 @@ export function RightSidebarPane({
   onChangeChatModelSelection,
 }) {
   const { language, t } = useI18n();
-  const [activeTab, setActiveTab] = useState("chat");
   const outputRef = useRef(null);
 
   const processOutput = detail?.subprocess_output || detail?.agent_output || detail?.process_log || "";
@@ -872,7 +873,7 @@ export function RightSidebarPane({
           <button
             key={id}
             className={`sidebar-icon${activeTab === id ? " active" : ""}`}
-            onClick={() => setActiveTab(id)}
+            onClick={() => onChangeTab?.(id)}
             title={title}
             type="button"
             aria-pressed={activeTab === id}

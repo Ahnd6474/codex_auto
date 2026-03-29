@@ -39,6 +39,7 @@ export default function App() {
   const controller = useDesktopController();
   const { t } = useI18n();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [rightTab, setRightTab] = useState("chat");
   const lastShiftRef = useRef(0);
 
   const keybindingActionsRef = useRef({
@@ -173,6 +174,20 @@ export default function App() {
   const rightOpen = !controller.rightCollapsed;
   const sidebarStyle = sidebarOpen ? { width: controller.sidebarWidth, flex: `0 0 ${controller.sidebarWidth}px` } : undefined;
   const compact = Boolean(controller.programSettings?.compact_mode);
+  const handleRightTabChange = useCallback((nextTab) => {
+    const requestedTab = String(nextTab || "").trim();
+    if (!requestedTab) {
+      return;
+    }
+    setRightTab((currentTab) => {
+      if (currentTab === requestedTab) {
+        controller.setRightCollapsed(true);
+        return currentTab;
+      }
+      controller.setRightCollapsed(false);
+      return requestedTab;
+    });
+  }, [controller.setRightCollapsed]);
   const handleSelectStep = useCallback(
     (stepId) => {
       controller.setSelectedStepId((current) => toggleStepSelection(current, stepId));
@@ -295,7 +310,9 @@ export default function App() {
         </div>
 
         {/* Left splitter */}
-        <Splitter axis="vertical" onResize={sidebarSplitter.onResize} onDragEnd={sidebarSplitter.onDragEnd} title="Resize sidebar" />
+        {sidebarOpen ? (
+          <Splitter axis="vertical" onResize={sidebarSplitter.onResize} onDragEnd={sidebarSplitter.onDragEnd} title="Resize sidebar" />
+        ) : null}
 
         {/* Center column: workspace + bottom tool panel */}
         <div className="ide-center-column">
@@ -383,6 +400,8 @@ export default function App() {
               style={{ width: controller.rightWidth, flex: `0 0 ${controller.rightWidth}px` }}
             >
               <RightSidebarPane
+                activeTab={rightTab}
+                onChangeTab={handleRightTabChange}
                 detail={detail}
                 planDraft={controller.planDraft}
                 selectedStepId={controller.selectedStepId}

@@ -2645,3 +2645,42 @@ test("IdeToolbar labels the top settings action as Program Settings", async () =
 
   assert.match(html, /Program Settings/);
 });
+
+test("IdeToolbar keeps the remote link button enabled without a selected project", async () => {
+  const html = await renderBundledComponent(
+    "ide-toolbar-remote-link-without-project-render",
+    "./src/components/layout/IdeToolbar.jsx",
+    "IdeToolbar",
+    {
+      projects: [],
+      selectedProjectId: "",
+      onSelectProject: noop,
+      onNewProject: noop,
+      projectDetail: null,
+      planDraft: {
+        steps: [],
+      },
+      pendingCheckpoint: null,
+      busy: false,
+      activeJob: null,
+      activeCenterTab: "run",
+      projectPath: "",
+      githubUrl: "",
+      shareUrl: "",
+      shareBusy: false,
+      onRefresh: noop,
+      onOpenSettings: noop,
+      onGeneratePlan: noop,
+      onRunPlan: noop,
+      onApproveCheckpoint: noop,
+      onSmartShareLink: noop,
+      onOpenFolder: noop,
+      onOpenVsCode: noop,
+      onOpenGithub: noop,
+    },
+  );
+
+  const remoteButton = html.match(/<button[^>]*aria-label="Remote Control"[^>]*>/)?.[0] || "";
+  assert.ok(remoteButton, "expected remote link button to render");
+  assert.doesNotMatch(remoteButton, /\sdisabled(?:=|>|\s)/);
+});
