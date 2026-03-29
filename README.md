@@ -40,8 +40,6 @@ Backend planning, execution, verification, rollback, and reporting flow:
 
 ![jakal-flow backend code generation flow (EN)](assets/backend-codegen-flow.svg)
 
-In short, the CLI and desktop shell are entry surfaces. The Python orchestration core isolates each repository, compiles a plan, executes blocks, verifies or rolls back results, and persists per-project docs, logs, memory, reports, and state.
-
 ## Quick Start
 
 Recommended runtime:

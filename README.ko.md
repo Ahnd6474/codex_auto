@@ -14,8 +14,6 @@
 
 ![jakal-flow 백엔드 코드 생성 흐름 (KO)](assets/backend-codegen-flow-ko.svg)
 
-요약하면, CLI와 데스크톱 셸은 진입점이고 실제 핵심은 Python 오케스트레이션 코어입니다. 코어가 저장소를 격리해 계획을 만들고 블록 단위로 실행한 뒤 검증 또는 롤백을 수행하며, 결과물은 프로젝트별 `docs/`, `logs/`, `memory/`, `reports/`, `state/`로 분리 저장합니다.
-
 ## 빠른 시작
 
 권장 런타임:

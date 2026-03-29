@@ -75,8 +75,8 @@ export default function App() {
       }
 
       /* Alt+1..6 → sidebar tool windows */
-      if (event.altKey && !event.ctrlKey && !event.metaKey && event.key >= "1" && event.key <= "6") {
-        const sidebarTabs = ["projects", "history", "workspace", "plans", "reservations", "chat"];
+      if (event.altKey && !event.ctrlKey && !event.metaKey && event.key >= "1" && event.key <= "3") {
+        const sidebarTabs = ["workspace", "plans", "reservations"];
         const target = sidebarTabs[Number.parseInt(event.key, 10) - 1];
         setSidebarTab((current) => nextSidebarTab(current, target));
         event.preventDefault();
@@ -175,12 +175,9 @@ export default function App() {
     { id: "tab-dashboard", label: t("tab.dashboard"), shortcut: "Ctrl+3", category: "Tab", keywords: "dashboard metrics", onExecute: () => controller.setCenterTab("dashboard") },
     { id: "tab-history", label: t("tab.history"), shortcut: "Ctrl+5", category: "Tab", keywords: "history runs", onExecute: () => controller.setCenterTab("history") },
     { id: "tab-settings", label: t("toolbar.programSettings"), shortcut: "Ctrl+6", category: "Tab", keywords: "settings preferences program", onExecute: () => controller.setCenterTab("app-settings") },
-    { id: "sidebar-projects", label: t("common.project"), shortcut: "Alt+1", category: "Sidebar", keywords: "project list", onExecute: () => controller.setSidebarTab((c) => nextSidebarTab(c, "projects")) },
-    { id: "sidebar-history", label: t("tab.history"), shortcut: "Alt+2", category: "Sidebar", keywords: "history archive", onExecute: () => controller.setSidebarTab((c) => nextSidebarTab(c, "history")) },
-    { id: "sidebar-workspace", label: t("sidebar.explorer"), shortcut: "Alt+3", category: "Sidebar", keywords: "explorer files workspace", onExecute: () => controller.setSidebarTab((c) => nextSidebarTab(c, "workspace")) },
-    { id: "sidebar-plans", label: t("sidebar.checkpoints"), shortcut: "Alt+4", category: "Sidebar", keywords: "checkpoints plans", onExecute: () => controller.setSidebarTab((c) => nextSidebarTab(c, "plans")) },
-    { id: "sidebar-reservations", label: "Job Queue", shortcut: "Alt+5", category: "Sidebar", keywords: "reservations queue jobs", onExecute: () => controller.setSidebarTab((c) => nextSidebarTab(c, "reservations")) },
-    { id: "sidebar-chat", label: "AI Chat", shortcut: "Alt+6", category: "Sidebar", keywords: "chat ai message intervene", onExecute: () => controller.setSidebarTab((c) => nextSidebarTab(c, "chat")) },
+    { id: "sidebar-workspace", label: t("sidebar.explorer"), shortcut: "Alt+1", category: "Sidebar", keywords: "explorer files workspace", onExecute: () => controller.setSidebarTab((c) => nextSidebarTab(c, "workspace")) },
+    { id: "sidebar-plans", label: t("sidebar.checkpoints"), shortcut: "Alt+2", category: "Sidebar", keywords: "checkpoints plans", onExecute: () => controller.setSidebarTab((c) => nextSidebarTab(c, "plans")) },
+    { id: "sidebar-reservations", label: "Job Queue", shortcut: "Alt+3", category: "Sidebar", keywords: "reservations queue jobs", onExecute: () => controller.setSidebarTab((c) => nextSidebarTab(c, "reservations")) },
     { id: "toggle-bottom", label: "Toggle Bottom Panel", shortcut: "Alt+B", category: "Panel", keywords: "bottom tool panel logs json tokens", onExecute: () => controller.setBottomCollapsed((v) => !v) },
     { id: "toggle-right", label: "Toggle Inspector", shortcut: "Alt+R", category: "Panel", keywords: "right inspector details", onExecute: () => controller.setRightCollapsed((v) => !v) },
     { id: "generate-plan", label: t("action.generatePlan"), category: "Action", keywords: "generate plan ai", onExecute: () => controller.generatePlan() },
@@ -267,12 +264,6 @@ export default function App() {
             onOpenGithub={controller.openRepoOnGithub}
             queuedJobs={controller.queuedJobs}
             onCancelQueuedJob={controller.cancelQueuedReservation}
-            chat={detail?.chat}
-            selectedChatSessionId={controller.selectedChatSessionId}
-            chatDraftSession={controller.chatDraftSession}
-            onSelectChatSession={controller.loadChatSession}
-            onStartNewChatSession={controller.startNewChatSession}
-            onSendChatMessage={controller.sendChatMessage}
             busy={controller.busy}
           />
         </div>
@@ -372,6 +363,12 @@ export default function App() {
             activeJob={controller.activeJob}
             busy={controller.busy}
             onChangeForm={controller.setProjectForm}
+            chat={detail?.chat}
+            selectedChatSessionId={controller.selectedChatSessionId}
+            chatDraftSession={controller.chatDraftSession}
+            onSelectChatSession={controller.loadChatSession}
+            onStartNewChatSession={controller.startNewChatSession}
+            onSendChatMessage={controller.sendChatMessage}
           />
         </div>
       </div>
