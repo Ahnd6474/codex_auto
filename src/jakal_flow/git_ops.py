@@ -15,7 +15,13 @@ class GitCommandError(RuntimeError):
 
 UNTRACKED_OVERWRITE_MARKER = "The following untracked working tree files would be overwritten by merge:"
 MISSING_REGISTERED_WORKTREE_MARKER = "is a missing but already registered worktree"
-GIT_COMMAND_TIMEOUT_SECONDS = 600.0
+GIT_QUERY_TIMEOUT_SECONDS = 10.0
+GIT_STATUS_TIMEOUT_SECONDS = 30.0
+GIT_LOCAL_MUTATION_TIMEOUT_SECONDS = 90.0
+GIT_MERGE_TIMEOUT_SECONDS = 180.0
+GIT_NETWORK_TIMEOUT_SECONDS = 180.0
+GIT_CLONE_TIMEOUT_SECONDS = 300.0
+GIT_WORKTREE_TIMEOUT_SECONDS = 180.0
 
 
 class GitOps:
@@ -41,6 +47,36 @@ class GitOps:
         "revert",
         "switch",
         "worktree",
+    }
+    _FAST_QUERY_COMMANDS = {
+        ("branch", "--show-current"),
+        ("rev-parse", "HEAD"),
+        ("rev-parse", "--abbrev-ref"),
+        ("rev-parse", "--verify"),
+        ("rev-parse", "-q"),
+        ("remote",),
+        ("diff", "--name-only"),
+        ("diff", "--name-status"),
+        ("show",),
+        ("merge-base", "--is-ancestor"),
+        ("ls-files", "--others"),
+    }
+    _STATUS_COMMANDS = {
+        ("status", "--porcelain"),
+        ("status", "--porcelain=v1"),
+    }
+    _NETWORK_COMMANDS = {
+        "fetch",
+        "pull",
+        "push",
+        "ls-remote",
+    }
+    _WORKTREE_COMMANDS = {
+        "worktree",
+    }
+    _MERGE_COMMANDS = {
+        "merge",
+        "cherry-pick",
     }
 
     def __init__(self) -> None:
@@ -74,8 +110,8 @@ class GitOps:
         cwd: Path,
         check: bool = True,
         env: dict[str, str] | None = None,
+        timeout_seconds: float | None = None,
     ) -> CommandResult:
-        repo_key = str(cwd.resolve())
         command = ["git", *self._safe_directory_args(cwd), *args]
         process_env = None
         if env:
@@ -87,7 +123,7 @@ class GitOps:
             capture_output=True,
             check=False,
             env=process_env,
-            timeout_seconds=GIT_COMMAND_TIMEOUT_SECONDS,
+            timeout_seconds=self._timeout_seconds_for_args(args, timeout_seconds),
         )
         stdout = decode_process_output(completed.stdout)
         stderr = self._filter_benign_stderr(decode_process_output(completed.stderr))
@@ -104,6 +140,28 @@ class GitOps:
         if args and args[0] in self._REVISION_MUTATING_COMMANDS:
             self._invalidate_repo_caches(cwd)
         return result
+
+    def _timeout_seconds_for_args(self, args: list[str], override: float | None = None) -> float:
+        if override is not None:
+            return float(override)
+        if not args:
+            return GIT_QUERY_TIMEOUT_SECONDS
+        primary = str(args[0]).strip().lower()
+        secondary = str(args[1]).strip().lower() if len(args) > 1 else ""
+        prefix = (primary, secondary) if secondary else (primary,)
+        if prefix in self._STATUS_COMMANDS:
+            return GIT_STATUS_TIMEOUT_SECONDS
+        if prefix in self._FAST_QUERY_COMMANDS or (primary,) in self._FAST_QUERY_COMMANDS:
+            return GIT_QUERY_TIMEOUT_SECONDS
+        if primary == "clone":
+            return GIT_CLONE_TIMEOUT_SECONDS
+        if primary in self._NETWORK_COMMANDS:
+            return GIT_NETWORK_TIMEOUT_SECONDS
+        if primary in self._WORKTREE_COMMANDS:
+            return GIT_WORKTREE_TIMEOUT_SECONDS
+        if primary in self._MERGE_COMMANDS:
+            return GIT_MERGE_TIMEOUT_SECONDS
+        return GIT_LOCAL_MUTATION_TIMEOUT_SECONDS
 
     def _filter_benign_stderr(self, stderr: str) -> str:
         filtered_lines = [
