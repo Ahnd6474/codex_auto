@@ -24,6 +24,20 @@ import {
   syncProgramSettingsModel,
 } from "../../utils";
 
+/* ── View header icon ── */
+function ConfigHeaderIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
 /* ── Toggle row ── */
 function ToggleRow({ checked, onChange, disabled, label, hint }) {
   return (
@@ -117,10 +131,18 @@ function EffortButton({ effort, selected, onSelect, disabled, label, description
       disabled={disabled}
     >
       <div className="choice-card__title">
-        <strong>{label}</strong>
-        <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>{effort}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <strong style={{ fontSize: "13px" }}>{label}</strong>
+          <span className="effort-badge">{effort}</span>
+        </div>
+        {selected ? (
+          <svg viewBox="0 0 16 16" fill="none" style={{ width: "14px", height: "14px", color: "var(--info)", flexShrink: 0 }}>
+            <circle cx="8" cy="8" r="7" fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="1.4" />
+            <path d="M5 8l2 2 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : null}
       </div>
-      <p style={{ fontSize: "12px" }}>{description}</p>
+      <p style={{ fontSize: "11.5px", marginTop: "4px", lineHeight: "1.5" }}>{description}</p>
     </button>
   );
 }
@@ -322,9 +344,14 @@ export const ConfigEditorView = memo(function ConfigEditorView({
   return (
     <section className="workspace-view">
       <div className="view-header">
-        <div>
-          <span className="eyebrow">{t("tab.config")}</span>
-          <h2>{t("tab.config")}</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div className="view-header-icon">
+            <ConfigHeaderIcon />
+          </div>
+          <div>
+            <span className="eyebrow">{t("tab.config")}</span>
+            <h2>{form.display_name || t("tab.config")}</h2>
+          </div>
         </div>
         <div className="field-row">
           <button
@@ -775,8 +802,8 @@ export const ConfigEditorView = memo(function ConfigEditorView({
 
             {/* Effort buttons */}
             {supportedEfforts.length > 0 ? (
-              <div style={{ marginTop: "8px" }}>
-                <span style={{ fontSize: "11.5px", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>
+              <div style={{ marginTop: "10px" }}>
+                <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "8px" }}>
                   {language === "ko" ? "추론 강도" : "Reasoning effort"}
                 </span>
                 <div className="choice-grid">

@@ -21,10 +21,63 @@ function Stat({ label, value, tone = "neutral", icon, sub }) {
   return (
     <div className={`metric-card metric-card--${tone} metric-card--dashboard`}>
       {icon ? <div className="metric-card__icon-sm">{icon}</div> : null}
-      <span>{label}</span>
+      <span className="metric-card__label">{label}</span>
       <strong>{value}</strong>
       {sub ? <span className="metric-card__sub">{sub}</span> : null}
     </div>
+  );
+}
+
+function StepsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M9 11l3 3L22 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CheckpointIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TokenInIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+      <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function TokenOutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function PlanIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+      <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
   );
 }
 
@@ -40,6 +93,17 @@ function ProgressBar({ completed, total, tone }) {
       </div>
       <span className="dashboard-progress__label">{pct}%</span>
     </div>
+  );
+}
+
+function DashboardHeaderIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
   );
 }
 
@@ -110,20 +174,22 @@ export const DashboardView = memo(function DashboardView({ detail, planDraft, mo
 
   const metricItems = useMemo(
     () => [
-      { key: "remaining_steps", label: t("dashboard.remainingSteps"), value: stepCounts.pending, tone: "info" },
+      { key: "remaining_steps", label: t("dashboard.remainingSteps"), value: stepCounts.pending, tone: "info", icon: <StepsIcon /> },
       {
         key: "checkpoint_pending",
         label: t("dashboard.checkpointPending"),
         value: detail?.checkpoints?.pending ? t("common.yes") : t("common.no"),
         tone: detail?.checkpoints?.pending ? "warning" : "neutral",
+        icon: <CheckpointIcon />,
       },
-      { key: "input_tokens", label: t("dashboard.inputTokens"), value: (usage.input_tokens ?? 0).toLocaleString() },
-      { key: "output_tokens", label: t("dashboard.outputTokens"), value: (usage.output_tokens ?? 0).toLocaleString() },
+      { key: "input_tokens", label: t("dashboard.inputTokens"), value: (usage.input_tokens ?? 0).toLocaleString(), icon: <TokenInIcon /> },
+      { key: "output_tokens", label: t("dashboard.outputTokens"), value: (usage.output_tokens ?? 0).toLocaleString(), icon: <TokenOutIcon /> },
       {
         key: "estimated_remaining",
         label: t("dashboard.estimatedRemaining"),
         value: formatDurationCompact(executionEstimate.remaining_seconds ?? 0, language),
         tone: "info",
+        icon: <ClockIcon />,
       },
       ...(showEstimatedCost
         ? [
@@ -131,7 +197,7 @@ export const DashboardView = memo(function DashboardView({ detail, planDraft, mo
             { key: "actual_cost", label: t("dashboard.actualCost"), value: formatUsd(costEstimate?.recent?.estimated_cost_usd ?? 0, language) },
           ]
         : []),
-      { key: "codex_plan", label: t("dashboard.codexPlan"), value: account.plan_type || t("common.unavailable"), tone: "neutral" },
+      { key: "codex_plan", label: t("dashboard.codexPlan"), value: account.plan_type || t("common.unavailable"), tone: "neutral", icon: <PlanIcon /> },
       ...usageBuckets.map((bucket) => ({
         key: `rate_limit_${bucket.key}`,
         label: bucket.label,
@@ -158,9 +224,14 @@ export const DashboardView = memo(function DashboardView({ detail, planDraft, mo
   return (
     <section className="workspace-view">
       <div className="view-header">
-        <div>
-          <span className="eyebrow">{t("dashboard.dashboard")}</span>
-          <h2>{detail?.project?.display_name || detail?.project?.slug || t("dashboard.noProjectSelected")}</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div className="view-header-icon">
+            <DashboardHeaderIcon />
+          </div>
+          <div>
+            <span className="eyebrow">{t("dashboard.dashboard")}</span>
+            <h2>{detail?.project?.display_name || detail?.project?.slug || t("dashboard.noProjectSelected")}</h2>
+          </div>
         </div>
       </div>
 
