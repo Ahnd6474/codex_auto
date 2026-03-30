@@ -253,6 +253,37 @@ class GitOpsTests(unittest.TestCase):
 
         self.assertEqual(result.stderr, "fatal: unrelated\n")
 
+    def test_safe_directory_args_are_limited_to_repo_path(self) -> None:
+        repo_dir = Path(__file__).resolve().parents[1]
+        git = GitOps()
+
+        args = git._safe_directory_args(repo_dir)
+
+        self.assertEqual(args, ["-c", f"safe.directory={repo_dir.resolve().as_posix()}"])
+
+    def test_run_does_not_add_parent_safe_directories_for_remote_queries(self) -> None:
+        repo_dir = Path(__file__).resolve().parents[1]
+        git = GitOps()
+        observed_command: list[str] | None = None
+
+        def fake_run_subprocess(command, cwd, capture_output, check, env, timeout_seconds):
+            nonlocal observed_command
+            observed_command = list(command)
+            return subprocess.CompletedProcess(args=command, returncode=0, stdout=b"origin\n", stderr=b"")
+
+        with mock.patch("jakal_flow.git_ops.run_subprocess", side_effect=fake_run_subprocess):
+            result = git.run(["remote"], cwd=repo_dir, check=False)
+
+        self.assertEqual(result.stdout, "origin\n")
+        self.assertIsNotNone(observed_command)
+        assert observed_command is not None
+        safe_directory_values = [
+            observed_command[index + 1]
+            for index, part in enumerate(observed_command[:-1])
+            if part == "-c" and str(observed_command[index + 1]).startswith("safe.directory=")
+        ]
+        self.assertEqual(safe_directory_values, [f"safe.directory={repo_dir.resolve().as_posix()}"])
+
     def test_add_worktree_recovers_missing_registered_path_and_reuses_existing_branch(self) -> None:
         repo_dir = Path(__file__).resolve().parents[1]
         worktree_dir = repo_dir / ".tmp_stale_worktree" / "repo"

@@ -7,6 +7,7 @@ from ..chat_sessions import (
     resolve_chat_session,
     save_chat_message,
 )
+from ..execution_control import ImmediateStopRequested
 from ..errors import HANDLED_OPERATION_EXCEPTIONS
 from ..parallel_resources import build_parallel_resource_plan
 from ..utils import normalize_workflow_mode, read_json
@@ -435,6 +436,15 @@ def build_run_command_handlers(
                 branch=branch,
                 origin_url=origin_url,
             )
+        except ImmediateStopRequested as exc:
+            latest_project = ctx.orchestrator.local_project(project_dir) or project
+            append_ui_event(
+                latest_project,
+                "manual-debugger-finished",
+                str(exc).strip() or "Manual debugger stopped by user.",
+                {"status": "paused"},
+            )
+            return ctx.detail_payload(latest_project)
         except HANDLED_OPERATION_EXCEPTIONS as exc:
             latest_project = ctx.orchestrator.local_project(project_dir)
             if latest_project is not None:
@@ -478,6 +488,15 @@ def build_run_command_handlers(
                 branch=branch,
                 origin_url=origin_url,
             )
+        except ImmediateStopRequested as exc:
+            latest_project = ctx.orchestrator.local_project(project_dir) or project
+            append_ui_event(
+                latest_project,
+                "manual-merger-finished",
+                str(exc).strip() or "Manual merger stopped by user.",
+                {"status": "paused"},
+            )
+            return ctx.detail_payload(latest_project)
         except HANDLED_OPERATION_EXCEPTIONS as exc:
             latest_project = ctx.orchestrator.local_project(project_dir)
             if latest_project is not None:
@@ -602,6 +621,15 @@ def build_run_command_handlers(
                     },
                 )
                 detail = ctx.detail_payload(project)
+            except ImmediateStopRequested as exc:
+                assistant_text = str(exc).strip() or "Manual debugger stopped."
+                metadata["interrupted"] = True
+                append_ui_event(
+                    project,
+                    "manual-debugger-finished",
+                    assistant_text,
+                    {"status": "paused", "source": "chat"},
+                )
             except HANDLED_OPERATION_EXCEPTIONS as exc:
                 error = str(exc).strip() or "Manual debugger recovery failed."
                 assistant_text = error
@@ -639,6 +667,15 @@ def build_run_command_handlers(
                     },
                 )
                 detail = ctx.detail_payload(project)
+            except ImmediateStopRequested as exc:
+                assistant_text = str(exc).strip() or "Manual merger stopped."
+                metadata["interrupted"] = True
+                append_ui_event(
+                    project,
+                    "manual-merger-finished",
+                    assistant_text,
+                    {"status": "paused", "source": "chat"},
+                )
             except HANDLED_OPERATION_EXCEPTIONS as exc:
                 error = str(exc).strip() or "Manual merger recovery failed."
                 assistant_text = error
@@ -652,10 +689,10 @@ def build_run_command_handlers(
         save_chat_message(
             project,
             session.session_id,
-            role="system" if error else "assistant",
+            role="system" if error or metadata.get("interrupted") else "assistant",
             text=assistant_text or ("Recovery finished." if not error else error),
             mode=chat_mode,
-            status="failed" if error else "completed",
+            status="cancelled" if metadata.get("interrupted") else ("failed" if error else "completed"),
             metadata=metadata,
         )
         rebuild_chat_session_files(project, session.session_id)

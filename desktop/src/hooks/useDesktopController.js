@@ -179,6 +179,7 @@ export function useDesktopController() {
     () => (isChatCommand(projectJob?.command) ? projectJob : null),
     [projectJob],
   );
+  const stoppableJob = activeJob || chatJob || null;
   const activeJobId = activeJob?.id || "";
   const queuedJobs = useMemo(
     () =>
@@ -196,7 +197,7 @@ export function useDesktopController() {
   );
 
   const busy = Boolean(pendingAction || startingJobCount > 0 || ["queued", "running"].includes(String(projectJob?.status || "").trim().toLowerCase()));
-  const canRequestStop = String(activeJob?.status || "").trim().toLowerCase() === "running";
+  const canRequestStop = String(stoppableJob?.status || "").trim().toLowerCase() === "running";
   const canCancelReservation = String(activeJob?.status || "").trim().toLowerCase() === "queued";
   const shareBusy = pendingAction === "create_share_session" || pendingAction === "revoke_share_session";
   const savedProgramSettings = useMemo(
@@ -2029,7 +2030,8 @@ export function useDesktopController() {
 
   async function requestStop() {
     const effectiveProjectDir = resolveProjectDirectory(projectForm, projectDetail);
-    const runningProjectJob = String(projectJob?.status || "").trim().toLowerCase() === "running";
+    const runningProjectJob = String(stoppableJob?.status || "").trim().toLowerCase() === "running";
+    const repoId = String(projectDetail?.project?.repo_id || selectedProjectId || "").trim();
     if (!effectiveProjectDir || !runningProjectJob) {
       return;
     }
@@ -2037,6 +2039,7 @@ export function useDesktopController() {
       await bridgeRequest(
         BRIDGE_COMMANDS.REQUEST_STOP,
         {
+          ...(repoId ? { repo_id: repoId } : {}),
           project_dir: effectiveProjectDir,
           source: "tauri-react-ui",
         },

@@ -86,15 +86,7 @@ class GitOps:
 
     def _safe_directory_args(self, cwd: Path) -> list[str]:
         resolved = cwd.resolve()
-        args: list[str] = []
-        seen: set[str] = set()
-        for candidate in (resolved, *resolved.parents):
-            normalized = candidate.as_posix()
-            if normalized in seen:
-                continue
-            seen.add(normalized)
-            args.extend(["-c", f"safe.directory={normalized}"])
-        return args
+        return ["-c", f"safe.directory={resolved.as_posix()}"]
 
     def _commit_env(self, author_name: str | None = None) -> dict[str, str] | None:
         normalized = str(author_name or "").strip()

@@ -3583,6 +3583,103 @@ class UIBridgeTests(unittest.TestCase):
             self.assertTrue(any("manual-merger-started" in line for line in detail["activity"]))
             self.assertTrue(any("manual-merger-finished" in line for line in detail["activity"]))
 
+    def test_run_manual_debugger_command_handles_immediate_stop_as_pause(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Debugger Stop Demo",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "effort": "medium",
+                    "test_cmd": "python -m pytest",
+                },
+            }
+            plan_payload = {
+                "plan_title": "Manual debugger stop",
+                "project_prompt": "Pause debugger recovery on stop.",
+                "steps": [],
+            }
+
+            with mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                run_command("save-project-setup", workspace_root, payload)
+
+            with mock.patch(
+                "jakal_flow.orchestrator.Orchestrator.run_manual_debugger_recovery",
+                side_effect=ImmediateStopRequested("Manual debugger stopped by user."),
+            ), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command(
+                    "run-manual-debugger",
+                    workspace_root,
+                    {
+                        **payload,
+                        "plan": plan_payload,
+                    },
+                )
+
+            self.assertTrue(any("manual-debugger-finished" in line for line in detail["activity"]))
+            self.assertTrue(any("Manual debugger stopped by user." in line for line in detail["activity"]))
+
+    def test_send_chat_message_debugger_records_cancelled_message_when_stopped(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Chat Debugger Stop Demo",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "effort": "medium",
+                    "test_cmd": "python -m pytest",
+                },
+            }
+            plan_payload = {
+                "plan_title": "Chat debugger stop",
+                "project_prompt": "Stop chat debugger recovery.",
+                "steps": [],
+            }
+
+            with mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            with mock.patch(
+                "jakal_flow.orchestrator.Orchestrator.run_manual_debugger_recovery",
+                side_effect=ImmediateStopRequested("Manual debugger stopped by user."),
+            ), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                result = run_command(
+                    "send-chat-message",
+                    workspace_root,
+                    {
+                        **payload,
+                        "repo_id": detail["project"]["repo_id"],
+                        "plan": plan_payload,
+                        "message": "Stop the debugger run.",
+                        "chat_mode": "debugger",
+                    },
+                )
+
+            self.assertEqual(result["error"], "")
+            self.assertEqual(result["chat"]["messages"][-1]["status"], "cancelled")
+            self.assertTrue(result["chat"]["messages"][-1]["metadata"]["interrupted"])
+            self.assertEqual(result["chat"]["messages"][-1]["text"], "Manual debugger stopped by user.")
+
     def test_load_project_chat_returns_chat_section_without_project_change_marker(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"
