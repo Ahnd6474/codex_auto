@@ -198,6 +198,7 @@ export const AppSettingsView = memo(function AppSettingsView({
   const [draftSettings, setDraftSettings] = useState(() => cloneSettings(settings));
   const [localDirty, setLocalDirty] = useState(false);
   const lastIncomingSettingsRef = useRef(cloneSettings(settings));
+  const lastOutgoingSettingsRef = useRef(cloneSettings(settings));
   const planningReasoningLabel = language === "ko" ? "계획 추론" : "Planning Reasoning";
   const settingsTabs = [
     { key: "app", label: language === "ko" ? "애플리케이션" : "Application" },
@@ -218,8 +219,12 @@ export const AppSettingsView = memo(function AppSettingsView({
   const autoParallelWorkers = String(draftSettings?.parallel_worker_mode || "auto").trim().toLowerCase() !== "manual";
 
   useEffect(() => {
-    if (!sameSettingsSnapshot(settings, lastIncomingSettingsRef.current)) {
-      const nextSettings = cloneSettings(settings);
+    const nextSettings = cloneSettings(settings);
+    if (sameSettingsSnapshot(nextSettings, lastOutgoingSettingsRef.current)) {
+      lastIncomingSettingsRef.current = nextSettings;
+      return;
+    }
+    if (!sameSettingsSnapshot(nextSettings, lastIncomingSettingsRef.current)) {
       lastIncomingSettingsRef.current = nextSettings;
       setDraftSettings(nextSettings);
       setLocalDirty(false);
@@ -231,6 +236,7 @@ export const AppSettingsView = memo(function AppSettingsView({
       return;
     }
     const nextSettings = cloneSettings(draftSettings);
+    lastOutgoingSettingsRef.current = nextSettings;
     startTransition(() => {
       onChangeSettings(nextSettings);
     });

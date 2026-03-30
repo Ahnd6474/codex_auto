@@ -2156,11 +2156,19 @@ export function resolveExecutionDisplayPlan(detail = null, planDraft = null, act
   const draftPlan = planDraft && typeof planDraft === "object" ? planDraft : null;
   const jobStatus = String(activeJob?.status || "").trim().toLowerCase();
   const command = String(activeJob?.command || "").trim().toLowerCase();
+  const projectStatus = String(detail?.project?.current_status || "").trim().toLowerCase();
+  const projectInFlight = projectStatus === "running" || projectStatus.startsWith("running:") || projectStatus === "queued" || projectStatus.startsWith("queued:");
   const planningInFlight =
     (jobStatus === "running" || jobStatus === "queued")
     && (command === "generate-plan" || isPlanningProgressRunning(detail?.planning_progress));
 
   if (planningInFlight && livePlan && typeof livePlan === "object") {
+    return livePlan;
+  }
+  if (projectInFlight && livePlan && typeof livePlan === "object") {
+    return livePlan;
+  }
+  if (jobStatus === "running" && livePlan && typeof livePlan === "object") {
     return livePlan;
   }
   if (draftPlan) {

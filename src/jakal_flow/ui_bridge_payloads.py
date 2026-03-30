@@ -1175,10 +1175,11 @@ def build_activity_lines(
     block_items = blocks if blocks is not None else read_jsonl_tail(context.paths.block_log_file, 12)
     for block in reversed(block_items):
         block_index = block.get("block_index", "?")
+        lineage_id = compact_text(str(block.get("lineage_id", "")).strip(), max_chars=24) or "n/a"
         status = block.get("status", "unknown")
         title = compact_text(str(block.get("selected_task", "")).strip(), max_chars=120)
         summary = compact_text(str(block.get("test_summary", "")).strip(), max_chars=120)
-        lines.append(f"block {block_index} | {status} | {title} | {summary}")
+        lines.append(f"block {block_index} | {lineage_id} | {status} | {title} | {summary}")
     if lines:
         return lines
 

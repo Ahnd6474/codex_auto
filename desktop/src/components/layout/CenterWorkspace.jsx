@@ -177,8 +177,8 @@ function sameQueuedJobs(previousJobs = [], nextJobs = []) {
 
 function normalizeWorkspaceTab(tab) {
   const normalized = String(tab || "").trim().toLowerCase();
-  if (normalized === "run" || normalized === "flow") {
-    return "ai-chat";
+  if (normalized === "run") {
+    return "flow";
   }
   return normalized;
 }

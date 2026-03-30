@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from time import monotonic
 import subprocess
 from threading import RLock
 from typing import Any, Iterator
@@ -99,6 +100,7 @@ def run_subprocess_capture(
     env: dict[str, str] | None = None,
     shell: bool = False,
     input_bytes: bytes | None = None,
+    timeout_seconds: float | None = None,
 ) -> subprocess.CompletedProcess[bytes]:
     if EXECUTION_STOP_REGISTRY.stop_requested(scope_id):
         raise ImmediateStopRequested(f"Immediate stop requested before starting {label}.")
@@ -112,17 +114,27 @@ def run_subprocess_capture(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+    start_time = monotonic()
+    deadline = None if timeout_seconds is None else start_time + float(timeout_seconds)
+    normalized_timeout = timeout_seconds
+    if normalized_timeout is not None and normalized_timeout <= 0:
+        normalized_timeout = None
     pending_input = input_bytes
     with EXECUTION_STOP_REGISTRY.manage_process(scope_id, process, label=label):
         while True:
+            communicate_timeout = PROCESS_POLL_TIMEOUT_SECONDS
+            if deadline is not None:
+                remaining = deadline - monotonic()
+                if remaining <= 0:
+                    break
+                communicate_timeout = min(communicate_timeout, remaining)
             try:
-                stdout, stderr = process.communicate(
-                    input=pending_input,
-                    timeout=PROCESS_POLL_TIMEOUT_SECONDS,
-                )
+                stdout, stderr = process.communicate(input=pending_input, timeout=communicate_timeout)
                 return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
             except subprocess.TimeoutExpired:
                 pending_input = None
+                if deadline is not None and monotonic() >= deadline:
+                    break
                 if not EXECUTION_STOP_REGISTRY.stop_requested(scope_id):
                     continue
                 terminate_process(int(process.pid or 0))
@@ -132,3 +144,11 @@ def run_subprocess_capture(
                     process.kill()
                     stdout, stderr = process.communicate()
                 raise ImmediateStopRequested(f"Immediate stop requested while running {label}.") from None
+    terminate_process(int(process.pid or 0))
+    try:
+        stdout, stderr = process.communicate(timeout=PROCESS_TERMINATION_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        stdout, stderr = process.communicate()
+    timeout_seconds_value = float(normalized_timeout or 0.0)
+    raise RuntimeError(f"{label} subprocess timed out after {timeout_seconds_value:.1f}s.") from subprocess.TimeoutExpired(command, timeout_seconds_value)

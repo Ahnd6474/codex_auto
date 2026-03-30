@@ -145,7 +145,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     logx_parser = subparsers.add_parser("logx", help="Collect and refresh project log index")
     _add_workspace_argument(logx_parser)
-    _add_repo_arguments(logx_parser)
+    logx_parser.add_argument(
+        "--repo-url",
+        help="Managed repository URL/path to write logx under (omit when using --source-repo-dir)",
+    )
+    logx_parser.add_argument("--branch", default="main", help="Target branch")
+    logx_parser.add_argument(
+        "--source-repo-dir",
+        type=Path,
+        default=None,
+        help="Local repository directory to collect logs from",
+    )
     logx_parser.add_argument(
         "--max-artifacts",
         type=int,
@@ -304,10 +314,14 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "logx":
+            source_repo_dir = getattr(args, "source_repo_dir", None)
+            if not str(getattr(args, "repo_url", "")).strip() and source_repo_dir is None:
+                parser.error("logx requires either --repo-url or --source-repo-dir.")
             path = orchestrator.logx(
-                args.repo_url,
+                args.repo_url or "",
                 args.branch,
                 max_artifacts=int(getattr(args, "max_artifacts", 400)),
+                source_repo_dir=Path(source_repo_dir).expanduser().resolve() if source_repo_dir else None,
             )
             print(str(path))
             return 0

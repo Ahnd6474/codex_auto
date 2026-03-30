@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import shutil
 import io
+import json
 import sys
 import unittest
 from unittest import mock
@@ -210,3 +211,49 @@ class BridgeServerTests(unittest.TestCase):
         self.assertEqual(args[0], "")
         self.assertIsInstance(args[1], ValueError)
         self.assertTrue(str(args[1]).strip())
+
+    def test_serve_forever_rejects_request_without_id(self) -> None:
+        with TemporaryTestDir() as workspace_root:
+            workspace_root.mkdir(parents=True, exist_ok=True)
+            server = CaptureBridgeServer()
+            payload = json.dumps(
+                {
+                "method": "bridge_request",
+                "params": {
+                    "command": "bootstrap",
+                    "workspace_root": str(workspace_root),
+                    "payload": {},
+                },
+                },
+            )
+            with mock.patch("sys.stdin", io.StringIO(f"{payload}\n")):
+                with mock.patch.object(server, "_error_response") as error_response:
+                    server.serve_forever()
+
+            error_response.assert_called_once()
+            args, kwargs = error_response.call_args
+            self.assertEqual(args[0], "")
+            self.assertIsInstance(args[1], ValueError)
+            self.assertEqual(str(args[1]), "Bridge request id is required.")
+            self.assertEqual(kwargs["method"], "bridge_request")
+            self.assertEqual(kwargs["command"], "bootstrap")
+
+    def test_serve_forever_rejects_request_with_non_dict_params(self) -> None:
+        server = CaptureBridgeServer()
+        payload = json.dumps(
+            {
+                "id": "req-bridge-params-invalid",
+                "method": "bridge_request",
+                "params": [],
+            }
+        )
+        with mock.patch("sys.stdin", io.StringIO(f"{payload}\n")):
+            with mock.patch.object(server, "_error_response") as error_response:
+                server.serve_forever()
+
+            error_response.assert_called_once()
+            args, kwargs = error_response.call_args
+            self.assertEqual(args[0], "req-bridge-params-invalid")
+            self.assertIsInstance(args[1], ValueError)
+            self.assertEqual(str(args[1]), "Bridge params must be a JSON object.")
+            self.assertEqual(kwargs["method"], "bridge_request")

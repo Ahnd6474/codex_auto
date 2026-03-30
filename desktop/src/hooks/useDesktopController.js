@@ -245,8 +245,8 @@ export function useDesktopController() {
       setCenterTab("dashboard");
       return;
     }
-    if (centerTab === "run" || centerTab === "flow") {
-      setCenterTab("ai-chat");
+    if (centerTab === "run") {
+      setCenterTab("flow");
     }
   }, [centerTab, setCenterTab]);
 

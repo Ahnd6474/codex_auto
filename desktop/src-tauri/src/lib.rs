@@ -28,7 +28,7 @@ struct AppState {
 #[derive(Clone)]
 struct BridgeSession {
     stdin: Arc<Mutex<ChildStdin>>,
-    pending: Arc<Mutex<HashMap<String, Sender<Result<Value, String>>>>,
+    pending: PendingRequestRegistry,
     next_id: Arc<AtomicU64>,
     stderr_lines: Arc<Mutex<Vec<String>>>,
     _child: Arc<Mutex<Child>>,
@@ -38,6 +38,54 @@ struct BridgeSession {
 struct BridgeEventPayload {
     event: String,
     payload: Value,
+}
+
+type BridgeResponse = Result<Value, String>;
+type PendingRequest = Sender<BridgeResponse>;
+
+#[derive(Clone, Default)]
+struct PendingRequestRegistry {
+    inner: Arc<Mutex<HashMap<String, PendingRequest>>>,
+}
+
+impl PendingRequestRegistry {
+    fn insert(&self, request_id: String, sender: PendingRequest) -> Result<(), String> {
+        self.inner
+            .lock()
+            .map_err(|_| "Failed to lock pending bridge requests.".to_string())?
+            .insert(request_id, sender);
+        Ok(())
+    }
+
+    fn take(&self, request_id: &str) -> Option<PendingRequest> {
+        self.inner
+            .lock()
+            .ok()
+            .and_then(|mut items| items.remove(request_id))
+    }
+
+    fn clear(&self, request_id: &str) -> bool {
+        self.inner
+            .lock()
+            .ok()
+            .and_then(|mut items| items.remove(request_id).map(|_| ()))
+            .is_some()
+    }
+
+    fn count(&self) -> usize {
+        self.inner.lock().map(|items| items.len()).unwrap_or(0)
+    }
+
+    fn fail_all(&self, error: String) {
+        let senders: Vec<PendingRequest> = self
+            .inner
+            .lock()
+            .map(|mut items| items.drain().map(|(_, sender)| sender).collect())
+            .unwrap_or_default();
+        for sender in senders {
+            let _ = sender.send(Err(error.clone()));
+        }
+    }
 }
 
 fn parse_bridge_timeout(env_override: Option<String>) -> Duration {
@@ -183,17 +231,16 @@ fn format_bridge_error_payload(error: &Value) -> String {
     error.to_string()
 }
 
-fn fail_pending_requests(
-    pending: &Arc<Mutex<HashMap<String, Sender<Result<Value, String>>>>,
-    error: String,
+fn log_bridge_issue(
+    component: &str,
+    request_id: &str,
+    method: &str,
+    error: &str,
+    pending_count: usize,
 ) {
-    let senders = pending
-        .lock()
-        .map(|mut items| items.drain().map(|(_, sender)| sender).collect::<Vec<_>>())
-        .unwrap_or_default();
-    for sender in senders {
-        let _ = sender.send(Err(error.clone()));
-    }
+    eprintln!(
+        "[jakal-flow bridge] {component} request_id={request_id} method={method} pending={pending_count} error={error}"
+    );
 }
 
 impl BridgeSession {
@@ -228,9 +275,9 @@ impl BridgeSession {
             .take()
             .ok_or_else(|| "Failed to capture Python bridge stderr.".to_string())?;
 
-        let pending = Arc::new(Mutex::new(HashMap::<String, Sender<Result<Value, String>>>::new()));
+        let pending = PendingRequestRegistry::default();
         let stderr_lines = Arc::new(Mutex::new(Vec::<String>::new()));
-        let stdout_pending = Arc::clone(&pending);
+        let stdout_pending = pending.clone();
         let stdout_stderr = Arc::clone(&stderr_lines);
         let stderr_sink = Arc::clone(&stderr_lines);
         let app_handle = app.clone();
@@ -241,10 +288,8 @@ impl BridgeSession {
                 let line = match line {
                     Ok(value) => value,
                     Err(error) => {
-                        fail_pending_requests(
-                            &stdout_pending,
-                            format!("Failed to read Python bridge stdout: {error}"),
-                        );
+                        stdout_pending
+                            .fail_all(format!("Failed to read Python bridge stdout: {error}"));
                         return;
                     }
                 };
@@ -254,9 +299,16 @@ impl BridgeSession {
                 let parsed: Value = match serde_json::from_str(&line) {
                     Ok(value) => value,
                     Err(error) => {
+                        log_bridge_issue(
+                            "stdout_parse",
+                            "",
+                            "bridge",
+                            &format!("Invalid bridge JSON from stdout: {error}"),
+                            stdout_pending.count(),
+                        );
                         store_stderr_line(
                             &stdout_stderr,
-                            format!("Invalid bridge JSON from stdout: {error}"),
+                            format!("Invalid bridge JSON from stdout: {error} line={line}"),
                         );
                         continue;
                     }
@@ -274,12 +326,25 @@ impl BridgeSession {
                             .unwrap_or_default()
                             .to_string();
                         if id.is_empty() {
+                            log_bridge_issue(
+                                "response",
+                                "",
+                                "bridge",
+                                "response payload is missing id",
+                                stdout_pending.count(),
+                            );
                             continue;
                         }
-                        let sender = stdout_pending
-                            .lock()
-                            .ok()
-                            .and_then(|mut items| items.remove(&id));
+                        let sender = stdout_pending.take(&id);
+                        if sender.is_none() {
+                            log_bridge_issue(
+                                "response_orphan",
+                                &id,
+                                "bridge",
+                                "request context was already cleared",
+                                stdout_pending.count(),
+                            );
+                        }
                         if let Some(sender) = sender {
                             let ok = parsed.get("ok").and_then(Value::as_bool).unwrap_or(false);
                             if ok {
@@ -308,7 +373,15 @@ impl BridgeSession {
                             },
                         );
                     }
-                    _ => {}
+                    _ => {
+                        log_bridge_issue(
+                            "stdout_unknown_kind",
+                            "",
+                            "bridge",
+                            &format!("Unexpected message kind: {kind}"),
+                            stdout_pending.count(),
+                        );
+                    }
                 }
             }
             let detail = stderr_excerpt(&stdout_stderr);
@@ -317,7 +390,7 @@ impl BridgeSession {
             } else {
                 format!("Python bridge server closed unexpectedly. {detail}")
             };
-            fail_pending_requests(&stdout_pending, error);
+            stdout_pending.fail_all(error);
         });
 
         thread::spawn(move || {
@@ -350,12 +423,7 @@ impl BridgeSession {
 
     fn request(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, String> {
         let request_id = format!("req-{}", self.next_id.fetch_add(1, Ordering::Relaxed));
-        let (sender, receiver): (Sender<Result<Value, String>>, Receiver<Result<Value, String>>) =
-            mpsc::channel();
-        self.pending
-            .lock()
-            .map_err(|_| "Failed to lock pending bridge requests.".to_string())?
-            .insert(request_id.clone(), sender);
+        let (sender, receiver): (PendingRequest, Receiver<BridgeResponse>) = mpsc::channel();
 
         let message = json!({
             "id": request_id,
@@ -363,41 +431,83 @@ impl BridgeSession {
             "params": params,
         });
         let serialized = serde_json::to_string(&message)
-            .map_err(|error| format!("Failed to serialize bridge request: {error}"))?;
+            .map_err(|error| {
+                log_bridge_issue(
+                    "serialize",
+                    &request_id,
+                    method,
+                    &format!("failed to serialize request payload: {error}"),
+                    self.pending.count(),
+                );
+                format!("Failed to serialize bridge request: {error}")
+            })?;
+        self.pending.insert(request_id.clone(), sender)?;
         {
             let mut stdin = self
                 .stdin
                 .lock()
                 .map_err(|_| "Failed to lock Python bridge stdin.".to_string())?;
             if let Err(error) = stdin.write_all(serialized.as_bytes()) {
-                self.pending
-                    .lock()
-                    .ok()
-                    .and_then(|mut items| items.remove(message["id"].as_str().unwrap_or_default()));
+                let removed = self.pending.clear(&request_id);
+                log_bridge_issue(
+                    "write",
+                    &request_id,
+                    method,
+                    if removed {
+                        "write_all(payload) failed"
+                    } else {
+                        "write_all(payload) failed but request was not tracked"
+                    },
+                    self.pending.count(),
+                );
                 return Err(format!("Failed to write bridge request: {error}"));
             }
             if let Err(error) = stdin.write_all(b"\n") {
-                self.pending
-                    .lock()
-                    .ok()
-                    .and_then(|mut items| items.remove(message["id"].as_str().unwrap_or_default()));
+                let removed = self.pending.clear(&request_id);
+                log_bridge_issue(
+                    "write",
+                    &request_id,
+                    method,
+                    if removed {
+                        "finalize request message failed"
+                    } else {
+                        "finalize request message failed but request was not tracked"
+                    },
+                    self.pending.count(),
+                );
                 return Err(format!("Failed to finalize bridge request: {error}"));
             }
             if let Err(error) = stdin.flush() {
-                self.pending
-                    .lock()
-                    .ok()
-                    .and_then(|mut items| items.remove(message["id"].as_str().unwrap_or_default()));
+                let removed = self.pending.clear(&request_id);
+                log_bridge_issue(
+                    "write",
+                    &request_id,
+                    method,
+                    if removed {
+                        "flush failed"
+                    } else {
+                        "flush failed but request was not tracked"
+                    },
+                    self.pending.count(),
+                );
                 return Err(format!("Failed to flush bridge request: {error}"));
             }
         }
         match receiver.recv_timeout(timeout) {
             Ok(result) => result,
             Err(_) => {
-                self.pending
-                    .lock()
-                    .ok()
-                    .and_then(|mut items| items.remove(message["id"].as_str().unwrap_or_default()));
+                let removed = self.pending.clear(&request_id);
+                log_bridge_issue(
+                    "timeout",
+                    &request_id,
+                    method,
+                    if removed {
+                        "request did not complete before timeout"
+                    } else {
+                        "request did not complete before timeout but request was not tracked"
+                    },
+                    self.pending.count(),
+                );
                 let detail = stderr_excerpt(&self.stderr_lines);
                 if detail.is_empty() {
                     Err(format!(

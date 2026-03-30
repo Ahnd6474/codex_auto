@@ -498,6 +498,7 @@ class OrchestratorParallelMixin:
         branch_name = f"jakal-flow-parallel-{batch_token}-{worker_slug}"
         worker_result: dict[str, object] = {
             "step_id": step.step_id,
+            "lineage_id": str((step.metadata if isinstance(step.metadata, dict) else {}).get("lineage_id", "")).strip(),
             "status": "failed",
             "notes": "Parallel worker did not complete.",
             "commit_hash": None,
@@ -550,10 +551,27 @@ class OrchestratorParallelMixin:
             commit_hash = None
             if isinstance(commit_hashes, list) and commit_hashes:
                 commit_hash = str(commit_hashes[-1]).strip() or None
+            worker_status = "completed" if latest_block.get("status") == "completed" else "failed"
+            block_summary = str(latest_block.get("test_summary") or "").strip()
+            worker_summary = self._parallel_worker_summary(latest_block, latest_pass)
+            step_metadata = step.metadata if isinstance(step.metadata, dict) else {}
+            lineage_id = str(
+                worker_result.get("lineage_id")
+                or latest_block.get("lineage_id")
+                or latest_pass.get("lineage_id")
+                or step_metadata.get("lineage_id", "")
+            ).strip()
+            summary_for_log = Reporter.summarize_logged_result(
+                block_entry=latest_block,
+                pass_entry=latest_pass,
+                completed_summary="Parallel worker finished.",
+                failed_summary="Parallel worker failed.",
+            )
             worker_result.update(
                 {
-                    "status": "completed" if latest_block.get("status") == "completed" else "failed",
-                    "notes": self._parallel_worker_summary(latest_block, latest_pass),
+                    "status": worker_status,
+                    "lineage_id": lineage_id,
+                    "notes": worker_summary,
                     "commit_hash": commit_hash,
                     "changed_files": [
                         str(item).strip()
@@ -564,7 +582,7 @@ class OrchestratorParallelMixin:
                     else [],
                     "pass_log": latest_pass,
                     "block_log": latest_block,
-                    "test_summary": str(latest_block.get("test_summary") or "").strip(),
+                    "test_summary": summary_for_log if (worker_status != "completed" or not block_summary) else block_summary,
                     "failure_type": str(latest_block.get("failure_type") or latest_pass.get("failure_type") or "").strip(),
                     "failure_reason_code": str(
                         latest_block.get("failure_reason_code") or latest_pass.get("failure_reason_code") or ""
@@ -589,53 +607,18 @@ class OrchestratorParallelMixin:
         latest_block: dict[str, object],
         latest_pass: dict[str, object],
     ) -> str:
-        block_summary = str(latest_block.get("test_summary") or "").strip()
-        if block_summary:
-            return block_summary
-        if str(latest_block.get("status") or "").strip().lower() == "completed":
-            return "Parallel worker finished."
-        failure_detail = self._logged_pass_failure_detail(latest_pass)
-        if failure_detail:
-            return f"Parallel worker failed. Cause: {failure_detail}"
-        rollback_status = str(latest_block.get("rollback_status") or latest_pass.get("rollback_status") or "").strip()
-        if rollback_status and rollback_status != "not_needed":
-            return f"Parallel worker failed and was {rollback_status.replace('_', ' ')}."
-        return "Parallel worker failed."
+        return Reporter.summarize_logged_result(
+            block_entry=latest_block,
+            pass_entry=latest_pass,
+            completed_summary="Parallel worker finished.",
+            failed_summary="Parallel worker failed.",
+        )
 
     def _logged_pass_failure_detail(self, pass_entry: dict[str, object]) -> str:
-        if not isinstance(pass_entry, dict):
-            return ""
-        test_results = pass_entry.get("test_results")
-        if isinstance(test_results, dict):
-            for key in ("failure_reason", "summary"):
-                detail = compact_text(str(test_results.get(key) or "").strip(), max_chars=280)
-                if detail:
-                    return detail
-        diagnostics = pass_entry.get("codex_diagnostics")
-        attempts = diagnostics.get("attempts", []) if isinstance(diagnostics, dict) else []
-        for attempt in reversed(attempts if isinstance(attempts, list) else []):
-            if not isinstance(attempt, dict):
-                continue
-            for key in ("stderr_excerpt", "last_message_excerpt", "stdout_excerpt"):
-                detail = self._clean_logged_failure_detail(str(attempt.get(key) or ""))
-                if detail:
-                    return detail
-        return ""
+        return Reporter.logged_pass_failure_detail(pass_entry)
 
     def _clean_logged_failure_detail(self, detail: str) -> str:
-        kept_lines: list[str] = []
-        for raw_line in str(detail or "").splitlines():
-            line = raw_line.strip()
-            if not line:
-                continue
-            lowered = line.lower()
-            if lowered in {
-                "yolo mode is enabled. all tool calls will be automatically approved.",
-                "loaded cached credentials.",
-            }:
-                continue
-            kept_lines.append(line)
-        return compact_text(" ".join(kept_lines), max_chars=280) if kept_lines else ""
+        return Reporter.clean_logged_failure_detail(detail)
 
     def _cleanup_parallel_worker(self, repo_dir: Path, worker_result: dict[str, object]) -> None:
         worktree_dir = worker_result.get("worktree_dir")

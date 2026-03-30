@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path
+import re
 from xml.sax.saxutils import escape
 import zipfile
 
@@ -23,6 +24,15 @@ class Reporter:
         ".stderr",
         ".stdout",
         ".txt",
+    }
+    _LOGX_LOCAL_LOG_DIRNAME = "jakal-flow-logs"
+    _GENERIC_WORKER_SUMMARIES = {
+        "lineage worker did not complete.",
+        "lineage worker failed.",
+        "lineage worker finished.",
+        "parallel worker did not complete.",
+        "parallel worker failed.",
+        "parallel worker finished.",
     }
 
     def __init__(self, context: ProjectContext) -> None:
@@ -117,6 +127,82 @@ class Reporter:
         write_json(path, report)
         return path
 
+    @classmethod
+    def _normalized_summary_text(cls, value: str) -> str:
+        return re.sub(r"\s+", " ", str(value or "").strip().lower())
+
+    @classmethod
+    def _is_generic_worker_summary(cls, value: str) -> bool:
+        return cls._normalized_summary_text(value) in cls._GENERIC_WORKER_SUMMARIES
+
+    @classmethod
+    def clean_logged_failure_detail(cls, detail: str) -> str:
+        kept_lines: list[str] = []
+        for raw_line in str(detail or "").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            lowered = line.lower()
+            if lowered in {
+                "yolo mode is enabled. all tool calls will be automatically approved.",
+                "loaded cached credentials.",
+            }:
+                continue
+            kept_lines.append(line)
+        return compact_text(" ".join(kept_lines), max_chars=280) if kept_lines else ""
+
+    @classmethod
+    def logged_pass_failure_detail(cls, pass_entry: dict[str, object]) -> str:
+        if not isinstance(pass_entry, dict):
+            return ""
+        test_results = pass_entry.get("test_results")
+        if isinstance(test_results, dict):
+            for key in ("failure_reason", "summary"):
+                detail = cls.clean_logged_failure_detail(str(test_results.get(key) or ""))
+                if detail:
+                    return detail
+        diagnostics = pass_entry.get("codex_diagnostics")
+        attempts = diagnostics.get("attempts", []) if isinstance(diagnostics, dict) else []
+        for attempt in reversed(attempts if isinstance(attempts, list) else []):
+            if not isinstance(attempt, dict):
+                continue
+            for key in ("stderr_excerpt", "last_message_excerpt", "stdout_excerpt"):
+                detail = cls.clean_logged_failure_detail(str(attempt.get(key) or ""))
+                if detail:
+                    return detail
+        failure_type = compact_text(str(pass_entry.get("failure_type") or "").strip(), max_chars=120)
+        failure_reason_code = compact_text(str(pass_entry.get("failure_reason_code") or "").strip(), max_chars=120)
+        if failure_type or failure_reason_code:
+            return " / ".join(part for part in [failure_type, failure_reason_code] if part)
+        return ""
+
+    @classmethod
+    def summarize_logged_result(
+        cls,
+        *,
+        block_entry: dict[str, object] | None,
+        pass_entry: dict[str, object] | None,
+        completed_summary: str,
+        failed_summary: str,
+    ) -> str:
+        block_payload = block_entry if isinstance(block_entry, dict) else {}
+        pass_payload = pass_entry if isinstance(pass_entry, dict) else {}
+        status = str(block_payload.get("status") or pass_payload.get("status") or "").strip().lower()
+        block_summary = compact_text(str(block_payload.get("test_summary") or "").strip(), max_chars=280)
+        if block_summary and not (status != "completed" and cls._is_generic_worker_summary(block_summary)):
+            return block_summary
+        if status == "completed":
+            return completed_summary
+        failure_detail = cls.logged_pass_failure_detail(pass_payload)
+        if failure_detail:
+            return f"{failed_summary} Cause: {failure_detail}"
+        rollback_status = str(block_payload.get("rollback_status") or pass_payload.get("rollback_status") or "").strip()
+        if rollback_status and rollback_status != "not_needed":
+            return f"{failed_summary} It was {rollback_status.replace('_', ' ')}."
+        if block_summary:
+            return block_summary
+        return failed_summary
+
     @staticmethod
     def _logx_kind(path: Path) -> str:
         name = path.name.lower()
@@ -186,24 +272,49 @@ class Reporter:
             "preview": preview,
         }
 
-    def _collect_logx_candidates(self, *, max_artifacts: int) -> list[Path]:
+    @classmethod
+    def _logx_log_dir(cls, project_root: Path) -> Path:
+        resolved_root = project_root.resolve()
+        candidates = [
+            resolved_root / "logs",
+            resolved_root / cls._LOGX_LOCAL_LOG_DIRNAME,
+            resolved_root / f".{cls._LOGX_LOCAL_LOG_DIRNAME}",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return resolved_root / "logs"
+
+    def _collect_logx_candidates(self, *, max_artifacts: int, source_repo_dir: Path | None = None) -> list[Path]:
+        root = self.context.paths.project_root if source_repo_dir is None else source_repo_dir
+        root = root.resolve()
+        logs_dir = self.context.paths.logs_dir if source_repo_dir is None else self._logx_log_dir(root)
         candidates: list[Path] = []
-        if self.context.paths.logs_dir.exists():
+        if logs_dir.exists():
             candidates.extend(
-                sorted(path for path in self.context.paths.logs_dir.rglob("*") if path.is_file())
+                sorted(path for path in logs_dir.rglob("*") if path.is_file())
             )
         for path in [
-            self.context.paths.metadata_file,
-            self.context.paths.project_config_file,
-            self.context.paths.loop_state_file,
-            self.context.paths.execution_plan_file,
-            self.context.paths.planning_inputs_cache_file,
-            self.context.paths.planning_prompt_cache_file,
-            self.context.paths.block_plan_cache_file,
-            self.context.paths.checkpoint_state_file,
-            self.context.paths.spine_file,
-            self.context.paths.common_requirements_file,
-            self.context.paths.reports_dir / "latest_report.json",
+            root / "metadata.json",
+            root / "project_config.json",
+            root / "state" / "LOOP_STATE.json",
+            root / "state" / "EXECUTION_PLAN.json",
+            root / "state" / "PLANNING_INPUTS_CACHE.json",
+            root / "state" / "PLANNING_PROMPT_CACHE.json",
+            root / "state" / "BLOCK_PLAN_CACHE.json",
+            root / "state" / "CHECKPOINTS.json",
+            root / "state" / "SPINE.json",
+            root / "state" / "COMMON_REQUIREMENTS.json",
+            root / "state" / "ML_MODE_STATE.json",
+            root / "state" / "LINEAGES.json",
+            root / "docs" / "PLAN.md",
+            root / "docs" / "BLOCK_REVIEW.md",
+            root / "docs" / "CLOSEOUT_REPORT.md",
+            root / "docs" / "ML_EXPERIMENT_REPORT.md",
+            root / "memory" / "success_patterns.jsonl",
+            root / "memory" / "failure_patterns.jsonl",
+            root / "memory" / "task_summaries.jsonl",
+            root / "reports" / "latest_report.json",
         ]:
             if path.exists():
                 candidates.append(path)
@@ -211,7 +322,13 @@ class Reporter:
             return sorted(set(candidates), key=lambda item: (item.parent.as_posix(), item.name))[: max_artifacts]
         return sorted(set(candidates), key=lambda item: (item.parent.as_posix(), item.name))
 
-    def _logx_index(self, path: Path, *, artifacts: list[dict[str, object]]) -> tuple[dict[str, object], int]:
+    def _logx_index(
+        self,
+        path: Path,
+        *,
+        artifacts: list[dict[str, object]],
+        source_repo_dir: Path | None = None,
+    ) -> tuple[dict[str, object], int]:
         existing_payload = read_json(path, default={})
         previous_entries = existing_payload.get("entries", [])
         existing_by_path: dict[str, dict[str, object]] = {}
@@ -245,6 +362,7 @@ class Reporter:
             "repository": self.context.metadata.to_dict(),
             "loop_state": self.context.loop_state.to_dict(),
             "project_root": str(self.context.paths.project_root),
+            "source_repo_dir": str(source_repo_dir) if source_repo_dir is not None else str(self.context.paths.project_root),
             "repo_url": str(self.context.metadata.repo_url),
             "repo_branch": str(self.context.metadata.branch),
             "project_logs_dir": str(self.context.paths.logs_dir),
@@ -261,15 +379,16 @@ class Reporter:
         *,
         max_artifacts: int = 400,
         max_preview_chars: int = 2_400,
+        source_repo_dir: Path | None = None,
     ) -> Path:
-        candidates = self._collect_logx_candidates(max_artifacts=max_artifacts)
+        candidates = self._collect_logx_candidates(max_artifacts=max_artifacts, source_repo_dir=source_repo_dir)
         if not candidates:
             path = self.context.paths.reports_dir / "logx.json"
             write_json(path, {"generated_at": now_utc_iso(), "entries": []})
             return path
         artifacts = [self._logx_entry(path, max_preview_chars=max_preview_chars) for path in candidates]
         path = self.context.paths.reports_dir / "logx.json"
-        payload, _ = self._logx_index(path, artifacts=artifacts)
+        payload, _ = self._logx_index(path, artifacts=artifacts, source_repo_dir=source_repo_dir)
         write_json(path, payload)
         return path
 
@@ -328,7 +447,7 @@ class Reporter:
         lines = []
         for item in entries:
             lines.append(
-                f"block={item['block_index']} status={item['status']} task={item['selected_task']} commits={','.join(item.get('commit_hashes', [])) or 'none'}"
+                f"block={item['block_index']} lineage={item.get('lineage_id') or 'n/a'} status={item['status']} task={item['selected_task']} commits={','.join(item.get('commit_hashes', [])) or 'none'}"
             )
         return "\n".join(lines)
 
@@ -425,7 +544,7 @@ class Reporter:
         lines.extend(["### Recent Blocks", ""])
         for item in bundle.get("recent_blocks", []) or []:
             lines.append(
-                f"- block={item.get('block_index')} status={item.get('status')} task={item.get('selected_task')} summary={compact_text(str(item.get('test_summary', '')), 180)}"
+                f"- block={item.get('block_index')} lineage={item.get('lineage_id') or 'n/a'} status={item.get('status')} task={item.get('selected_task')} summary={compact_text(str(item.get('test_summary', '')), 180)}"
             )
         if not (bundle.get("recent_blocks") or []):
             lines.append("- none")

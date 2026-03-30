@@ -54,7 +54,26 @@ test("parseBridgeError reads prefixed JSON string from tauri-bridge transport", 
   assert.equal(payload.type, "RuntimeError");
 });
 
+test("parseBridgeError reads fallback message from nested error field", () => {
+  const payload = parseBridgeError({ error: "nested transport failure" });
+  assert.equal(payload.message, "nested transport failure");
+});
+
 test("bridgeErrorMessage returns safe fallback for unparseable payloads", () => {
   assert.equal(bridgeErrorMessage(null, "fallback"), "fallback");
   assert.equal(bridgeErrorMessage(42, "fallback"), "42");
+});
+
+test("parseBridgeError reads plain numeric payloads as message text", () => {
+  const payload = parseBridgeError(500);
+  assert.equal(payload.message, "500");
+  assert.equal(payload.reason_code, "");
+  assert.equal(payload.type, "");
+  assert.equal(payload.recoverable, null);
+});
+
+test("parseBridgeError ignores malformed BRIDGE_ERROR_JSON payloads and falls back", () => {
+  const payload = parseBridgeError(`${BRIDGE_ERROR_PREFIX}not-a-json-object`);
+  assert.equal(payload.message, "not-a-json-object");
+  assert.equal(payload.reason_code, "");
 });

@@ -71,7 +71,8 @@ jakal-flow resume --repo-url https://github.com/Ahnd6474/lit.git --branch main -
 jakal-flow status --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
 jakal-flow report --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
 jakal-flow logx --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
-```
+jakal-flow logx --workspace-root .jakal-flow-workspace --source-repo-dir D:/GitHub/lit
+``` 
 
 ## Workspace Layout
 

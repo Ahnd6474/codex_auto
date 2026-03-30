@@ -31,7 +31,8 @@ def slugify(value: str, max_length: int = 64) -> str:
 
 def stable_repo_identity(repo_url: str, branch: str) -> tuple[str, str]:
     digest = hashlib.sha1(f"{repo_url}|{branch}".encode("utf-8")).hexdigest()
-    name_seed = repo_url.rstrip("/").split("/")[-1]
+    stripped_repo_url = str(repo_url or "").strip().rstrip("/\\")
+    name_seed = re.split(r"[\\/]+", stripped_repo_url)[-1] if stripped_repo_url else ""
     if name_seed.endswith(".git"):
         name_seed = name_seed[:-4]
     slug = f"{slugify(name_seed)}-{slugify(branch, max_length=20)}-{digest[:10]}"

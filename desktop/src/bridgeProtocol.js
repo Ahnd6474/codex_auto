@@ -64,11 +64,18 @@ export const BRIDGE_ERROR_CODES = Object.freeze({
 });
 
 export function parseBridgeError(rawError) {
-  const rawMessage = String(
-    (rawError && typeof rawError === "object" && (rawError.message || rawError.error))
-      || rawError
-      || "",
-  ).trim();
+  const rawMessageSource =
+    rawError && typeof rawError === "object"
+      ? rawError.message || rawError.error || rawError.errorMessage
+      : rawError;
+  const rawMessage =
+    rawMessageSource === undefined || rawMessageSource === null
+      ? ""
+      : typeof rawMessageSource === "string" ||
+          typeof rawMessageSource === "number" ||
+          typeof rawMessageSource === "boolean"
+        ? String(rawMessageSource).trim()
+        : "";
   if (typeof rawError === "object" && rawError !== null) {
     if (typeof rawError.reason_code === "string" || typeof rawError.reasonCode === "string") {
       return {
@@ -106,24 +113,36 @@ export function parseBridgeError(rawError) {
     }
   } else if (rawMessage.startsWith(BRIDGE_ERROR_PREFIX)) {
     const text = rawMessage.slice(BRIDGE_ERROR_PREFIX.length).trim();
-    if (text.startsWith("{") && text.endsWith("}")) {
-      try {
-        const parsed = JSON.parse(text);
-        if (parsed && typeof parsed === "object") {
-          return {
-            message: String(parsed.message || rawMessage || "Bridge request failed."),
-            reason_code: String(parsed.reason_code || parsed.reasonCode || "").trim(),
-            type: String(parsed.type || "").trim(),
-            details: parsed.details || {},
-            recoverable: parsed.recoverable,
-            command: String(parsed.command || "").trim(),
-            method: String(parsed.method || "").trim(),
-            request_id: String(parsed.request_id || "").trim(),
-          };
+    if (text) {
+      if (text.startsWith("{") && text.endsWith("}")) {
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed && typeof parsed === "object") {
+            return {
+              message: String(parsed.message || rawMessage || "Bridge request failed."),
+              reason_code: String(parsed.reason_code || parsed.reasonCode || "").trim(),
+              type: String(parsed.type || "").trim(),
+              details: parsed.details || {},
+              recoverable: parsed.recoverable,
+              command: String(parsed.command || "").trim(),
+              method: String(parsed.method || "").trim(),
+              request_id: String(parsed.request_id || "").trim(),
+            };
+          }
+        } catch {
+          // Fall back to the raw message.
         }
-      } catch {
-        // Fall back to the raw message.
       }
+      return {
+        message: text,
+        reason_code: "",
+        type: "",
+        details: {},
+        recoverable: null,
+        command: "",
+        method: "",
+        request_id: "",
+      };
     }
   }
   return {
@@ -139,6 +158,9 @@ export function parseBridgeError(rawError) {
 }
 
 export function bridgeErrorMessage(rawError, fallback = "Bridge request failed.") {
+  if (rawError === null || rawError === undefined) {
+    return String(fallback || "Bridge request failed.");
+  }
   const parsed = parseBridgeError(rawError);
   return String(parsed.message || "").trim() || String(fallback || "Bridge request failed.");
 }

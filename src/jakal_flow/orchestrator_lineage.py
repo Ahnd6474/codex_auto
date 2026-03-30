@@ -26,7 +26,7 @@ from .contract_wave import (
 from .environment import ensure_gitignore, ensure_virtualenv
 from . import execution_plan_support
 from .codex_runner import CodexRunner
-from .errors import HANDLED_OPERATION_EXCEPTIONS, PromotionRollbackError
+from .errors import HANDLED_OPERATION_EXCEPTIONS, PromotionRollbackError, failure_log_fields
 from .execution_control import ImmediateStopRequested
 from .git_ops import GitCommandError, GitOps
 from .memory import MemoryStore
@@ -394,8 +394,11 @@ class OrchestratorLineageMixin:
         lineage_context: ProjectContext,
         step: ExecutionStep,
     ) -> dict[str, object]:
+        step_metadata = step.metadata if isinstance(step.metadata, dict) else {}
+        lineage_id = str(step_metadata.get("lineage_id", "")).strip()
         lineage_result: dict[str, object] = {
             "step_id": step.step_id,
+            "lineage_id": lineage_id,
             "status": "failed",
             "notes": "Lineage worker did not complete.",
             "commit_hash": None,
@@ -403,6 +406,8 @@ class OrchestratorLineageMixin:
             "pass_log": {},
             "block_log": {},
             "test_summary": "",
+            "failure_type": "",
+            "failure_reason_code": "",
             "ml_report_payload": {},
             "head_commit": lineage_context.metadata.current_safe_revision,
         }
@@ -437,15 +442,28 @@ class OrchestratorLineageMixin:
                 str(lineage_context.metadata.current_safe_revision or "").strip()
                 or (self.git.current_revision(lineage_context.paths.repo_dir) if lineage_context.paths.repo_dir.exists() else "")
             )
+            worker_status = "completed" if latest_block.get("status") == "completed" else "failed"
+            block_summary = str(latest_block.get("test_summary") or "").strip()
+            worker_summary = Reporter.summarize_logged_result(
+                block_entry=latest_block,
+                pass_entry=latest_pass,
+                completed_summary="Lineage worker finished.",
+                failed_summary="Lineage worker failed.",
+            )
             lineage_result.update(
                 {
-                    "status": "completed" if latest_block.get("status") == "completed" else "failed",
-                    "notes": str(latest_block.get("test_summary") or "").strip() or "Lineage worker finished.",
+                    "status": worker_status,
+                    "lineage_id": lineage_id,
+                    "notes": worker_summary,
                     "commit_hash": commit_hash,
                     "changed_files": [str(item).strip() for item in changed_files if str(item).strip()] if isinstance(changed_files, list) else [],
                     "pass_log": latest_pass,
                     "block_log": latest_block,
-                    "test_summary": str(latest_block.get("test_summary") or "").strip(),
+                    "test_summary": worker_summary if (worker_status != "completed" or not block_summary) else block_summary,
+                    "failure_type": str(latest_block.get("failure_type") or latest_pass.get("failure_type") or "").strip(),
+                    "failure_reason_code": str(
+                        latest_block.get("failure_reason_code") or latest_pass.get("failure_reason_code") or ""
+                    ).strip(),
                     "ml_report_payload": read_json(lineage_context.paths.ml_step_report_file, default={}),
                     "head_commit": head_commit,
                 }
@@ -454,8 +472,11 @@ class OrchestratorLineageMixin:
             lineage_result["status"] = "paused"
             lineage_result["notes"] = str(exc).strip() or "Immediate stop requested."
         except HANDLED_OPERATION_EXCEPTIONS as exc:
+            note = str(exc).strip() or "Lineage worker failed."
             lineage_result["status"] = "failed"
-            lineage_result["notes"] = str(exc).strip() or "Lineage worker failed."
+            lineage_result["notes"] = note
+            lineage_result["test_summary"] = note
+            lineage_result.update(failure_log_fields(exc))
         finally:
             self._persist_context_files(lineage_context)
         return lineage_result
@@ -467,7 +488,7 @@ class OrchestratorLineageMixin:
         step: ExecutionStep,
         error: Exception | str,
     ) -> dict[str, object]:
-        lineage_id = str((step.metadata or {}).get("lineage_id", "")).strip()
+        lineage_id = str((step.metadata if isinstance(step.metadata, dict) else {}).get("lineage_id", "")).strip()
         lineage = lineages.get(lineage_id)
         note = str(error).strip() or "Lineage worker failed."
         head_commit = ""
@@ -477,15 +498,17 @@ class OrchestratorLineageMixin:
             head_commit = str(context.metadata.current_safe_revision or "").strip()
         return {
             "step_id": step.step_id,
+            "lineage_id": lineage_id,
             "status": "failed",
             "notes": note,
             "commit_hash": None,
             "changed_files": [],
             "pass_log": {},
             "block_log": {},
-            "test_summary": "",
+            "test_summary": note,
             "ml_report_payload": {},
             "head_commit": head_commit,
+            **failure_log_fields(error if isinstance(error, BaseException) else None),
         }
     def _cleanup_lineage_worktree(self, repo_dir: Path, lineage: LineageState) -> None:
         self.git.remove_worktree(repo_dir, lineage.worktree_dir, force=True)
@@ -707,7 +730,7 @@ class OrchestratorLineageMixin:
             worker_contexts: dict[str, ProjectContext] = {}
             worker_results_by_step: dict[str, dict[str, object]] = {}
             for step in ordered_targets:
-                lineage_id = str((step.metadata or {}).get("lineage_id", "")).strip()
+                lineage_id = str((step.metadata if isinstance(step.metadata, dict) else {}).get("lineage_id", "")).strip()
                 lineage = lineages.get(lineage_id)
                 if lineage is None:
                     result = self._lineage_worker_failure_result(
@@ -822,7 +845,7 @@ class OrchestratorLineageMixin:
                 final_status = "paused"
                 batch_summary = str(paused_worker.get("notes") or "Immediate stop requested.").strip()
                 for step in ordered_targets:
-                    lineage_id = str((step.metadata or {}).get("lineage_id", "")).strip()
+                    lineage_id = str((step.metadata if isinstance(step.metadata, dict) else {}).get("lineage_id", "")).strip()
                     lineage = lineages.get(lineage_id)
                     if lineage is not None and lineage.worktree_dir.exists() and lineage.safe_revision:
                         self.git.hard_reset(lineage.worktree_dir, lineage.safe_revision)
@@ -838,7 +861,7 @@ class OrchestratorLineageMixin:
             batch_spine_version = current_spine_version(context.paths)
             for index, step in enumerate(ordered_targets):
                 worker_result = worker_results[index] if index < len(worker_results) else {}
-                lineage_id = str((step.metadata or {}).get("lineage_id", "")).strip()
+                lineage_id = str((step.metadata if isinstance(step.metadata, dict) else {}).get("lineage_id", "")).strip()
                 lineage = lineages.get(lineage_id)
                 if lineage is None:
                     raise RuntimeError(f"{step.step_id} lost its lineage state during execution.")
@@ -1026,17 +1049,24 @@ class OrchestratorLineageMixin:
                 changed_files = sorted(set(str(item) for item in worker_result.get("changed_files", []) if str(item).strip()))
                 combined_changed_files.extend(changed_files)
                 rollback_status = "not_needed" if step.status == "completed" else "lineage_rolled_back_to_safe_revision"
+                step_metadata = step.metadata if isinstance(step.metadata, dict) else {}
+                lineage_id = str(worker_result.get("lineage_id") or step_metadata.get("lineage_id", "")).strip()
                 pass_entry.update(
                     {
                         "repository_id": context.metadata.repo_id,
                         "repository_slug": context.metadata.slug,
                         "block_index": next_block_index,
+                        "lineage_id": lineage_id or None,
                         "selected_task": step.title,
                         "commit_hash": step.commit_hash if step.status == "completed" else None,
                         "rollback_status": rollback_status,
                         "changed_files": changed_files,
                         "test_results": pass_entry.get("test_results"),
                         "lineage_push": worker_result.get("lineage_push"),
+                        "failure_type": str(worker_result.get("failure_type") or pass_entry.get("failure_type") or "").strip(),
+                        "failure_reason_code": str(
+                            worker_result.get("failure_reason_code") or pass_entry.get("failure_reason_code") or ""
+                        ).strip(),
                         "promotion_class": str(worker_result.get("promotion_assessment", {}).get("promotion_class", "")),
                         "promotion_assessment": worker_result.get("promotion_assessment"),
                         "lineage_manifest_file": worker_result.get("lineage_manifest_file"),
@@ -1047,13 +1077,28 @@ class OrchestratorLineageMixin:
                         "repository_id": context.metadata.repo_id,
                         "repository_slug": context.metadata.slug,
                         "block_index": next_block_index,
+                        "lineage_id": lineage_id or None,
                         "status": "completed" if step.status == "completed" else ("paused" if step.status == "paused" else "failed"),
                         "selected_task": step.title,
                         "changed_files": changed_files,
-                        "test_summary": step.notes or batch_summary,
+                        "test_summary": str(
+                            Reporter.summarize_logged_result(
+                                block_entry=block_entry,
+                                pass_entry=pass_entry,
+                                completed_summary="Lineage worker finished.",
+                                failed_summary="Lineage worker failed.",
+                            )
+                            or worker_result.get("test_summary")
+                            or step.notes
+                            or batch_summary
+                        ).strip(),
                         "commit_hashes": [step.commit_hash] if step.commit_hash else [],
                         "rollback_status": rollback_status,
                         "lineage_push": worker_result.get("lineage_push"),
+                        "failure_type": str(worker_result.get("failure_type") or block_entry.get("failure_type") or "").strip(),
+                        "failure_reason_code": str(
+                            worker_result.get("failure_reason_code") or block_entry.get("failure_reason_code") or ""
+                        ).strip(),
                         "promotion_class": str(worker_result.get("promotion_assessment", {}).get("promotion_class", "")),
                         "promotion_assessment": worker_result.get("promotion_assessment"),
                         "lineage_manifest_file": worker_result.get("lineage_manifest_file"),

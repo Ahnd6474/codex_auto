@@ -88,7 +88,23 @@ from .planning import (
 from .reporting import Reporter
 from .status_views import status_from_plan_state
 from .step_models import normalize_step_model, normalize_step_model_provider, provider_execution_preflight_error, resolve_step_model_choice
-from .utils import append_jsonl, ensure_dir, normalize_workflow_mode, now_utc_iso, read_json, read_jsonl_tail, read_text, svg_text_element, wrap_svg_text, write_json, write_json_if_changed, write_text, write_text_if_changed
+from .utils import (
+    append_jsonl,
+    compact_text,
+    ensure_dir,
+    normalize_workflow_mode,
+    now_utc_iso,
+    read_json,
+    read_jsonl,
+    read_jsonl_tail,
+    read_text,
+    svg_text_element,
+    wrap_svg_text,
+    write_json,
+    write_json_if_changed,
+    write_text,
+    write_text_if_changed,
+)
 from .verification import VerificationRunner
 from .workspace import WorkspaceManager
 from .orchestrator_lineage import OrchestratorLineageMixin
@@ -1378,11 +1394,12 @@ class Orchestrator(
         final_failure_reports: bool = True,
     ) -> tuple[dict[str, object] | None, int]:
         attempt_limit = max(1, int(context.runtime.regression_limit or 1))
+        lineage_id = self._execution_step_lineage_id(execution_step)
         latest_block: dict[str, object] | None = None
         attempts = 0
         while attempts < attempt_limit:
             attempts += 1
-            previous_block = read_last_jsonl(context.paths.block_log_file)
+            previous_block = self._latest_logged_block_for_lineage(context.paths.block_log_file, lineage_id)
             previous_block_index = int(previous_block.get("block_index", -1)) if previous_block else -1
             self._run_single_block(
                 context=context,
@@ -1394,7 +1411,7 @@ class Orchestrator(
                 suppress_failure_reporting=not final_failure_reports or attempts < attempt_limit,
             )
             context.metadata.last_run_at = now_utc_iso()
-            latest_block = read_last_jsonl(context.paths.block_log_file)
+            latest_block = self._latest_logged_block_for_lineage(context.paths.block_log_file, lineage_id)
             latest_block_index = int(latest_block.get("block_index", -1)) if latest_block else -1
             if latest_block_index <= previous_block_index:
                 latest_block = None
@@ -1932,11 +1949,13 @@ class Orchestrator(
                 block_entry = deepcopy(worker_result.get("block_log") or {})
                 changed_files = sorted(set(str(item) for item in worker_result.get("changed_files", []) if str(item).strip()))
                 combined_changed_files.extend(changed_files)
+                lineage_id = str(worker_result.get("lineage_id") or self._execution_step_lineage_id(step)).strip()
                 pass_entry.update(
                     {
                         "repository_id": context.metadata.repo_id,
                         "repository_slug": context.metadata.slug,
                         "block_index": next_block_index,
+                        "lineage_id": lineage_id or None,
                         "selected_task": step.title,
                         "commit_hash": step.commit_hash if step.status == "completed" else None,
                         "rollback_status": (
@@ -1953,6 +1972,7 @@ class Orchestrator(
                         "repository_id": context.metadata.repo_id,
                         "repository_slug": context.metadata.slug,
                         "block_index": next_block_index,
+                        "lineage_id": lineage_id or None,
                         "status": self._parallel_batch_log_status(step.status),
                         "selected_task": step.title,
                         "changed_files": changed_files,
@@ -2422,6 +2442,25 @@ class Orchestrator(
         if source in {"auto", "manual"}:
             return source
         return "manual" if str(getattr(step, "model_provider", "") or "").strip() else "auto"
+
+    def _execution_step_lineage_id(self, step: ExecutionStep | None) -> str:
+        if step is None:
+            return ""
+        metadata = step.metadata if isinstance(step.metadata, dict) else {}
+        return str(metadata.get("lineage_id", "")).strip()
+
+    def _latest_logged_block_for_lineage(self, block_log_file: Path, lineage_id: str) -> dict[str, object] | None:
+        lineage_key = str(lineage_id).strip()
+        entries = read_jsonl(block_log_file)
+        if not entries:
+            return None
+        for entry in reversed(entries):
+            if not isinstance(entry, dict):
+                continue
+            if lineage_key and str(entry.get("lineage_id", "")).strip() != lineage_key:
+                continue
+            return entry
+        return None
 
     def _run_result_failure_detail(self, run_result: CodexRunResult) -> str:
         if run_result.last_message:
@@ -3041,9 +3080,39 @@ class Orchestrator(
         context = self.status(repo_url, branch)
         return Reporter(context).write_status_report()
 
-    def logx(self, repo_url: str, branch: str, max_artifacts: int = 400) -> Path:
-        context = self.status(repo_url, branch)
-        return Reporter(context).write_logx(max_artifacts=max_artifacts)
+    def logx(
+        self,
+        repo_url: str,
+        branch: str,
+        max_artifacts: int = 400,
+        source_repo_dir: Path | None = None,
+    ) -> Path:
+        source_root = source_repo_dir.resolve() if source_repo_dir is not None else None
+        if source_root is not None and not source_root.exists():
+            raise FileNotFoundError(f"Source repository directory not found: {source_root}")
+
+        if repo_url:
+            context = self.status(repo_url, branch)
+        else:
+            if source_root is None:
+                raise ValueError("logx requires either a repo URL/path or a source repository directory")
+            context = self.workspace.find_project_by_repo_path(source_root)
+            if context is None:
+                context = self.workspace.initialize_local_project(
+                    project_dir=source_root,
+                    branch=branch,
+                    runtime=RuntimeOptions(),
+                    origin_url="",
+                    display_name=source_root.name,
+                )
+            context.metadata.branch = branch
+            context.metadata.current_status = "setup_ready"
+            self.workspace.save_project(context)
+
+        return Reporter(context).write_logx(
+            max_artifacts=max_artifacts,
+            source_repo_dir=source_root,
+        )
 
     def plan_work(
         self,
@@ -3417,6 +3486,7 @@ class Orchestrator(
                     "repository_id": context.metadata.repo_id,
                     "repository_slug": context.metadata.slug,
                     "block_index": block_index,
+                    "lineage_id": self._execution_step_lineage_id(execution_step_override) or None,
                     "status": "rolled_back",
                     "selected_task": selected_task,
                     "changed_files": [],
@@ -3491,6 +3561,7 @@ class Orchestrator(
                 "repository_id": context.metadata.repo_id,
                 "repository_slug": context.metadata.slug,
                 "block_index": block_index,
+                "lineage_id": self._execution_step_lineage_id(execution_step_override) or None,
                 "status": "completed",
                 "selected_task": selected_task,
                 "changed_files": sorted(set(block_changed_files)),

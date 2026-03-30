@@ -30,6 +30,23 @@ const PROJECT_RUNTIME_OVERRIDE_KEYS = [
   "planning_effort",
 ];
 
+function enforceProgramModelDefaults(form = null, defaultRuntime = null) {
+  const nextForm = form && typeof form === "object" ? cloneValue(form) : {};
+  const nextRuntime = nextForm.runtime && typeof nextForm.runtime === "object" ? cloneValue(nextForm.runtime) : {};
+  const defaultModel = String(defaultRuntime?.model || "").trim();
+  const defaultEffort = String(defaultRuntime?.effort || "").trim();
+  if (defaultModel) {
+    nextRuntime.model = defaultModel;
+  }
+  if (defaultEffort) {
+    nextRuntime.effort = defaultEffort;
+  }
+  return {
+    ...nextForm,
+    runtime: nextRuntime,
+  };
+}
+
 function hasOwnValue(value, key) {
   return Boolean(value) && Object.prototype.hasOwnProperty.call(value, key);
 }
@@ -633,15 +650,20 @@ export function applyProjectDetailState({
       if (current.project_dir && preserveDirtyPlan) {
         return current;
       }
-      return preserveProjectRuntimeOverrides(
+      const projectFormFromDetailState = preserveProjectIdentityForm(
         current,
-        preserveProjectIdentityForm(
-          current,
-          projectFormFromDetail(normalizedDetail, state.defaultRuntime),
-        ),
+        projectFormFromDetail(normalizedDetail, state.defaultRuntime),
+      );
+      const nextProjectForm = preserveProjectRuntimeOverrides(
+        current,
+        projectFormFromDetailState,
         state.projectDetail,
         sameProject,
       );
+      if (sameProject) {
+        return nextProjectForm;
+      }
+      return enforceProgramModelDefaults(nextProjectForm, state.defaultRuntime);
     });
     if (!preserveDirtyPlan) {
       setters.setPlanDraft(cloneValue(normalizedDetail.plan));

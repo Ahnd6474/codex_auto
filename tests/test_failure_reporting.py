@@ -194,6 +194,28 @@ class FailureReportingTests(unittest.TestCase):
             self.assertGreater(second_pass_size, first_pass_size)
             self.assertGreaterEqual(int(second_payload.get("stats", {}).get("updated_count", 0)), 1)
 
+    def test_orchestrator_logx_with_source_repo_dir_adds_local_source_marker(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            source_repo_dir = temp_dir / "lit"
+            source_repo_dir.mkdir(parents=True, exist_ok=True)
+            _, orchestrator, _project = create_project(workspace_root, source_repo_dir)
+            state_dir = source_repo_dir / "state"
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "LOOP_STATE.json").write_text("{}", encoding="utf-8")
+            logx_path = orchestrator.logx(
+                repo_url="",
+                branch="main",
+                max_artifacts=200,
+                source_repo_dir=source_repo_dir,
+            )
+            payload = json.loads(logx_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload.get("source_repo_dir"), str(source_repo_dir))
+            self.assertIn(
+                str(state_dir / "LOOP_STATE.json"),
+                [entry.get("path") for entry in payload.get("entries", []) if isinstance(entry, dict)],
+            )
+
     def test_reporter_ensure_pull_request_creates_missing_pull_request(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"

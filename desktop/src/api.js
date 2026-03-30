@@ -2,6 +2,49 @@ import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen as tauriListen } from "@tauri-apps/api/event";
 import { bridgeErrorMessage, parseBridgeError } from "./bridgeProtocol.js";
 
+const DEFAULT_BRIDGE_LOGGER = {
+  warn: (...args) => {
+    if (globalThis.console && typeof globalThis.console.warn === "function") {
+      globalThis.console.warn(...args);
+    }
+  },
+  error: (...args) => {
+    if (globalThis.console && typeof globalThis.console.error === "function") {
+      globalThis.console.error(...args);
+    }
+  },
+};
+
+function resolveBridgeLogger(rawLogger = null) {
+  return {
+    warn: rawLogger && typeof rawLogger.warn === "function" ? rawLogger.warn : DEFAULT_BRIDGE_LOGGER.warn,
+    error: rawLogger && typeof rawLogger.error === "function" ? rawLogger.error : DEFAULT_BRIDGE_LOGGER.error,
+  };
+}
+
+function summarizeValue(value) {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint"
+  ) {
+    return value;
+  }
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return String(value);
+  }
+}
+
+function logBridgeError(logger, component, context = {}) {
+  logger.error("[jakal-flow bridge]", component, summarizeValue(context));
+}
+
 export class BridgeApiError extends Error {
   constructor(message, details = {}) {
     super(message);
@@ -15,6 +58,7 @@ export class BridgeApiError extends Error {
       ? details.recoverable
       : null;
     this.errorDetails = details.details || {};
+    this.rawError = details.rawError || {};
   }
 }
 
@@ -29,8 +73,22 @@ function normalizeError(error, context = {}) {
   );
 }
 
-async function safeInvoke(invokeFn, command = "", method = "", args = {}) {
+function buildInvokeLogContext(method, command, context = {}, rawError = undefined) {
+  return {
+    method,
+    command,
+    reasonCode: String(context.reason_code || context.reasonCode || "").trim(),
+    errorType: String(context.type || "").trim(),
+    requestId: String(context.request_id || "").trim(),
+    rawError: summarizeValue(rawError),
+  };
+}
+
+async function safeInvoke(invokeFn, command = "", method = "", args = undefined, logger = DEFAULT_BRIDGE_LOGGER) {
   try {
+    if (args === undefined) {
+      return await invokeFn();
+    }
     return await invokeFn(args);
   } catch (error) {
     const payload = parseBridgeError(error);
@@ -39,11 +97,17 @@ async function safeInvoke(invokeFn, command = "", method = "", args = {}) {
       command: String(command || payload.command || "").trim(),
       method: String(method || payload.method || "").trim(),
     };
-    throw normalizeError(error || "Bridge request failed.", context);
+    const normalizedError = normalizeError(error || "Bridge request failed.", {
+      rawError: summarizeValue(error),
+      ...context,
+    });
+    logBridgeError(logger, "invoke_failed", buildInvokeLogContext(method, command, context, error));
+    throw normalizedError;
   }
 }
 
-export function createBridgeClient(invoke = tauriInvoke, listen = tauriListen) {
+export function createBridgeClient(invoke = tauriInvoke, listen = tauriListen, options = {}) {
+  const logger = resolveBridgeLogger(options.logger);
   return {
     bridgeRequest(command, payload = null, workspaceRoot = null) {
       return safeInvoke(
@@ -55,6 +119,7 @@ export function createBridgeClient(invoke = tauriInvoke, listen = tauriListen) {
           payload,
           workspaceRoot,
         },
+        logger,
       );
     },
 
@@ -68,6 +133,7 @@ export function createBridgeClient(invoke = tauriInvoke, listen = tauriListen) {
           payload,
           workspaceRoot,
         },
+        logger,
       );
     },
 
@@ -77,11 +143,12 @@ export function createBridgeClient(invoke = tauriInvoke, listen = tauriListen) {
         "",
         "get_bridge_job",
         { jobId },
+        logger,
       );
     },
 
     listBridgeJobs() {
-      return safeInvoke((invocation) => invoke("list_bridge_jobs", invocation), "", "list_bridge_jobs", {});
+      return safeInvoke(() => invoke("list_bridge_jobs"), "", "list_bridge_jobs", undefined, logger);
     },
 
     configureBridgeScheduler(maxConcurrentJobs, workspaceRoot = null) {
@@ -93,6 +160,7 @@ export function createBridgeClient(invoke = tauriInvoke, listen = tauriListen) {
           maxConcurrentJobs,
           workspaceRoot,
         },
+        logger,
       );
     },
 
@@ -102,6 +170,7 @@ export function createBridgeClient(invoke = tauriInvoke, listen = tauriListen) {
         "",
         "cancel_bridge_job",
         { jobId },
+        logger,
       );
     },
 
