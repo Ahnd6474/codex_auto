@@ -839,6 +839,39 @@ class UIBridgeTests(unittest.TestCase):
 
         self.assertIn("quota window is exhausted", error.lower())
 
+    def test_provider_execution_preflight_error_blocks_known_invalid_gemini_model(self) -> None:
+        fake_snapshot = mock.Mock(
+            to_dict=mock.Mock(
+                return_value={
+                    "available": True,
+                    "model_catalog": [
+                        {"provider": "gemini", "model": "gemini-3-flash-preview"},
+                        {"provider": "gemini", "model": "gemini-2.5-pro"},
+                    ],
+                    "account": {},
+                    "rate_limits": {"default_limit_id": "", "items": []},
+                    "error": "",
+                }
+            )
+        )
+        with mock.patch("jakal_flow.step_models._command_available", return_value=True), mock.patch(
+            "jakal_flow.step_models._gemini_runtime_auth_configured",
+            return_value=True,
+        ), mock.patch(
+            "jakal_flow.step_models.fetch_codex_backend_snapshot",
+            return_value=fake_snapshot,
+        ):
+            error = provider_execution_preflight_error(
+                "gemini",
+                codex_path="gemini-invalid-model.cmd",
+                repo_dir=Path.cwd(),
+                provider_api_key_env="GEMINI_API_KEY",
+                model="gemini-not-real",
+            )
+
+        self.assertIn("not available", error)
+        self.assertIn("gemini-not-real", error)
+
     def test_bootstrap_payload_includes_provider_statuses(self) -> None:
         with TemporaryTestDir() as temp_dir, mock.patch(
             "jakal_flow.ui_bridge._codex_snapshot_service",

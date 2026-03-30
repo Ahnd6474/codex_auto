@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from types import SimpleNamespace
 from pathlib import Path
 import shutil
@@ -14,6 +15,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import jakal_flow.planning as planning_module
 from jakal_flow.environment import ensure_gitignore
 from jakal_flow.errors import (
     AgentPassExecutionError,
@@ -3507,6 +3509,157 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertGreaterEqual(mocked_reset.call_count, 2)
         mocked_commit.assert_called_once()
 
+    def test_execute_verified_repo_pass_skips_preflight_invalid_fallback_candidates(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_verified_repo_skip_invalid_fallback_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model_provider="openai",
+            model="gpt-5.4",
+            effort="medium",
+            test_cmd="python -m pytest",
+        )
+        observed_providers: list[str] = []
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            context.metadata.current_safe_revision = "safe-revision"
+            context.loop_state.current_safe_revision = "safe-revision"
+            orchestrator.workspace.save_project(context)
+
+            reporter = Reporter(context)
+            runner = mock.Mock()
+            failing_result = CodexRunResult(
+                pass_type="project-closeout-pass",
+                prompt_file=context.paths.logs_dir / "initial.prompt.md",
+                output_file=context.paths.logs_dir / "initial.last_message.txt",
+                event_file=context.paths.logs_dir / "initial.events.jsonl",
+                returncode=1,
+                search_enabled=False,
+                changed_files=[],
+                usage={},
+                last_message="",
+                diagnostics={
+                    "attempts": [
+                        {
+                            "attempt": 1,
+                            "returncode": 1,
+                            "stderr_excerpt": "OpenAI failed: You have exhausted your capacity on this model. Your quota will reset after 5s.",
+                        }
+                    ]
+                },
+            )
+            local_success_result = CodexRunResult(
+                pass_type="project-closeout-pass-fallback-oss",
+                prompt_file=context.paths.logs_dir / "oss.prompt.md",
+                output_file=context.paths.logs_dir / "oss.last_message.txt",
+                event_file=context.paths.logs_dir / "oss.events.jsonl",
+                returncode=0,
+                search_enabled=False,
+                changed_files=[],
+                usage={"input_tokens": 13},
+                last_message="local fallback closeout pass",
+            )
+            successful_test = TestRunResult(
+                command="python -m pytest",
+                returncode=0,
+                stdout_file=context.paths.logs_dir / "fallback.test.stdout.log",
+                stderr_file=context.paths.logs_dir / "fallback.test.stderr.log",
+                summary="python -m pytest exited with 0",
+            )
+
+            def fake_primary_run_pass(**kwargs):
+                observed_providers.append(str(kwargs["context"].runtime.model_provider))
+                return failing_result
+
+            def fake_fallback_run_pass(*args, **kwargs):
+                provider = str(kwargs["context"].runtime.model_provider)
+                observed_providers.append(provider)
+                if provider == "oss":
+                    return local_success_result
+                raise AssertionError(f"unexpected fallback provider: {provider}")
+
+            fallback_runtimes = [
+                RuntimeOptions(
+                    model_provider="gemini",
+                    provider_api_key_env="GEMINI_API_KEY",
+                    codex_path="gemini.cmd",
+                    model="gemini-not-real",
+                    effort="medium",
+                    test_cmd="python -m pytest",
+                ),
+                RuntimeOptions(
+                    model_provider="oss",
+                    local_model_provider="ollama",
+                    codex_path="codex.cmd",
+                    model="qwen2.5-coder:7b",
+                    effort="medium",
+                    test_cmd="python -m pytest",
+                ),
+            ]
+            runner.run_pass.side_effect = fake_primary_run_pass
+
+            with mock.patch(
+                "jakal_flow.orchestrator.build_provider_fallback_runtimes",
+                return_value=fallback_runtimes,
+            ), mock.patch(
+                "jakal_flow.orchestrator.CodexRunner.run_pass",
+                side_effect=fake_fallback_run_pass,
+            ) as mocked_fallback_run, mock.patch.object(
+                orchestrator,
+                "_execution_runtime_preflight_error",
+                side_effect=lambda _context, candidate_runtime: (
+                    "Model 'gemini-not-real' is not available for provider 'gemini' on this machine."
+                    if str(candidate_runtime.model_provider) == "gemini"
+                    else ""
+                ),
+            ), mock.patch.object(
+                orchestrator,
+                "_run_test_command",
+                return_value=successful_test,
+            ), mock.patch.object(
+                orchestrator.git,
+                "changed_files",
+                return_value=["README.md"],
+            ), mock.patch.object(orchestrator.git, "has_changes", return_value=True), mock.patch.object(
+                orchestrator.git,
+                "commit_all",
+                return_value="local-fallback-closeout-commit",
+            ) as mocked_commit, mock.patch.object(orchestrator.git, "hard_reset") as mocked_reset:
+                result = orchestrator._execute_verified_repo_pass(
+                    context=context,
+                    runner=runner,
+                    reporter=reporter,
+                    prompt="Summarize the release closeout.",
+                    pass_type="project-closeout-pass",
+                    block_index=1,
+                    task_name="Release closeout",
+                    safe_revision="safe-revision",
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(observed_providers, ["openai", "oss"])
+        self.assertEqual(context.runtime.model_provider, "oss")
+        self.assertTrue(result["success"])
+        self.assertEqual(result["run_result"].attempt_count, 2)
+        self.assertEqual(result["run_result"].diagnostics["provider_fallback"]["to_provider"], "oss")
+        self.assertEqual(
+            [item["provider"] for item in result["run_result"].diagnostics["provider_fallback"]["chain"]],
+            ["gemini", "oss"],
+        )
+        self.assertEqual(result["run_result"].diagnostics["provider_fallback"]["chain"][0]["skipped"], True)
+        mocked_fallback_run.assert_called_once()
+        self.assertEqual(mocked_reset.call_count, 1)
+        mocked_commit.assert_called_once()
+
     def test_run_result_failure_detail_prefers_event_error_over_empty_output_warning(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_run_result_failure_detail_test"
         shutil.rmtree(temp_root, ignore_errors=True)
@@ -5030,6 +5183,68 @@ class ExecutionPlanHelperTests(unittest.TestCase):
 
         self.assertTrue(cache_exists)
         self.assertEqual(payload, cached)
+
+    def test_scan_repository_inputs_invalidates_cache_when_git_tracks_content_change(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_repo_inputs_git_invalidation_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        repo_dir = temp_root / "repo"
+        cache_file = temp_root / "workspace" / "state" / "PLANNING_INPUTS_CACHE.json"
+        (repo_dir / "src").mkdir(parents=True, exist_ok=True)
+        (repo_dir / "README.md").write_text("README summary", encoding="utf-8")
+        (repo_dir / "AGENTS.md").write_text("AGENTS summary", encoding="utf-8")
+        tracked_file = repo_dir / "src" / "main.py"
+        tracked_file.write_text("def run() -> None:\n    pass\n", encoding="utf-8")
+        subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True, text=True)
+        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True, text=True)
+        subprocess.run(
+            ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "init"],
+            cwd=repo_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        try:
+            scan_repository_inputs(repo_dir, cache_file=cache_file)
+            tracked_file.write_text("def run() -> None:\n    print('updated')\n", encoding="utf-8")
+            with mock.patch("jakal_flow.planning._build_repository_inputs", wraps=planning_module._build_repository_inputs) as mocked_build:
+                scan_repository_inputs(repo_dir, cache_file=cache_file)
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertGreaterEqual(mocked_build.call_count, 1)
+
+    def test_scan_repository_inputs_invalidates_cache_for_ignored_docs_changes(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_repo_inputs_ignored_docs_invalidation_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        repo_dir = temp_root / "repo"
+        cache_file = temp_root / "workspace" / "state" / "PLANNING_INPUTS_CACHE.json"
+        docs_dir = repo_dir / "docs"
+        docs_dir.mkdir(parents=True, exist_ok=True)
+        (repo_dir / "README.md").write_text("README summary", encoding="utf-8")
+        (repo_dir / "AGENTS.md").write_text("AGENTS summary", encoding="utf-8")
+        (repo_dir / ".gitignore").write_text("docs/generated.md\n", encoding="utf-8")
+        ignored_doc = docs_dir / "generated.md"
+        ignored_doc.write_text("doc v1", encoding="utf-8")
+        subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True, text=True)
+        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True, text=True)
+        subprocess.run(
+            ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "init"],
+            cwd=repo_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        try:
+            first = scan_repository_inputs(repo_dir, cache_file=cache_file)
+            ignored_doc.write_text("doc v2", encoding="utf-8")
+            second = scan_repository_inputs(repo_dir, cache_file=cache_file)
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertIn("doc v1", first["docs"])
+        self.assertIn("doc v2", second["docs"])
 
     def test_prompt_to_execution_plan_prompt_reuses_prompt_bundle_cache(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_prompt_bundle_cache_test"

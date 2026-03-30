@@ -12,6 +12,7 @@ from typing import Any
 from .contract_wave import DEFAULT_SPINE_VERSION, load_spine_state, normalize_execution_step_policy, policy_summary
 from .model_selection import normalize_reasoning_effort
 from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, ProjectContext
+from .subprocess_utils import run_subprocess
 from .step_models import planning_model_selection_guidance, resolve_step_model_choice
 from .utils import compact_text, normalize_workflow_mode, now_utc_iso, parse_json_text, read_json, read_text, similarity_score, svg_text_element, tokenize, wrap_svg_text, write_json_if_changed, write_text
 
@@ -40,9 +41,9 @@ SCOPE_GUARD_TEMPLATE_FILENAME = "SCOPE_GUARD_TEMPLATE.md"
 REFERENCE_GUIDE_FILENAME = "REFERENCE_GUIDE.md"
 REFERENCE_GUIDE_DISPLAY_PATH = f"src/jakal_flow/docs/{REFERENCE_GUIDE_FILENAME}"
 _AGENTS_SUMMARY_CACHE: dict[tuple[str, int], tuple[tuple[int, int, int, int], str]] = {}
-_REPO_INPUTS_CACHE_VERSION = 1
+_REPO_INPUTS_CACHE_VERSION = 2
 _PROMPT_BUNDLE_CACHE_VERSION = 1
-_REPO_INPUTS_MEMORY_CACHE: dict[str, tuple[str, dict[str, str]]] = {}
+_REPO_INPUTS_MEMORY_CACHE: dict[str, tuple[str, dict[str, str], dict[str, Any]]] = {}
 _PROMPT_BUNDLE_MEMORY_CACHE: dict[str, tuple[str, dict[str, str]]] = {}
 
 
@@ -98,6 +99,108 @@ def _sorted_scandir(path: Path) -> list[os.DirEntry[str]]:
 
 def _cache_file_key(cache_file: Path | None, fallback: Path) -> str:
     return str((cache_file or fallback).resolve())
+
+
+def _important_invalidation_dirs(repo_dir: Path) -> list[Path]:
+    return [
+        repo_dir / "docs",
+        *_source_inventory_roots(repo_dir),
+        repo_dir / "tests",
+    ]
+
+
+def _important_invalidation_files(repo_dir: Path) -> list[Path]:
+    return [
+        repo_dir / "pyproject.toml",
+        repo_dir / "package.json",
+        repo_dir / "package-lock.json",
+        repo_dir / "pnpm-lock.yaml",
+        repo_dir / "yarn.lock",
+        repo_dir / "requirements.txt",
+        repo_dir / "requirements-dev.txt",
+        repo_dir / "setup.py",
+        repo_dir / "setup.cfg",
+        repo_dir / "tox.ini",
+        repo_dir / "Makefile",
+        repo_dir / "Dockerfile",
+        repo_dir / "docker-compose.yml",
+        repo_dir / "docker-compose.yaml",
+    ]
+
+
+def _git_status_signature(repo_dir: Path) -> str:
+    if not (repo_dir / ".git").exists():
+        return "no-git"
+    try:
+        completed = run_subprocess(
+            ["git", "status", "--porcelain=v1", "--untracked-files=all"],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout_seconds=2.0,
+        )
+    except (OSError, RuntimeError):
+        return "git-status-error"
+    if completed.returncode != 0:
+        return f"git-status-exit-{completed.returncode}"
+    lines = [line.rstrip() for line in str(completed.stdout or "").splitlines() if line.strip()]
+    return _stable_digest(lines) if lines else "clean"
+
+
+def _important_tree_signature(repo_dir: Path, *, max_entries: int = 256) -> dict[str, Any]:
+    excluded_parts = {
+        ".git",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".venv",
+        "__pycache__",
+        "build",
+        "coverage",
+        "dist",
+        "node_modules",
+        "target",
+        "venv",
+    }
+    entries: list[tuple[str, tuple[int, int, int, int]]] = []
+    truncated = False
+    for file_path in _important_invalidation_files(repo_dir):
+        if file_path.exists() and file_path.is_file():
+            relative = str(file_path.relative_to(repo_dir)).replace("\\", "/")
+            entries.append((relative, _path_cache_token(file_path)))
+            if len(entries) >= max_entries:
+                truncated = True
+                break
+    for root in _important_invalidation_dirs(repo_dir):
+        if truncated:
+            break
+        if not root.exists():
+            continue
+        stack = [root]
+        while stack and not truncated:
+            current = stack.pop()
+            child_dirs: list[Path] = []
+            for entry in _sorted_scandir(current):
+                if len(entries) >= max_entries:
+                    truncated = True
+                    break
+                name = entry.name
+                if entry.is_dir(follow_symlinks=False):
+                    if name in excluded_parts:
+                        continue
+                    child_dirs.append(Path(entry.path))
+                    continue
+                if not entry.is_file(follow_symlinks=False):
+                    continue
+                relative = str(Path(entry.path).relative_to(repo_dir)).replace("\\", "/")
+                entries.append((relative, _path_cache_token(Path(entry.path))))
+            stack.extend(reversed(child_dirs))
+    return {
+        "entries": entries,
+        "truncated": truncated,
+    }
 
 
 def plan_generation_prompt_filename(execution_mode: str | None, workflow_mode: str | None = None) -> str:
@@ -326,6 +429,7 @@ def _repository_inputs_cache_signature(repo_dir: Path, *, sampled_docs: list[str
         "repo_dir": str(repo_dir.resolve()),
         "readme": _path_cache_token(repo_dir / "README.md"),
         "agents": _path_cache_token(repo_dir / "AGENTS.md"),
+        "git_status": _git_status_signature(repo_dir),
         "docs_root": _path_cache_token(repo_dir / "docs"),
         "source_roots": {
             str(root.relative_to(repo_dir)).replace("\\", "/"): _path_cache_token(root)
@@ -335,6 +439,7 @@ def _repository_inputs_cache_signature(repo_dir: Path, *, sampled_docs: list[str
             relative: _path_cache_token(repo_dir / relative.replace("/", os.sep))
             for relative in sampled_docs
         },
+        "important_tree": _important_tree_signature(repo_dir),
     }
 
 
@@ -356,15 +461,10 @@ def scan_repository_inputs(repo_dir: Path, *, cache_file: Path | None = None, fo
     if not force_refresh:
         cached_memory = _REPO_INPUTS_MEMORY_CACHE.get(cache_key)
         if cached_memory is not None:
-            cached_signature, cached_payload = cached_memory
-            if cache_file is None:
-                return dict(cached_payload)
-            cached_disk = read_json(cache_file, default=None)
-            if (
-                isinstance(cached_disk, dict)
-                and int(cached_disk.get("version", 0) or 0) == _REPO_INPUTS_CACHE_VERSION
-                and str(cached_disk.get("signature", "")).strip() == cached_signature
-            ):
+            cached_signature, cached_payload, cached_metadata = cached_memory
+            sampled_docs = [str(item).strip() for item in cached_metadata.get("sampled_docs", []) if str(item).strip()]
+            current_signature = _stable_digest(_repository_inputs_cache_signature(repo_dir, sampled_docs=sampled_docs))
+            if current_signature == cached_signature:
                 return dict(cached_payload)
         if cache_file:
             cached = read_json(cache_file, default=None)
@@ -382,20 +482,22 @@ def scan_repository_inputs(repo_dir: Path, *, cache_file: Path | None = None, fo
                             "docs": str(payload.get("docs", "")).strip() or "No markdown files under repo/docs.",
                             "source": str(payload.get("source", "")).strip() or "Source inventory unavailable.",
                         }
-                        _REPO_INPUTS_MEMORY_CACHE[cache_key] = (signature_digest, normalized_payload)
+                        normalized_metadata = {"sampled_docs": sampled_docs}
+                        _REPO_INPUTS_MEMORY_CACHE[cache_key] = (signature_digest, normalized_payload, normalized_metadata)
                         return dict(normalized_payload)
 
     payload, metadata = _build_repository_inputs(repo_dir)
     signature = _repository_inputs_cache_signature(repo_dir, sampled_docs=list(metadata.get("sampled_docs", [])))
     signature_digest = _stable_digest(signature)
-    _REPO_INPUTS_MEMORY_CACHE[cache_key] = (signature_digest, dict(payload))
+    normalized_metadata = {"sampled_docs": list(metadata.get("sampled_docs", []))}
+    _REPO_INPUTS_MEMORY_CACHE[cache_key] = (signature_digest, dict(payload), normalized_metadata)
     if cache_file:
         write_json_if_changed(
             cache_file,
             {
                 "version": _REPO_INPUTS_CACHE_VERSION,
                 "signature": signature_digest,
-                "metadata": metadata,
+                "metadata": normalized_metadata,
                 "payload": payload,
             },
         )

@@ -2121,6 +2121,7 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
             codex_path=str(getattr(runtime, "codex_path", "") or "").strip(),
             repo_dir=context.paths.repo_dir,
             provider_api_key_env=str(getattr(runtime, "provider_api_key_env", "") or "").strip(),
+            model=str(getattr(runtime, "model", "") or getattr(runtime, "model_slug_input", "")).strip(),
         )
 
     def _step_model_runtime_overrides(
@@ -2426,6 +2427,37 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
 
         for fallback_runtime in fallback_runtimes:
             to_provider = normalize_step_model_provider(str(getattr(fallback_runtime, "model_provider", "") or "")) or str(getattr(fallback_runtime, "model_provider", "") or "").strip() or "unknown"
+            preflight_error = self._execution_runtime_preflight_error(context, fallback_runtime)
+            if preflight_error:
+                fallback_chain.append(
+                    {
+                        "provider": to_provider,
+                        "model": str(getattr(fallback_runtime, "model", "") or "").strip(),
+                        "local_model_provider": str(getattr(fallback_runtime, "local_model_provider", "") or "").strip(),
+                        "returncode": None,
+                        "attempt_count": 0,
+                        "trigger_detail": preflight_error,
+                        "skipped": True,
+                    }
+                )
+                self._append_runtime_ui_event(
+                    context,
+                    "provider-fallback-skipped",
+                    f"Skipped fallback attempt on {to_provider}: {compact_text(preflight_error, max_chars=180)}",
+                    {
+                        "flow": "execution",
+                        "block_index": block_index,
+                        "pass_type": pass_name,
+                        "step_id": execution_step.step_id if execution_step is not None else "",
+                        "from_provider": from_provider,
+                        "to_provider": to_provider,
+                        "attempt_count": 0,
+                        "succeeded": False,
+                        "skipped": True,
+                        "trigger_detail": compact_text(preflight_error, max_chars=240),
+                    },
+                )
+                continue
             if safe_revision:
                 self.git.hard_reset(context.paths.repo_dir, safe_revision)
             self._append_runtime_ui_event(

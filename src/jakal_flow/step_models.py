@@ -46,6 +46,8 @@ _UI_PATH_PREFIXES = (
 _UI_SUFFIXES = (".css", ".scss", ".sass", ".less", ".jsx", ".tsx", ".html")
 _PROVIDER_STATUSES_CACHE_TTL_SECONDS = 10.0
 _provider_statuses_cache_no_fetch: tuple[float, dict[str, dict[str, Any]]] | None = None
+_PROVIDER_SNAPSHOT_CACHE_TTL_SECONDS = 10.0
+_provider_snapshot_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _COMMAND_AVAILABLE_CACHE_TTL_SECONDS = 10.0
 _command_available_cache: dict[str, tuple[float, bool]] = {}
 _gemini_settings_cache: dict[str, tuple[float, bool]] = {}
@@ -223,6 +225,7 @@ def provider_execution_preflight_error(
     codex_path: str = "",
     repo_dir: Path | None = None,
     provider_api_key_env: str = "",
+    model: str = "",
 ) -> str:
     normalized_provider = normalize_step_model_provider(provider)
     if normalized_provider == "openai":
@@ -233,15 +236,67 @@ def provider_execution_preflight_error(
         quota_available, quota_reason = _openai_quota_status(snapshot)
         if quota_available is False:
             return quota_reason or "Codex CLI is authenticated but no OpenAI quota is currently available."
-        return ""
+        return provider_model_preflight_error(
+            normalized_provider,
+            model,
+            codex_path=resolved_codex_path,
+        )
     if normalized_provider != "gemini":
-        return ""
+        return provider_model_preflight_error(
+            normalized_provider,
+            model,
+            codex_path=str(codex_path or default_codex_path(normalized_provider)).strip() or default_codex_path(normalized_provider),
+        )
     resolved_codex_path = str(codex_path or default_codex_path("gemini")).strip() or default_codex_path("gemini")
     if not _command_available(resolved_codex_path):
         return f"Gemini CLI is not installed or not reachable: {resolved_codex_path}"
     if _gemini_runtime_auth_configured(repo_dir=repo_dir, provider_api_key_env=provider_api_key_env):
-        return ""
+        return provider_model_preflight_error(
+            normalized_provider,
+            model,
+            codex_path=resolved_codex_path,
+        )
     return _gemini_auth_error_message()
+
+
+def provider_model_preflight_error(
+    provider: str,
+    model: str,
+    *,
+    codex_path: str = "",
+    fetch_snapshot: Callable[[str], Any] | None = None,
+) -> str:
+    normalized_provider = normalize_step_model_provider(provider)
+    normalized_model = normalize_step_model(model)
+    if not normalized_provider or not normalized_model or normalized_model == "auto":
+        return ""
+    if normalized_provider in {"openrouter", "opencdk", "local_openai", "oss"}:
+        return ""
+
+    snapshot = _provider_snapshot_payload(
+        normalized_provider,
+        codex_path=codex_path,
+        fetch_snapshot=fetch_snapshot,
+    )
+    catalog = snapshot.get("model_catalog")
+    if not isinstance(catalog, list) or not catalog:
+        return ""
+
+    known_models = {
+        str(item.get("model", "")).strip().lower()
+        for item in catalog
+        if isinstance(item, dict)
+        and str(item.get("provider", "")).strip().lower() == normalized_provider
+        and str(item.get("model", "")).strip()
+    }
+    if not known_models:
+        return ""
+    if normalized_model in known_models:
+        return ""
+    return (
+        f"Model '{normalized_model}' is not available for provider '{normalized_provider}' on this machine. "
+        "Choose a configured model or leave the model on auto/default routing."
+    )
 
 
 def _openai_quota_status(snapshot: dict[str, Any]) -> tuple[bool | None, str]:
@@ -331,6 +386,29 @@ def _ui_provider_choice(runtime: RuntimeOptions) -> tuple[str, str]:
 def _routing_mode(runtime: RuntimeOptions) -> str:
     runtime_provider = normalize_step_model_provider(getattr(runtime, "model_provider", ""))
     return "ensemble" if runtime_provider == "ensemble" else "agents"
+
+
+def _first_usable_provider_choice(
+    provider_order: list[str],
+    *,
+    preferred_provider: str,
+    preferred_reason: str,
+) -> tuple[str, str]:
+    statuses = provider_statuses_payload()
+    preferred_status = statuses.get(preferred_provider, {})
+    if bool(preferred_status.get("usable")):
+        return preferred_provider, preferred_reason
+    for provider in provider_order:
+        status = statuses.get(provider, {})
+        if bool(status.get("usable")):
+            preferred_detail = str(preferred_status.get("reason", "")).strip()
+            if preferred_detail:
+                return provider, f"{preferred_reason} skipped because {preferred_detail}"
+            return provider, f"{preferred_reason} skipped because {preferred_provider} is not currently usable"
+    preferred_detail = str(preferred_status.get("reason", "")).strip()
+    if preferred_detail:
+        return preferred_provider, preferred_detail
+    return preferred_provider, f"{preferred_provider} is not currently usable"
 
 
 def _default_model_for_provider(provider: str, runtime: RuntimeOptions) -> str:
@@ -595,6 +673,31 @@ def _snapshot_to_dict(snapshot: Any) -> dict[str, Any]:
         "account": getattr(snapshot, "account", {}) or {},
         "error": str(getattr(snapshot, "error", "") or "").strip(),
     }
+
+
+def _provider_snapshot_payload(
+    provider: str,
+    *,
+    codex_path: str = "",
+    fetch_snapshot: Callable[[str], Any] | None = None,
+) -> dict[str, Any]:
+    normalized_provider = normalize_step_model_provider(provider)
+    if not normalized_provider:
+        return {}
+    resolved_path = str(codex_path or default_codex_path(normalized_provider)).strip() or default_codex_path(normalized_provider)
+    cache_key = f"{normalized_provider}|{resolved_path}"
+    now = time.monotonic()
+    if fetch_snapshot is None:
+        cached = _provider_snapshot_cache.get(cache_key)
+        if cached is not None:
+            checked_at, payload = cached
+            if (now - checked_at) <= _PROVIDER_SNAPSHOT_CACHE_TTL_SECONDS:
+                return deepcopy(payload)
+    fetch = fetch_snapshot or fetch_codex_backend_snapshot
+    payload = _snapshot_to_dict(fetch(resolved_path))
+    if fetch_snapshot is None:
+        _provider_snapshot_cache[cache_key] = (now, deepcopy(payload))
+    return payload
 
 
 def _command_available(command: str) -> bool:

@@ -73,6 +73,7 @@ class CodexRunner:
             codex_path=self.codex_path,
             repo_dir=context.paths.repo_dir,
             provider_api_key_env=str(getattr(context.runtime, "provider_api_key_env", "") or "").strip(),
+            model=str(getattr(context.runtime, "model", "") or getattr(context.runtime, "model_slug_input", "")).strip(),
         )
         if preflight_error:
             raise RuntimeError(preflight_error)
