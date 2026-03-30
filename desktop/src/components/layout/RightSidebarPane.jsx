@@ -1,7 +1,7 @@
 ﻿import { Suspense, lazy, memo, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { ChatMessageContent } from "../../chatMarkdown";
 import { useI18n } from "../../i18n";
-import { isActiveExecutionStatus, runtimeSummary, visibleExecutionJob } from "../../utils";
+import { resolveExecutionDisplayPlan, runtimeSummary } from "../../utils";
 
 function RailChatIcon() {
   return (
@@ -214,7 +214,10 @@ function rightSidebarPanePropsEqual(previousProps, nextProps) {
       return (
         previousProps.detail?.reports === nextProps.detail?.reports
         && previousProps.detail?.files === nextProps.detail?.files
+        && previousProps.detail?.plan === nextProps.detail?.plan
+        && previousProps.detail?.history?.ui_events === nextProps.detail?.history?.ui_events
         && previousProps.planDraft === nextProps.planDraft
+        && previousProps.activeJob === nextProps.activeJob
         && previousProps.selectedStepId === nextProps.selectedStepId
         && previousProps.busy === nextProps.busy
       );
@@ -222,9 +225,12 @@ function rightSidebarPanePropsEqual(previousProps, nextProps) {
       return (
         previousProps.detail?.project === nextProps.detail?.project
         && previousProps.detail?.runtime === nextProps.detail?.runtime
+        && previousProps.detail?.plan === nextProps.detail?.plan
+        && previousProps.detail?.history?.ui_events === nextProps.detail?.history?.ui_events
         && previousProps.detail?.reports?.closeout_report_text === nextProps.detail?.reports?.closeout_report_text
         && previousProps.detail?.checkpoints?.pending === nextProps.detail?.checkpoints?.pending
         && previousProps.planDraft === nextProps.planDraft
+        && previousProps.activeJob === nextProps.activeJob
         && previousProps.selectedStepId === nextProps.selectedStepId
       );
     default:
@@ -859,9 +865,10 @@ export const RightSidebarPane = memo(function RightSidebarPane({
 }) {
   const { language } = useI18n();
   const processOutput = detail?.subprocess_output || detail?.agent_output || detail?.process_log || "";
-  const executionJob = visibleExecutionJob(activeJob);
-  const liveRuntimeEditable = isActiveExecutionStatus(executionJob?.status) || isActiveExecutionStatus(detail?.project?.current_status);
-  const effectivePlan = liveRuntimeEditable && detail?.plan ? detail.plan : planDraft;
+  const effectivePlan = useMemo(
+    () => resolveExecutionDisplayPlan(detail, planDraft, activeJob),
+    [detail, planDraft, activeJob],
+  );
   const selectedStep = (effectivePlan?.steps || []).find((step) => step.step_id === selectedStepId) || null;
   const hasFiles = Boolean(
     detail?.files?.closeout_report_file
