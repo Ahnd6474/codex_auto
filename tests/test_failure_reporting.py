@@ -169,7 +169,7 @@ class FailureReportingTests(unittest.TestCase):
             logx_path = reporter.write_logx(max_artifacts=500)
             first_payload = json.loads(logx_path.read_text(encoding="utf-8"))
             first_entries = {
-                item["path"]: item for item in first_payload.get("entries", []) if isinstance(item, dict) and str(item.get("path"))
+                item["path"]: item for item in first_payload.get("entries", []) if isinstance(item, dict) and isinstance(item.get("path"), str)
             }
             self.assertIn(str(project.paths.pass_log_file), first_entries)
             self.assertIn(str(block_dir / "block-search-pass.stderr.log"), first_entries)
@@ -187,7 +187,7 @@ class FailureReportingTests(unittest.TestCase):
             logx_path = reporter.write_logx(max_artifacts=500)
             second_payload = json.loads(logx_path.read_text(encoding="utf-8"))
             second_entries = {
-                item["path"]: item for item in second_payload.get("entries", []) if isinstance(item, dict) and str(item.get("path"))
+                item["path"]: item for item in second_payload.get("entries", []) if isinstance(item, dict) and isinstance(item.get("path"), str)
             }
             second_pass_size = int(second_entries.get(str(project.paths.pass_log_file), {}).get("size_bytes", 0))
 

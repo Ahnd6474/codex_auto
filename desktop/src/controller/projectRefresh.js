@@ -20,9 +20,7 @@ const IMMEDIATE_PROJECT_STATUS_PREFIXES = [
   "awaiting_checkpoint_approval",
 ];
 const IMMEDIATE_UI_EVENT_TYPES = new Set([
-  "step-started",
   "step-finished",
-  "batch-started",
   "batch-finished",
   "closeout-started",
   "closeout-finished",

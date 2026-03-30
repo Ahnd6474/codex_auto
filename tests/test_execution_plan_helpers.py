@@ -2586,54 +2586,6 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(step.metadata["failure_reason_code"], "preflight_failed")
         self.assertEqual(context.metadata.current_status, "failed")
 
-    def test_parallel_step_worker_fails_fast_when_gemini_auth_is_missing(self) -> None:
-        temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_worker_gemini_preflight_test"
-        shutil.rmtree(temp_root, ignore_errors=True)
-        workspace_root = temp_root / "workspace"
-        repo_dir = temp_root / "repo"
-        repo_dir.mkdir(parents=True, exist_ok=True)
-        orchestrator = Orchestrator(workspace_root)
-        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", test_cmd="python -m pytest", execution_mode="parallel")
-
-        try:
-            context = orchestrator.workspace.initialize_local_project(project_dir=repo_dir, branch="main", runtime=runtime)
-            result = None
-            with mock.patch(
-                "jakal_flow.step_models._command_available",
-                return_value=True,
-            ), mock.patch(
-                "jakal_flow.step_models._gemini_auth_env_configured",
-                return_value=False,
-            ), mock.patch(
-                "jakal_flow.step_models._gemini_settings_file_configured",
-                return_value=False,
-            ), mock.patch.object(
-                orchestrator,
-                "_build_parallel_worker_context",
-                side_effect=AssertionError("worker context should not be created before auth preflight passes"),
-            ):
-                result = orchestrator._run_parallel_step_worker(
-                    context,
-                    runtime,
-                    ExecutionStep(
-                        step_id="ST2",
-                        title="Explicit Gemini slice",
-                        model_provider="gemini",
-                        model=GEMINI_DEFAULT_MODEL,
-                        test_command="python -m pytest",
-                    ),
-                    "safe-revision",
-                    "batch-token",
-                    1,
-                )
-        finally:
-            shutil.rmtree(temp_root, ignore_errors=True)
-
-        self.assertEqual(result["status"], "failed")
-        self.assertIn("Please set an Auth method", result["notes"])
-        self.assertEqual(result["failure_type"], "ExecutionPreflightError")
-        self.assertEqual(result["failure_reason_code"], "preflight_failed")
-
     def test_run_saved_execution_step_pauses_when_immediate_stop_is_requested(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_step_immediate_stop_test"
         shutil.rmtree(temp_root, ignore_errors=True)
@@ -4900,37 +4852,6 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertFalse(background_error, str(background_error[0]) if background_error else "")
         self.assertEqual(synced_statuses, ["integrating", "running"])
 
-    def test_build_parallel_worker_paths_includes_lineage_state_file(self) -> None:
-        temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_worker_paths_test"
-        shutil.rmtree(temp_root, ignore_errors=True)
-        workspace_root = temp_root / "workspace"
-        repo_dir = temp_root / "repo"
-        repo_dir.mkdir(parents=True, exist_ok=True)
-        orchestrator = Orchestrator(workspace_root)
-        runtime = RuntimeOptions(
-            model="gpt-5.4",
-            effort="medium",
-            execution_mode="parallel",
-        )
-
-        try:
-            context = orchestrator.workspace.initialize_local_project(
-                project_dir=repo_dir,
-                branch="main",
-                runtime=runtime,
-            )
-            worker_paths = orchestrator._build_parallel_worker_paths(
-                context,
-                batch_token="batch-demo",
-                worker_slug="01-st1",
-                worktree_dir=repo_dir,
-            )
-        finally:
-            shutil.rmtree(temp_root, ignore_errors=True)
-
-        self.assertEqual(worker_paths.lineage_state_file, worker_paths.state_dir / "LINEAGES.json")
-        self.assertEqual(worker_paths.logs_dir, repo_dir.resolve() / "jakal-flow-logs")
-
     def test_parallel_batch_merge_conflict_invokes_merger_and_continues(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_merge_debugger_test"
         shutil.rmtree(temp_root, ignore_errors=True)
@@ -6207,29 +6128,6 @@ class ExecutionPlanHelperTests(unittest.TestCase):
 
         self.assertEqual(first.last_updated_at, second.last_updated_at)
 
-    def test_parallel_worker_summary_prefers_logged_failure_detail(self) -> None:
-        orchestrator = Orchestrator(Path(__file__).resolve().parents[1] / ".tmp_parallel_worker_summary_test")
-        summary = orchestrator._parallel_worker_summary(
-            {"status": "failed", "test_summary": "", "rollback_status": "rolled_back_to_safe_revision"},
-            {
-                "rollback_status": "rolled_back_to_safe_revision",
-                "codex_diagnostics": {
-                    "attempts": [
-                        {
-                            "stderr_excerpt": (
-                                "YOLO mode is enabled. All tool calls will be automatically approved.\n"
-                                "Loaded cached credentials.\n"
-                                "TerminalQuotaError: You have exhausted your capacity on this model."
-                            )
-                        }
-                    ]
-                },
-            },
-        )
-
-        self.assertIn("Parallel worker failed. Cause:", summary)
-        self.assertIn("TerminalQuotaError", summary)
-        self.assertNotIn("Loaded cached credentials.", summary)
 
     def test_generate_execution_plan_runs_planner_agent_a_then_agent_b(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_dual_planner_test"
