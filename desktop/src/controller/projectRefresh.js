@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 const DEFAULT_IDLE_DEBOUNCE_MS = 120;
 const DEFAULT_RUNNING_DEBOUNCE_MS = 250;
 const IMMEDIATE_REFRESH_DEBOUNCE_MS = 0;
@@ -30,6 +31,10 @@ const IMMEDIATE_UI_EVENT_TYPES = new Set([
   "checkpoint-approved",
   "project-state-synced",
 ]);
+=======
+const DEFAULT_IDLE_DEBOUNCE_MS = 400;
+const DEFAULT_RUNNING_DEBOUNCE_MS = 1600;
+>>>>>>> Stashed changes
 
 function normalizedRepoId(repoId) {
   return String(repoId || "").trim();

@@ -195,6 +195,7 @@ export const PROGRAM_RUNTIME_KEYS = [
   "ensemble_claude_model",
   "model",
   "chat_model",
+  "chat_effort",
   "planning_effort",
   "model_preset",
   "model_selection_mode",
@@ -257,6 +258,7 @@ const DEFAULT_PROGRAM_RUNTIME = {
   ensemble_claude_model: CLAUDE_DEFAULT_MODEL,
   model: "gpt-5.4",
   chat_model: "",
+  chat_effort: "",
   planning_effort: "medium",
   model_preset: "",
   model_selection_mode: "slug",
@@ -283,20 +285,22 @@ const DEFAULT_PROGRAM_UI = {
 };
 
 function normalizeProgramSettingsProviderSelection(settings = {}) {
-  const normalized = applyProviderDefaults(settings, "openai");
+  const provider = normalizedModelProvider(settings);
+  const localProvider = normalizedLocalModelProvider(settings);
+  const normalized = applyProviderDefaults(settings, provider, localProvider);
   return {
     ...normalized,
-    model_provider: "openai",
-    local_model_provider: "ollama",
-    provider_base_url: defaultProviderBaseUrl("openai"),
-    provider_api_key_env: defaultProviderApiKeyEnv("openai"),
-    ensemble_openai_model: "gpt-5.4",
-    ensemble_gemini_model: GEMINI_DEFAULT_MODEL,
-    ensemble_claude_model: CLAUDE_DEFAULT_MODEL,
-    model: "gpt-5.4",
-    model_preset: "",
-    model_selection_mode: "slug",
-    model_slug_input: "gpt-5.4",
+    model_provider: provider,
+    local_model_provider: localProvider,
+    provider_base_url: String(normalized?.provider_base_url || defaultProviderBaseUrl(provider)).trim(),
+    provider_api_key_env: String(normalized?.provider_api_key_env || defaultProviderApiKeyEnv(provider)).trim(),
+    ensemble_openai_model: String(normalized?.ensemble_openai_model || "gpt-5.4").trim().toLowerCase() || "gpt-5.4",
+    ensemble_gemini_model: String(normalized?.ensemble_gemini_model || GEMINI_DEFAULT_MODEL).trim().toLowerCase() || GEMINI_DEFAULT_MODEL,
+    ensemble_claude_model: String(normalized?.ensemble_claude_model || CLAUDE_DEFAULT_MODEL).trim().toLowerCase() || CLAUDE_DEFAULT_MODEL,
+    model: String(normalized?.model || defaultModelForProvider(provider, normalized)).trim().toLowerCase(),
+    model_preset: String(normalized?.model_preset || "").trim().toLowerCase(),
+    model_selection_mode: String(normalized?.model_selection_mode || "slug").trim().toLowerCase() || "slug",
+    model_slug_input: String(normalized?.model_slug_input || normalized?.model || defaultModelForProvider(provider, normalized)).trim(),
   };
 }
 

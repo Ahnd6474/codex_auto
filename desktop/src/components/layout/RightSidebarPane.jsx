@@ -1,7 +1,20 @@
 ﻿import { Suspense, lazy, memo, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { ChatMessageContent } from "../../chatMarkdown";
 import { useI18n } from "../../i18n";
+<<<<<<< Updated upstream
 import { isActiveExecutionStatus, runtimeSummary, visibleExecutionJob } from "../../utils";
+=======
+import {
+  defaultModelForRuntime,
+  filterModelCatalogByProvider,
+  normalizedLocalModelProvider,
+  normalizedModelProvider,
+  reasoningEffortLabel,
+  runtimeSummary,
+  supportedReasoningOptions,
+  visibleExecutionJob,
+} from "../../utils";
+>>>>>>> Stashed changes
 
 function RailChatIcon() {
   return (
@@ -138,14 +151,28 @@ function sameArtifactFiles(previousFiles = [], nextFiles = []) {
   return previousFiles.every((value, index) => value === nextFiles[index]);
 }
 
+function rightRailTabIds(includeChatTab = true) {
+  return includeChatTab
+    ? ["chat", "output", "files", "contracts", "inspector"]
+    : ["output", "files", "contracts", "inspector"];
+}
+
+function effectiveRightSidebarTab(activeTab = "chat", includeChatTab = true) {
+  const requestedTab = String(activeTab || "").trim();
+  const availableTabs = rightRailTabIds(includeChatTab);
+  return availableTabs.includes(requestedTab) ? requestedTab : (availableTabs[0] || "");
+}
+
 function rightSidebarPanePropsEqual(previousProps, nextProps) {
-  if (previousProps.activeTab !== nextProps.activeTab || previousProps.collapsed !== nextProps.collapsed) {
+  const previousActiveTab = effectiveRightSidebarTab(previousProps.activeTab, previousProps.includeChatTab);
+  const nextActiveTab = effectiveRightSidebarTab(nextProps.activeTab, nextProps.includeChatTab);
+  if (previousActiveTab !== nextActiveTab || previousProps.collapsed !== nextProps.collapsed) {
     return false;
   }
   if (previousProps.chatCenterMode !== nextProps.chatCenterMode) {
     return false;
   }
-  if (previousProps.promptValue !== nextProps.promptValue) {
+  if (previousProps.includeChatTab !== nextProps.includeChatTab) {
     return false;
   }
 
@@ -184,7 +211,7 @@ function rightSidebarPanePropsEqual(previousProps, nextProps) {
     return false;
   }
 
-  switch (nextProps.activeTab) {
+  switch (nextActiveTab) {
     case "chat":
       return (
         previousProps.chat === nextProps.chat
@@ -322,10 +349,14 @@ const ProjectChatPane = memo(function ProjectChatPane({
   onStartNewChatSession,
   onSendChatMessage,
   onChangeChatModelSelection,
+  onChangeChatReasoningEffort,
   busy,
   language,
   centerMode = false,
+<<<<<<< Updated upstream
   promptValue = "",
+=======
+>>>>>>> Stashed changes
   onGeneratePlan,
 }) {
   const sessions = Array.isArray(chat?.sessions) ? chat.sessions : [];
@@ -334,9 +365,12 @@ const ProjectChatPane = memo(function ProjectChatPane({
   const deferredRemoteMessages = useDeferredValue(remoteMessages);
   const activeSessionId = String(selectedChatSessionId || chat?.active_session_id || "").trim();
   const summaryFile = String(chat?.summary_file || "").trim();
+  const currentProvider = normalizedModelProvider(chatSettings);
+  const currentLocalProvider = normalizedLocalModelProvider(chatSettings);
   const selectedChatProvider = String(chatSettings?.chat_model_provider || "").trim().toLowerCase();
   const selectedChatLocalProvider = String(chatSettings?.chat_local_model_provider || "").trim().toLowerCase();
   const selectedChatModel = String(chatSettings?.chat_model || "").trim().toLowerCase();
+  const selectedChatEffort = String(chatSettings?.chat_effort || "").trim().toLowerCase();
   const projectRuntime = detail?.runtime || {};
   const [input, setInput] = useState("");
   const [pendingMode, setPendingMode] = useState("conversation");
@@ -350,34 +384,74 @@ const ProjectChatPane = memo(function ProjectChatPane({
   const shouldStickToBottomRef = useRef(true);
   const [messageScrollTop, setMessageScrollTop] = useState(0);
   const [messageViewportHeight, setMessageViewportHeight] = useState(CHAT_DEFAULT_VIEWPORT_HEIGHT);
+  const providerScopedRuntime = useMemo(
+    () => ({
+      ...projectRuntime,
+      model_provider: currentProvider,
+      local_model_provider: currentLocalProvider,
+      model: String(chatSettings?.model || projectRuntime?.model || "").trim().toLowerCase(),
+      model_slug_input: String(chatSettings?.model_slug_input || chatSettings?.model || projectRuntime?.model_slug_input || projectRuntime?.model || "").trim(),
+    }),
+    [chatSettings?.model, chatSettings?.model_slug_input, currentLocalProvider, currentProvider, projectRuntime],
+  );
   const availableChatModels = useMemo(
-    () => (Array.isArray(modelCatalog) ? modelCatalog : []).filter((item) => {
+    () => filterModelCatalogByProvider(modelCatalog, providerScopedRuntime).filter((item) => {
       const model = String(item?.model || "").trim();
       return Boolean(model) && !item?.hidden;
     }),
-    [modelCatalog],
+    [modelCatalog, providerScopedRuntime],
+  );
+  const selectedChatKey = useMemo(
+    () => (selectedChatModel ? [selectedChatProvider, selectedChatLocalProvider, selectedChatModel].join("::") : ""),
+    [selectedChatLocalProvider, selectedChatModel, selectedChatProvider],
+  );
+  const selectedChatIsAllowed = useMemo(
+    () => Boolean(selectedChatKey) && availableChatModels.some((item) => chatModelOptionValue(item) === selectedChatKey),
+    [availableChatModels, selectedChatKey],
   );
   const selectedChatValue = useMemo(
-    () => (selectedChatModel ? [selectedChatProvider || "openai", selectedChatLocalProvider, selectedChatModel].join("::") : ""),
-    [selectedChatLocalProvider, selectedChatModel, selectedChatProvider],
+    () => (selectedChatIsAllowed ? selectedChatKey : ""),
+    [selectedChatIsAllowed, selectedChatKey],
+  );
+  const effectiveDefaultChatModel = useMemo(
+    () => defaultModelForRuntime(modelCatalog, providerScopedRuntime),
+    [modelCatalog, providerScopedRuntime],
   );
   const selectedChatEntry = useMemo(
     () => (
       availableChatModels.find((item) => chatModelOptionValue(item) === selectedChatValue)
-      || (selectedChatModel
-        ? {
-            model: selectedChatModel,
-            display_name: selectedChatModel,
-            provider: selectedChatProvider || "openai",
-            local_provider: selectedChatLocalProvider,
-          }
-        : null)
+      || null
     ),
-    [availableChatModels, selectedChatLocalProvider, selectedChatModel, selectedChatProvider, selectedChatValue],
+    [availableChatModels, selectedChatValue],
+  );
+  const effectiveChatModel = useMemo(
+    () => selectedChatEntry?.model || effectiveDefaultChatModel || "",
+    [effectiveDefaultChatModel, selectedChatEntry?.model],
+  );
+  const availableChatEfforts = useMemo(
+    () => supportedReasoningOptions(
+      availableChatModels,
+      effectiveChatModel,
+      String(projectRuntime?.effort || "medium").trim().toLowerCase() || "medium",
+    ),
+    [availableChatModels, effectiveChatModel, projectRuntime?.effort],
+  );
+  const effectiveChatEffort = useMemo(
+    () => (availableChatEfforts.includes(selectedChatEffort) ? selectedChatEffort : ""),
+    [availableChatEfforts, selectedChatEffort],
   );
   const projectDefaultSummary = useMemo(
-    () => runtimeSummary(projectRuntime, modelPresets, language, modelCatalog),
-    [language, modelCatalog, modelPresets, projectRuntime],
+    () => runtimeSummary(
+      {
+        ...providerScopedRuntime,
+        model: effectiveDefaultChatModel || providerScopedRuntime.model,
+        model_slug_input: providerScopedRuntime.model_slug_input || effectiveDefaultChatModel || providerScopedRuntime.model,
+      },
+      modelPresets,
+      language,
+      modelCatalog,
+    ),
+    [effectiveDefaultChatModel, language, modelCatalog, modelPresets, providerScopedRuntime],
   );
   const chatTargetSummary = useMemo(
     () => (
@@ -527,10 +601,17 @@ const ProjectChatPane = memo(function ProjectChatPane({
       return;
     }
     const mode = pendingMode;
+<<<<<<< Updated upstream
     setInput("");
     setPendingMode("conversation");
     setMenuOpen(false);
     if (mode === "plan") {
+=======
+    if (mode === "plan") {
+      setInput("");
+      setPendingMode("conversation");
+      setMenuOpen(false);
+>>>>>>> Stashed changes
       void Promise.resolve(onGeneratePlan?.(text)).catch(() => {});
       return;
     }
@@ -570,6 +651,10 @@ const ProjectChatPane = memo(function ProjectChatPane({
       return;
     }
     onChangeChatModelSelection?.(parseChatModelOptionValue(nextValue));
+  }
+
+  function handleChatEffortChange(event) {
+    onChangeChatReasoningEffort?.(event.target.value);
   }
 
   const selectedSessionValue = chatDraftSession ? "" : activeSessionId;
@@ -646,33 +731,58 @@ const ProjectChatPane = memo(function ProjectChatPane({
         </select>
       </div>
 
-      <div className="sidebar-chat-toolbar" style={{ padding: "0 10px" }}>
+      <div className="sidebar-chat-config" style={{ margin: "8px 10px 0" }}>
+        <div className="sidebar-chat-config__header">
+          <strong>{language === "ko" ? "Chat reasoning" : "Chat reasoning"}</strong>
+          <span>
+            {effectiveChatEffort
+              ? reasoningEffortLabel(effectiveChatEffort, language)
+              : (language === "ko" ? "Project default" : "Project default")}
+          </span>
+        </div>
         <select
-          className="sidebar-chat-session-select"
-          value={selectedSessionValue}
-          onChange={handleSessionChange}
-          disabled={busy}
+          className="sidebar-chat-config__select"
+          value={effectiveChatEffort}
+          onChange={handleChatEffortChange}
         >
-          <option value="">{language === "ko" ? "New conversation" : "New conversation"}</option>
-          {deferredSessions.map((session) => (
-            <option key={session.session_id} value={session.session_id}>
-              {sessionLabel(session)}
+          <option value="">{language === "ko" ? "Project default" : "Project default"}</option>
+          {availableChatEfforts.map((effort) => (
+            <option key={effort} value={effort}>
+              {reasoningEffortLabel(effort, language)}
             </option>
           ))}
         </select>
-        <button
-          className="sidebar-chat-new"
-          onClick={() => {
-            setPendingMode("conversation");
-            setMenuOpen(false);
-            onStartNewChatSession?.();
-          }}
-          type="button"
-          disabled={busy}
-        >
-          {language === "ko" ? "New" : "New"}
-        </button>
       </div>
+
+      {!centerMode ? (
+        <div className="sidebar-chat-toolbar" style={{ padding: "0 10px" }}>
+          <select
+            className="sidebar-chat-session-select"
+            value={selectedSessionValue}
+            onChange={handleSessionChange}
+            disabled={busy}
+          >
+            <option value="">{language === "ko" ? "New conversation" : "New conversation"}</option>
+            {deferredSessions.map((session) => (
+              <option key={session.session_id} value={session.session_id}>
+                {sessionLabel(session)}
+              </option>
+            ))}
+          </select>
+          <button
+            className="sidebar-chat-new"
+            onClick={() => {
+              setPendingMode("conversation");
+              setMenuOpen(false);
+              onStartNewChatSession?.();
+            }}
+            type="button"
+            disabled={busy}
+          >
+            {language === "ko" ? "New" : "New"}
+          </button>
+        </div>
+      ) : null}
 
       <div className="sidebar-chat-summary-path" style={{ margin: "0 10px" }}>
         <strong>{language === "ko" ? "Summary txt" : "Summary txt"}</strong>
@@ -726,7 +836,11 @@ const ProjectChatPane = memo(function ProjectChatPane({
               onClick={() => setMenuOpen((current) => !current)}
               type="button"
               disabled={busy}
+<<<<<<< Updated upstream
               title={language === "ko" ? "계획, 디버거, 머저 모드 선택" : "Choose plan, debugger, or merger"}
+=======
+              title={language === "ko" ? "Choose plan, debugger or merger" : "Choose plan, debugger or merger"}
+>>>>>>> Stashed changes
             >
               <PlusIcon />
             </button>
@@ -736,7 +850,10 @@ const ProjectChatPane = memo(function ProjectChatPane({
                   type="button"
                   onClick={() => {
                     setPendingMode("plan");
+<<<<<<< Updated upstream
                     setInput((current) => current.trim() ? current : String(promptValue || ""));
+=======
+>>>>>>> Stashed changes
                     setMenuOpen(false);
                   }}
                 >
@@ -800,6 +917,10 @@ const ProjectChatPane = memo(function ProjectChatPane({
           </button>
         </div>
       </div>
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
     </div>
   );
 }, (previousProps, nextProps) => (
@@ -809,9 +930,13 @@ const ProjectChatPane = memo(function ProjectChatPane({
     && previousProps.chatDraftSession === nextProps.chatDraftSession
     && previousProps.busy === nextProps.busy
     && previousProps.detail?.runtime === nextProps.detail?.runtime
+    && previousProps.chatSettings?.model_provider === nextProps.chatSettings?.model_provider
+    && previousProps.chatSettings?.local_model_provider === nextProps.chatSettings?.local_model_provider
+    && previousProps.chatSettings?.model === nextProps.chatSettings?.model
     && previousProps.chatSettings?.chat_model_provider === nextProps.chatSettings?.chat_model_provider
     && previousProps.chatSettings?.chat_local_model_provider === nextProps.chatSettings?.chat_local_model_provider
     && previousProps.chatSettings?.chat_model === nextProps.chatSettings?.chat_model
+    && previousProps.chatSettings?.chat_effort === nextProps.chatSettings?.chat_effort
     && previousProps.modelCatalog === nextProps.modelCatalog
     && previousProps.modelPresets === nextProps.modelPresets
     && previousProps.chat?.active_session_id === nextProps.chat?.active_session_id
@@ -827,6 +952,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
   activeTab = "chat",
   collapsed = false,
   chatCenterMode = false,
+  includeChatTab = true,
   onChangeTab,
   detail,
   planDraft,
@@ -845,6 +971,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
   onStartNewChatSession,
   onSendChatMessage,
   onChangeChatModelSelection,
+  onChangeChatReasoningEffort,
   onResolveCommonRequirement,
   onReopenCommonRequirement,
   onRecordSpineCheckpoint,
@@ -852,10 +979,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
   onDeleteCommonRequirement,
   onUpdateSpineCheckpoint,
   onDeleteSpineCheckpoint,
-  promptValue = "",
-  onPromptChange,
   onGeneratePlan,
-  onRunPlan,
 }) {
   const { language } = useI18n();
   const processOutput = detail?.subprocess_output || detail?.agent_output || detail?.process_log || "";
@@ -912,7 +1036,8 @@ export const RightSidebarPane = memo(function RightSidebarPane({
       title: "Inspector",
       dot: false,
     },
-  ];
+  ].filter((item) => includeChatTab || item.id !== "chat");
+  const effectiveActiveTab = effectiveRightSidebarTab(activeTab, includeChatTab);
 
   if (chatCenterMode) {
     return (
@@ -929,10 +1054,14 @@ export const RightSidebarPane = memo(function RightSidebarPane({
           onStartNewChatSession={onStartNewChatSession}
           onSendChatMessage={onSendChatMessage}
           onChangeChatModelSelection={onChangeChatModelSelection}
+          onChangeChatReasoningEffort={onChangeChatReasoningEffort}
           busy={busy}
           language={language}
           centerMode
+<<<<<<< Updated upstream
           promptValue={promptValue}
+=======
+>>>>>>> Stashed changes
           onGeneratePlan={onGeneratePlan}
         />
       </div>
@@ -943,7 +1072,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
     <aside className={`details-pane rsb ${collapsed ? "rsb--collapsed" : ""}`.trim()}>
       {collapsed ? null : (
         <div className="rsb-panel">
-        {activeTab === "chat" ? (
+        {effectiveActiveTab === "chat" ? (
           <ProjectChatPane
             chat={chat}
             detail={detail}
@@ -956,6 +1085,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
             onStartNewChatSession={onStartNewChatSession}
             onSendChatMessage={onSendChatMessage}
             onChangeChatModelSelection={onChangeChatModelSelection}
+            onChangeChatReasoningEffort={onChangeChatReasoningEffort}
             busy={busy}
             language={language}
             promptValue={promptValue}
@@ -963,13 +1093,13 @@ export const RightSidebarPane = memo(function RightSidebarPane({
           />
         ) : null}
 
-        {activeTab === "output" ? (
+        {effectiveActiveTab === "output" ? (
           <Suspense fallback={<div className="rsb-panel__loading" aria-hidden="true" />}>
             <LazyOutputPanel processOutput={processOutput} language={language} />
           </Suspense>
         ) : null}
 
-        {activeTab === "files" ? (
+        {effectiveActiveTab === "files" ? (
           <Suspense fallback={<div className="rsb-panel__loading" aria-hidden="true" />}>
             <LazyFilesPanel
               detail={detail}
@@ -982,7 +1112,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
           </Suspense>
         ) : null}
 
-        {activeTab === "contracts" ? (
+        {effectiveActiveTab === "contracts" ? (
           <Suspense fallback={<div className="rsb-panel__loading" aria-hidden="true" />}>
             <LazyContractsPanel
               detail={detail}
@@ -1000,7 +1130,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
           </Suspense>
         ) : null}
 
-        {activeTab === "inspector" ? (
+        {effectiveActiveTab === "inspector" ? (
           <Suspense fallback={<div className="rsb-panel__loading" aria-hidden="true" />}>
             <LazyInspectorPanel
               detail={detail}
@@ -1017,11 +1147,11 @@ export const RightSidebarPane = memo(function RightSidebarPane({
         {railTabs.map(({ id, icon, title, dot }) => (
           <button
             key={id}
-            className={`sidebar-icon${!collapsed && activeTab === id ? " active" : ""}`}
+            className={`sidebar-icon${!collapsed && effectiveActiveTab === id ? " active" : ""}`}
             onClick={() => onChangeTab?.(id)}
             title={title}
             type="button"
-            aria-pressed={!collapsed && activeTab === id}
+            aria-pressed={!collapsed && effectiveActiveTab === id}
           >
             {icon}
             {dot ? <span className="rsb-rail__dot" /> : null}

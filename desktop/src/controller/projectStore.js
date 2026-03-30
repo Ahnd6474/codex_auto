@@ -67,6 +67,68 @@ function resolveWorkspaceTree(nextWorkspaceTree, previousWorkspaceTree = []) {
   return cloneValue(incomingTree);
 }
 
+function projectListingKey(project = {}) {
+  return String(project?.repo_id || project?.archive_id || project?.repo_path || "").trim();
+}
+
+function sameProjectStats(leftStats = {}, rightStats = {}) {
+  const left = leftStats && typeof leftStats === "object" ? leftStats : {};
+  const right = rightStats && typeof rightStats === "object" ? rightStats : {};
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  for (const key of keys) {
+    if (left[key] !== right[key]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function sameProjectListItem(left, right) {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  return (
+    left.repo_id === right.repo_id
+    && left.archive_id === right.archive_id
+    && left.slug === right.slug
+    && left.display_name === right.display_name
+    && left.repo_path === right.repo_path
+    && left.origin_url === right.origin_url
+    && left.branch === right.branch
+    && left.status === right.status
+    && left.detail === right.detail
+    && left.created_at === right.created_at
+    && left.last_run_at === right.last_run_at
+    && left.summary === right.summary
+    && left.progress === right.progress
+    && left.closeout_status === right.closeout_status
+    && sameProjectStats(left.stats, right.stats)
+  );
+}
+
+function reuseProjectListingItems(previousProjects = [], nextProjects = []) {
+  const previousByKey = new Map(
+    (Array.isArray(previousProjects) ? previousProjects : [])
+      .map((project) => [projectListingKey(project), project])
+      .filter(([key]) => Boolean(key)),
+  );
+  const reusedProjects = (Array.isArray(nextProjects) ? nextProjects : []).map((project) => {
+    const key = projectListingKey(project);
+    const previousProject = key ? previousByKey.get(key) : null;
+    return previousProject && sameProjectListItem(previousProject, project) ? previousProject : project;
+  });
+  if (
+    reusedProjects.length === (Array.isArray(previousProjects) ? previousProjects.length : 0)
+    && reusedProjects.every((project, index) => project === previousProjects[index])
+  ) {
+    return previousProjects;
+  }
+  return reusedProjects;
+}
+
 function mergeLoadedSections(currentSections = null, fallbackSections = null, detailLevel = "") {
   const nextSections = {
     ...(fallbackSections && typeof fallbackSections === "object" ? fallbackSections : {}),
@@ -338,7 +400,10 @@ export function mergeProjectDetailSupplement(detail, supplement = {}) {
 }
 
 export function applyListingState({ listing, runningJob = null, setProjects, setWorkspaceStats }) {
-  const nextProjects = sanitizeProjectListForJobState(listing?.projects || [], runningJob);
+  const nextProjects = sanitizeProjectListForJobState(
+    reuseProjectListingItems([], listing?.projects || []),
+    runningJob,
+  );
   setProjects(nextProjects);
   setWorkspaceStats(workspaceStatsFromProjects(nextProjects));
   return nextProjects;
@@ -386,7 +451,10 @@ export function applyProjectDetailListingState({
     return projectListItemFromDetail(detail, project);
   });
   const mergedProjects = matched ? nextProjects : [projectListItemFromDetail(detail), ...(projects || [])];
-  const sanitizedProjects = sanitizeProjectListForJobState(mergedProjects, runningJob);
+  const sanitizedProjects = sanitizeProjectListForJobState(
+    reuseProjectListingItems(projects || [], mergedProjects),
+    runningJob,
+  );
   setProjects(sanitizedProjects);
   setWorkspaceStats(workspaceStatsFromProjects(sanitizedProjects));
   return sanitizedProjects;
@@ -427,7 +495,10 @@ export function applyProjectEventListingState({
     return null;
   }
 
-  const sanitizedProjects = sanitizeProjectListForJobState(nextProjects, runningJob);
+  const sanitizedProjects = sanitizeProjectListForJobState(
+    reuseProjectListingItems(projects || [], nextProjects),
+    runningJob,
+  );
   setProjects(sanitizedProjects);
   setWorkspaceStats(workspaceStatsFromProjects(sanitizedProjects));
   return sanitizedProjects;

@@ -1,27 +1,14 @@
 import { memo, useMemo } from "react";
 import { useI18n } from "../../i18n";
 import {
-  AUTO_REASONING_OPTION,
-  applyProviderDefaults,
-  applyConfigRuntimeModelSelection,
-  autoRoutingPresetLabel,
   clampReasoningEffort,
-  configReasoningOptions,
   defaultModelForRuntime,
   filterModelCatalogByProvider,
   findModelCatalogEntry,
   normalizeMemoryBudgetGiB,
   normalizedModelProvider,
-  providerAvailable,
-  providerUsable,
-  providerStatusReason,
-  providerSupportsAutoModel,
-  providerSupportsCatalog,
   REASONING_OPTIONS,
   reasoningEffortLabel,
-  runtimeSummary,
-  selectedConfigReasoning,
-  syncProgramSettingsModel,
 } from "../../utils";
 
 /* ── View header icon ── */
@@ -60,15 +47,6 @@ function ProjectIcon() {
     <svg viewBox="0 0 24 24" fill="none">
       <path d="M4.75 7.25A2.5 2.5 0 0 1 7.25 4.75h5.1c.66 0 1.3.26 1.77.73l5.15 5.15c.47.47.73 1.1.73 1.77v4.35a2.5 2.5 0 0 1-2.5 2.5h-10a2.5 2.5 0 0 1-2.5-2.5v-9.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
       <path d="M13 4.9v5.35a1 1 0 0 0 1 1h5.1" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function ModelIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none">
-      <path d="M12 2a5 5 0 1 0 0 10A5 5 0 0 0 12 2z" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M12 12v10M8 16l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -121,76 +99,6 @@ function SectionHeader({ icon, title, description, trailing }) {
   );
 }
 
-/* ── Effort button ── */
-function EffortButton({ effort, selected, onSelect, disabled, label, description }) {
-  return (
-    <button
-      className={`choice-card ${selected ? "selected" : ""}`}
-      onClick={() => onSelect(effort)}
-      type="button"
-      disabled={disabled}
-    >
-      <div className="choice-card__title">
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <strong style={{ fontSize: "13px" }}>{label}</strong>
-          <span className="effort-badge">{effort}</span>
-        </div>
-        {selected ? (
-          <svg viewBox="0 0 16 16" fill="none" style={{ width: "14px", height: "14px", color: "var(--info)", flexShrink: 0 }}>
-            <circle cx="8" cy="8" r="7" fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="1.4" />
-            <path d="M5 8l2 2 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        ) : null}
-      </div>
-      <p style={{ fontSize: "11.5px", marginTop: "4px", lineHeight: "1.5" }}>{description}</p>
-    </button>
-  );
-}
-
-function effortDescription(modelLabel, effort, language) {
-  if (String(modelLabel || "").trim().toLowerCase() === "auto") {
-    if (language === "ko") {
-      if (effort === AUTO_REASONING_OPTION) return "Codex 자동 라우팅의 기본 추론 설정을 사용합니다.";
-      return `Codex 자동 라우팅을 유지하면서 추론은 ${autoRoutingPresetLabel(effort, language)}으로 고정합니다.`;
-    }
-    if (effort === AUTO_REASONING_OPTION) return "Use Codex automatic routing with its default reasoning setting.";
-    return `Keep Codex automatic routing enabled and lock reasoning to ${autoRoutingPresetLabel(effort, language)}.`;
-  }
-  const reasoningLabel = reasoningEffortLabel(effort, language);
-  if (language === "ko") {
-    if (effort === AUTO_REASONING_OPTION) return `${modelLabel}의 기본 추론 수준을 사용합니다.`;
-    return `${modelLabel}에 ${reasoningLabel} 추론 수준을 적용합니다.`;
-  }
-  if (effort === AUTO_REASONING_OPTION) return `Use ${modelLabel}'s default reasoning level.`;
-  return `Use ${reasoningLabel} reasoning with ${modelLabel}.`;
-}
-
-function modelReasoningSummary(entry, language) {
-  const supported = Array.isArray(entry?.supported_reasoning_efforts) ? entry.supported_reasoning_efforts : [];
-  if (!supported.length) return "";
-  const labels = supported.map((effort) => reasoningEffortLabel(effort, language)).join(", ");
-  const defaultLabel = reasoningEffortLabel(entry?.default_reasoning_effort || supported[0] || "medium", language);
-  if (language === "ko") return `지원 추론: ${labels} | 기본: ${defaultLabel}`;
-  return `Supported reasoning: ${labels} | default: ${defaultLabel}`;
-}
-
-const CONFIG_PROVIDER_OPTIONS = [
-  ["openai", "Codex CLI"],
-  ["ensemble", "option.providerEnsemble"],
-  ["claude", "Claude Code"],
-  ["gemini", "Gemini CLI"],
-  ["ollama", "Ollama"],
-  ["qwen_code", "Qwen Code"],
-  ["deepseek", "DeepSeek via Claude Code"],
-  ["kimi", "Kimi"],
-  ["minimax", "MiniMax via Claude Code"],
-  ["glm", "GLM via Claude Code"],
-  ["openrouter", "OpenRouter"],
-  ["opencdk", "OpenCDK"],
-  ["local_openai", "Local OpenAI-Compatible"],
-  ["oss", "LM Studio / Local OSS"],
-];
-
 function configEditorViewPropsEqual(previousProps, nextProps) {
   return (
     previousProps.form === nextProps.form
@@ -222,27 +130,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
   const liveRuntimeEditable = isRunning;
   const planningReasoningLabel = language === "ko" ? "계획 추론" : "Planning Reasoning";
   const selectedProvider = normalizedModelProvider(runtime);
-  const providerHasCatalog = providerSupportsCatalog(selectedProvider);
-  const providerHasAutoModel = providerSupportsAutoModel(selectedProvider);
-  const scopedModelCatalog = useMemo(
-    () => filterModelCatalogByProvider(modelCatalog, runtime),
-    [modelCatalog, runtime],
-  );
-  const selectedModel = runtime.model || defaultModelForRuntime(modelCatalog, runtime) || (providerHasAutoModel ? "auto" : "");
   const autoParallelWorkers = String(runtime.parallel_worker_mode || "auto").trim().toLowerCase() !== "manual";
-  const selectedCatalogEntry = useMemo(
-    () => findModelCatalogEntry(scopedModelCatalog, selectedModel),
-    [scopedModelCatalog, selectedModel],
-  );
-  const supportedEfforts = useMemo(
-    () => configReasoningOptions(scopedModelCatalog, selectedModel, runtime.effort || "medium"),
-    [scopedModelCatalog, selectedModel, runtime.effort],
-  );
-  const selectedEffort = selectedConfigReasoning(scopedModelCatalog, runtime);
-  const providerOptions = useMemo(
-    () => CONFIG_PROVIDER_OPTIONS.map(([value, label]) => [value, label === "option.providerEnsemble" ? t("option.providerEnsemble") : label]),
-    [t],
-  );
 
   const planningRuntime =
     selectedProvider === "ensemble"
@@ -257,7 +145,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
     () => filterModelCatalogByProvider(modelCatalog, planningRuntime),
     [modelCatalog, planningRuntime],
   );
-  const planningModel = planningRuntime.model || planningRuntime.model_slug_input || defaultModelForRuntime(modelCatalog, planningRuntime) || selectedModel;
+  const planningModel = planningRuntime.model || planningRuntime.model_slug_input || defaultModelForRuntime(modelCatalog, planningRuntime) || runtime.model || "";
   const planningEntry = useMemo(
     () => findModelCatalogEntry(planningCatalog, planningModel),
     [planningCatalog, planningModel],
@@ -279,67 +167,6 @@ export const ConfigEditorView = memo(function ConfigEditorView({
     ),
     [planningCatalog, planningModel, runtime.effort, runtime.planning_effort],
   );
-
-  const ensembleClaudeRuntime = { ...runtime, model_provider: "claude", model: runtime.ensemble_claude_model || "" };
-  const ensembleClaudeCatalog = useMemo(
-    () => filterModelCatalogByProvider(modelCatalog, ensembleClaudeRuntime),
-    [modelCatalog, ensembleClaudeRuntime],
-  );
-  const ensembleClaudeModel = runtime.ensemble_claude_model || defaultModelForRuntime(modelCatalog, ensembleClaudeRuntime) || "";
-  const ensembleClaudeEntry = useMemo(
-    () => findModelCatalogEntry(ensembleClaudeCatalog, ensembleClaudeModel),
-    [ensembleClaudeCatalog, ensembleClaudeModel],
-  );
-
-  const visibleModels = useMemo(
-    () => (scopedModelCatalog || []).filter(
-      (item) => item && item.model && (item.model !== "auto" || selectedModel === "auto"),
-    ),
-    [scopedModelCatalog, selectedModel],
-  );
-  const allModels = useMemo(
-    () => (
-      visibleModels.length
-        ? visibleModels
-        : [{ model: selectedModel || "", display_name: selectedCatalogEntry?.display_name || selectedModel || t("common.none"), hidden: false }]
-    ),
-    [selectedCatalogEntry?.display_name, selectedModel, t, visibleModels],
-  );
-  const selectedModelOption = useMemo(
-    () => (
-      selectedModel && !allModels.some((item) => item?.model === selectedModel)
-        ? { model: selectedModel, display_name: selectedCatalogEntry?.display_name || selectedModel || t("common.none"), hidden: false }
-        : null
-    ),
-    [allModels, selectedCatalogEntry?.display_name, selectedModel, t],
-  );
-  const recommendedModels = useMemo(
-    () => [...(selectedModelOption ? [selectedModelOption] : []), ...allModels.filter((item) => !item.hidden)],
-    [allModels, selectedModelOption],
-  );
-  const additionalModels = useMemo(
-    () => allModels.filter((item) => item.hidden),
-    [allModels],
-  );
-
-  function applyModelChange(nextModel, nextEffort = null) {
-    const nextRuntime = applyConfigRuntimeModelSelection(runtime, scopedModelCatalog, nextModel, nextEffort);
-    onChangeForm((current) => ({ ...current, runtime: nextRuntime }));
-    if (typeof onChangeProgramSettings === "function") {
-      onChangeProgramSettings((current) => syncProgramSettingsModel(current, nextRuntime));
-    }
-  }
-
-  function applyRuntimePatch(runtimePatch) {
-    const nextRuntime = { ...runtime, ...runtimePatch };
-    onChangeForm((current) => ({ ...current, runtime: nextRuntime }));
-    if (typeof onChangeProgramSettings === "function") {
-      onChangeProgramSettings((current) => syncProgramSettingsModel(current, nextRuntime));
-    }
-  }
-
-  const providerUnavailable = !providerUsable(selectedProvider, codexStatus);
-  const providerReason = providerStatusReason(selectedProvider, codexStatus);
 
   return (
     <section className="workspace-view">
@@ -724,146 +551,6 @@ export const ConfigEditorView = memo(function ConfigEditorView({
             ) : null}
           </div>
 
-          {/* Model selection */}
-          <div className="subsection">
-            <SectionHeader
-              icon={<ModelIcon />}
-              title={t("config.executionModel")}
-              description={runtimeSummary(runtime, modelPresets, language, modelCatalog)}
-            />
-
-            {providerUnavailable && providerReason ? (
-              <div className="info-callout info-callout--warning" style={{ marginTop: "4px" }}>
-                <InfoIcon />
-                <span>{providerReason}</span>
-              </div>
-            ) : null}
-
-            <label className="field" style={{ marginTop: "4px" }}>
-              <span>{t("field.modelProvider")}</span>
-              <select
-                value={selectedProvider}
-                onChange={(event) => {
-                  const nextRuntime = applyProviderDefaults(runtime, event.target.value);
-                  onChangeForm((current) => ({ ...current, runtime: nextRuntime }));
-                  if (typeof onChangeProgramSettings === "function") {
-                    onChangeProgramSettings((current) => syncProgramSettingsModel(current, nextRuntime));
-                  }
-                }}
-                disabled={busy}
-              >
-                {providerOptions.map(([value, label]) => (
-                  <option key={value} value={value} disabled={!providerAvailable(value, codexStatus)}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="field" style={{ marginTop: "4px" }}>
-              <span>
-                {selectedProvider === "ensemble"
-                  ? (language === "ko" ? "Codex 모델" : "Codex Model")
-                  : t("field.model")}
-              </span>
-              {providerHasCatalog ? (
-                <select value={selectedModel} onChange={(event) => applyModelChange(event.target.value)} disabled={busy}>
-                  {(recommendedModels.length ? recommendedModels : allModels).map((item) => (
-                    <option key={item.model || "custom"} value={item.model}>
-                      {item.display_name || item.model || t("common.none")}
-                    </option>
-                  ))}
-                  {additionalModels.length ? (
-                    <optgroup label={t("config.additionalModels")}>
-                      {additionalModels.map((item) => (
-                        <option key={item.model} value={item.model}>
-                          {item.display_name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null}
-                </select>
-              ) : (
-                <input
-                  value={runtime.model_slug_input || runtime.model || ""}
-                  onChange={(event) => applyModelChange(event.target.value)}
-                  disabled={busy}
-                  placeholder={language === "ko" ? "모델 슬러그 입력" : "Enter model slug"}
-                />
-              )}
-            </label>
-
-            {!providerHasCatalog ? (
-              <div className="info-callout" style={{ marginTop: "4px" }}>
-                <InfoIcon />
-                <span>{providerHasAutoModel ? t("config.providerPresetModelHint") : t("config.customProviderModelHint")}</span>
-              </div>
-            ) : null}
-
-            {/* Effort buttons */}
-            {supportedEfforts.length > 0 ? (
-              <div style={{ marginTop: "10px" }}>
-                <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "8px" }}>
-                  {language === "ko" ? "추론 강도" : "Reasoning effort"}
-                </span>
-                <div className="choice-grid">
-                  {supportedEfforts.map((effort) => (
-                    <EffortButton
-                      key={effort}
-                      effort={effort}
-                      label={selectedModel === "auto" ? autoRoutingPresetLabel(effort, language) : reasoningEffortLabel(effort, language)}
-                      selected={selectedEffort === effort}
-                      onSelect={(nextEffort) => applyModelChange(selectedModel, nextEffort)}
-                      disabled={busy}
-                      language={language}
-                      description={effortDescription(selectedCatalogEntry?.display_name || selectedModel || "auto", effort, language)}
-                    />
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {/* Ensemble sub-models */}
-            {selectedProvider === "ensemble" ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "8px", borderTop: "1px solid var(--border)", paddingTop: "10px" }}>
-                <div className="ensemble-label-row">
-                  <span className="ensemble-pill ensemble-pill--gpt">GPT</span>
-                  <span className="ensemble-plus">+</span>
-                  <span className="ensemble-pill ensemble-pill--claude">Claude</span>
-                </div>
-                <label className="field">
-                  <span>{language === "ko" ? "GPT 모델 (계획 · 실행)" : "GPT Model (planning · execution)"}</span>
-                  <select
-                    value={planningModel}
-                    onChange={(event) => applyRuntimePatch({ ensemble_openai_model: event.target.value })}
-                    disabled={busy}
-                  >
-                    {planningCatalog.map((item) => (
-                      <option key={item.model} value={item.model}>{item.display_name || item.model}</option>
-                    ))}
-                  </select>
-                  {modelReasoningSummary(planningEntry, language) ? (
-                    <small className="field-hint">{modelReasoningSummary(planningEntry, language)}</small>
-                  ) : null}
-                </label>
-                <label className="field">
-                  <span>{language === "ko" ? "Claude 모델 (특정 단계)" : "Claude Model (specific steps)"}</span>
-                  <select
-                    value={ensembleClaudeModel}
-                    onChange={(event) => applyRuntimePatch({ ensemble_claude_model: event.target.value })}
-                    disabled={busy}
-                  >
-                    {ensembleClaudeCatalog.map((item) => (
-                      <option key={item.model} value={item.model}>{item.display_name || item.model}</option>
-                    ))}
-                  </select>
-                  {modelReasoningSummary(ensembleClaudeEntry, language) ? (
-                    <small className="field-hint">{modelReasoningSummary(ensembleClaudeEntry, language)}</small>
-                  ) : null}
-                </label>
-              </div>
-            ) : null}
-          </div>
         </div>
       </div>
     </section>

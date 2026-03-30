@@ -486,6 +486,20 @@ test("CenterWorkspace upgrades legacy serial plans into the parallel execution t
   assert.doesNotMatch(html, /Serial/);
 });
 
+test("CenterWorkspace shows the AI Chat tab instead of the old Flow tab", async () => {
+  const html = await renderBundledComponent(
+    "center-workspace-ai-chat-tab-render",
+    "./src/components/layout/CenterWorkspace.jsx",
+    "CenterWorkspace",
+    baseWorkspaceProps({
+      activeTab: "ai-chat",
+    }),
+  );
+
+  assert.match(html, />AI Chat<\/button>/);
+  assert.doesNotMatch(html, />Flow<\/button>/);
+});
+
 test("CenterWorkspace renders the parallel execution flow chart for parallel plans", async () => {
   const html = await renderBundledComponent(
     "parallel-workspace-render",
@@ -822,6 +836,7 @@ test("RightSidebarPane renders process output through the deferred detail panel"
   assert.match(html, /step-2/);
 });
 
+<<<<<<< Updated upstream
 test("RightSidebarPane inspector prefers the live execution plan over a stale draft while a run is active", async () => {
   const html = await renderBundledComponent(
     "right-sidebar-inspector-live-plan-render",
@@ -947,6 +962,9 @@ test("RightSidebarPane inspector uses the live plan when project status is runni
 });
 
 test("RightSidebarPane keeps an out-of-catalog chat model visible in the selector", async () => {
+=======
+test("RightSidebarPane scopes chat models to the provider selected in program settings", async () => {
+>>>>>>> Stashed changes
   const html = await renderBundledComponent(
     "right-sidebar-chat-custom-model-render",
     "./src/components/layout/RightSidebarPane.jsx",
@@ -970,6 +988,12 @@ test("RightSidebarPane keeps an out-of-catalog chat model visible in the selecto
           hidden: false,
           provider: "openai",
         },
+        {
+          model: "gemini-2.5-pro",
+          display_name: "Gemini 2.5 Pro",
+          hidden: false,
+          provider: "gemini",
+        },
       ],
       form: {
         runtime: {
@@ -985,8 +1009,10 @@ test("RightSidebarPane keeps an out-of-catalog chat model visible in the selecto
         summary_file: "",
       },
       chatSettings: {
-        chat_model_provider: "gemini",
-        chat_model: "gemini-legacy-lab",
+        model_provider: "gemini",
+        model: "gemini-2.5-pro",
+        chat_model_provider: "openai",
+        chat_model: "gpt-5.4-mini",
       },
       selectedChatSessionId: "",
       chatDraftSession: true,
@@ -999,8 +1025,43 @@ test("RightSidebarPane keeps an out-of-catalog chat model visible in the selecto
   );
 
   assert.match(html, /Chat model/);
-  assert.match(html, /gemini-legacy-lab/);
-  assert.match(html, /Gemini/);
+  assert.match(html, /Gemini 2\.5 Pro/);
+  assert.doesNotMatch(html, /GPT-5\.4 Mini/);
+});
+
+test("RightSidebarPane can exclude the AI chat tab from the right rail", async () => {
+  const html = await renderBundledComponent(
+    "right-sidebar-no-chat-tab-render",
+    "./src/components/layout/RightSidebarPane.jsx",
+    "RightSidebarPane",
+    {
+      activeTab: "chat",
+      includeChatTab: false,
+      detail: {
+        project: {
+          current_status: "plan_ready",
+        },
+        process_log: "step-1",
+      },
+      planDraft: {
+        steps: [],
+      },
+      selectedStepId: "",
+      modelPresets: [],
+      modelCatalog: [],
+      form: {
+        runtime: {
+          generate_word_report: false,
+        },
+      },
+      activeJob: null,
+      busy: false,
+    },
+  );
+
+  assert.match(html, /Process Output/);
+  assert.doesNotMatch(html, /title="AI Chat"/);
+  assert.doesNotMatch(html, /Chat model/);
 });
 
 test("RightSidebarPane renders assistant replies with safe markdown while keeping user text plain", async () => {
@@ -1270,7 +1331,8 @@ test("CenterWorkspace prefers the live detail plan while a run is active", async
 
   const runningNodeMatches = html.match(/execution-flow-chart__node--info/g) || [];
   assert.match(html, /Running: Parallel/);
-  assert.match(html, /Ship the live UI/);
+  assert.doesNotMatch(html, /Ship the stale UI/);
+  assert.doesNotMatch(html, /Plan generation prompt/);
   assert.equal(runningNodeMatches.length, 2);
 });
 
@@ -2958,124 +3020,9 @@ test("DetailsPane shows report documents and checkpoint deadlines in the inspect
   assert.match(html, /2026-04-05 18:00/);
 });
 
-test("ConfigEditorView keeps a selected model visible even when the catalog omits it", async () => {
+test("ConfigEditorView keeps execution-model controls out of project settings even for provider-specific runtimes", async () => {
   const html = await renderBundledComponent(
-    "config-editor-selected-model-render",
-    "./src/components/views/ConfigEditorView.jsx",
-    "ConfigEditorView",
-    {
-      form: {
-        project_dir: "C:/demo",
-        display_name: "Demo",
-        branch: "main",
-        github_mode: "existing",
-        origin_url: "",
-        runtime: {
-          model_provider: "openai",
-          model: "gpt-5.4",
-          model_preset: "",
-          model_slug_input: "gpt-5.4",
-          effort: "medium",
-          workflow_mode: "standard",
-          execution_mode: "serial",
-          parallel_workers: 2,
-          parallel_memory_per_worker_gib: 3,
-          ml_max_cycles: 3,
-          max_blocks: 5,
-        },
-      },
-      modelPresets: [],
-      modelCatalog: [
-        {
-          model: "gpt-5.3-codex-spark",
-          display_name: "GPT-5.3-Codex-Spark",
-          hidden: false,
-          default_reasoning_effort: "high",
-          supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
-        },
-      ],
-      busy: false,
-      onChangeForm: noop,
-      onChooseDirectory: noop,
-      onArchiveProject: noop,
-      onDeleteProject: noop,
-    },
-  );
-
-  assert.match(html, /gpt-5\.4/);
-  assert.match(html, /GPT-5\.3-Codex-Spark/);
-});
-
-test("ConfigEditorView renders provider-scoped catalog models for Gemini CLI projects", async () => {
-  const html = await renderBundledComponent(
-    "config-editor-gemini-model-render",
-    "./src/components/views/ConfigEditorView.jsx",
-    "ConfigEditorView",
-    {
-      form: {
-        project_dir: "C:/demo",
-        display_name: "Demo",
-        branch: "main",
-        github_mode: "existing",
-        origin_url: "",
-        runtime: {
-          model_provider: "gemini",
-          model: "gemini-2.5-pro",
-          model_preset: "",
-          model_slug_input: "gemini-2.5-pro",
-          effort: "medium",
-          workflow_mode: "standard",
-          execution_mode: "parallel",
-          parallel_worker_mode: "auto",
-          parallel_workers: 0,
-          parallel_memory_per_worker_gib: 3,
-          ml_max_cycles: 3,
-          max_blocks: 5,
-        },
-      },
-      modelPresets: [],
-      modelCatalog: [
-        {
-          model: "gpt-5.4",
-          display_name: "GPT-5.4",
-          hidden: false,
-          provider: "openai",
-          default_reasoning_effort: "medium",
-          supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
-        },
-        {
-          model: "gemini-3-flash-preview",
-          display_name: "Gemini 3 Flash Preview",
-          hidden: false,
-          provider: "gemini",
-          default_reasoning_effort: "medium",
-          supported_reasoning_efforts: ["medium"],
-        },
-        {
-          model: "gemini-2.5-pro",
-          display_name: "Gemini 2.5 Pro",
-          hidden: false,
-          provider: "gemini",
-          default_reasoning_effort: "medium",
-          supported_reasoning_efforts: ["medium"],
-        },
-      ],
-      busy: false,
-      onChangeForm: noop,
-      onChooseDirectory: noop,
-      onArchiveProject: noop,
-      onDeleteProject: noop,
-    },
-  );
-
-  assert.match(html, /Gemini 3 Flash Preview/);
-  assert.match(html, /Gemini 2\.5 Pro/);
-  assert.doesNotMatch(html, /GPT-5\.4/);
-});
-
-test("ConfigEditorView renders the current ensemble model selectors in project settings", async () => {
-  const html = await renderBundledComponent(
-    "config-editor-ensemble-model-render",
+    "config-editor-no-execution-model-controls-render",
     "./src/components/views/ConfigEditorView.jsx",
     "ConfigEditorView",
     {
@@ -3091,7 +3038,6 @@ test("ConfigEditorView renders the current ensemble model selectors in project s
           model_preset: "",
           model_slug_input: "gpt-5.4-mini",
           ensemble_openai_model: "gpt-5.4-mini",
-          ensemble_gemini_model: "gemini-2.5-pro",
           ensemble_claude_model: "claude-3.7-sonnet",
           effort: "medium",
           planning_effort: "medium",
@@ -3111,16 +3057,8 @@ test("ConfigEditorView renders the current ensemble model selectors in project s
           display_name: "GPT-5.4 Mini",
           hidden: false,
           provider: "openai",
-          default_reasoning_effort: "medium",
+          default_reasoning_effort: "high",
           supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
-        },
-        {
-          model: "gemini-2.5-pro",
-          display_name: "Gemini 2.5 Pro",
-          hidden: false,
-          provider: "gemini",
-          default_reasoning_effort: "medium",
-          supported_reasoning_efforts: ["medium"],
         },
         {
           model: "claude-3.7-sonnet",
@@ -3140,12 +3078,13 @@ test("ConfigEditorView renders the current ensemble model selectors in project s
     },
   );
 
-  assert.match(html, /Codex Model/);
-  assert.match(html, /GPT Model/);
-  assert.match(html, /Claude Model/);
-  assert.match(html, /GPT-5\.4 Mini/);
-  assert.match(html, /Claude 3\.7 Sonnet/);
-  assert.doesNotMatch(html, /Gemini Model/);
+  assert.match(html, /Planning Reasoning/);
+  assert.doesNotMatch(html, /Execution Model/);
+  assert.doesNotMatch(html, /Codex Model/);
+  assert.doesNotMatch(html, /GPT Model/);
+  assert.doesNotMatch(html, /Claude Model/);
+  assert.doesNotMatch(html, /GPT-5\.4 Mini/);
+  assert.doesNotMatch(html, /Claude 3\.7 Sonnet/);
 });
 
 test("AppSettingsView keeps direct model slug editing for OpenRouter only", async () => {

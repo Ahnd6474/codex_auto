@@ -1,19 +1,10 @@
 import { Suspense, lazy, memo, useEffect } from "react";
 import { useI18n } from "../../i18n";
 
-/* ── Tab icons ── */
-function RunTabIcon() {
+function AiChatTabIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <polygon
-        points="5 3 19 12 5 21 5 3"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="currentColor"
-        fillOpacity="0.15"
-      />
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -42,6 +33,18 @@ function DashboardTabIcon() {
   );
 }
 
+function FlowTabIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3" y="10" width="5" height="5" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
+      <rect x="16" y="4" width="5" height="5" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
+      <rect x="16" y="15" width="5" height="5" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M8 12.5h4m0 0V6.5m0 6v6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M12 6.5h4M12 18.5h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function HistoryTabIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -66,14 +69,14 @@ function ReportsTabIcon() {
 }
 
 const TAB_ICONS = {
-  run: <RunTabIcon />,
+  "ai-chat": <AiChatTabIcon />,
   config: <ConfigTabIcon />,
+  flow: <FlowTabIcon />,
   dashboard: <DashboardTabIcon />,
   history: <HistoryTabIcon />,
   reports: <ReportsTabIcon />,
 };
 
-/* ── Lazy view loader ── */
 function createLazyNamedView(loader, exportName) {
   let loadedComponent = null;
   let pendingModule = null;
@@ -102,8 +105,9 @@ function createLazyNamedView(loader, exportName) {
   return PreloadableView;
 }
 
+const AiChatWorkspaceView = createLazyNamedView(() => import("../views/AiChatWorkspaceView"), "AiChatWorkspaceView");
+const FlowWorkspaceView = createLazyNamedView(() => import("../views/FlowWorkspaceView"), "FlowWorkspaceView");
 const DashboardView = createLazyNamedView(() => import("../views/DashboardView"), "DashboardView");
-const ParallelRunControlView = createLazyNamedView(() => import("../views/ParallelRunControlView"), "ParallelRunControlView");
 const ReportsView = createLazyNamedView(() => import("../views/ReportsView"), "ReportsView");
 const HistoryView = createLazyNamedView(() => import("../views/HistoryView"), "HistoryView");
 const ConfigEditorView = createLazyNamedView(() => import("../views/ConfigEditorView"), "ConfigEditorView");
@@ -128,7 +132,7 @@ function ViewLoadingFallback() {
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ animation: "skeleton-pulse 1.2s ease-in-out infinite" }}>
           <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" strokeDasharray="4 4" />
         </svg>
-        <span style={{ color: "var(--text-dim)", fontSize: "13px" }}>Loading view…</span>
+        <span style={{ color: "var(--text-dim)", fontSize: "13px" }}>Loading view...</span>
       </div>
     </section>
   );
@@ -171,8 +175,24 @@ function sameQueuedJobs(previousJobs = [], nextJobs = []) {
   return true;
 }
 
+function normalizeWorkspaceTab(tab) {
+  return tab === "run" ? "flow" : tab;
+}
+
+function planHasFlowContent(detail, planDraft) {
+  const planningStatus = String(detail?.planning_progress?.status || detail?.planning_progress?.planningStatus || "").trim().toLowerCase();
+  const livePlan = detail?.plan || planDraft;
+  return Boolean(
+    planningStatus === "running"
+    || String(livePlan?.project_prompt || "").trim()
+    || (Array.isArray(livePlan?.steps) && livePlan.steps.length > 0),
+  );
+}
+
 function centerWorkspacePropsEqual(previousProps, nextProps) {
-  if (previousProps.activeTab !== nextProps.activeTab) {
+  const previousTab = normalizeWorkspaceTab(previousProps.activeTab);
+  const nextTab = normalizeWorkspaceTab(nextProps.activeTab);
+  if (previousTab !== nextTab) {
     return false;
   }
   const previousDeveloperMode = Boolean(previousProps.programSettings?.developer_mode);
@@ -181,8 +201,20 @@ function centerWorkspacePropsEqual(previousProps, nextProps) {
     return false;
   }
 
-  switch (nextProps.activeTab) {
-    case "run":
+  switch (nextTab) {
+    case "ai-chat":
+      return (
+        previousProps.detail === nextProps.detail
+        && previousProps.activeJob === nextProps.activeJob
+        && previousProps.selectedStepId === nextProps.selectedStepId
+        && previousProps.form === nextProps.form
+        && previousProps.busy === nextProps.busy
+        && previousProps.chat === nextProps.chat
+        && previousProps.selectedChatSessionId === nextProps.selectedChatSessionId
+        && previousProps.chatDraftSession === nextProps.chatDraftSession
+        && previousProps.programSettings === nextProps.programSettings
+      );
+    case "flow":
       return (
         previousProps.detail === nextProps.detail
         && previousProps.planDraft === nextProps.planDraft
@@ -288,14 +320,25 @@ export const CenterWorkspace = memo(function CenterWorkspace({
   onMoveStep,
   activeJob,
   hidePromptStrip = false,
+  chat,
+  selectedChatSessionId,
+  chatDraftSession,
+  onSelectChatSession,
+  onStartNewChatSession,
+  onSendChatMessage,
+  onChangeChatModelSelection,
+  onChangeChatReasoningEffort,
 }) {
   const { t } = useI18n();
   const developerMode = Boolean(programSettings?.developer_mode);
   const visibleHistoryDetail = selectedHistoryId ? historyDetail : detail;
+  const normalizedActiveTab = normalizeWorkspaceTab(activeTab);
+  const hasFlowTab = planHasFlowContent(detail, planDraft);
 
   function resolveTabView(tab) {
-    switch (tab) {
-      case "run": return ParallelRunControlView;
+    switch (normalizeWorkspaceTab(tab)) {
+      case "ai-chat": return AiChatWorkspaceView;
+      case "flow": return FlowWorkspaceView;
       case "dashboard": return DashboardView;
       case "reports": return developerMode ? ReportsView : null;
       case "history": return HistoryView;
@@ -311,33 +354,42 @@ export const CenterWorkspace = memo(function CenterWorkspace({
   }
 
   useEffect(() => {
-    preloadTab(activeTab);
+    preloadTab(hasFlowTab ? normalizedActiveTab : (normalizedActiveTab === "flow" ? "ai-chat" : normalizedActiveTab));
     const likelyNextTabs =
-      activeTab === "run"
-        ? ["config", "dashboard"]
-        : activeTab === "config"
-          ? ["run", "dashboard"]
-          : activeTab === "dashboard"
-            ? ["run", "config"]
-            : activeTab === "reports"
+      normalizedActiveTab === "ai-chat"
+        ? [hasFlowTab ? "flow" : "config", "dashboard"]
+        : normalizedActiveTab === "flow"
+          ? ["ai-chat", "dashboard"]
+        : normalizedActiveTab === "config"
+          ? [hasFlowTab ? "flow" : "ai-chat", "dashboard"]
+          : normalizedActiveTab === "dashboard"
+            ? [hasFlowTab ? "flow" : "ai-chat", "config"]
+            : normalizedActiveTab === "reports"
               ? ["history", "dashboard"]
-              : activeTab === "history"
+              : normalizedActiveTab === "history"
                 ? ["reports", "dashboard"]
                 : ["config"];
     return scheduleIdlePrefetch(() => {
       likelyNextTabs.forEach((tab) => preloadTab(tab));
     });
-  }, [activeTab, developerMode]);
+  }, [developerMode, hasFlowTab, normalizedActiveTab]);
 
   useEffect(() => {
-    if (!developerMode && activeTab === "reports") {
-      onChangeTab("run");
+    if (!developerMode && normalizedActiveTab === "reports") {
+      onChangeTab("ai-chat");
     }
-  }, [activeTab, developerMode, onChangeTab]);
+  }, [developerMode, normalizedActiveTab, onChangeTab]);
+
+  useEffect(() => {
+    if (!hasFlowTab && normalizedActiveTab === "flow") {
+      onChangeTab("ai-chat");
+    }
+  }, [hasFlowTab, normalizedActiveTab, onChangeTab]);
 
   const visibleTabs = [
-    ["run", t("tab.flow")],
+    ["ai-chat", t("tab.aiChat")],
     ["config", t("tab.config")],
+    ...(hasFlowTab ? [["flow", t("tab.flow")]] : []),
     ["dashboard", t("tab.dashboard")],
     ["history", t("tab.history")],
     ...(developerMode ? [["reports", t("tab.reports")]] : []),
@@ -350,7 +402,7 @@ export const CenterWorkspace = memo(function CenterWorkspace({
           <WorkspaceTab
             key={value}
             value={value}
-            activeTab={activeTab}
+            activeTab={normalizedActiveTab}
             onChange={onChangeTab}
             onPrefetch={preloadTab}
             label={label}
@@ -359,15 +411,36 @@ export const CenterWorkspace = memo(function CenterWorkspace({
       </div>
 
       <Suspense fallback={<ViewLoadingFallback />}>
-        {activeTab === "run" ? (
-          <ParallelRunControlView
+        {normalizedActiveTab === "ai-chat" ? (
+          <AiChatWorkspaceView
             detail={detail}
-            codexStatus={detail?.codex_status}
+            form={form}
+            modelPresets={modelPresets}
+            modelCatalog={modelCatalog}
+            activeJob={activeJob}
+            selectedStepId={selectedStepId}
+            busy={busy}
+            onChangeForm={onChangeForm}
+            onGeneratePlan={onGeneratePlan}
+            chat={chat}
+            chatSettings={programSettings}
+            selectedChatSessionId={selectedChatSessionId}
+            chatDraftSession={chatDraftSession}
+            onSelectChatSession={onSelectChatSession}
+            onStartNewChatSession={onStartNewChatSession}
+            onSendChatMessage={onSendChatMessage}
+            onChangeChatModelSelection={onChangeChatModelSelection}
+            onChangeChatReasoningEffort={onChangeChatReasoningEffort}
+          />
+        ) : null}
+        {normalizedActiveTab === "flow" ? (
+          <FlowWorkspaceView
+            detail={detail}
+            form={form}
             planDraft={planDraft}
             activeJob={activeJob}
             autoRunAfterPlan={autoRunAfterPlan}
             selectedStepId={selectedStepId}
-            form={form}
             busy={busy}
             canRequestStop={canRequestStop}
             canCancelReservation={canCancelReservation}
@@ -382,16 +455,15 @@ export const CenterWorkspace = memo(function CenterWorkspace({
             onRunManualMerger={onRunManualMerger}
             onRequestStop={onRequestStop}
             onCancelQueuedJob={onCancelQueuedJob}
-            onAutoRunAfterPlanChange={onChangeAutoRunAfterPlan}
+            onChangeAutoRunAfterPlan={onChangeAutoRunAfterPlan}
             onSelectStep={onSelectStep}
             onUpdateStepField={onUpdateStepField}
             onSaveStepLocal={onSaveStepLocal}
             onAddStep={onAddStep}
             onDeleteStep={onDeleteStep}
-            hidePromptStrip={hidePromptStrip}
           />
         ) : null}
-        {activeTab === "dashboard" ? (
+        {normalizedActiveTab === "dashboard" ? (
           <DashboardView
             detail={detail}
             planDraft={planDraft}
@@ -401,11 +473,11 @@ export const CenterWorkspace = memo(function CenterWorkspace({
             activeJob={activeJob}
           />
         ) : null}
-        {developerMode && activeTab === "reports" ? <ReportsView reports={detail?.reports} /> : null}
-        {activeTab === "history" ? (
+        {developerMode && normalizedActiveTab === "reports" ? <ReportsView reports={detail?.reports} /> : null}
+        {normalizedActiveTab === "history" ? (
           <HistoryView detail={visibleHistoryDetail} busy={busy} onDeleteHistoryEntry={onDeleteHistoryEntry} />
         ) : null}
-        {activeTab === "config" ? (
+        {normalizedActiveTab === "config" ? (
           <ConfigEditorView
             form={form}
             modelPresets={modelPresets}
@@ -421,7 +493,7 @@ export const CenterWorkspace = memo(function CenterWorkspace({
             onDeleteProject={onDeleteProject}
           />
         ) : null}
-        {activeTab === "app-settings" ? (
+        {normalizedActiveTab === "app-settings" ? (
           <AppSettingsView
             settings={programSettings}
             codexStatus={detail?.codex_status}
