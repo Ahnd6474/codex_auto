@@ -128,6 +128,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
 
         with mock.patch("jakal_flow.git_ops.run_subprocess", side_effect=fake_run_subprocess):
             git.run(["branch", "--show-current"], cwd=repo_dir, check=False)
+            git.run(["remote"], cwd=repo_dir, check=False)
             git.run(["status", "--porcelain"], cwd=repo_dir, check=False)
             git.run(["fetch", "origin", "main"], cwd=repo_dir, check=False)
             git.run(["cherry-pick", "abc123"], cwd=repo_dir, check=False)
@@ -135,6 +136,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
 
         timeout_map = {tuple(args[:2] if len(args) > 1 else args): timeout for args, timeout in observed_timeouts}
         self.assertEqual(timeout_map[("branch", "--show-current")], 10.0)
+        self.assertEqual(timeout_map[("remote",)], 30.0)
         self.assertEqual(timeout_map[("status", "--porcelain")], 30.0)
         self.assertEqual(timeout_map[("fetch", "origin")], 180.0)
         self.assertEqual(timeout_map[("cherry-pick", "abc123")], 180.0)

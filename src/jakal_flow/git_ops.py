@@ -17,6 +17,7 @@ class GitCommandError(RuntimeError):
 UNTRACKED_OVERWRITE_MARKER = "The following untracked working tree files would be overwritten by merge:"
 MISSING_REGISTERED_WORKTREE_MARKER = "is a missing but already registered worktree"
 GIT_QUERY_TIMEOUT_SECONDS = 10.0
+GIT_REMOTE_QUERY_TIMEOUT_SECONDS = 30.0
 GIT_STATUS_TIMEOUT_SECONDS = 30.0
 GIT_LOCAL_MUTATION_TIMEOUT_SECONDS = 90.0
 GIT_MERGE_TIMEOUT_SECONDS = 180.0
@@ -55,7 +56,6 @@ class GitOps:
         ("rev-parse", "--abbrev-ref"),
         ("rev-parse", "--verify"),
         ("rev-parse", "-q"),
-        ("remote",),
         ("diff", "--name-only"),
         ("diff", "--name-status"),
         ("show",),
@@ -144,6 +144,8 @@ class GitOps:
         prefix = (primary, secondary) if secondary else (primary,)
         if prefix in self._STATUS_COMMANDS:
             return GIT_STATUS_TIMEOUT_SECONDS
+        if primary == "remote":
+            return GIT_REMOTE_QUERY_TIMEOUT_SECONDS
         if prefix in self._FAST_QUERY_COMMANDS or (primary,) in self._FAST_QUERY_COMMANDS:
             return GIT_QUERY_TIMEOUT_SECONDS
         if primary == "clone":
