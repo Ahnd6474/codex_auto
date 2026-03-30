@@ -7,7 +7,7 @@ import { StatusBar } from "./components/layout/StatusBar";
 import { nextSidebarTab } from "./controllerHelpers";
 import { useDesktopController } from "./hooks/useDesktopController";
 import { useI18n } from "./i18n";
-import { toggleStepSelection } from "./utils";
+import { isActiveExecutionStatus, toggleStepSelection } from "./utils";
 
 /* ── Layout mode constants ── */
 const WORKSPACE_MIN = 320;
@@ -232,8 +232,9 @@ export default function App() {
   const detail = controller.projectDetail;
   const deferredDetail = useDeferredValue(detail);
   const deferredPlanDraft = useDeferredValue(controller.planDraft);
-  const activeExecutionStatus = String(controller.activeJob?.status || "").trim().toLowerCase();
-  const useLiveExecutionDetail = activeExecutionStatus === "queued" || activeExecutionStatus === "running";
+  const useLiveExecutionDetail =
+    isActiveExecutionStatus(controller.activeJob?.status)
+    || isActiveExecutionStatus(detail?.project?.current_status);
   const sidebarDetail = useLiveExecutionDetail ? detail : deferredDetail;
   const sidebarPlanDraft = useLiveExecutionDetail && detail?.plan ? detail.plan : deferredPlanDraft;
   const sidebarOpen = Boolean(controller.sidebarTab);

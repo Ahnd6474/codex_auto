@@ -886,6 +886,66 @@ test("RightSidebarPane inspector prefers the live execution plan over a stale dr
   assert.doesNotMatch(html, /Do not use the stale draft/);
 });
 
+test("RightSidebarPane inspector uses the live plan when project status is running even if the active job is absent", async () => {
+  const html = await renderBundledComponent(
+    "right-sidebar-inspector-live-plan-without-job-render",
+    "./src/components/layout/RightSidebarPane.jsx",
+    "RightSidebarPane",
+    {
+      activeTab: "inspector",
+      detail: {
+        project: {
+          current_status: "running:parallel",
+          display_name: "Demo",
+          branch: "main",
+          repo_path: "C:/demo",
+        },
+        runtime: {
+          effort: "medium",
+        },
+        plan: {
+          steps: [
+            { step_id: "ST1", title: "Plan", status: "completed" },
+            {
+              step_id: "ST2",
+              title: "Live Build From Status",
+              status: "running",
+              display_description: "Project status should be enough",
+              reasoning_effort: "medium",
+            },
+          ],
+        },
+      },
+      planDraft: {
+        steps: [
+          { step_id: "ST1", title: "Plan", status: "completed" },
+          {
+            step_id: "ST2",
+            title: "Stale Build",
+            status: "pending",
+            display_description: "Do not use the stale draft",
+            reasoning_effort: "medium",
+          },
+        ],
+      },
+      selectedStepId: "ST2",
+      modelPresets: [],
+      modelCatalog: [],
+      form: {
+        runtime: {
+          generate_word_report: false,
+        },
+      },
+      activeJob: null,
+      busy: false,
+    },
+  );
+
+  assert.match(html, /Live Build From Status/);
+  assert.match(html, /Project status should be enough/);
+  assert.doesNotMatch(html, /Stale Build/);
+});
+
 test("RightSidebarPane keeps an out-of-catalog chat model visible in the selector", async () => {
   const html = await renderBundledComponent(
     "right-sidebar-chat-custom-model-render",
@@ -1212,6 +1272,51 @@ test("CenterWorkspace prefers the live detail plan while a run is active", async
   assert.match(html, /Running: Parallel/);
   assert.match(html, /Ship the live UI/);
   assert.equal(runningNodeMatches.length, 2);
+});
+
+test("CenterWorkspace keeps using the live detail plan when project status is running but the active job snapshot lags", async () => {
+  const html = await renderBundledComponent(
+    "parallel-workspace-live-plan-without-job-render",
+    "./src/components/layout/CenterWorkspace.jsx",
+    "CenterWorkspace",
+    baseWorkspaceProps({
+      detail: {
+        project: {
+          current_status: "running:parallel",
+        },
+        runtime: {
+          execution_mode: "parallel",
+          effort: "medium",
+        },
+        plan: {
+          project_prompt: "Ship the live plan from project status",
+          execution_mode: "parallel",
+          closeout_status: "not_started",
+          steps: [
+            { step_id: "ST1", title: "Plan", status: "completed" },
+            { step_id: "ST2", title: "Build", status: "running", depends_on: ["ST1"], owned_paths: ["desktop/src"] },
+          ],
+        },
+      },
+      planDraft: {
+        project_prompt: "Ship the stale draft",
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [
+          { step_id: "ST1", title: "Plan", status: "completed" },
+          { step_id: "ST2", title: "Build", status: "pending", depends_on: ["ST1"], owned_paths: ["desktop/src"] },
+        ],
+      },
+      selectedStepId: "ST2",
+      busy: true,
+      activeJob: null,
+    }),
+  );
+
+  const runningNodeMatches = html.match(/execution-flow-chart__node--info/g) || [];
+  assert.match(html, /Ship the live plan from project status/);
+  assert.doesNotMatch(html, /Ship the stale draft/);
+  assert.equal(runningNodeMatches.length, 1);
 });
 
 test("CenterWorkspace shows debugging badges in yellow while debugger recovery is active", async () => {

@@ -1,7 +1,7 @@
 ﻿import { Suspense, lazy, memo, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { ChatMessageContent } from "../../chatMarkdown";
 import { useI18n } from "../../i18n";
-import { runtimeSummary, visibleExecutionJob } from "../../utils";
+import { isActiveExecutionStatus, runtimeSummary, visibleExecutionJob } from "../../utils";
 
 function RailChatIcon() {
   return (
@@ -860,8 +860,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
   const { language } = useI18n();
   const processOutput = detail?.subprocess_output || detail?.agent_output || detail?.process_log || "";
   const executionJob = visibleExecutionJob(activeJob);
-  const executionJobStatus = String(executionJob?.status || "").trim().toLowerCase();
-  const liveRuntimeEditable = ["running", "queued"].includes(executionJobStatus);
+  const liveRuntimeEditable = isActiveExecutionStatus(executionJob?.status) || isActiveExecutionStatus(detail?.project?.current_status);
   const effectivePlan = liveRuntimeEditable && detail?.plan ? detail.plan : planDraft;
   const selectedStep = (effectivePlan?.steps || []).find((step) => step.step_id === selectedStepId) || null;
   const hasFiles = Boolean(

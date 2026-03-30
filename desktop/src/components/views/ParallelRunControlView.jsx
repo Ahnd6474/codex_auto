@@ -27,6 +27,7 @@ import {
   providerAvailable,
   providerUsable,
   providerStatusReason,
+  isActiveExecutionStatus,
   projectStatusWithJob,
   QWEN_CODE_DEFAULT_MODEL,
   REASONING_OPTIONS,
@@ -452,7 +453,11 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
     [t],
   );
 
-  const livePlan = activeJob?.status === "running" && detail?.plan ? detail.plan : planDraft;
+  const shouldUseLivePlan = Boolean(detail?.plan) && (
+    isActiveExecutionStatus(activeJob?.status)
+    || isActiveExecutionStatus(detail?.project?.current_status)
+  );
+  const livePlan = shouldUseLivePlan ? detail.plan : planDraft;
   const promptValue = livePlan?.project_prompt || "";
   const [promptDraft, setPromptDraft] = useState(promptValue);
   const [failureDismissed, setFailureDismissed] = useState(false);

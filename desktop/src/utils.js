@@ -146,6 +146,14 @@ export function visibleExecutionJob(job = null) {
   return job;
 }
 
+export function isActiveExecutionStatus(status = "") {
+  const normalized = String(status || "").trim().toLowerCase();
+  return normalized === "running"
+    || normalized.startsWith("running:")
+    || normalized === "queued"
+    || normalized.startsWith("queued:");
+}
+
 export function projectStatusWithJob(status = "", activeJob = null) {
   const job = visibleExecutionJob(activeJob);
   const currentStatus = String(status || "").trim();
