@@ -27,7 +27,7 @@ class BridgeEnvelope:
     params: dict[str, Any] = field(default_factory=dict)
     ok: bool = True
     result: dict[str, Any] | list[Any] | None = None
-    error: str = ""
+    error: str | dict[str, Any] = ""
     payload: dict[str, Any] = field(default_factory=dict)
     version: int = BRIDGE_PROTOCOL_VERSION
 
@@ -64,6 +64,23 @@ class BridgeJobSnapshot:
 class BridgeEvent:
     event: str
     payload: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return _normalize(self)
+
+
+@dataclass(slots=True)
+class BridgeError:
+    message: str
+    kind: str = "bridge_error"
+    type: str = ""
+    reason_code: str = ""
+    command: str = ""
+    method: str = ""
+    request_id: str = ""
+    workspace_root: str = ""
+    recoverable: bool | None = None
+    details: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return _normalize(self)

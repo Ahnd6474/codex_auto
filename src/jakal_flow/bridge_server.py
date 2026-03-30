@@ -9,15 +9,16 @@ import sys
 import time
 from typing import Any
 
-from .bridge_contract import BRIDGE_PROTOCOL_VERSION, BridgeEnvelope, BridgeEvent, BridgeJobSnapshot
+from .bridge_contract import BRIDGE_PROTOCOL_VERSION, BridgeEnvelope, BridgeError, BridgeEvent, BridgeJobSnapshot
 from .bridge_events import BridgeEventSink, bridge_event_context
-from .errors import HANDLED_OPERATION_EXCEPTIONS, JSON_PARSE_EXCEPTIONS
+from .errors import ExecutionFailure, HANDLED_OPERATION_EXCEPTIONS, JSON_PARSE_EXCEPTIONS
 from .job_scheduler import (
     DEFAULT_MAX_CONCURRENT_JOBS,
     append_scheduler_event,
     normalize_max_concurrent_jobs,
     write_scheduler_state,
 )
+from .failure_logs import write_runtime_failure_log
 from .ui_bridge import configure_stdio, default_workspace_root, run_command, runtime_from_payload
 from .utils import now_utc_iso, parse_json_text
 
@@ -454,13 +455,100 @@ class BridgeServer:
             sys.stdout.write("\n")
             sys.stdout.flush()
 
-    def _error_response(self, request_id: str, error: str) -> None:
+    def _normalize_error_payload(
+        self,
+        request_id: str,
+        error: BaseException | str,
+        *,
+        method: str = "",
+        command: str = "",
+        workspace_root: Path | str = "",
+    ) -> BridgeError:
+        message = str(error).strip() if str(error).strip() else "Bridge request failed."
+        error_type = type(error).__name__
+        reason_code = ""
+        recoverable = None
+        details: dict[str, Any] = {}
+        normalized_message = message.lower().strip()
+        if isinstance(error, ExecutionFailure):
+            reason_code = error.reason_code
+            recoverable = True
+        elif isinstance(error, ValueError):
+            if normalized_message.startswith("unsupported bridge method"):
+                reason_code = "unsupported_method"
+            else:
+                reason_code = "invalid_request"
+            recoverable = True
+        elif isinstance(error, RuntimeError):
+            reason_code = "request_rejected"
+        elif isinstance(error, LookupError):
+            reason_code = "not_found"
+        else:
+            reason_code = "bridge_server_error"
+            if normalized_message == "cancelled":
+                reason_code = "cancelled"
+
+        return BridgeError(
+            message=message,
+            type=error_type,
+            reason_code=reason_code,
+            command=str(command or ""),
+            method=str(method or ""),
+            request_id=str(request_id or ""),
+            workspace_root=str(workspace_root or ""),
+            recoverable=bool(recoverable) if isinstance(recoverable, bool) else recoverable,
+            details=details,
+        )
+
+    def _write_bridge_error_log(self, workspace_root: Path, command: str, error: BaseException | str, request_id: str, method: str) -> None:
+        if not isinstance(error, BaseException):
+            return
+        if not workspace_root:
+            return
+        try:
+            write_runtime_failure_log(
+                workspace_root,
+                source="bridge-server",
+                command=str(command or "bridge"),
+                exc=error,
+                payload={
+                    "method": method,
+                    "request_id": request_id,
+                },
+            )
+        except OSError:
+            pass
+
+    def _error_response(
+        self,
+        request_id: str,
+        error: BaseException | str,
+        *,
+        method: str = "",
+        command: str = "",
+        workspace_root: Path | str = "",
+    ) -> None:
+        payload = self._normalize_error_payload(
+            request_id,
+            error,
+            method=method,
+            command=command,
+            workspace_root=workspace_root,
+        )
+        if request_id:
+            self._write_bridge_error_log(
+                workspace_root=Path(str(workspace_root or Path("."))),
+                command=command,
+                error=error,
+                request_id=request_id,
+                method=method,
+            )
         self._send_envelope(
             BridgeEnvelope(
                 kind="response",
                 id=request_id,
                 ok=False,
-                error=error,
+                error=payload.to_dict(),
             )
         )
 
@@ -536,7 +624,17 @@ class BridgeServer:
                     )
                 )
         except HANDLED_OPERATION_EXCEPTIONS as exc:
-            self._jobs.update(job_id, status="failed", error=str(exc).strip() or str(exc), result=None)
+            self._write_bridge_error_log(
+                workspace_root=workspace_root,
+                command=command,
+                error=exc,
+                request_id=job_id,
+                method="run_job",
+            )
+            error_message = str(exc).strip() or str(exc)
+            if isinstance(exc, ExecutionFailure):
+                error_message = f"{error_message} (reason_code={exc.reason_code})"
+            self._jobs.update(job_id, status="failed", error=error_message, result=None)
         finally:
             for snapshot in self._jobs.dequeue_startable_jobs(workspace_root):
                 self._start_job_thread(snapshot.id)
@@ -556,83 +654,93 @@ class BridgeServer:
         payload = params.get("payload", {})
         payload = payload if isinstance(payload, dict) else {}
         command = str(params.get("command", "")).strip()
+        try:
+            if method == "bridge_request":
+                with bridge_event_context(self._event_sink):
+                    result = run_command(command, workspace_root, payload)
+                self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=result if isinstance(result, dict) else {}))
+                if self._should_emit_project_changed(command, result):
+                    self._send_envelope(
+                        BridgeEnvelope(
+                            kind="event",
+                            event="project.changed",
+                            payload=self._infer_project_event_payload(command, workspace_root, payload, result),
+                        )
+                    )
+                return
 
-        if method == "bridge_request":
-            with bridge_event_context(self._event_sink):
-                result = run_command(command, workspace_root, payload)
-            self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=result if isinstance(result, dict) else {}))
-            if self._should_emit_project_changed(command, result):
+            if method == "start_job":
+                snapshot = self._jobs.create(command, workspace_root, payload)
+                if snapshot.status == "running":
+                    self._start_job_thread(snapshot.id)
+                self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=snapshot.to_dict()))
+                return
+
+            if method == "get_job":
+                result = self._jobs.get_job(str(params.get("job_id", "")).strip())
+                self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=result))
+                return
+
+            if method == "list_jobs":
+                self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=self._jobs.list_jobs()))
+                return
+
+            if method == "get_scheduler":
+                self._send_envelope(
+                    BridgeEnvelope(kind="response", id=request_id, ok=True, result=self._jobs.scheduler_snapshot(workspace_root))
+                )
+                return
+
+            if method == "configure_scheduler":
+                result, promoted = self._jobs.set_max_running_jobs(workspace_root, params.get("max_concurrent_jobs"))
+                for snapshot in promoted:
+                    self._start_job_thread(snapshot.id)
+                self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=result))
+                return
+
+            if method == "cancel_job":
+                result = self._jobs.cancel(str(params.get("job_id", "")).strip())
+                if result is None:
+                    raise RuntimeError("The requested background job was not found.")
+                self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=result.to_dict()))
+                return
+
+            if method == "ping":
                 self._send_envelope(
                     BridgeEnvelope(
-                        kind="event",
-                        event="project.changed",
-                        payload=self._infer_project_event_payload(command, workspace_root, payload, result),
+                        kind="response",
+                        id=request_id,
+                        ok=True,
+                        result={
+                            "status": "ok",
+                            "protocol_version": BRIDGE_PROTOCOL_VERSION,
+                            "timestamp": now_utc_iso(),
+                        },
                     )
                 )
-            return
+                return
 
-        if method == "start_job":
-            snapshot = self._jobs.create(command, workspace_root, payload)
-            if snapshot.status == "running":
-                self._start_job_thread(snapshot.id)
-            self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=snapshot.to_dict()))
-            return
-
-        if method == "get_job":
-            result = self._jobs.get_job(str(params.get("job_id", "")).strip())
-            self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=result))
-            return
-
-        if method == "list_jobs":
-            self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=self._jobs.list_jobs()))
-            return
-
-        if method == "get_scheduler":
-            self._send_envelope(
-                BridgeEnvelope(kind="response", id=request_id, ok=True, result=self._jobs.scheduler_snapshot(workspace_root))
+            raise ValueError(f"Unsupported bridge method: {method}")
+        except HANDLED_OPERATION_EXCEPTIONS as exc:
+            self._error_response(
+                request_id,
+                exc,
+                method=method,
+                command=command,
+                workspace_root=workspace_root,
             )
-            return
-
-        if method == "configure_scheduler":
-            result, promoted = self._jobs.set_max_running_jobs(workspace_root, params.get("max_concurrent_jobs"))
-            for snapshot in promoted:
-                self._start_job_thread(snapshot.id)
-            self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=result))
-            return
-
-        if method == "cancel_job":
-            result = self._jobs.cancel(str(params.get("job_id", "")).strip())
-            if result is None:
-                raise RuntimeError("The requested background job was not found.")
-            self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=result.to_dict()))
-            return
-
-        if method == "ping":
-            self._send_envelope(
-                BridgeEnvelope(
-                    kind="response",
-                    id=request_id,
-                    ok=True,
-                    result={
-                        "status": "ok",
-                        "protocol_version": BRIDGE_PROTOCOL_VERSION,
-                        "timestamp": now_utc_iso(),
-                    },
-                )
-            )
-            return
-
-        raise ValueError(f"Unsupported bridge method: {method}")
 
     def serve_forever(self) -> int:
         for raw_line in sys.stdin:
             line = raw_line.strip()
             if not line:
                 continue
+            parsed_request: dict[str, Any] = {}
             try:
                 payload = parse_json_text(line)
                 if not isinstance(payload, dict):
                     raise ValueError("Bridge request must be a JSON object.")
+                parsed_request = payload
                 request_id = str(payload.get("id", "")).strip()
                 method = str(payload.get("method", "")).strip()
                 params = payload.get("params", {})
@@ -643,13 +751,33 @@ class BridgeServer:
                 self._handle_request(request_id, method, params)
             except HANDLED_OPERATION_EXCEPTIONS as exc:
                 request_id = ""
-                try:
-                    parsed = parse_json_text(line)
-                    if isinstance(parsed, dict):
-                        request_id = str(parsed.get("id", "")).strip()
-                except JSON_PARSE_EXCEPTIONS:
-                    request_id = ""
-                self._error_response(request_id, str(exc).strip() or str(exc))
+                request_method = ""
+                raw_payload: dict[str, Any] = {}
+                if parsed_request:
+                    raw_payload = parsed_request
+                else:
+                    try:
+                        fallback = parse_json_text(line)
+                        if isinstance(fallback, dict):
+                            raw_payload = fallback
+                    except JSON_PARSE_EXCEPTIONS:
+                        raw_payload = {}
+                if raw_payload:
+                    request_id = str(raw_payload.get("id", "")).strip()
+                    request_method = str(raw_payload.get("method", "")).strip()
+                workspace_root = ""
+                command = ""
+                params = raw_payload.get("params", {})
+                if isinstance(params, dict):
+                    workspace_root = str(params.get("workspace_root", ""))
+                    command = str(params.get("command", ""))
+                self._error_response(
+                    request_id,
+                    exc,
+                    method=request_method,
+                    command=command,
+                    workspace_root=workspace_root,
+                )
         return 0
 
 

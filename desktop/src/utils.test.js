@@ -7,6 +7,7 @@ import {
   defaultModelForRuntime,
   failureReasonCode,
   failureReasonLabel,
+  isDuplicateProjectJobError,
   jobHasNewerActiveReplacement,
   projectFormFromDetail,
   selectedConfigReasoning,
@@ -110,6 +111,33 @@ test("failureReasonLabel maps step metadata reason codes to readable labels", ()
 test("failureReasonCode reads both top-level and step metadata reason codes", () => {
   assert.equal(failureReasonCode({ failure_reason_code: "agent_pass_failed" }), "agent_pass_failed");
   assert.equal(failureReasonCode({ metadata: { failure_reason_code: "parallel_merge_conflict" } }), "parallel_merge_conflict");
+});
+
+test("isDuplicateProjectJobError reads structured reason code fields", () => {
+  assert.equal(
+    isDuplicateProjectJobError({
+      reasonCode: "duplicate_job",
+      message: "This project is busy.",
+    }),
+    true,
+  );
+  assert.equal(
+    isDuplicateProjectJobError({
+      reason_code: "already_active_for_project",
+      message: "This project is busy.",
+    }),
+    true,
+  );
+});
+
+test("isDuplicateProjectJobError falls back to legacy message match", () => {
+  assert.equal(
+    isDuplicateProjectJobError({
+      message: "Another background task is already active for this project.",
+    }),
+    true,
+  );
+  assert.equal(isDuplicateProjectJobError({ message: "No match here." }), false);
 });
 
 test("defaultModelForRuntime skips auto catalog entries for openai providers", () => {

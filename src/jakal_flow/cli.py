@@ -143,6 +143,16 @@ def build_parser() -> argparse.ArgumentParser:
     _add_workspace_argument(report_parser)
     _add_repo_arguments(report_parser)
 
+    logx_parser = subparsers.add_parser("logx", help="Collect and refresh project log index")
+    _add_workspace_argument(logx_parser)
+    _add_repo_arguments(logx_parser)
+    logx_parser.add_argument(
+        "--max-artifacts",
+        type=int,
+        default=400,
+        help="Maximum number of log artifacts to track",
+    )
+
     return parser
 
 
@@ -290,6 +300,15 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "report":
             path = orchestrator.report(args.repo_url, args.branch)
+            print(str(path))
+            return 0
+
+        if args.command == "logx":
+            path = orchestrator.logx(
+                args.repo_url,
+                args.branch,
+                max_artifacts=int(getattr(args, "max_artifacts", 400)),
+            )
             print(str(path))
             return 0
 

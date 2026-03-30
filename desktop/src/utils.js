@@ -79,7 +79,14 @@ export function backgroundJobProjectKey(payload = null, workspaceRoot = "") {
 }
 
 export function isDuplicateProjectJobError(error = null) {
-  return String(error || "").trim().toLowerCase().includes("already active for this project");
+  if (!error) {
+    return false;
+  }
+  const rawReason = String(error?.reasonCode || error?.reason_code || error?.reason || "").trim().toLowerCase();
+  if (rawReason === "duplicate_job" || rawReason === "already_active_for_project") {
+    return true;
+  }
+  return String(error?.message || error).trim().toLowerCase().includes("already active for this project");
 }
 
 export function normalizedChatMode(mode = "") {

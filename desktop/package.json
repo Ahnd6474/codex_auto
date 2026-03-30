@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 1420",
+    "dev": "node scripts/clean-vite-cache.mjs && vite --host 0.0.0.0 --port 1420",
     "build": "vite build",
     "check:bundle": "node scripts/check-bundle-budgets.mjs",
     "build:budget": "npm run build && npm run check:bundle",

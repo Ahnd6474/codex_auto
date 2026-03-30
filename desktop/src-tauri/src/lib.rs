@@ -28,7 +28,7 @@ struct AppState {
 #[derive(Clone)]
 struct BridgeSession {
     stdin: Arc<Mutex<ChildStdin>>,
-    pending: Arc<Mutex<HashMap<String, Sender<Result<Value, String>>>>>,
+    pending: Arc<Mutex<HashMap<String, Sender<Result<Value, String>>>>,
     next_id: Arc<AtomicU64>,
     stderr_lines: Arc<Mutex<Vec<String>>>,
     _child: Arc<Mutex<Child>>,
@@ -161,8 +161,30 @@ fn store_stderr_line(stderr_lines: &Arc<Mutex<Vec<String>>>, line: String) {
     }
 }
 
+fn format_bridge_error_payload(error: &Value) -> String {
+    const BRIDGE_ERROR_PREFIX: &str = "BRIDGE_ERROR_JSON:";
+    let fallback = "Python bridge request failed.".to_string();
+    if error.is_object() || error.is_array() {
+        return serde_json::to_string(error)
+            .map(|payload| format!("{BRIDGE_ERROR_PREFIX}{payload}"))
+            .unwrap_or(fallback);
+    }
+    if let Some(message) = error.as_str() {
+        let trimmed = message.trim();
+        return if trimmed.is_empty() {
+            fallback
+        } else {
+            trimmed.to_string()
+        };
+    }
+    if error.is_null() {
+        return fallback;
+    }
+    error.to_string()
+}
+
 fn fail_pending_requests(
-    pending: &Arc<Mutex<HashMap<String, Sender<Result<Value, String>>>>>,
+    pending: &Arc<Mutex<HashMap<String, Sender<Result<Value, String>>>>,
     error: String,
 ) {
     let senders = pending
@@ -266,9 +288,7 @@ impl BridgeSession {
                             } else {
                                 let error = parsed
                                     .get("error")
-                                    .and_then(Value::as_str)
-                                    .unwrap_or("Python bridge request failed.")
-                                    .to_string();
+                                    .map_or_else(|| "Python bridge request failed.".to_string(), format_bridge_error_payload);
                                 let _ = sender.send(Err(error));
                             }
                         }
@@ -635,6 +655,33 @@ mod tests {
         assert_eq!(params["command"], "run-plan");
         assert_eq!(params["payload"]["repo_id"], "demo");
         assert_eq!(params["workspace_root"], "C:/workspace");
+    }
+
+    #[test]
+    fn format_bridge_error_payload_wraps_object_error_with_prefix() {
+        let payload = json!({
+            "message": "Failed",
+            "reason_code": "invalid_request",
+        });
+        let formatted = format_bridge_error_payload(&payload);
+        assert!(
+            formatted.starts_with("BRIDGE_ERROR_JSON:"),
+            "formatted error payload should be prefixed as transport object"
+        );
+        let parsed = serde_json::from_str::<Value>(&formatted["BRIDGE_ERROR_JSON:".len()..]).unwrap();
+        assert_eq!(parsed["reason_code"], "invalid_request");
+    }
+
+    #[test]
+    fn format_bridge_error_payload_keeps_scalar_errors() {
+        assert_eq!(format_bridge_error_payload(&json!("bridge request failed.")), "bridge request failed.");
+        assert_eq!(format_bridge_error_payload(&Value::Null), "Python bridge request failed.");
+        let array_payload = json!([1, 2, 3]);
+        let formatted = format_bridge_error_payload(&array_payload);
+        assert!(
+            formatted.starts_with("BRIDGE_ERROR_JSON:"),
+            "array payload should also be wrapped"
+        );
     }
 
     #[test]

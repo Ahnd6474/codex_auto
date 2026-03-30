@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import shutil
+import io
 import sys
 import unittest
 from unittest import mock
@@ -153,3 +154,59 @@ class BridgeServerTests(unittest.TestCase):
             self.assertEqual(project_events, [])
             self.assertTrue(job_updates)
             self.assertEqual(job_updates[-1]["payload"]["job"]["status"], "completed")
+
+    def test_handle_request_returns_structured_error_payload_for_invalid_request(self) -> None:
+        with TemporaryTestDir() as workspace_root:
+            workspace_root.mkdir(parents=True, exist_ok=True)
+            server = CaptureBridgeServer()
+            with mock.patch(
+                "jakal_flow.bridge_server.run_command",
+                side_effect=ValueError("Invalid payload"),
+            ):
+                server._handle_request(
+                    "req-1",
+                    "bridge_request",
+                    {
+                        "command": "load-project",
+                        "workspace_root": str(workspace_root),
+                        "payload": {},
+                    },
+                )
+
+            responses = [item for item in server.envelopes if item.get("kind") == "response"]
+            self.assertTrue(responses)
+            last_response = responses[-1]
+            self.assertFalse(bool(last_response.get("ok")))
+            self.assertIsInstance(last_response.get("error"), dict)
+            self.assertEqual(last_response["error"].get("reason_code"), "invalid_request")
+            self.assertEqual(last_response["error"].get("command"), "load-project")
+            self.assertEqual(last_response["error"].get("method"), "bridge_request")
+            self.assertEqual(last_response["error"].get("request_id"), "req-1")
+
+    def test_handle_request_returns_structured_error_for_unsupported_method(self) -> None:
+        with TemporaryTestDir() as workspace_root:
+            workspace_root.mkdir(parents=True, exist_ok=True)
+            server = CaptureBridgeServer()
+            server._handle_request(
+                "req-2",
+                "unsupported_bridge_method",
+                {"command": "load-project", "workspace_root": str(workspace_root), "payload": {}},
+            )
+
+            responses = [item for item in server.envelopes if item.get("kind") == "response"]
+            self.assertTrue(responses)
+            last_error = responses[-1]["error"]
+            self.assertEqual(last_error.get("reason_code"), "unsupported_method")
+            self.assertEqual(last_error.get("message"), "Unsupported bridge method: unsupported_bridge_method")
+
+    def test_serve_forever_treats_invalid_json_as_structured_error(self) -> None:
+        server = CaptureBridgeServer()
+        with mock.patch("sys.stdin", io.StringIO("not-json\n")):
+            with mock.patch.object(server, "_error_response") as error_response:
+                server.serve_forever()
+
+        error_response.assert_called_once()
+        args, _ = error_response.call_args
+        self.assertEqual(args[0], "")
+        self.assertIsInstance(args[1], ValueError)
+        self.assertTrue(str(args[1]).strip())

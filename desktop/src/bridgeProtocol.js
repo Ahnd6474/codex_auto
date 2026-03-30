@@ -48,6 +48,101 @@ export const BRIDGE_EVENTS = Object.freeze({
   PROJECT_UI_EVENT: "project.ui_event",
 });
 
+export const BRIDGE_ERROR_PREFIX = "BRIDGE_ERROR_JSON:";
+
+export const BRIDGE_ERROR_CODES = Object.freeze({
+  BRIDGE_ERROR: "bridge_server_error",
+  INVALID_REQUEST: "invalid_request",
+  REQUEST_REJECTED: "request_rejected",
+  NOT_FOUND: "not_found",
+  DUPLICATE_JOB: "duplicate_job",
+  INVALID_COMMAND: "unsupported_command",
+  METHOD_UNSUPPORTED: "unsupported_method",
+  TIMEOUT: "timeout",
+  BRIDGE_UNAVAILABLE: "bridge_unavailable",
+  PRECONDITION_FAILED: "precondition_failed",
+});
+
+export function parseBridgeError(rawError) {
+  const rawMessage = String(
+    (rawError && typeof rawError === "object" && (rawError.message || rawError.error))
+      || rawError
+      || "",
+  ).trim();
+  if (typeof rawError === "object" && rawError !== null) {
+    if (typeof rawError.reason_code === "string" || typeof rawError.reasonCode === "string") {
+      return {
+        message: String(rawError.message || rawMessage || "Bridge request failed."),
+        reason_code: String(rawError.reason_code || rawError.reasonCode || "").trim(),
+        type: String(rawError.type || rawError.error_type || "").trim(),
+        details: rawError.details || {},
+        recoverable: rawError.recoverable,
+        command: String(rawError.command || "").trim(),
+        method: String(rawError.method || "").trim(),
+        request_id: String(rawError.request_id || "").trim(),
+      };
+    }
+    const text = rawMessage.startsWith(BRIDGE_ERROR_PREFIX)
+      ? rawMessage.slice(BRIDGE_ERROR_PREFIX.length).trim()
+      : rawMessage;
+    if (text.startsWith("{") && text.endsWith("}")) {
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed === "object") {
+          return {
+            message: String(parsed.message || rawMessage || "Bridge request failed."),
+            reason_code: String(parsed.reason_code || parsed.reasonCode || "").trim(),
+            type: String(parsed.type || "").trim(),
+            details: parsed.details || {},
+            recoverable: parsed.recoverable,
+            command: String(parsed.command || "").trim(),
+            method: String(parsed.method || "").trim(),
+            request_id: String(parsed.request_id || "").trim(),
+          };
+        }
+      } catch {
+        // Fall back to the raw message.
+      }
+    }
+  } else if (rawMessage.startsWith(BRIDGE_ERROR_PREFIX)) {
+    const text = rawMessage.slice(BRIDGE_ERROR_PREFIX.length).trim();
+    if (text.startsWith("{") && text.endsWith("}")) {
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed === "object") {
+          return {
+            message: String(parsed.message || rawMessage || "Bridge request failed."),
+            reason_code: String(parsed.reason_code || parsed.reasonCode || "").trim(),
+            type: String(parsed.type || "").trim(),
+            details: parsed.details || {},
+            recoverable: parsed.recoverable,
+            command: String(parsed.command || "").trim(),
+            method: String(parsed.method || "").trim(),
+            request_id: String(parsed.request_id || "").trim(),
+          };
+        }
+      } catch {
+        // Fall back to the raw message.
+      }
+    }
+  }
+  return {
+    message: rawMessage || "Bridge request failed.",
+    reason_code: "",
+    type: "",
+    details: {},
+    recoverable: null,
+    command: "",
+    method: "",
+    request_id: "",
+  };
+}
+
+export function bridgeErrorMessage(rawError, fallback = "Bridge request failed.") {
+  const parsed = parseBridgeError(rawError);
+  return String(parsed.message || "").trim() || String(fallback || "Bridge request failed.");
+}
+
 export function isBridgeMutationCommand(command) {
   return new Set([
     BRIDGE_COMMANDS.SAVE_PROJECT_SETUP,

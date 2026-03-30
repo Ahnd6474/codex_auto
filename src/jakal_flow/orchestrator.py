@@ -3632,6 +3632,10 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
         context = self.status(repo_url, branch)
         return Reporter(context).write_status_report()
 
+    def logx(self, repo_url: str, branch: str, max_artifacts: int = 400) -> Path:
+        context = self.status(repo_url, branch)
+        return Reporter(context).write_logx(max_artifacts=max_artifacts)
+
     def plan_work(
         self,
         repo_url: str,
