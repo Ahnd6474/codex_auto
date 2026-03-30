@@ -400,6 +400,65 @@ test("ParallelRunControlView keeps reset available while generate-plan is runnin
   assert.doesNotMatch(resetMatch[0], /disabled=""/);
 });
 
+test("ParallelRunControlView disables Run when the project status is already running", async () => {
+  const html = await renderBundledComponent(
+    "parallel-run-control-run-disabled-while-running-render",
+    "./src/components/views/ParallelRunControlView.jsx",
+    "ParallelRunControlView",
+    {
+      detail: {
+        project: {
+          current_status: "running:parallel",
+        },
+        runtime: {
+          execution_mode: "parallel",
+          effort: "medium",
+        },
+      },
+      planDraft: {
+        project_prompt: "Ship the UI",
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [
+          {
+            step_id: "ST1",
+            title: "Build",
+            display_description: "Build the screen",
+            codex_description: "Build the screen",
+            success_criteria: "Screen renders",
+            reasoning_effort: "high",
+            status: "running",
+          },
+        ],
+      },
+      activeJob: null,
+      queuedJobs: [],
+      autoRunAfterPlan: false,
+      selectedStepId: "ST1",
+      busy: false,
+      canCancelReservation: false,
+      canRequestStop: false,
+      onPromptChange: noop,
+      onGeneratePlan: noop,
+      onSavePlan: noop,
+      onResetPlan: noop,
+      onRunPlan: noop,
+      onRequestStop: noop,
+      onCancelQueuedJob: noop,
+      onAutoRunAfterPlanChange: noop,
+      onSelectStep: noop,
+      onUpdateStepField: noop,
+      onSaveStepLocal: noop,
+      onAddStep: noop,
+      onDeleteStep: noop,
+    },
+  );
+
+  const runMatch = html.match(/<button[^>]*toolbar-btn toolbar-btn--accent[^>]*>(?:<[^>]+>|[^<])*<span>Run<\/span><\/button>/);
+  assert.ok(runMatch, "Run button should exist");
+  assert.match(runMatch[0], /disabled=""/);
+});
+
 test("ParallelRunControlView shows failure reasons for failed blocks", async () => {
   const html = await renderBundledComponent(
     "parallel-run-control-failure-reason-render",
@@ -1835,6 +1894,42 @@ test("IdeToolbar prioritizes the debugging status over the generic active comman
   assert.match(html, /Debugging/);
 });
 
+test("IdeToolbar disables Run Remaining Steps when the project status is already running", async () => {
+  const html = await renderBundledComponent(
+    "ide-toolbar-run-disabled-while-running-render",
+    "./src/components/layout/IdeToolbar.jsx",
+    "IdeToolbar",
+    {
+      projectDetail: {
+        project: {
+          display_name: "Demo",
+          current_status: "running:parallel",
+        },
+      },
+      planDraft: {
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [
+          { step_id: "ST1", status: "running" },
+        ],
+      },
+      busy: false,
+      activeJob: null,
+      activeCenterTab: "run",
+      onRefresh: noop,
+      onOpenSettings: noop,
+      onGeneratePlan: noop,
+      onRunPlan: noop,
+      onRunCloseout: noop,
+      onApproveCheckpoint: noop,
+    },
+  );
+
+  const runMatch = html.match(/<button[^>]*toolbar-btn toolbar-btn--accent[^>]*>(?:<[^>]+>|[^<])*<span>Run Remaining Steps<\/span><\/button>/);
+  assert.ok(runMatch, "Run Remaining Steps button should exist");
+  assert.match(runMatch[0], /disabled=""/);
+});
+
 test("AppSettingsView omits the removed subsection helper copy", async () => {
   const html = await renderBundledComponent(
     "app-settings-render",
@@ -2208,7 +2303,7 @@ test("SidebarPane renders a filtered workspace tree without unrelated nodes", as
   assert.doesNotMatch(html, /README\.md/);
 });
 
-test("SidebarPane keeps a pending checkpoint visible and marked as live", async () => {
+test("SidebarPane renders live flow steps and keeps a pending checkpoint visible", async () => {
   const html = await renderBundledComponent(
     "sidebar-pane-pending-checkpoint-render",
     "./src/components/layout/SidebarPane.jsx",
@@ -2231,6 +2326,49 @@ test("SidebarPane keeps a pending checkpoint visible and marked as live", async 
       onArchiveAllProjects: noop,
       onDeleteAllProjects: noop,
       workspaceTree: [],
+      detail: {
+        project: {
+          current_status: "running:parallel",
+        },
+        plan: {
+          execution_mode: "parallel",
+          closeout_status: "not_started",
+          steps: [
+            { step_id: "ST1", title: "Prep", status: "completed", depends_on: [] },
+            { step_id: "ST2", title: "Core UI", status: "pending", depends_on: ["ST1"] },
+            { step_id: "ST3", title: "Runtime", status: "pending", depends_on: ["ST1"] },
+          ],
+        },
+        history: {
+          ui_events: [
+            {
+              timestamp: "2026-03-30T12:00:00+00:00",
+              event_type: "batch-started",
+              message: "Started parallel batch",
+              details: {
+                execution_mode: "parallel",
+                step_ids: ["ST2", "ST3"],
+              },
+            },
+          ],
+        },
+      },
+      planDraft: {
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [
+          { step_id: "ST1", title: "Prep", status: "completed", depends_on: [] },
+          { step_id: "ST2", title: "Core UI", status: "pending", depends_on: ["ST1"] },
+          { step_id: "ST3", title: "Runtime", status: "pending", depends_on: ["ST1"] },
+        ],
+      },
+      activeJob: {
+        id: "job-1",
+        status: "running",
+        command: "run-plan",
+      },
+      selectedStepId: "ST2",
+      onSelectStep: noop,
       checkpoints: {
         items: [],
         pending: {
@@ -2249,6 +2387,12 @@ test("SidebarPane keeps a pending checkpoint visible and marked as live", async 
     },
   );
 
+  assert.match(html, /Flow/);
+  assert.match(html, /ST2/);
+  assert.match(html, /ST3/);
+  assert.match(html, /Core UI/);
+  assert.match(html, /Runtime/);
+  assert.match(html, /Running/);
   assert.match(html, /CP2/);
   assert.match(html, /Review the merged work/);
   assert.match(html, /sidebar-item--checkpoint-live/);

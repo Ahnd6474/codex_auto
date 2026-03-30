@@ -251,7 +251,7 @@ export default function App() {
     { id: "tab-history", label: t("tab.history"), shortcut: "Ctrl+5", category: "Tab", keywords: "history runs", onExecute: () => controllerCommandRef.current.setCenterTab("history") },
     { id: "tab-settings", label: t("toolbar.programSettings"), shortcut: "Ctrl+6", category: "Tab", keywords: "settings preferences program", onExecute: () => controllerCommandRef.current.setCenterTab("app-settings") },
     { id: "sidebar-workspace", label: t("sidebar.explorer"), shortcut: "Alt+1", category: "Sidebar", keywords: "explorer files workspace", onExecute: () => controllerCommandRef.current.setSidebarTab((current) => nextSidebarTab(current, "workspace")) },
-    { id: "sidebar-plans", label: t("sidebar.checkpoints"), shortcut: "Alt+2", category: "Sidebar", keywords: "checkpoints plans", onExecute: () => controllerCommandRef.current.setSidebarTab((current) => nextSidebarTab(current, "plans")) },
+    { id: "sidebar-plans", label: t("tab.flow"), shortcut: "Alt+2", category: "Sidebar", keywords: "flow steps checkpoints", onExecute: () => controllerCommandRef.current.setSidebarTab((current) => nextSidebarTab(current, "plans")) },
     { id: "sidebar-reservations", label: "Job Queue", shortcut: "Alt+3", category: "Sidebar", keywords: "reservations queue jobs", onExecute: () => controllerCommandRef.current.setSidebarTab((current) => nextSidebarTab(current, "reservations")) },
     { id: "toggle-bottom", label: "Toggle Bottom Panel", shortcut: "Alt+B", category: "Panel", keywords: "bottom tool panel logs json tokens", onExecute: () => controllerCommandRef.current.setBottomCollapsed((value) => !value) },
     { id: "generate-plan", label: t("action.generatePlan"), category: "Action", keywords: "generate plan ai", onExecute: () => controllerCommandRef.current.generatePlan() },
@@ -331,8 +331,13 @@ export default function App() {
               onDeleteHistoryEntry={controller.deleteHistoryEntry}
               workspaceTree={sidebarDetail?.workspace_tree}
               checkpoints={sidebarDetail?.checkpoints}
+              detail={sidebarDetail}
+              planDraft={sidebarPlanDraft}
+              activeJob={controller.activeJob}
+              selectedStepId={controller.selectedStepId}
+              onSelectStep={handleSelectStep}
               github={sidebarDetail?.github}
-              planPrompt={controller.planDraft?.project_prompt || ""}
+              planPrompt={sidebarPlanDraft?.project_prompt || ""}
               onOpenFolder={controller.openRepoInFolder}
               onOpenVsCode={controller.openRepoInVsCode}
               onOpenGithub={controller.openRepoOnGithub}

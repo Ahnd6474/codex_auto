@@ -1,6 +1,7 @@
 ﻿import { Suspense, lazy, memo, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { ChatMessageContent } from "../../chatMarkdown";
 import { useI18n } from "../../i18n";
+import { resolveExecutionDisplayPlan, runtimeSummary } from "../../utils";
 <<<<<<< Updated upstream
 import { isActiveExecutionStatus, runtimeSummary, visibleExecutionJob } from "../../utils";
 =======
@@ -241,7 +242,10 @@ function rightSidebarPanePropsEqual(previousProps, nextProps) {
       return (
         previousProps.detail?.reports === nextProps.detail?.reports
         && previousProps.detail?.files === nextProps.detail?.files
+        && previousProps.detail?.plan === nextProps.detail?.plan
+        && previousProps.detail?.history?.ui_events === nextProps.detail?.history?.ui_events
         && previousProps.planDraft === nextProps.planDraft
+        && previousProps.activeJob === nextProps.activeJob
         && previousProps.selectedStepId === nextProps.selectedStepId
         && previousProps.busy === nextProps.busy
       );
@@ -249,9 +253,12 @@ function rightSidebarPanePropsEqual(previousProps, nextProps) {
       return (
         previousProps.detail?.project === nextProps.detail?.project
         && previousProps.detail?.runtime === nextProps.detail?.runtime
+        && previousProps.detail?.plan === nextProps.detail?.plan
+        && previousProps.detail?.history?.ui_events === nextProps.detail?.history?.ui_events
         && previousProps.detail?.reports?.closeout_report_text === nextProps.detail?.reports?.closeout_report_text
         && previousProps.detail?.checkpoints?.pending === nextProps.detail?.checkpoints?.pending
         && previousProps.planDraft === nextProps.planDraft
+        && previousProps.activeJob === nextProps.activeJob
         && previousProps.selectedStepId === nextProps.selectedStepId
       );
     default:
@@ -983,9 +990,10 @@ export const RightSidebarPane = memo(function RightSidebarPane({
 }) {
   const { language } = useI18n();
   const processOutput = detail?.subprocess_output || detail?.agent_output || detail?.process_log || "";
-  const executionJob = visibleExecutionJob(activeJob);
-  const liveRuntimeEditable = isActiveExecutionStatus(executionJob?.status) || isActiveExecutionStatus(detail?.project?.current_status);
-  const effectivePlan = liveRuntimeEditable && detail?.plan ? detail.plan : planDraft;
+  const effectivePlan = useMemo(
+    () => resolveExecutionDisplayPlan(detail, planDraft, activeJob),
+    [detail, planDraft, activeJob],
+  );
   const selectedStep = (effectivePlan?.steps || []).find((step) => step.step_id === selectedStepId) || null;
   const hasFiles = Boolean(
     detail?.files?.closeout_report_file
@@ -1036,8 +1044,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
       title: "Inspector",
       dot: false,
     },
-  ].filter((item) => includeChatTab || item.id !== "chat");
-  const effectiveActiveTab = effectiveRightSidebarTab(activeTab, includeChatTab);
+  ];
 
   if (chatCenterMode) {
     return (
@@ -1054,14 +1061,10 @@ export const RightSidebarPane = memo(function RightSidebarPane({
           onStartNewChatSession={onStartNewChatSession}
           onSendChatMessage={onSendChatMessage}
           onChangeChatModelSelection={onChangeChatModelSelection}
-          onChangeChatReasoningEffort={onChangeChatReasoningEffort}
           busy={busy}
           language={language}
           centerMode
-<<<<<<< Updated upstream
           promptValue={promptValue}
-=======
->>>>>>> Stashed changes
           onGeneratePlan={onGeneratePlan}
         />
       </div>
@@ -1072,7 +1075,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
     <aside className={`details-pane rsb ${collapsed ? "rsb--collapsed" : ""}`.trim()}>
       {collapsed ? null : (
         <div className="rsb-panel">
-        {effectiveActiveTab === "chat" ? (
+        {activeTab === "chat" ? (
           <ProjectChatPane
             chat={chat}
             detail={detail}
@@ -1085,7 +1088,6 @@ export const RightSidebarPane = memo(function RightSidebarPane({
             onStartNewChatSession={onStartNewChatSession}
             onSendChatMessage={onSendChatMessage}
             onChangeChatModelSelection={onChangeChatModelSelection}
-            onChangeChatReasoningEffort={onChangeChatReasoningEffort}
             busy={busy}
             language={language}
             promptValue={promptValue}
@@ -1093,13 +1095,13 @@ export const RightSidebarPane = memo(function RightSidebarPane({
           />
         ) : null}
 
-        {effectiveActiveTab === "output" ? (
+        {activeTab === "output" ? (
           <Suspense fallback={<div className="rsb-panel__loading" aria-hidden="true" />}>
             <LazyOutputPanel processOutput={processOutput} language={language} />
           </Suspense>
         ) : null}
 
-        {effectiveActiveTab === "files" ? (
+        {activeTab === "files" ? (
           <Suspense fallback={<div className="rsb-panel__loading" aria-hidden="true" />}>
             <LazyFilesPanel
               detail={detail}
@@ -1112,7 +1114,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
           </Suspense>
         ) : null}
 
-        {effectiveActiveTab === "contracts" ? (
+        {activeTab === "contracts" ? (
           <Suspense fallback={<div className="rsb-panel__loading" aria-hidden="true" />}>
             <LazyContractsPanel
               detail={detail}
@@ -1130,7 +1132,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
           </Suspense>
         ) : null}
 
-        {effectiveActiveTab === "inspector" ? (
+        {activeTab === "inspector" ? (
           <Suspense fallback={<div className="rsb-panel__loading" aria-hidden="true" />}>
             <LazyInspectorPanel
               detail={detail}
@@ -1147,11 +1149,11 @@ export const RightSidebarPane = memo(function RightSidebarPane({
         {railTabs.map(({ id, icon, title, dot }) => (
           <button
             key={id}
-            className={`sidebar-icon${!collapsed && effectiveActiveTab === id ? " active" : ""}`}
+            className={`sidebar-icon${!collapsed && activeTab === id ? " active" : ""}`}
             onClick={() => onChangeTab?.(id)}
             title={title}
             type="button"
-            aria-pressed={!collapsed && effectiveActiveTab === id}
+            aria-pressed={!collapsed && activeTab === id}
           >
             {icon}
             {dot ? <span className="rsb-rail__dot" /> : null}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { effectiveStepStatus, isActiveExecutionStatus, reasoningEffortLabel, runtimeSummary, statusTone } from "../../utils";
+import { effectiveStepStatus, reasoningEffortLabel, resolveExecutionDisplayPlan, runtimeSummary, statusTone } from "../../utils";
 
 function DocumentIcon() {
   return (
@@ -33,7 +33,7 @@ export function DetailsPane({ detail, planDraft, selectedStepId, modelPresets, o
   const { t } = useI18n();
   const [detailsTab, setDetailsTab] = useState("inspector");
   const outputRef = useRef(null);
-  const effectivePlan = isActiveExecutionStatus(detail?.project?.current_status) && detail?.plan ? detail.plan : planDraft;
+  const effectivePlan = resolveExecutionDisplayPlan(detail, planDraft, null);
   const selectedStep = (effectivePlan?.steps || []).find((step) => step.step_id === selectedStepId) || null;
   const pendingCheckpoint = detail?.checkpoints?.pending || null;
   const selectedStepStatus = effectiveStepStatus(selectedStep, detail?.project?.current_status || "");

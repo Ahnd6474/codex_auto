@@ -2538,6 +2538,29 @@ select:focus {
   animation: fade-in 0.1s ease;
 }
 
+.sidebar-step-item {
+  gap: 4px;
+}
+
+.sidebar-step-item__id {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.sidebar-step-item__meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-flow-checkpoints {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
