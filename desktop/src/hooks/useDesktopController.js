@@ -6,6 +6,7 @@ import { bridgeEventJob, bridgeEventProject, compactBridgeEventQueue, isJobUpdat
 import {
   mergeRefreshRepoId,
   projectRefreshDebounceMs,
+  shouldImmediatelyRefreshJobUpdate,
   shouldImmediatelyRefreshProjectEvent,
   shouldImmediatelyRefreshProjectUiEvent,
   shouldForceCodexRefreshForManualRefresh,
@@ -894,6 +895,21 @@ export function useDesktopController() {
         const jobStatus = String(job.status || "").trim().toLowerCase();
         const normalizedCommand = String(job.command || "").trim().toLowerCase();
         const supersededByActiveJob = jobHasNewerActiveReplacement(job, jobsRef.current);
+        if (shouldImmediatelyRefreshJobUpdate(selectedProjectId, job)) {
+          const jobRepoId = String(
+            job?.repo_id
+            || job?.result?.repo_id
+            || job?.result?.project?.repo_id
+            || job?.result?.detail?.project?.repo_id
+            || job?.project_dir
+            || "",
+          ).trim();
+          scheduleBridgeRefresh(jobRepoId, {
+            immediate: true,
+            refreshListing: false,
+            refreshDetail: true,
+          });
+        }
         if (normalizedCommand === BRIDGE_COMMANDS.SEND_CHAT_MESSAGE) {
           const resultProjectId = String(job?.result?.project?.repo_id || "").trim();
           if (

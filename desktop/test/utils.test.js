@@ -1667,6 +1667,29 @@ test("planStepsWithCloseout appends a synthetic final closeout node", () => {
   assert.equal(canEditStep(steps[2], false), false);
 });
 
+test("planStepsWithCloseout only depends on terminal steps in a DAG", () => {
+  const steps = planStepsWithCloseout(
+    {
+      closeout_status: "not_started",
+      closeout_notes: "",
+      steps: [
+        { step_id: "ST1", status: "completed", depends_on: [] },
+        { step_id: "ST2", status: "completed", depends_on: ["ST1"] },
+        { step_id: "ST3", status: "completed", depends_on: ["ST1"] },
+        { step_id: "ST4", status: "pending", depends_on: ["ST2", "ST3"] },
+      ],
+    },
+    {
+      title: "Closeout",
+      description: "Closeout report",
+      successCriteria: "Closeout report",
+    },
+  );
+
+  assert.equal(steps[4].step_id, "CO1");
+  assert.deepEqual(steps[4].depends_on, ["ST4"]);
+});
+
 /*
   assert.equal(
     runtimeSummary(

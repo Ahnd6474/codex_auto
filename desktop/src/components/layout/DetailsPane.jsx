@@ -33,7 +33,11 @@ export function DetailsPane({ detail, planDraft, selectedStepId, modelPresets, o
   const { t } = useI18n();
   const [detailsTab, setDetailsTab] = useState("inspector");
   const outputRef = useRef(null);
-  const selectedStep = (planDraft?.steps || []).find((step) => step.step_id === selectedStepId) || null;
+  const effectivePlan =
+    ["running", "queued"].includes(String(detail?.project?.current_status || "").trim().toLowerCase()) && detail?.plan
+      ? detail.plan
+      : planDraft;
+  const selectedStep = (effectivePlan?.steps || []).find((step) => step.step_id === selectedStepId) || null;
   const pendingCheckpoint = detail?.checkpoints?.pending || null;
   const selectedStepStatus = effectiveStepStatus(selectedStep, detail?.project?.current_status || "");
   const processOutput = detail?.subprocess_output || detail?.agent_output || detail?.process_log || "";

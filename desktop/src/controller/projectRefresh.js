@@ -1,6 +1,15 @@
 const DEFAULT_IDLE_DEBOUNCE_MS = 120;
 const DEFAULT_RUNNING_DEBOUNCE_MS = 250;
 const IMMEDIATE_REFRESH_DEBOUNCE_MS = 0;
+const IMMEDIATE_JOB_COMMANDS = new Set([
+  "generate-plan",
+  "run-plan",
+  "run-closeout",
+  "run-manual-debugger",
+  "run-manual-merger",
+  "request-stop",
+  "approve-checkpoint",
+]);
 const IMMEDIATE_PROJECT_STATUS_PREFIXES = [
   "running",
   "failed",
@@ -97,4 +106,23 @@ export function shouldImmediatelyRefreshProjectUiEvent(selectedProjectId = "", e
     return false;
   }
   return IMMEDIATE_UI_EVENT_TYPES.has(eventType);
+}
+
+export function shouldImmediatelyRefreshJobUpdate(selectedProjectId = "", job = null) {
+  const repoId = normalizedRepoId(
+    job?.repo_id
+    || job?.result?.repo_id
+    || job?.result?.project?.repo_id
+    || job?.result?.detail?.project?.repo_id
+    || job?.project_dir,
+  );
+  if (!shouldRefreshSelectedProject(selectedProjectId, repoId)) {
+    return false;
+  }
+  const command = normalizedStatus(job?.command);
+  if (!IMMEDIATE_JOB_COMMANDS.has(command)) {
+    return false;
+  }
+  const status = normalizedStatus(job?.status);
+  return ["queued", "running", "completed", "failed", "cancelled"].includes(status);
 }

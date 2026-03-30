@@ -822,6 +822,70 @@ test("RightSidebarPane renders process output through the deferred detail panel"
   assert.match(html, /step-2/);
 });
 
+test("RightSidebarPane inspector prefers the live execution plan over a stale draft while a run is active", async () => {
+  const html = await renderBundledComponent(
+    "right-sidebar-inspector-live-plan-render",
+    "./src/components/layout/RightSidebarPane.jsx",
+    "RightSidebarPane",
+    {
+      activeTab: "inspector",
+      detail: {
+        project: {
+          current_status: "running:parallel",
+          display_name: "Demo",
+          branch: "main",
+          repo_path: "C:/demo",
+        },
+        runtime: {
+          effort: "medium",
+        },
+        plan: {
+          steps: [
+            { step_id: "ST1", title: "Plan", status: "completed" },
+            {
+              step_id: "ST2",
+              title: "Live Build",
+              status: "running",
+              display_description: "Use the live plan",
+              reasoning_effort: "medium",
+            },
+          ],
+        },
+      },
+      planDraft: {
+        steps: [
+          { step_id: "ST1", title: "Plan", status: "completed" },
+          {
+            step_id: "ST2",
+            title: "Stale Build",
+            status: "pending",
+            display_description: "Do not use the stale draft",
+            reasoning_effort: "medium",
+          },
+        ],
+      },
+      selectedStepId: "ST2",
+      modelPresets: [],
+      modelCatalog: [],
+      form: {
+        runtime: {
+          generate_word_report: false,
+        },
+      },
+      activeJob: {
+        status: "running",
+        command: "run-plan",
+      },
+      busy: false,
+    },
+  );
+
+  assert.match(html, /Live Build/);
+  assert.match(html, /Use the live plan/);
+  assert.doesNotMatch(html, /Stale Build/);
+  assert.doesNotMatch(html, /Do not use the stale draft/);
+});
+
 test("RightSidebarPane keeps an out-of-catalog chat model visible in the selector", async () => {
   const html = await renderBundledComponent(
     "right-sidebar-chat-custom-model-render",

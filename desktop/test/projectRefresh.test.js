@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   mergeRefreshRepoId,
   projectRefreshDebounceMs,
+  shouldImmediatelyRefreshJobUpdate,
   shouldImmediatelyRefreshProjectEvent,
   shouldImmediatelyRefreshProjectUiEvent,
   shouldForceCodexRefreshForManualRefresh,
@@ -105,6 +106,45 @@ test("shouldImmediatelyRefreshProjectUiEvent only fast-tracks visible structural
           details: {},
         },
       },
+    }),
+    false,
+  );
+});
+
+test("shouldImmediatelyRefreshJobUpdate fast-tracks visible execution job state changes", () => {
+  assert.equal(
+    shouldImmediatelyRefreshJobUpdate("repo-1", {
+      repo_id: "repo-1",
+      command: "run-plan",
+      status: "running",
+    }),
+    true,
+  );
+  assert.equal(
+    shouldImmediatelyRefreshJobUpdate("repo-1", {
+      result: {
+        project: {
+          repo_id: "repo-1",
+        },
+      },
+      command: "run-closeout",
+      status: "completed",
+    }),
+    true,
+  );
+  assert.equal(
+    shouldImmediatelyRefreshJobUpdate("repo-1", {
+      repo_id: "repo-2",
+      command: "run-plan",
+      status: "running",
+    }),
+    false,
+  );
+  assert.equal(
+    shouldImmediatelyRefreshJobUpdate("repo-1", {
+      repo_id: "repo-1",
+      command: "send-chat-message",
+      status: "running",
     }),
     false,
   );

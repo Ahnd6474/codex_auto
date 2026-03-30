@@ -859,9 +859,11 @@ export const RightSidebarPane = memo(function RightSidebarPane({
 }) {
   const { language } = useI18n();
   const processOutput = detail?.subprocess_output || detail?.agent_output || detail?.process_log || "";
-  const selectedStep = (planDraft?.steps || []).find((step) => step.step_id === selectedStepId) || null;
   const executionJob = visibleExecutionJob(activeJob);
-  const liveRuntimeEditable = ["running", "queued"].includes(String(executionJob?.status || "").trim().toLowerCase());
+  const executionJobStatus = String(executionJob?.status || "").trim().toLowerCase();
+  const liveRuntimeEditable = ["running", "queued"].includes(executionJobStatus);
+  const effectivePlan = liveRuntimeEditable && detail?.plan ? detail.plan : planDraft;
+  const selectedStep = (effectivePlan?.steps || []).find((step) => step.step_id === selectedStepId) || null;
   const hasFiles = Boolean(
     detail?.files?.closeout_report_file
     || detail?.reports?.word_report_path

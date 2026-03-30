@@ -232,6 +232,10 @@ export default function App() {
   const detail = controller.projectDetail;
   const deferredDetail = useDeferredValue(detail);
   const deferredPlanDraft = useDeferredValue(controller.planDraft);
+  const activeExecutionStatus = String(controller.activeJob?.status || "").trim().toLowerCase();
+  const useLiveExecutionDetail = activeExecutionStatus === "queued" || activeExecutionStatus === "running";
+  const sidebarDetail = useLiveExecutionDetail ? detail : deferredDetail;
+  const sidebarPlanDraft = useLiveExecutionDetail && detail?.plan ? detail.plan : deferredPlanDraft;
   const sidebarOpen = Boolean(controller.sidebarTab);
   const sidebarStyle = sidebarOpen ? { width: controller.sidebarWidth, flex: `0 0 ${controller.sidebarWidth}px` } : undefined;
   const compact = Boolean(controller.programSettings?.compact_mode);
@@ -345,9 +349,9 @@ export default function App() {
               onArchiveProject={controller.archiveProjectById}
               onDeleteProject={controller.deleteProjectById}
               onDeleteHistoryEntry={controller.deleteHistoryEntry}
-              workspaceTree={deferredDetail?.workspace_tree}
-              checkpoints={deferredDetail?.checkpoints}
-              github={deferredDetail?.github}
+              workspaceTree={sidebarDetail?.workspace_tree}
+              checkpoints={sidebarDetail?.checkpoints}
+              github={sidebarDetail?.github}
               planPrompt={controller.planDraft?.project_prompt || ""}
               onOpenFolder={controller.openRepoInFolder}
               onOpenVsCode={controller.openRepoInVsCode}
@@ -372,15 +376,15 @@ export default function App() {
               collapsed={false}
               chatCenterMode
               onChangeTab={handleRightTabChange}
-              detail={deferredDetail}
-              planDraft={deferredPlanDraft}
+              detail={sidebarDetail}
+              planDraft={sidebarPlanDraft}
               selectedStepId={controller.selectedStepId}
               modelPresets={controller.modelPresets}
               form={controller.projectForm}
               activeJob={controller.activeJob}
               busy={controller.busy}
               onChangeForm={controller.setProjectForm}
-              chat={deferredDetail?.chat}
+              chat={sidebarDetail?.chat}
               selectedChatSessionId={controller.selectedChatSessionId}
               chatDraftSession={controller.chatDraftSession}
               onSelectChatSession={controller.loadChatSession}
@@ -484,7 +488,7 @@ export default function App() {
                     <LazyBottomToolPanel
                       activeTab={controller.bottomTab}
                       onChangeTab={controller.setBottomTab}
-                      data={deferredDetail}
+                      data={sidebarDetail}
                       onHide={() => controller.setBottomCollapsed(true)}
                     />
                   </Suspense>

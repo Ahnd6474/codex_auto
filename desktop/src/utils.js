@@ -2016,6 +2016,19 @@ export function planStepsWithCloseout(plan, labels = {}) {
   if (!steps.length) {
     return steps;
   }
+  const stepIds = steps
+    .map((step) => String(step?.step_id || "").trim())
+    .filter((stepId) => stepId && stepId !== CLOSEOUT_STEP_ID);
+  const dependedOnStepIds = new Set();
+  steps.forEach((step) => {
+    (step?.depends_on || []).forEach((dependency) => {
+      const dependencyId = String(dependency || "").trim();
+      if (dependencyId && dependencyId !== CLOSEOUT_STEP_ID) {
+        dependedOnStepIds.add(dependencyId);
+      }
+    });
+  });
+  const closeoutDependsOn = stepIds.filter((stepId) => !dependedOnStepIds.has(stepId));
   const closeoutStatus = String(plan?.closeout_status || "not_started").trim().toLowerCase();
   let status = "pending";
   if (closeoutStatus === "running") {
@@ -2034,7 +2047,9 @@ export function planStepsWithCloseout(plan, labels = {}) {
     deadline_at: "",
     reasoning_effort: "high",
     parallel_group: "",
-    depends_on: steps.map((step) => step.step_id).filter((stepId) => stepId && stepId !== CLOSEOUT_STEP_ID),
+    // Closeout should attach to terminal steps, otherwise the DAG renders redundant
+    // shortcut edges like ST2 -> CO1 alongside ST2 -> ... -> CO1.
+    depends_on: closeoutDependsOn.length ? closeoutDependsOn : stepIds,
     owned_paths: ["README.md", "docs/CLOSEOUT_REPORT.md"],
     status,
     notes: String(plan?.closeout_notes || "").trim(),
