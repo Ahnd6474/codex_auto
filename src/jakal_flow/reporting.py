@@ -96,6 +96,7 @@ class Reporter:
             "loop_state": self.context.loop_state.to_dict(),
             "recent_passes": passes,
             "recent_blocks": blocks,
+            "planning_metrics": read_jsonl_tail(self.context.paths.planning_metrics_file, 40),
             "spine": read_json(self.context.paths.spine_file, default={}),
             "common_requirements": read_json(self.context.paths.common_requirements_file, default={}),
             "lineage_manifests": load_lineage_manifest_payloads(self.context.paths),

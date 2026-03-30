@@ -7,6 +7,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import shutil
 from pathlib import Path
+from time import perf_counter
 from uuid import uuid4
 
 from .commit_naming import build_commit_descriptor, build_initial_commit_descriptor
@@ -48,6 +49,7 @@ from .parallel_resources import build_parallel_resource_plan, normalize_parallel
 from .platform_defaults import default_codex_path
 from .planning import (
     FINALIZATION_PROMPT_FILENAME,
+    PlanItem,
     attempt_history_entry,
     assess_repository_maturity,
     build_fast_planner_outline,
@@ -139,6 +141,35 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
             deepcopy(state),
         )
 
+    def _scan_repository_inputs(self, context: ProjectContext, *, force_refresh: bool = False) -> dict[str, str]:
+        return scan_repository_inputs(
+            context.paths.repo_dir,
+            cache_file=context.paths.planning_inputs_cache_file,
+            force_refresh=force_refresh,
+        )
+
+    def _log_planning_metric(
+        self,
+        context: ProjectContext,
+        stage: str,
+        *,
+        started_at: float,
+        flow: str = "planning",
+        details: dict[str, object] | None = None,
+    ) -> None:
+        payload: dict[str, object] = {
+            "generated_at": now_utc_iso(),
+            "flow": flow,
+            "stage": stage,
+            "duration_ms": round((perf_counter() - started_at) * 1000.0, 3),
+            "block_index": max(0, context.loop_state.block_index),
+            "repo_id": context.metadata.repo_id,
+            "repo_slug": context.metadata.slug,
+        }
+        if details:
+            payload.update(details)
+        append_jsonl(context.paths.planning_metrics_file, payload)
+
     @staticmethod
     def _step_static_artifact_signature(step: ExecutionStep) -> str:
         payload = step.to_dict()
@@ -174,6 +205,131 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
                 context.paths.scope_guard_file,
                 context.paths.execution_flow_svg_file,
             )
+        )
+
+    def _save_execution_plan_static_artifacts(self, context: ProjectContext, state: ExecutionPlanState) -> None:
+        write_text_if_changed(
+            context.paths.plan_file,
+            execution_plan_markdown(
+                context,
+                state.plan_title,
+                state.project_prompt,
+                state.summary,
+                state.workflow_mode,
+                state.execution_mode,
+                state.steps,
+            ),
+        )
+        mid_term_text, _ = build_mid_term_plan_from_plan_items(
+            execution_steps_to_plan_items(state.steps),
+            "This plan is the user-reviewed execution sequence for the current local project.",
+        )
+        write_text_if_changed(context.paths.mid_term_plan_file, mid_term_text)
+        write_text_if_changed(context.paths.scope_guard_file, ensure_scope_guard(context))
+        flow_title = state.plan_title or context.metadata.display_name or context.metadata.slug
+        write_text_if_changed(
+            context.paths.execution_flow_svg_file,
+            execution_plan_svg(f"{flow_title} execution flow", state.steps, state.execution_mode),
+        )
+
+    def _save_execution_plan_runtime_artifacts(self, context: ProjectContext, state: ExecutionPlanState) -> None:
+        checkpoints = self._checkpoints_from_execution_steps(state.steps)
+        write_json_if_changed(context.paths.checkpoint_state_file, {"checkpoints": [checkpoint.to_dict() for checkpoint in checkpoints]})
+        write_text_if_changed(context.paths.checkpoint_timeline_file, checkpoint_timeline_markdown(checkpoints))
+
+    def _block_plan_cache_signature(
+        self,
+        context: ProjectContext,
+        *,
+        plan_text: str,
+        max_items: int,
+        repo_inputs: dict[str, str] | None,
+        work_items: list[str] | None,
+    ) -> dict[str, object]:
+        return {
+            "repo_dir": str(context.paths.repo_dir.resolve()),
+            "plan_hash": compact_text(plan_text, 12000),
+            "max_items": max_items,
+            "work_items": list(work_items or []),
+            "repo_inputs": repo_inputs if isinstance(repo_inputs, dict) else {},
+            "plan_file": self._path_cache_token(context.paths.plan_file),
+            "execution_plan_file": self._path_cache_token(context.paths.execution_plan_file),
+            "success_patterns": self._path_cache_token(context.paths.success_patterns_file),
+            "failure_patterns": self._path_cache_token(context.paths.failure_patterns_file),
+            "task_summaries": self._path_cache_token(context.paths.task_summaries_file),
+        }
+
+    def _load_cached_block_plan(
+        self,
+        context: ProjectContext,
+        *,
+        plan_text: str,
+        max_items: int,
+        repo_inputs: dict[str, str] | None,
+        work_items: list[str] | None,
+    ) -> tuple[list, str] | None:
+        cached = read_json(context.paths.block_plan_cache_file, default=None)
+        if not isinstance(cached, dict):
+            return None
+        if int(cached.get("version", 0) or 0) != 1:
+            return None
+        signature = self._block_plan_cache_signature(
+            context,
+            plan_text=plan_text,
+            max_items=max_items,
+            repo_inputs=repo_inputs,
+            work_items=work_items,
+        )
+        if str(cached.get("signature", "")).strip() != json.dumps(signature, ensure_ascii=False, sort_keys=True):
+            return None
+        mid_term_text = str(cached.get("mid_term_text", ""))
+        raw_items = cached.get("items", [])
+        if not mid_term_text or not isinstance(raw_items, list):
+            return None
+        parsed_items: list[PlanItem] = []
+        for item in raw_items:
+            if isinstance(item, dict):
+                item_id = str(item.get("item_id", "")).strip()
+                text = str(item.get("text", "")).strip()
+                if item_id and text:
+                    parsed_items.append(PlanItem(item_id=item_id, text=text))
+        if mid_term_text.strip():
+            return parsed_items, mid_term_text
+        return None
+
+    def _store_block_plan_cache(
+        self,
+        context: ProjectContext,
+        *,
+        plan_text: str,
+        max_items: int,
+        repo_inputs: dict[str, str] | None,
+        work_items: list[str] | None,
+        mid_items: list,
+        mid_term_text: str,
+    ) -> None:
+        signature = self._block_plan_cache_signature(
+            context,
+            plan_text=plan_text,
+            max_items=max_items,
+            repo_inputs=repo_inputs,
+            work_items=work_items,
+        )
+        write_json_if_changed(
+            context.paths.block_plan_cache_file,
+            {
+                "version": 1,
+                "signature": json.dumps(signature, ensure_ascii=False, sort_keys=True),
+                "mid_term_text": mid_term_text,
+                "items": [
+                    {
+                        "item_id": str(getattr(item, "item_id", "")).strip(),
+                        "text": str(getattr(item, "text", "")).strip(),
+                    }
+                    for item in mid_items
+                    if str(getattr(item, "item_id", "")).strip() and str(getattr(item, "text", "")).strip()
+                ],
+            },
         )
 
     def _step_metadata_copy(self, step: ExecutionStep) -> dict[str, object]:
@@ -316,7 +472,14 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
                 "status": "running",
             },
         )
-        repo_inputs = scan_repository_inputs(context.paths.repo_dir)
+        context_scan_started_at = perf_counter()
+        repo_inputs = self._scan_repository_inputs(context)
+        self._log_planning_metric(
+            context,
+            "context_scan",
+            started_at=context_scan_started_at,
+            details={"cache_file": str(context.paths.planning_inputs_cache_file)},
+        )
         runner = CodexRunner(context.runtime.codex_path)
         skip_planner_a = self._should_skip_planner_decomposition(context, planning_effort, workflow_mode)
         planner_outline = ""
@@ -333,10 +496,17 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
                     "agent_label": "Planner Agent A",
                 },
             )
+            planner_a_started_at = perf_counter()
             planner_outline = build_fast_planner_outline(
                 repo_inputs,
                 project_prompt,
                 current_spine_version=current_spine_version(context.paths),
+            )
+            self._log_planning_metric(
+                context,
+                "planner_a_fast_outline",
+                started_at=planner_a_started_at,
+                details={"skipped": True},
             )
             report_progress(
                 "planner-agent-finished",
@@ -360,6 +530,7 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
                 execution_mode=normalized_execution_mode,
                 template_text=decomposition_prompt_template,
             )
+            planner_a_started_at = perf_counter()
             report_progress(
                 "planner-agent-started",
                 "Planner Agent A is decomposing the work into implementation blocks.",
@@ -380,6 +551,12 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
                 block_index=max(0, context.loop_state.block_index),
                 search_enabled=False,
                 reasoning_effort=planning_effort,
+            )
+            self._log_planning_metric(
+                context,
+                "planner_a_decomposition",
+                started_at=planner_a_started_at,
+                details={"returncode": decomposition_result.returncode},
             )
             report_progress(
                 "planner-agent-finished",
@@ -408,6 +585,7 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
             planner_outline=planner_outline,
             template_text=planning_prompt_template,
         )
+        planner_b_started_at = perf_counter()
         report_progress(
             "planner-agent-started",
             "Planner Agent B is packing the final execution plan.",
@@ -429,6 +607,12 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
             search_enabled=False,
             reasoning_effort=planning_effort,
         )
+        self._log_planning_metric(
+            context,
+            "planner_b_packing",
+            started_at=planner_b_started_at,
+            details={"returncode": result.returncode},
+        )
         report_progress(
             "planner-agent-finished",
             "Planner Agent B finished the execution plan draft.",
@@ -446,6 +630,7 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
         summary = ""
         steps: list[ExecutionStep] = []
         if result.returncode == 0:
+            parse_started_at = perf_counter()
             plan_title, summary, steps = parse_execution_plan_response(
                 result.last_message or "",
                 runtime.test_cmd,
@@ -458,6 +643,12 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
                 execution_mode=normalized_execution_mode,
             )
             steps = self._materialize_generated_step_models(steps, runtime)
+            self._log_planning_metric(
+                context,
+                "plan_response_parse",
+                started_at=parse_started_at,
+                details={"step_count": len(steps)},
+            )
         if not steps:
             steps = [
                 ExecutionStep(
@@ -492,7 +683,14 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
             last_updated_at=now_utc_iso(),
             steps=steps,
         )
+        finalize_started_at = perf_counter()
         self.save_execution_plan_state(context, plan_state)
+        self._log_planning_metric(
+            context,
+            "plan_finalize",
+            started_at=finalize_started_at,
+            details={"step_count": len(steps)},
+        )
         self._initialize_ml_mode_state(
             context,
             plan_state,
@@ -673,33 +871,9 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
         write_json(context.paths.execution_plan_file, state.to_dict())
         static_signature = self._static_plan_artifact_signature(context, state)
         if self._static_plan_artifacts_need_refresh(context, static_signature):
-            write_text_if_changed(
-                context.paths.plan_file,
-                execution_plan_markdown(
-                    context,
-                    state.plan_title,
-                    state.project_prompt,
-                    state.summary,
-                    state.workflow_mode,
-                    state.execution_mode,
-                    state.steps,
-                ),
-            )
-            mid_term_text, _ = build_mid_term_plan_from_plan_items(
-                execution_steps_to_plan_items(state.steps),
-                "This plan is the user-reviewed execution sequence for the current local project.",
-            )
-            write_text_if_changed(context.paths.mid_term_plan_file, mid_term_text)
-            write_text_if_changed(context.paths.scope_guard_file, ensure_scope_guard(context))
-            flow_title = state.plan_title or context.metadata.display_name or context.metadata.slug
-            write_text_if_changed(
-                context.paths.execution_flow_svg_file,
-                execution_plan_svg(f"{flow_title} execution flow", state.steps, state.execution_mode),
-            )
+            self._save_execution_plan_static_artifacts(context, state)
             self._static_plan_artifact_signature_cache[self._execution_plan_cache_key(context)] = static_signature
-        checkpoints = self._checkpoints_from_execution_steps(state.steps)
-        write_json_if_changed(context.paths.checkpoint_state_file, {"checkpoints": [checkpoint.to_dict() for checkpoint in checkpoints]})
-        write_text_if_changed(context.paths.checkpoint_timeline_file, checkpoint_timeline_markdown(checkpoints))
+        self._save_execution_plan_runtime_artifacts(context, state)
         self._cache_execution_plan_state(context, state)
         return state
 
@@ -3064,7 +3238,14 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
             if supplied_plan_text and is_plan_markdown(supplied_plan_text):
                 plan_text = supplied_plan_text
             else:
-                repo_inputs = scan_repository_inputs(context.paths.repo_dir)
+                repo_inputs_started_at = perf_counter()
+                repo_inputs = self._scan_repository_inputs(context)
+                self._log_planning_metric(
+                    context,
+                    "init_repo_context_scan",
+                    started_at=repo_inputs_started_at,
+                    flow="planning-bootstrap",
+                )
                 is_mature, maturity_details = assess_repository_maturity(context.paths.repo_dir, repo_inputs)
                 plan_text = self._resolve_plan_text(
                     context=context,
@@ -3126,7 +3307,14 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
                     if is_plan_markdown(updated_plan_text):
                         resolved_plan_text = updated_plan_text
                     else:
-                        repo_inputs = scan_repository_inputs(context.paths.repo_dir)
+                        repo_inputs_started_at = perf_counter()
+                        repo_inputs = self._scan_repository_inputs(context)
+                        self._log_planning_metric(
+                            context,
+                            "run_context_scan",
+                            started_at=repo_inputs_started_at,
+                            flow="planning-bootstrap",
+                        )
                         is_mature, maturity_details = assess_repository_maturity(context.paths.repo_dir, repo_inputs)
                         resolved_plan_text = self._resolve_plan_text(
                             context=context,
@@ -3224,7 +3412,14 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
                 if is_plan_markdown(supplied_plan_text):
                     plan_text = supplied_plan_text
                 else:
-                    repo_inputs = scan_repository_inputs(context.paths.repo_dir)
+                    repo_inputs_started_at = perf_counter()
+                    repo_inputs = self._scan_repository_inputs(context)
+                    self._log_planning_metric(
+                        context,
+                        "plan_work_context_scan",
+                        started_at=repo_inputs_started_at,
+                        flow="planning-bootstrap",
+                    )
                     is_mature, maturity_details = assess_repository_maturity(context.paths.repo_dir, repo_inputs)
                     plan_text = self._resolve_plan_text(
                         context=context,
@@ -3238,7 +3433,14 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
             elif context.paths.plan_file.exists():
                 plan_text = read_text(context.paths.plan_file)
             else:
-                repo_inputs = scan_repository_inputs(context.paths.repo_dir)
+                repo_inputs_started_at = perf_counter()
+                repo_inputs = self._scan_repository_inputs(context)
+                self._log_planning_metric(
+                    context,
+                    "plan_work_context_scan",
+                    started_at=repo_inputs_started_at,
+                    flow="planning-bootstrap",
+                )
                 is_mature, maturity_details = assess_repository_maturity(context.paths.repo_dir, repo_inputs)
                 plan_text = self._resolve_plan_text(
                     context=context,
@@ -4023,7 +4225,15 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
         maturity_details: dict[str, int],
     ) -> str:
         runner = CodexRunner(runtime.codex_path)
+        prompt_started_at = perf_counter()
         prompt = bootstrap_plan_prompt(context, repo_inputs, user_prompt)
+        self._log_planning_metric(
+            context,
+            "bootstrap_prompt_build",
+            started_at=prompt_started_at,
+            flow="planning-bootstrap",
+        )
+        agent_started_at = perf_counter()
         result = self._run_pass_with_provider_fallback(
             context=context,
             runner=runner,
@@ -4031,6 +4241,13 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
             pass_type="init-project-plan",
             block_index=0,
             search_enabled=False,
+        )
+        self._log_planning_metric(
+            context,
+            "bootstrap_plan_agent",
+            started_at=agent_started_at,
+            flow="planning-bootstrap",
+            details={"returncode": result.returncode},
         )
         plan_text = read_text(context.paths.plan_file)
         if result.returncode != 0 or not plan_text.strip():
@@ -4062,6 +4279,36 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
             mid_term_text, mid_items = build_mid_term_plan_from_user_items(remaining_items or work_items)
             return mid_items, mid_term_text
 
+        cache_lookup_started_at = perf_counter()
+        cached_mid_term = self._load_cached_block_plan(
+            context,
+            plan_text=plan_text,
+            max_items=max_items,
+            repo_inputs=repo_inputs,
+            work_items=work_items,
+        )
+        if cached_mid_term is not None:
+            cached_items, cached_text = cached_mid_term
+            valid_subset, violations = validate_mid_term_subset(cached_text, plan_text)
+            self._log_planning_metric(
+                context,
+                "block_plan_cache_lookup",
+                started_at=cache_lookup_started_at,
+                flow="block-planning",
+                details={"cache_hit": valid_subset, "item_count": len(cached_items)},
+            )
+            if valid_subset:
+                return cached_items, cached_text
+            write_text(context.paths.reports_dir / "plan_scope_violation.txt", "\n".join(violations) + "\n")
+        else:
+            self._log_planning_metric(
+                context,
+                "block_plan_cache_lookup",
+                started_at=cache_lookup_started_at,
+                flow="block-planning",
+                details={"cache_hit": False},
+            )
+
         planned_items = self._generate_codex_work_items(
             context=context,
             runner=runner,
@@ -4076,6 +4323,15 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
             )
             valid_subset, violations = validate_mid_term_subset(mid_term_text, plan_text)
             if valid_subset:
+                self._store_block_plan_cache(
+                    context,
+                    plan_text=plan_text,
+                    max_items=max_items,
+                    repo_inputs=repo_inputs,
+                    work_items=work_items,
+                    mid_items=mid_items,
+                    mid_term_text=mid_term_text,
+                )
                 return mid_items, mid_term_text
             write_text(context.paths.reports_dir / "plan_scope_violation.txt", "\n".join(violations) + "\n")
 
@@ -4083,6 +4339,15 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
         valid_subset, violations = validate_mid_term_subset(mid_term_text, plan_text)
         if not valid_subset:
             raise RuntimeError(f"Mid-term plan violated saved plan scope: {violations}")
+        self._store_block_plan_cache(
+            context,
+            plan_text=plan_text,
+            max_items=max_items,
+            repo_inputs=repo_inputs,
+            work_items=work_items,
+            mid_items=mid_items,
+            mid_term_text=mid_term_text,
+        )
         return mid_items, mid_term_text
 
     def _generate_codex_work_items(
@@ -4094,7 +4359,15 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
         repo_inputs: dict[str, str] | None = None,
     ) -> list:
         if repo_inputs is None:
-            repo_inputs = scan_repository_inputs(context.paths.repo_dir)
+            repo_inputs_started_at = perf_counter()
+            repo_inputs = self._scan_repository_inputs(context)
+            self._log_planning_metric(
+                context,
+                "block_context_scan",
+                started_at=repo_inputs_started_at,
+                flow="block-planning",
+            )
+        prompt_started_at = perf_counter()
         memory_context = MemoryStore(context.paths).render_context(plan_text)
         prompt = work_breakdown_prompt(
             context=context,
@@ -4103,6 +4376,14 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
             memory_context=memory_context,
             max_items=max_items,
         )
+        self._log_planning_metric(
+            context,
+            "block_prompt_build",
+            started_at=prompt_started_at,
+            flow="block-planning",
+            details={"max_items": max_items},
+        )
+        agent_started_at = perf_counter()
         result = self._run_pass_with_provider_fallback(
             context=context,
             runner=runner,
@@ -4111,6 +4392,22 @@ class Orchestrator(OrchestratorLineageMixin, OrchestratorCloseoutMixin, Orchestr
             block_index=max(0, context.loop_state.block_index),
             search_enabled=False,
         )
+        self._log_planning_metric(
+            context,
+            "block_agent_breakdown",
+            started_at=agent_started_at,
+            flow="block-planning",
+            details={"returncode": result.returncode},
+        )
         if result.returncode != 0:
             return []
-        return parse_work_breakdown_response(result.last_message or "", limit=max_items)
+        parse_started_at = perf_counter()
+        items = parse_work_breakdown_response(result.last_message or "", limit=max_items)
+        self._log_planning_metric(
+            context,
+            "block_breakdown_parse",
+            started_at=parse_started_at,
+            flow="block-planning",
+            details={"item_count": len(items)},
+        )
+        return items

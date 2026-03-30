@@ -53,6 +53,7 @@ from jakal_flow.planning import (
     PLAN_DECOMPOSITION_PARALLEL_PROMPT_FILENAME,
     PLAN_GENERATION_PARALLEL_PROMPT_FILENAME,
     PLAN_GENERATION_PROMPT_FILENAME,
+    PlanItem,
     REFERENCE_GUIDE_FILENAME,
     SCOPE_GUARD_TEMPLATE_FILENAME,
     STEP_EXECUTION_PARALLEL_PROMPT_FILENAME,
@@ -5007,6 +5008,80 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("omitted to keep planning context compact", repo_inputs["docs"])
         self.assertIn("note_1.md", repo_inputs["docs"])
 
+    def test_scan_repository_inputs_reuses_disk_cache(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_repo_inputs_disk_cache_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        repo_dir = temp_root / "repo"
+        cache_file = temp_root / "workspace" / "state" / "PLANNING_INPUTS_CACHE.json"
+        (repo_dir / "docs").mkdir(parents=True, exist_ok=True)
+        (repo_dir / "src").mkdir(parents=True, exist_ok=True)
+        (repo_dir / "README.md").write_text("README summary", encoding="utf-8")
+        (repo_dir / "AGENTS.md").write_text("AGENTS summary", encoding="utf-8")
+        (repo_dir / "docs" / "note_1.md").write_text("docs summary", encoding="utf-8")
+        (repo_dir / "src" / "main.py").write_text("def run() -> None:\n    pass\n", encoding="utf-8")
+
+        try:
+            payload = scan_repository_inputs(repo_dir, cache_file=cache_file)
+            with mock.patch("jakal_flow.planning._build_repository_inputs", side_effect=AssertionError("disk cache should satisfy the second call.")):
+                cached = scan_repository_inputs(repo_dir, cache_file=cache_file)
+            cache_exists = cache_file.exists()
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertTrue(cache_exists)
+        self.assertEqual(payload, cached)
+
+    def test_prompt_to_execution_plan_prompt_reuses_prompt_bundle_cache(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_prompt_bundle_cache_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        repo_dir = temp_root / "repo"
+        managed_docs = temp_root / "managed-docs"
+        managed_state = temp_root / "managed-state"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        managed_docs.mkdir(parents=True, exist_ok=True)
+        managed_state.mkdir(parents=True, exist_ok=True)
+        (repo_dir / "README.md").write_text("README summary", encoding="utf-8")
+        (repo_dir / "AGENTS.md").write_text("AGENTS summary", encoding="utf-8")
+        (managed_state / "SPINE.json").write_text(json.dumps({"current_version": "spine-v9", "history": []}), encoding="utf-8")
+        (managed_docs / "SHARED_CONTRACTS.md").write_text("# Shared Contracts\n\n- api/root\n", encoding="utf-8")
+        repo_inputs = {
+            "readme": "README summary",
+            "agents": "AGENTS summary",
+            "docs": "No markdown files under repo/docs.",
+            "source": "Existing implementation files detected. src/main.py",
+        }
+        context = SimpleNamespace(
+            paths=SimpleNamespace(
+                repo_dir=repo_dir,
+                plan_file=managed_docs / "PLAN.md",
+                spine_file=managed_state / "SPINE.json",
+                shared_contracts_file=managed_docs / "SHARED_CONTRACTS.md",
+                planning_prompt_cache_file=managed_state / "PLANNING_PROMPT_CACHE.json",
+            ),
+            metadata=SimpleNamespace(
+                repo_url="https://github.com/example/project.git",
+                branch="main",
+            ),
+            runtime=SimpleNamespace(workflow_mode="standard"),
+        )
+
+        try:
+            first = prompt_to_execution_plan_prompt(context, repo_inputs, "Build a desktop flow screen.", 4, "parallel")
+            with mock.patch("jakal_flow.planning.followup_planning_repository_inputs", side_effect=AssertionError("prompt bundle cache should be reused.")), mock.patch(
+                "jakal_flow.planning._planning_spine_version",
+                side_effect=AssertionError("spine snapshot should come from the prompt bundle cache."),
+            ), mock.patch(
+                "jakal_flow.planning._planning_shared_contracts_snapshot",
+                side_effect=AssertionError("shared contract snapshot should come from the prompt bundle cache."),
+            ):
+                second = prompt_to_execution_plan_prompt(context, repo_inputs, "Build a desktop flow screen.", 4, "parallel")
+            cache_exists = (managed_state / "PLANNING_PROMPT_CACHE.json").exists()
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertTrue(cache_exists)
+        self.assertEqual(first, second)
+
     def test_plan_work_reuses_existing_plan_without_re_scanning_resolution_inputs(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_plan_work_existing_plan_scan_test"
         shutil.rmtree(temp_root, ignore_errors=True)
@@ -5051,6 +5126,50 @@ class ExecutionPlanHelperTests(unittest.TestCase):
 
         self.assertEqual(result["current_status"], context.metadata.current_status)
 
+    def test_plan_block_items_reuses_cached_breakdown(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_block_plan_cache_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", test_cmd="python -m pytest")
+        context = orchestrator.workspace.initialize_local_project(project_dir=repo_dir, branch="main", runtime=runtime)
+        plan_text = "# Project Plan\n\n- [ ] PL1: Narrow task\n"
+        planned_items = [PlanItem(item_id="PL1", text="Narrow task")]
+
+        try:
+            with mock.patch.object(orchestrator, "_generate_codex_work_items", return_value=planned_items):
+                first_items, first_text = orchestrator._plan_block_items(
+                    context=context,
+                    runner=mock.Mock(),
+                    plan_text=plan_text,
+                    work_items=None,
+                    max_items=3,
+                    repo_inputs={"readme": "r", "agents": "a", "docs": "d", "source": "s"},
+                )
+            with mock.patch.object(
+                orchestrator,
+                "_generate_codex_work_items",
+                side_effect=AssertionError("cached block plan should avoid another breakdown pass."),
+            ):
+                second_items, second_text = orchestrator._plan_block_items(
+                    context=context,
+                    runner=mock.Mock(),
+                    plan_text=plan_text,
+                    work_items=None,
+                    max_items=3,
+                    repo_inputs={"readme": "r", "agents": "a", "docs": "d", "source": "s"},
+                )
+            cache_exists = context.paths.block_plan_cache_file.exists()
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual([item.item_id for item in first_items], ["PL1"])
+        self.assertEqual([item.item_id for item in second_items], ["PL1"])
+        self.assertEqual(first_text, second_text)
+        self.assertTrue(cache_exists)
+
     def test_generate_codex_work_items_uses_supplied_repo_inputs_without_rescan(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_generate_codex_work_items_scan_test"
         shutil.rmtree(temp_root, ignore_errors=True)
@@ -5091,6 +5210,50 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             shutil.rmtree(temp_root, ignore_errors=True)
 
         self.assertEqual(items, [])
+
+    def test_generate_codex_work_items_logs_planning_metrics(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_generate_codex_work_items_metrics_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        (repo_dir / "docs").mkdir(parents=True, exist_ok=True)
+        (repo_dir / "src").mkdir(parents=True, exist_ok=True)
+        (repo_dir / "README.md").write_text("README summary", encoding="utf-8")
+        (repo_dir / "AGENTS.md").write_text("AGENTS summary", encoding="utf-8")
+        (repo_dir / "src" / "main.py").write_text("def run() -> None:\n    pass\n", encoding="utf-8")
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", test_cmd="python -m pytest")
+        context = orchestrator.workspace.initialize_local_project(project_dir=repo_dir, branch="main", runtime=runtime)
+
+        try:
+            with mock.patch.object(
+                MemoryStore,
+                "render_context",
+                return_value="memory context",
+            ), mock.patch.object(
+                orchestrator,
+                "_run_pass_with_provider_fallback",
+                return_value=SimpleNamespace(
+                    returncode=0,
+                    last_message='{"tasks":[{"title":"Do the task","primary_ref":"PL1","reason":"Because it is the next narrow step."}]}',
+                ),
+            ):
+                items = orchestrator._generate_codex_work_items(
+                    context=context,
+                    runner=mock.Mock(),
+                    plan_text="# Project Plan\n\n- [ ] PL1: Do the task\n",
+                    max_items=3,
+                )
+                metrics = read_jsonl_tail(context.paths.planning_metrics_file, 10)
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        stages = {entry["stage"] for entry in metrics}
+        self.assertEqual(len(items), 1)
+        self.assertIn("block_context_scan", stages)
+        self.assertIn("block_prompt_build", stages)
+        self.assertIn("block_agent_breakdown", stages)
+        self.assertIn("block_breakdown_parse", stages)
 
     def test_save_execution_plan_state_skips_static_artifact_refresh_when_only_status_changes(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_plan_artifact_refresh_test"

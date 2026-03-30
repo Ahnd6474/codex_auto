@@ -443,11 +443,13 @@ def followup_planning_repository_inputs(repo_inputs: dict[str, str]) -> dict[str
 
 def _planning_prompt_bundle_signature(context: ProjectContext, repo_inputs: dict[str, str]) -> dict[str, Any]:
     runtime = getattr(context, "runtime", None)
+    spine_file = getattr(context.paths, "spine_file", context.paths.repo_dir / ".spine")
+    shared_contracts_file = getattr(context.paths, "shared_contracts_file", context.paths.repo_dir / ".shared_contracts")
     return {
         "repo_dir": str(context.paths.repo_dir.resolve()),
         "repo_inputs": _stable_digest(repo_inputs),
-        "spine": _path_cache_token(context.paths.spine_file),
-        "shared_contracts": _path_cache_token(context.paths.shared_contracts_file),
+        "spine": _path_cache_token(spine_file),
+        "shared_contracts": _path_cache_token(shared_contracts_file),
         "workflow_mode": normalize_workflow_mode(getattr(runtime, "workflow_mode", "standard")),
     }
 
@@ -877,6 +879,7 @@ def work_breakdown_prompt(
     max_items: int,
 ) -> str:
     reference_notes = load_reference_guide_text()
+    prompt_bundle = _planning_prompt_bundle(context, repo_inputs)
     return "\n".join(
         [
             f"You are planning work for the managed repository at {context.paths.repo_dir}.",
@@ -892,9 +895,9 @@ def work_breakdown_prompt(
             "Do not include markdown fences or any text outside the JSON object.",
             "",
             "Repository summary:",
-            f"README:\n{repo_inputs['readme']}",
+            f"README:\n{prompt_bundle['readme']}",
             "",
-            f"AGENTS:\n{repo_inputs['agents']}",
+            f"AGENTS:\n{prompt_bundle['agents']}",
             "",
             "Planning priority order:",
             "1. Follow AGENTS.md and explicit repository constraints first.",
@@ -905,7 +908,7 @@ def work_breakdown_prompt(
             "",
             f"Reference notes ({REFERENCE_GUIDE_DISPLAY_PATH}):\n{reference_notes}",
             "",
-            f"Docs:\n{repo_inputs['docs']}",
+            f"Docs:\n{prompt_bundle['docs']}",
             "",
             "Current plan snapshot:",
             compact_text(plan_text, 5000),
@@ -928,25 +931,23 @@ def prompt_to_execution_plan_prompt(
     runtime = getattr(context, "runtime", None)
     workflow_mode = normalize_workflow_mode(getattr(runtime, "workflow_mode", "standard"))
     template = template_text or load_plan_generation_prompt_template(execution_mode, workflow_mode)
-    compact_inputs = followup_planning_repository_inputs(repo_inputs)
-    spine_version = _planning_spine_version(context)
-    shared_contracts_snapshot = _planning_shared_contracts_snapshot(context)
+    prompt_bundle = _planning_prompt_bundle(context, repo_inputs)
     try:
         return template.format(
             repo_dir=context.paths.repo_dir,
             max_steps=max(3, max_steps),
             workflow_mode=workflow_mode,
             execution_mode=_normalize_execution_mode(execution_mode),
-            readme=compact_inputs["readme"],
-            agents=compact_inputs["agents"],
+            readme=prompt_bundle["readme"],
+            agents=prompt_bundle["agents"],
             reference_notes=load_reference_guide_text(),
-            docs=compact_inputs["docs"],
-            source=compact_inputs["source"],
+            docs=prompt_bundle["docs"],
+            source=prompt_bundle["source"],
             user_prompt=user_prompt.strip(),
             planner_outline=compact_text(planner_outline.strip(), 4000) or "Planner Agent A output unavailable.",
             model_selection_guidance=planning_model_selection_guidance(runtime),
-            current_spine_version=spine_version,
-            shared_contracts_snapshot=shared_contracts_snapshot,
+            current_spine_version=prompt_bundle["spine_version"],
+            shared_contracts_snapshot=prompt_bundle["shared_contracts_snapshot"],
         )
     except KeyError as exc:
         raise ValueError(f"Unknown placeholder in plan generation prompt template: {exc.args[0]}") from exc
@@ -963,22 +964,21 @@ def prompt_to_plan_decomposition_prompt(
     runtime = getattr(context, "runtime", None)
     workflow_mode = normalize_workflow_mode(getattr(runtime, "workflow_mode", "standard"))
     template = template_text or load_plan_decomposition_prompt_template(execution_mode, workflow_mode)
-    spine_version = _planning_spine_version(context)
-    shared_contracts_snapshot = _planning_shared_contracts_snapshot(context)
+    prompt_bundle = _planning_prompt_bundle(context, repo_inputs)
     try:
         return template.format(
             repo_dir=context.paths.repo_dir,
             max_steps=max(3, max_steps),
             workflow_mode=workflow_mode,
             execution_mode=_normalize_execution_mode(execution_mode),
-            readme=repo_inputs["readme"],
-            agents=repo_inputs["agents"],
+            readme=prompt_bundle["readme"],
+            agents=prompt_bundle["agents"],
             reference_notes=load_reference_guide_text(),
-            docs=repo_inputs["docs"],
-            source=repo_inputs.get("source", "Source inventory unavailable."),
+            docs=prompt_bundle["docs"],
+            source=prompt_bundle["source"],
             user_prompt=user_prompt.strip(),
-            current_spine_version=spine_version,
-            shared_contracts_snapshot=shared_contracts_snapshot,
+            current_spine_version=prompt_bundle["spine_version"],
+            shared_contracts_snapshot=prompt_bundle["shared_contracts_snapshot"],
         )
     except KeyError as exc:
         raise ValueError(f"Unknown placeholder in plan decomposition prompt template: {exc.args[0]}") from exc
