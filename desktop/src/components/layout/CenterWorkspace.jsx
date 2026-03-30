@@ -176,7 +176,11 @@ function sameQueuedJobs(previousJobs = [], nextJobs = []) {
 }
 
 function normalizeWorkspaceTab(tab) {
-  return tab === "run" ? "flow" : tab;
+  const normalized = String(tab || "").trim().toLowerCase();
+  if (normalized === "run" || normalized === "flow") {
+    return "ai-chat";
+  }
+  return normalized;
 }
 
 function planHasFlowContent(detail, planDraft) {
