@@ -1737,12 +1737,22 @@ export function useDesktopController() {
     };
   }
 
-  async function generatePlan() {
-    const prompt = planDraft?.project_prompt?.trim() || "";
+  async function generatePlan(promptOverride = undefined) {
+    const hasPromptOverride = typeof promptOverride === "string";
+    const nextPlanDraft = hasPromptOverride
+      ? {
+          ...(planDraft || emptyPlanDraft()),
+          project_prompt: promptOverride,
+        }
+      : (planDraft || emptyPlanDraft());
+    const prompt = String(nextPlanDraft?.project_prompt || "").trim();
+    if (hasPromptOverride && nextPlanDraft.project_prompt !== String(planDraft?.project_prompt || "")) {
+      syncPlan(nextPlanDraft);
+    }
     const generationValidation = planGenerationValidation({
       projectDir: projectForm.project_dir,
       prompt,
-      plan: planDraft,
+      plan: nextPlanDraft,
     });
     if (generationValidation === "prepareProjectFirst") {
       setMessage(messagePayload("error", translate(language, "message.prepareProjectFirst")));
@@ -1859,6 +1869,10 @@ export function useDesktopController() {
 
   async function sendChatMessage(text, mode = "conversation") {
     const messageText = String(text || "").trim();
+    const normalizedMode = String(mode || "conversation").trim().toLowerCase() || "conversation";
+    if (normalizedMode === "plan") {
+      return generatePlan(messageText);
+    }
     if (!projectForm.project_dir.trim()) {
       setMessage(messagePayload("error", translate(language, "message.openProjectFirst")));
       return null;
@@ -1894,7 +1908,7 @@ export function useDesktopController() {
           chat_model: String(programSettings?.chat_model || "").trim().toLowerCase(),
         },
         message: messageText,
-        chat_mode: String(mode || "conversation").trim().toLowerCase() || "conversation",
+        chat_mode: normalizedMode,
         session_id: activeSessionId,
         create_new_session: chatDraftSession || !activeSessionId,
       },

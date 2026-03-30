@@ -270,6 +270,9 @@ function chatRoleLabel(role, language = "en") {
 }
 
 function chatModeLabel(mode, language = "en") {
+  if (mode === "plan") {
+    return language === "ko" ? "Plan" : "Plan";
+  }
   if (mode === "debugger") {
     return language === "ko" ? "Debugger" : "Debugger";
   }
@@ -323,9 +326,7 @@ const ProjectChatPane = memo(function ProjectChatPane({
   language,
   centerMode = false,
   promptValue = "",
-  onPromptChange,
   onGeneratePlan,
-  onRunPlan,
 }) {
   const sessions = Array.isArray(chat?.sessions) ? chat.sessions : [];
   const remoteMessages = Array.isArray(chat?.messages) ? chat.messages : [];
@@ -342,8 +343,6 @@ const ProjectChatPane = memo(function ProjectChatPane({
   const [menuOpen, setMenuOpen] = useState(false);
   const [localMessages, setLocalMessages] = useState(deferredRemoteMessages);
   const [visibleMessageCount, setVisibleMessageCount] = useState(MAX_VISIBLE_CHAT_MESSAGES);
-  const [promptDraft, setPromptDraft] = useState(promptValue);
-  const [promptExpanded, setPromptExpanded] = useState(!promptValue);
   const messagesRef = useRef(null);
   const menuRef = useRef(null);
   const scrollFrameRef = useRef(0);
@@ -427,10 +426,6 @@ const ProjectChatPane = memo(function ProjectChatPane({
   useEffect(() => {
     setVisibleMessageCount(MAX_VISIBLE_CHAT_MESSAGES);
   }, [activeSessionId, chatDraftSession]);
-
-  useEffect(() => {
-    setPromptDraft(promptValue);
-  }, [promptValue]);
 
   useEffect(() => {
     if (!virtualizationEnabled || !messagesRef.current || typeof ResizeObserver === "undefined") {
@@ -532,6 +527,13 @@ const ProjectChatPane = memo(function ProjectChatPane({
       return;
     }
     const mode = pendingMode;
+    setInput("");
+    setPendingMode("conversation");
+    setMenuOpen(false);
+    if (mode === "plan") {
+      void Promise.resolve(onGeneratePlan?.(text)).catch(() => {});
+      return;
+    }
     setLocalMessages((prev) => [
       ...prev,
       {
@@ -542,9 +544,6 @@ const ProjectChatPane = memo(function ProjectChatPane({
         message_id: `local-${Date.now()}`,
       },
     ]);
-    setInput("");
-    setPendingMode("conversation");
-    setMenuOpen(false);
     void Promise.resolve(onSendChatMessage?.(text, mode)).catch(() => {});
   }
 
@@ -574,6 +573,13 @@ const ProjectChatPane = memo(function ProjectChatPane({
   }
 
   const selectedSessionValue = chatDraftSession ? "" : activeSessionId;
+  const composerPlaceholder =
+    pendingMode === "plan"
+      ? (language === "ko" ? "계획 생성 프롬프트를 입력하세요... (Enter로 생성)" : "Type a plan prompt... (Enter to generate)")
+      : (language === "ko" ? "메시지를 입력하세요... (Enter로 전송)" : "Type a message… (Enter to send)");
+  const sendButtonTitle = pendingMode === "plan"
+    ? (language === "ko" ? "Generate Plan" : "Generate Plan")
+    : (language === "ko" ? "Send" : "Send");
 
   return (
     <div className={centerMode ? "rsb-chat rsb-chat--center" : "rsb-chat"}>
@@ -720,12 +726,22 @@ const ProjectChatPane = memo(function ProjectChatPane({
               onClick={() => setMenuOpen((current) => !current)}
               type="button"
               disabled={busy}
-              title={language === "ko" ? "Choose debugger or merger" : "Choose debugger or merger"}
+              title={language === "ko" ? "계획, 디버거, 머저 모드 선택" : "Choose plan, debugger, or merger"}
             >
               <PlusIcon />
             </button>
             {menuOpen ? (
               <div className="sidebar-chat-mode-menu">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPendingMode("plan");
+                    setInput((current) => current || String(promptValue || ""));
+                    setMenuOpen(false);
+                  }}
+                >
+                  {chatModeLabel("plan", language)}
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -769,7 +785,7 @@ const ProjectChatPane = memo(function ProjectChatPane({
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={language === "ko" ? "메시지를 입력하세요... (Enter로 전송)" : "Type a message… (Enter to send)"}
+            placeholder={composerPlaceholder}
             disabled={busy}
             rows={centerMode ? 3 : 2}
           />
@@ -778,57 +794,12 @@ const ProjectChatPane = memo(function ProjectChatPane({
             onClick={handleSend}
             type="button"
             disabled={busy || !input.trim()}
-            title={language === "ko" ? "Send" : "Send"}
+            title={sendButtonTitle}
           >
             <SendIcon />
           </button>
         </div>
       </div>
-
-      {/* Prompt section — only in center mode */}
-      {centerMode ? (
-        <div className="chat-center__prompt-section">
-          <div className="chat-center__prompt-header">
-            <svg viewBox="0 0 24 24" fill="none" style={{ width: 14, height: 14, color: "var(--text-dim)" }}>
-              <path d="M2 4h12M2 8h8M2 12h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-            <span>{language === "ko" ? "계획 생성용 프롬프트" : "Plan generation prompt"}</span>
-            <span className="chat-center__prompt-count">{promptDraft.length}</span>
-          </div>
-          <textarea
-            className="chat-center__prompt-textarea"
-            value={promptDraft}
-            onChange={(event) => setPromptDraft(event.target.value)}
-            onBlur={() => {
-              if (promptDraft !== promptValue) onPromptChange?.(promptDraft);
-            }}
-            disabled={busy}
-            placeholder={language === "ko" ? "프로젝트 프롬프트를 입력하세요…" : "Enter your project prompt…"}
-            rows={4}
-          />
-          <div className="chat-center__prompt-actions">
-            <button
-              className="toolbar-button toolbar-button--accent"
-              onClick={() => {
-                if (promptDraft !== promptValue) onPromptChange?.(promptDraft);
-                onGeneratePlan?.();
-              }}
-              type="button"
-              disabled={busy || !promptDraft.trim()}
-            >
-              {language === "ko" ? "계획 생성" : "Generate Plan"}
-            </button>
-            <button
-              className="toolbar-button"
-              onClick={onRunPlan}
-              type="button"
-              disabled={busy}
-            >
-              {language === "ko" ? "실행" : "Run"}
-            </button>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }, (previousProps, nextProps) => (
@@ -847,6 +818,8 @@ const ProjectChatPane = memo(function ProjectChatPane({
     && previousProps.chat?.summary_file === nextProps.chat?.summary_file
     && sameChatSessions(previousProps.chat?.sessions, nextProps.chat?.sessions)
     && sameChatMessages(previousProps.chat?.messages, nextProps.chat?.messages)
+    && previousProps.centerMode === nextProps.centerMode
+    && previousProps.promptValue === nextProps.promptValue
   )
 ));
 
@@ -959,9 +932,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
           language={language}
           centerMode
           promptValue={promptValue}
-          onPromptChange={onPromptChange}
           onGeneratePlan={onGeneratePlan}
-          onRunPlan={onRunPlan}
         />
       </div>
     );
@@ -986,6 +957,8 @@ export const RightSidebarPane = memo(function RightSidebarPane({
             onChangeChatModelSelection={onChangeChatModelSelection}
             busy={busy}
             language={language}
+            promptValue={promptValue}
+            onGeneratePlan={onGeneratePlan}
           />
         ) : null}
 
