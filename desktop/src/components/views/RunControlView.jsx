@@ -17,8 +17,6 @@ import {
   providerAvailable,
   providerUsable,
   providerStatusReason,
-  isActiveExecutionStatus,
-  isPlanningProgressRunning,
   projectStatusWithJob,
   QWEN_CODE_DEFAULT_MODEL,
   REASONING_OPTIONS,
@@ -193,7 +191,6 @@ export function RunControlView({
   const executionJob = visibleExecutionJob(activeJob);
   const projectStatus = projectStatusWithJob(detail?.project?.current_status || "", executionJob);
   const activeJobStatus = String(executionJob?.status || "").trim().toLowerCase();
-  const runActionDisabled = busy || isActiveExecutionStatus(projectStatus) || isPlanningProgressRunning(detail?.planning_progress);
   const selectedStepStatus = effectiveStepStatus(selectedStep, projectStatus);
   const closeoutStatus = String(planDraft?.closeout_status || "not_started").trim().toLowerCase();
   const showCloseoutStatus = closeoutStatus && closeoutStatus !== "not_started";
@@ -298,7 +295,7 @@ export function RunControlView({
         <div className="content-card__header">
           <strong>{t("run.flowChart")}</strong>
           <div className="action-row">
-            <button className="toolbar-button toolbar-button--accent" onClick={onRunPlan} type="button" disabled={runActionDisabled}>
+            <button className="toolbar-button toolbar-button--accent" onClick={onRunPlan} type="button" disabled={busy}>
               {t("action.run")}
             </button>
             <button className="toolbar-button" onClick={onGeneratePlan} type="button" disabled={busy}>

@@ -2,14 +2,7 @@ import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useSta
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import { arePropsEqualExceptFunctions } from "../../shallowProps";
-import {
-  effectiveStepStatus,
-  planStepsWithCloseout,
-  projectStatusWithJob,
-  resolveExecutionDisplayPlan,
-  statusTone,
-  visibleExecutionJob,
-} from "../../utils";
+import { statusTone } from "../../utils";
 
 /* ── Rail icons ── */
 function SidebarExplorerIcon() {
@@ -867,78 +860,6 @@ function CheckpointsPanel({ checkpoints, visibleCheckpoints, language, t }) {
   );
 }
 
-function FlowStepsPanel({
-  steps = [],
-  selectedStepId = "",
-  onSelectStep = () => {},
-  projectStatus = "",
-  checkpoints,
-  visibleCheckpoints,
-  language,
-  t,
-}) {
-  return (
-    <>
-      <div className="sidebar-panel__header">
-        <strong>{t("tab.flow")}</strong>
-        {steps.length > 0 ? (
-          <span className="sidebar-count-badge">{steps.length}</span>
-        ) : null}
-      </div>
-
-      <div className="sidebar-list">
-        {steps.length ? (
-          steps.map((step) => {
-            const stepStatus = effectiveStepStatus(step, projectStatus);
-            const tone = statusTone(stepStatus);
-            const selected = String(step?.step_id || "").trim() === String(selectedStepId || "").trim();
-            const title = String(step?.title || step?.display_description || "").trim() || t("run.noSummary");
-            const meta = (step?.depends_on || []).length
-              ? `${language === "ko" ? "선행" : "Depends on"} ${(step.depends_on || []).join(", ")}`
-              : ((step?.owned_paths || []).length
-                ? `${step.owned_paths.length} ${language === "ko" ? "개 경로 소유" : "owned path(s)"}`
-                : "");
-            return (
-              <button
-                key={step.step_id}
-                className={`sidebar-project sidebar-step-item sidebar-project--${tone} ${selected ? "selected" : ""}`.trim()}
-                onClick={() => onSelectStep(step.step_id)}
-                type="button"
-              >
-                <div className="sidebar-project__fill" />
-                <div className="sidebar-item__title">
-                  <strong className="sidebar-step-item__id">{step.step_id}</strong>
-                  <span className={`status-badge status-badge--${tone}`}>
-                    {displayStatus(stepStatus, language)}
-                  </span>
-                </div>
-                <span className="sidebar-project__detail" title={title}>{title}</span>
-                {meta ? <span className="sidebar-step-item__meta">{meta}</span> : null}
-              </button>
-            );
-          })
-        ) : (
-          <div className="empty-block">
-            <EmptyCheckpointsIcon />
-            <span>{t("run.noSteps")}</span>
-          </div>
-        )}
-      </div>
-
-      {visibleCheckpoints.length ? (
-        <div className="sidebar-flow-checkpoints">
-          <CheckpointsPanel
-            checkpoints={checkpoints}
-            visibleCheckpoints={visibleCheckpoints}
-            language={language}
-            t={t}
-          />
-        </div>
-      ) : null}
-    </>
-  );
-}
-
 /* ── Main SidebarPane ── */
 export const SidebarPane = memo(function SidebarPane({
   activeTab,
@@ -957,11 +878,6 @@ export const SidebarPane = memo(function SidebarPane({
   onNewProject = () => {},
   workspaceTree,
   checkpoints,
-  detail = null,
-  planDraft = null,
-  activeJob = null,
-  selectedStepId = "",
-  onSelectStep = () => {},
   queuedJobs = [],
   onCancelQueuedJob,
   chat = {},
@@ -1002,19 +918,6 @@ export const SidebarPane = memo(function SidebarPane({
     if (items.some((item) => item?.checkpoint_id === pending.checkpoint_id)) return items;
     return [pending, ...items];
   }, [activeTab, checkpoints]);
-  const executionPlan = useMemo(
-    () => resolveExecutionDisplayPlan(detail, planDraft, activeJob),
-    [detail, planDraft, activeJob],
-  );
-  const flowSteps = useMemo(
-    () => planStepsWithCloseout(executionPlan, {
-      title: t("run.closeout"),
-      description: t("reports.closeoutReport"),
-      successCriteria: t("reports.closeoutReport"),
-    }),
-    [executionPlan, t],
-  );
-  const projectStatus = projectStatusWithJob(detail?.project?.current_status || "", visibleExecutionJob(activeJob));
 
   useEffect(() => {
     workspaceFilterCacheRef.current.clear();
@@ -1075,7 +978,7 @@ export const SidebarPane = memo(function SidebarPane({
 
   const tabs = [
     ["workspace", <SidebarExplorerIcon key="workspace-icon" />, t("sidebar.explorer")],
-    ["plans", <SidebarCheckpointsIcon key="plans-icon" />, t("tab.flow")],
+    ["plans", <SidebarCheckpointsIcon key="plans-icon" />, t("sidebar.checkpoints")],
     ["reservations", <SidebarReservationIcon key="reservations-icon" />, language === "ko" ? "예약" : "Queue"],
   ];
 
@@ -1239,11 +1142,7 @@ export const SidebarPane = memo(function SidebarPane({
 
           {/* ── Checkpoints tab ── */}
           {activeTab === "plans" ? (
-            <FlowStepsPanel
-              steps={flowSteps}
-              selectedStepId={selectedStepId}
-              onSelectStep={onSelectStep}
-              projectStatus={projectStatus}
+            <CheckpointsPanel
               checkpoints={checkpoints}
               visibleCheckpoints={visibleCheckpoints}
               language={language}

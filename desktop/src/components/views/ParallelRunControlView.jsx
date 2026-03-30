@@ -28,12 +28,10 @@ import {
   providerUsable,
   providerStatusReason,
   isActiveExecutionStatus,
-  isPlanningProgressRunning,
   projectStatusWithJob,
   QWEN_CODE_DEFAULT_MODEL,
   REASONING_OPTIONS,
   reasoningEffortLabel,
-  resolveExecutionDisplayPlan,
   shouldShowEstimatedCost,
   statusTone,
   visibleExecutionJob,
@@ -455,10 +453,11 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
     [t],
   );
 
-  const livePlan = useMemo(
-    () => resolveExecutionDisplayPlan(detail, planDraft, activeJob),
-    [detail, planDraft, activeJob],
+  const shouldUseLivePlan = Boolean(detail?.plan) && (
+    isActiveExecutionStatus(activeJob?.status)
+    || isActiveExecutionStatus(detail?.project?.current_status)
   );
+  const livePlan = shouldUseLivePlan ? detail.plan : planDraft;
   const promptValue = livePlan?.project_prompt || "";
   const [promptDraft, setPromptDraft] = useState(promptValue);
   const [failureDismissed, setFailureDismissed] = useState(false);
@@ -499,7 +498,6 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
   const executionJob = visibleExecutionJob(activeJob);
   const projectStatus = projectStatusWithJob(detail?.project?.current_status || "", executionJob);
   const activeJobStatus = String(executionJob?.status || "").trim().toLowerCase();
-  const runActionDisabled = busy || isActiveExecutionStatus(projectStatus) || isPlanningProgressRunning(detail?.planning_progress);
   const selectedStepStatus = effectiveStepStatus(selectedStep, projectStatus);
   const selectedStepFailureReason = failureReasonLabel(selectedStep, language);
   const selectedStepFailureCode = failureReasonCode(selectedStep);
@@ -588,7 +586,7 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
           <button className="toolbar-btn" onClick={onSavePlan} type="button" disabled={busy}><SaveIcon /><span>{t("action.save")}</span></button>
           <button className="toolbar-btn" onClick={onResetPlan} type="button"><ResetIcon /><span>{t("action.reset")}</span></button>
           <div className="toolbar-divider" />
-          <button className="toolbar-btn toolbar-btn--accent" onClick={onRunPlan} type="button" disabled={runActionDisabled}><RunIcon /><span>{t("action.run")}</span></button>
+          <button className="toolbar-btn toolbar-btn--accent" onClick={onRunPlan} type="button" disabled={busy}><RunIcon /><span>{t("action.run")}</span></button>
           {canCancelReservation ? (
             <button className="toolbar-btn" onClick={() => onCancelQueuedJob?.(activeJob?.id)} type="button">{t("action.cancelReservation")}</button>
           ) : null}

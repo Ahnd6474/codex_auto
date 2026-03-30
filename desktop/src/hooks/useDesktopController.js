@@ -39,10 +39,8 @@ import {
   cloneValue,
   commandLabel,
   inheritProjectIdentityForm,
-  isActiveExecutionStatus,
   isDuplicateProjectJobError,
   isChatCommand,
-  isPlanningProgressRunning,
   jobHasNewerActiveReplacement,
   planDependencyValidationMessage,
   projectJobFromJobs,
@@ -1801,22 +1799,6 @@ export function useDesktopController() {
   }
 
   async function runPlan() {
-    const runAlreadyActive = Boolean(
-      isActiveExecutionStatus(projectJob?.status || "")
-      || isActiveExecutionStatus(projectDetail?.project?.current_status || "")
-      || isPlanningProgressRunning(projectDetail?.planning_progress),
-    );
-    if (runAlreadyActive) {
-      setMessage(
-        messagePayload(
-          "error",
-          language === "ko"
-            ? "이 프로젝트에서 다른 백그라운드 작업이 이미 실행 중입니다."
-            : "Another background task is already active for this project.",
-        ),
-      );
-      return;
-    }
     if (!(planDraft?.steps || []).length) {
       setMessage(messagePayload("error", translate(language, "message.createStepBeforeRun")));
       return;

@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { commandLabel, isActiveExecutionStatus, isDebuggingStatus, isPlanningProgressRunning, projectStatusWithJob, statusTone, toolbarProgressCaptionDisplay, visibleExecutionJob } from "../../utils";
+import { commandLabel, isDebuggingStatus, isPlanningProgressRunning, projectStatusWithJob, statusTone, toolbarProgressCaptionDisplay, visibleExecutionJob } from "../../utils";
 
 function RefreshIcon() {
   return (
@@ -340,7 +340,6 @@ export const IdeToolbar = memo(function IdeToolbar({
   });
 
   const tone = statusTone(projectStatus);
-  const runActionDisabled = busy || isActiveExecutionStatus(projectStatus) || planningRunning;
   const repoPath = String(projectPath || "").trim();
   const remoteUrl = String(githubUrl || "").trim();
 
@@ -460,7 +459,7 @@ export const IdeToolbar = memo(function IdeToolbar({
           className="toolbar-btn toolbar-btn--accent"
           onClick={onRunPlan}
           type="button"
-          disabled={runActionDisabled}
+          disabled={busy}
           title={t("action.runRemaining")}
         >
           <RunIcon />
