@@ -226,6 +226,7 @@ class UIBridgeTests(unittest.TestCase):
             context.metadata.current_status = "running:st1"
             context.metadata.last_run_at = "2026-03-28T10:00:00+00:00"
             context.loop_state.current_task = "Execute ST1"
+            context.loop_state.current_checkpoint_id = "CP2"
 
             events: list[tuple[str, dict]] = []
 
@@ -244,6 +245,7 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(payload["project_status"], "running:st1")
             self.assertEqual(payload["event"]["event_type"], "project-state-synced")
             self.assertEqual(payload["event"]["details"]["current_task"], "Execute ST1")
+            self.assertEqual(payload["event"]["details"]["current_checkpoint_id"], "CP2")
             self.assertTrue(payload["event"]["details"]["last_run_at"])
 
     def test_workspace_save_project_skips_bridge_ui_event_for_idle_state(self) -> None:

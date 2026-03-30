@@ -6,6 +6,8 @@ import { bridgeEventJob, bridgeEventProject, compactBridgeEventQueue, isJobUpdat
 import {
   mergeRefreshRepoId,
   projectRefreshDebounceMs,
+  shouldImmediatelyRefreshProjectEvent,
+  shouldImmediatelyRefreshProjectUiEvent,
   shouldForceCodexRefreshForManualRefresh,
   shouldRefreshListingForManualRefresh,
   shouldRefreshListingForProjectEvent,
@@ -116,6 +118,7 @@ export function useDesktopController() {
   const pendingBridgeRefreshRepoIdRef = useRef("");
   const pendingBridgeRefreshListingRef = useRef(false);
   const pendingBridgeRefreshDetailRef = useRef(false);
+  const pendingBridgeRefreshImmediateRef = useRef(false);
   const pendingBridgeEventsRef = useRef([]);
   const bridgeEventFlushScheduledRef = useRef(false);
   const bridgeEventFlushInFlightRef = useRef(false);
@@ -799,6 +802,7 @@ export function useDesktopController() {
       const pendingRepoId = pendingBridgeRefreshRepoIdRef.current;
       const refreshListing = pendingBridgeRefreshListingRef.current;
       const refreshDetail = pendingBridgeRefreshDetailRef.current;
+      pendingBridgeRefreshImmediateRef.current = false;
       pendingBridgeRefreshRepoIdRef.current = "";
       pendingBridgeRefreshListingRef.current = false;
       pendingBridgeRefreshDetailRef.current = false;
@@ -846,7 +850,9 @@ export function useDesktopController() {
       } finally {
         bridgeRefreshInFlightRef.current = false;
         if (!cancelled && pendingBridgeRefreshRepoIdRef.current) {
-          scheduleBridgeRefresh(pendingBridgeRefreshRepoIdRef.current);
+          scheduleBridgeRefresh(pendingBridgeRefreshRepoIdRef.current, {
+            immediate: pendingBridgeRefreshImmediateRef.current,
+          });
         }
       }
     }
@@ -855,13 +861,23 @@ export function useDesktopController() {
       pendingBridgeRefreshRepoIdRef.current = mergeRefreshRepoId(pendingBridgeRefreshRepoIdRef.current, eventRepoId);
       pendingBridgeRefreshListingRef.current = pendingBridgeRefreshListingRef.current || options.refreshListing !== false;
       pendingBridgeRefreshDetailRef.current = pendingBridgeRefreshDetailRef.current || options.refreshDetail !== false;
+      pendingBridgeRefreshImmediateRef.current = pendingBridgeRefreshImmediateRef.current || options.immediate === true;
       if (bridgeRefreshTimerRef.current) {
         window.clearTimeout(bridgeRefreshTimerRef.current);
+      }
+      const delayMs = projectRefreshDebounceMs(
+        jobsRef.current.find((job) => String(job?.status || "").trim().toLowerCase() === "running") || null,
+        { immediate: pendingBridgeRefreshImmediateRef.current },
+      );
+      if (delayMs <= 0) {
+        bridgeRefreshTimerRef.current = null;
+        void flushBridgeRefresh();
+        return;
       }
       bridgeRefreshTimerRef.current = window.setTimeout(() => {
         bridgeRefreshTimerRef.current = null;
         void flushBridgeRefresh();
-      }, projectRefreshDebounceMs(jobsRef.current.find((job) => String(job?.status || "").trim().toLowerCase() === "running") || null));
+      }, delayMs);
     }
 
     async function handleBridgeEvent(eventPayload) {
@@ -989,6 +1005,7 @@ export function useDesktopController() {
           applyProjectListingDelta(project, jobsRef.current);
         }
         scheduleBridgeRefresh(eventRepoId, {
+          immediate: shouldImmediatelyRefreshProjectEvent(selectedProjectId, project),
           refreshListing: shouldRefreshListingForProjectEvent(selectedProjectId, eventRepoId),
           refreshDetail: !detailPatched,
         });
@@ -1012,7 +1029,11 @@ export function useDesktopController() {
         if (shouldPatchSelectedProject && shouldRefreshProjectDetailForUiEvent(eventPayload)) {
           // UI events only carry a shallow project delta, so structural run
           // updates still need a core detail reload to refresh plan state.
-          scheduleBridgeRefresh(eventRepoId, { refreshListing: false, refreshDetail: true });
+          scheduleBridgeRefresh(eventRepoId, {
+            immediate: shouldImmediatelyRefreshProjectUiEvent(selectedProjectId, eventPayload),
+            refreshListing: false,
+            refreshDetail: true,
+          });
         }
       }
     }
@@ -1068,6 +1089,7 @@ export function useDesktopController() {
       }
       pendingBridgeEventsRef.current = [];
       bridgeEventFlushScheduledRef.current = false;
+      pendingBridgeRefreshImmediateRef.current = false;
       void subscription.then(() => {
         if (typeof unlisten === "function") {
           return unlisten();

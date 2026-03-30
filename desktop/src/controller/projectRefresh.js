@@ -1,8 +1,33 @@
-const DEFAULT_IDLE_DEBOUNCE_MS = 150;
-const DEFAULT_RUNNING_DEBOUNCE_MS = 900;
+const DEFAULT_IDLE_DEBOUNCE_MS = 120;
+const DEFAULT_RUNNING_DEBOUNCE_MS = 250;
+const IMMEDIATE_REFRESH_DEBOUNCE_MS = 0;
+const IMMEDIATE_PROJECT_STATUS_PREFIXES = [
+  "running",
+  "failed",
+  "completed",
+  "cancelled",
+  "closed_out",
+  "closeout_failed",
+  "awaiting_checkpoint_approval",
+];
+const IMMEDIATE_UI_EVENT_TYPES = new Set([
+  "step-started",
+  "step-finished",
+  "batch-started",
+  "batch-finished",
+  "closeout-started",
+  "closeout-finished",
+  "run-paused",
+  "checkpoint-approved",
+  "project-state-synced",
+]);
 
 function normalizedRepoId(repoId) {
   return String(repoId || "").trim();
+}
+
+function normalizedStatus(status) {
+  return String(status || "").trim().toLowerCase();
 }
 
 export function mergeRefreshRepoId(currentRepoId = "", nextRepoId = "") {
@@ -11,7 +36,10 @@ export function mergeRefreshRepoId(currentRepoId = "", nextRepoId = "") {
   return next || current;
 }
 
-export function projectRefreshDebounceMs(activeJob = null) {
+export function projectRefreshDebounceMs(activeJob = null, options = {}) {
+  if (options?.immediate) {
+    return IMMEDIATE_REFRESH_DEBOUNCE_MS;
+  }
   return activeJob?.status === "running" ? DEFAULT_RUNNING_DEBOUNCE_MS : DEFAULT_IDLE_DEBOUNCE_MS;
 }
 
@@ -43,4 +71,30 @@ export function shouldRefreshListingForManualRefresh(selectedProjectId = "") {
 export function shouldForceCodexRefreshForManualRefresh(centerTab = "") {
   const normalizedTab = String(centerTab || "").trim().toLowerCase();
   return normalizedTab === "config" || normalizedTab === "app-settings";
+}
+
+export function shouldImmediatelyRefreshProjectEvent(selectedProjectId = "", project = null) {
+  if (!project || !shouldRefreshSelectedProject(selectedProjectId, project.repo_id || project.project_dir || "")) {
+    return false;
+  }
+  const status = normalizedStatus(project.current_status || project.status || project.project_status);
+  if (!status) {
+    return false;
+  }
+  return IMMEDIATE_PROJECT_STATUS_PREFIXES.some((prefix) => status === prefix || status.startsWith(`${prefix}:`));
+}
+
+export function shouldImmediatelyRefreshProjectUiEvent(selectedProjectId = "", eventPayload = null) {
+  const payload = eventPayload?.payload;
+  const repoId = normalizedRepoId(payload?.repo_id || payload?.project?.repo_id || payload?.project_dir);
+  if (!shouldRefreshSelectedProject(selectedProjectId, repoId)) {
+    return false;
+  }
+  const event = payload?.event;
+  const eventType = normalizedStatus(event?.event_type);
+  const flow = normalizedStatus(event?.details?.flow);
+  if (!eventType || flow === "planning") {
+    return false;
+  }
+  return IMMEDIATE_UI_EVENT_TYPES.has(eventType);
 }

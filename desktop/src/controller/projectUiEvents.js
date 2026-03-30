@@ -73,6 +73,99 @@ function terminalStepStatus(status = "") {
   return ["completed", "failed"].includes(normalizedText(status).toLowerCase());
 }
 
+function patchCheckpointsFromRunEvent(checkpoints = null, record = null, loopState = null) {
+  if (!checkpoints || typeof checkpoints !== "object" || !record) {
+    return checkpoints;
+  }
+  if (!["project-state-synced", "checkpoint-approved"].includes(record.eventType)) {
+    return checkpoints;
+  }
+
+  const currentCheckpointId = normalizedText(
+    record.eventType === "project-state-synced"
+      ? record.details?.current_checkpoint_id
+      : loopState?.current_checkpoint_id,
+  ) || normalizedText(loopState?.current_checkpoint_id);
+  const waitingForApproval =
+    record.eventType === "checkpoint-approved"
+      ? false
+      : record.details?.pending_checkpoint_approval !== undefined
+        ? Boolean(record.details.pending_checkpoint_approval)
+        : Boolean(loopState?.pending_checkpoint_approval);
+  const previousPendingId = normalizedText(checkpoints?.pending?.checkpoint_id);
+  const targetCheckpointId = currentCheckpointId || previousPendingId;
+  const items = Array.isArray(checkpoints.items) ? checkpoints.items : [];
+  let changed = false;
+  const nextItems = items.map((item) => {
+    if (!item || typeof item !== "object") {
+      return item;
+    }
+    const itemId = normalizedText(item.checkpoint_id);
+    const status = normalizedText(item.status).toLowerCase();
+    if (!waitingForApproval && status === "awaiting_review") {
+      changed = true;
+      return {
+        ...item,
+        status: "approved",
+      };
+    }
+    if (waitingForApproval && targetCheckpointId && itemId === targetCheckpointId && status !== "awaiting_review") {
+      changed = true;
+      return {
+        ...item,
+        status: "awaiting_review",
+      };
+    }
+    return item;
+  });
+
+  let nextPending = checkpoints?.pending && typeof checkpoints.pending === "object"
+    ? { ...checkpoints.pending }
+    : null;
+  if (waitingForApproval) {
+    const matchingItem = targetCheckpointId
+      ? nextItems.find((item) => normalizedText(item?.checkpoint_id) === targetCheckpointId) || null
+      : null;
+    if (matchingItem) {
+      nextPending = {
+        ...matchingItem,
+        status: "awaiting_review",
+      };
+    } else if (nextPending && (!targetCheckpointId || normalizedText(nextPending.checkpoint_id) === targetCheckpointId)) {
+      nextPending = {
+        ...nextPending,
+        checkpoint_id: normalizedText(nextPending.checkpoint_id) || targetCheckpointId,
+        status: "awaiting_review",
+      };
+    } else if (targetCheckpointId) {
+      nextPending = {
+        checkpoint_id: targetCheckpointId,
+        status: "awaiting_review",
+      };
+    } else {
+      nextPending = nextItems.find((item) => normalizedText(item?.status).toLowerCase() === "awaiting_review") || null;
+    }
+  } else {
+    nextPending = null;
+  }
+
+  if (
+    normalizedText(nextPending?.checkpoint_id) !== normalizedText(checkpoints?.pending?.checkpoint_id)
+    || normalizedText(nextPending?.status) !== normalizedText(checkpoints?.pending?.status)
+  ) {
+    changed = true;
+  }
+
+  if (!changed) {
+    return checkpoints;
+  }
+  return {
+    ...checkpoints,
+    items: nextItems,
+    pending: nextPending,
+  };
+}
+
 function patchPlanFromRunEvent(plan = null, record = null) {
   if (!plan || typeof plan !== "object" || !record) {
     return plan;
@@ -314,12 +407,17 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
           record.eventType === "project-state-synced"
             ? normalizedText(record.details?.current_task)
             : detail.loop_state.current_task,
+        current_checkpoint_id:
+          record.eventType === "project-state-synced"
+            ? normalizedText(record.details?.current_checkpoint_id)
+            : detail.loop_state.current_checkpoint_id,
         pending_checkpoint_approval:
           record.eventType === "project-state-synced" && record.details?.pending_checkpoint_approval !== undefined
             ? Boolean(record.details.pending_checkpoint_approval)
             : detail.loop_state.pending_checkpoint_approval,
       }
     : detail.loop_state;
+  const nextCheckpoints = patchCheckpointsFromRunEvent(detail.checkpoints, record, nextLoopState);
 
   const nextActivity = activityLine
     ? uniquePrepend(detail.activity, activityLine, activityLimit)
@@ -371,6 +469,10 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
                 record.eventType === "project-state-synced"
                   ? normalizedText(record.details?.current_task)
                   : detail.snapshot.loop_state.current_task,
+              current_checkpoint_id:
+                record.eventType === "project-state-synced"
+                  ? normalizedText(record.details?.current_checkpoint_id)
+                  : detail.snapshot.loop_state.current_checkpoint_id,
               pending_checkpoint_approval:
                 record.eventType === "project-state-synced" && record.details?.pending_checkpoint_approval !== undefined
                   ? Boolean(record.details.pending_checkpoint_approval)
@@ -385,6 +487,7 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
     ...detail,
     project: nextProject,
     loop_state: nextLoopState,
+    checkpoints: nextCheckpoints,
     activity: nextActivity,
     history: nextHistory,
     bottom_panels: nextBottomPanels,

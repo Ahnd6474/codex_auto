@@ -472,6 +472,7 @@ class WorkspaceManager:
                     "message": "Project state updated during execution.",
                     "details": {
                         "current_task": str(context.loop_state.current_task or "").strip(),
+                        "current_checkpoint_id": str(context.loop_state.current_checkpoint_id or "").strip(),
                         "pending_checkpoint_approval": bool(context.loop_state.pending_checkpoint_approval),
                         "last_run_at": str(context.metadata.last_run_at or "").strip(),
                     },
