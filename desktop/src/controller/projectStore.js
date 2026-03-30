@@ -51,6 +51,35 @@ function projectEventMatchesDetail(detail = null, project = null) {
   return Boolean(detailProjectDir) && Boolean(eventProjectDir) && detailProjectDir === eventProjectDir;
 }
 
+function projectListKey(item = null) {
+  if (!item || typeof item !== "object") {
+    return "";
+  }
+  return String(
+    item.archive_id
+    || item.repo_id
+    || item.repo_path
+    || item.project_dir
+    || item.slug
+    || "",
+  ).trim();
+}
+
+function shallowObjectEqual(left = null, right = null) {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") {
+    return false;
+  }
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+  return leftKeys.every((key) => Object.is(left[key], right[key]));
+}
+
 function workspaceTreeNodesEqual(leftNodes = [], rightNodes = []) {
   if (leftNodes === rightNodes) {
     return true;
@@ -383,6 +412,40 @@ export function mergeProjectDetailSupplement(detail, supplement = {}) {
       detail?.detail_level,
     ),
   };
+}
+
+export function reuseProjectListingItems(previousItems = [], nextItems = []) {
+  const prior = Array.isArray(previousItems) ? previousItems : [];
+  const incoming = Array.isArray(nextItems) ? nextItems : [];
+  if (!incoming.length) {
+    return [];
+  }
+  if (!prior.length) {
+    return incoming;
+  }
+
+  const previousByKey = new Map(
+    prior
+      .map((item) => [projectListKey(item), item])
+      .filter(([key]) => Boolean(key)),
+  );
+
+  let changed = incoming.length !== prior.length;
+  const merged = incoming.map((item, index) => {
+    const match = previousByKey.get(projectListKey(item));
+    if (match && shallowObjectEqual(match, item)) {
+      if (prior[index] !== match) {
+        changed = true;
+      }
+      return match;
+    }
+    if (prior[index] !== item) {
+      changed = true;
+    }
+    return item;
+  });
+
+  return changed ? merged : prior;
 }
 
 export function applyListingState({ listing, runningJob = null, setProjects, setWorkspaceStats }) {

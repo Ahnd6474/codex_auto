@@ -2144,6 +2144,27 @@ export function planStepsWithCloseout(plan, labels = {}) {
   return steps;
 }
 
+export function resolveExecutionDisplayPlan(detail = null, planDraft = null, activeJob = null) {
+  const livePlan = detail?.plan;
+  const draftPlan = planDraft && typeof planDraft === "object" ? planDraft : null;
+  const jobStatus = String(activeJob?.status || "").trim().toLowerCase();
+  const command = String(activeJob?.command || "").trim().toLowerCase();
+  const planningInFlight =
+    (jobStatus === "running" || jobStatus === "queued")
+    && (command === "generate-plan" || isPlanningProgressRunning(detail?.planning_progress));
+
+  if (planningInFlight && livePlan && typeof livePlan === "object") {
+    return livePlan;
+  }
+  if (draftPlan) {
+    return draftPlan;
+  }
+  if (livePlan && typeof livePlan === "object") {
+    return livePlan;
+  }
+  return draftPlan || livePlan || { steps: [] };
+}
+
 export function runtimeSummary(runtime, modelPresets = [], language = "en", modelCatalog = []) {
   const provider = normalizedModelProvider(runtime);
   const providerPrefix = providerDisplayName(provider, normalizedLocalModelProvider(runtime));

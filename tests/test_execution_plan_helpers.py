@@ -664,9 +664,39 @@ class ExecutionPlanHelperTests(unittest.TestCase):
                 ExecutionPlanState(
                     execution_mode="parallel",
                     default_test_command="python -m pytest",
+                    closeout_status="failed",
+                    closeout_started_at="2026-03-30T00:30:00+00:00",
+                    closeout_completed_at="2026-03-30T00:45:00+00:00",
+                    closeout_commit_hash="closeout-head",
+                    closeout_notes="closeout failed",
                     steps=[
-                        ExecutionStep(step_id="ST1", title="Parent active step", status="running", started_at="2026-03-30T00:00:00+00:00"),
-                        ExecutionStep(step_id="ST2", title="Sibling already done", status="completed", completed_at="2026-03-29T00:00:00+00:00"),
+                        ExecutionStep(
+                            step_id="ST1",
+                            title="Parent active step",
+                            status="running",
+                            started_at="2026-03-30T00:00:00+00:00",
+                            commit_hash="parent-running",
+                            notes="still running",
+                            metadata={"failure_type": "should-clear", "failure_reason_code": "running"},
+                        ),
+                        ExecutionStep(
+                            step_id="ST2",
+                            title="Sibling failed step",
+                            status="failed",
+                            started_at="2026-03-29T12:00:00+00:00",
+                            completed_at="2026-03-29T12:30:00+00:00",
+                            commit_hash="failed-head",
+                            notes="failed previously",
+                            metadata={"failure_type": "test_failure", "failure_reason_code": "tests_failed"},
+                        ),
+                        ExecutionStep(
+                            step_id="ST3",
+                            title="Sibling paused step",
+                            status="paused",
+                            started_at="2026-03-29T13:00:00+00:00",
+                            notes="paused previously",
+                        ),
+                        ExecutionStep(step_id="ST4", title="Sibling already done", status="completed", completed_at="2026-03-29T00:00:00+00:00"),
                     ],
                 ),
             )
@@ -694,10 +724,31 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_root, ignore_errors=True)
 
-        self.assertEqual([item.status for item in lineage_plan.steps], ["pending", "completed"])
+        self.assertEqual([item.status for item in lineage_plan.steps], ["pending", "pending", "pending", "completed"])
         self.assertIsNone(lineage_plan.steps[0].started_at)
+        self.assertIsNone(lineage_plan.steps[0].completed_at)
+        self.assertIsNone(lineage_plan.steps[0].commit_hash)
+        self.assertEqual(lineage_plan.steps[0].notes, "")
+        self.assertNotIn("failure_type", lineage_plan.steps[0].metadata)
+        self.assertNotIn("failure_reason_code", lineage_plan.steps[0].metadata)
+        self.assertIsNone(lineage_plan.steps[1].started_at)
+        self.assertIsNone(lineage_plan.steps[1].completed_at)
+        self.assertIsNone(lineage_plan.steps[1].commit_hash)
+        self.assertEqual(lineage_plan.steps[1].notes, "")
+        self.assertNotIn("failure_type", lineage_plan.steps[1].metadata)
+        self.assertNotIn("failure_reason_code", lineage_plan.steps[1].metadata)
+        self.assertIsNone(lineage_plan.steps[2].started_at)
+        self.assertIsNone(lineage_plan.steps[2].completed_at)
+        self.assertEqual(lineage_plan.steps[2].notes, "")
+        self.assertEqual(lineage_plan.closeout_status, "not_started")
+        self.assertIsNone(lineage_plan.closeout_started_at)
+        self.assertIsNone(lineage_plan.closeout_completed_at)
+        self.assertIsNone(lineage_plan.closeout_commit_hash)
+        self.assertEqual(lineage_plan.closeout_notes, "")
         self.assertEqual(checkpoint_state["checkpoints"][0]["status"], "pending")
-        self.assertEqual(checkpoint_state["checkpoints"][1]["status"], "approved")
+        self.assertEqual(checkpoint_state["checkpoints"][1]["status"], "pending")
+        self.assertEqual(checkpoint_state["checkpoints"][2]["status"], "pending")
+        self.assertEqual(checkpoint_state["checkpoints"][3]["status"], "approved")
         self.assertEqual(lineage_context.metadata.current_status, "lineage_ready")
 
     def test_cleanup_lineage_worktree_unregisters_missing_worktree_path(self) -> None:

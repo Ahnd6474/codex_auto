@@ -3326,6 +3326,76 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(detail["reports"]["latest_failure"], {})
             self.assertFalse(latest_failure_file.exists())
 
+    def test_run_plan_marks_started_step_failed_when_step_execution_raises(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Raised Step Failure Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+            plan = {
+                "plan_title": "Raised Step Failure Demo",
+                "project_prompt": "Run the first step",
+                "summary": "The first step should fail cleanly.",
+                "workflow_mode": "standard",
+                "execution_mode": "parallel",
+                "default_test_command": "python -m unittest",
+                "steps": [
+                    {
+                        "step_id": "ST1",
+                        "title": "Freeze Shared Harness Contract",
+                        "display_description": "Start the shared harness work",
+                        "codex_description": "Start the shared harness work",
+                        "success_criteria": "Tests pass",
+                        "test_command": "python -m unittest",
+                        "reasoning_effort": "high",
+                        "status": "pending",
+                    }
+                ],
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            ui_event_log_file = Path(detail["files"]["ui_event_log_file"])
+
+            with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()), mock.patch(
+                "jakal_flow.orchestrator.Orchestrator.run_saved_execution_step",
+                side_effect=RuntimeError("Injected ST1 failure"),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "Injected ST1 failure"):
+                    run_command(
+                        "run-plan",
+                        workspace_root,
+                        {
+                            **payload,
+                            "plan": plan,
+                        },
+                    )
+
+            events = read_jsonl(ui_event_log_file)
+            self.assertEqual(
+                [event.get("event_type") for event in events[-3:]],
+                ["run-started", "step-started", "step-finished"],
+            )
+            self.assertEqual(events[-1]["details"]["step_id"], "ST1")
+            self.assertEqual(events[-1]["details"]["status"], "failed")
+
     def test_run_closeout_clears_latest_failure_when_restarting_after_failure(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"

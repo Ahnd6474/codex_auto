@@ -121,6 +121,69 @@ def build_run_command_handlers(
         save_run_control(project, default_run_control())
         ctx.orchestrator.clear_latest_failure_status(project)
         append_ui_event(project, "run-started", "Started running the remaining execution steps.")
+        pending_started_steps: list[dict[str, str]] = []
+        pending_batch_details: dict[str, object] | None = None
+
+        def clear_pending_events() -> None:
+            pending_started_steps.clear()
+            nonlocal pending_batch_details
+            pending_batch_details = None
+
+        def mark_pending_steps_failed(latest_project, error_message: str) -> None:
+            nonlocal pending_batch_details
+            if not pending_started_steps:
+                return
+            for item in pending_started_steps:
+                step_id = str(item.get("step_id", "")).strip()
+                title = str(item.get("title", "")).strip()
+                details = {
+                    "step_id": step_id,
+                    "status": "failed",
+                }
+                execution_mode = str(item.get("execution_mode", "")).strip()
+                if execution_mode:
+                    details["execution_mode"] = execution_mode
+                if str(item.get("hybrid_lineages", "")).strip():
+                    details["hybrid_lineages"] = True
+                step_kind = str(item.get("step_kind", "")).strip()
+                if step_kind:
+                    details["step_kind"] = step_kind
+                append_ui_event(
+                    latest_project,
+                    "step-finished",
+                    f"{step_id} finished with status failed.",
+                    details,
+                )
+            if pending_batch_details is not None:
+                step_ids = [
+                    str(value).strip()
+                    for value in pending_batch_details.get("step_ids", [])
+                    if str(value).strip()
+                ]
+                if len(step_ids) > 1:
+                    details = {
+                        "step_ids": step_ids,
+                        "statuses": {step_id: "failed" for step_id in step_ids},
+                    }
+                    execution_mode = str(pending_batch_details.get("execution_mode", "")).strip()
+                    if execution_mode:
+                        details["execution_mode"] = execution_mode
+                    parallel_workers = pending_batch_details.get("parallel_workers")
+                    if parallel_workers is not None:
+                        details["parallel_workers"] = parallel_workers
+                    parallel_worker_mode = str(pending_batch_details.get("parallel_worker_mode", "")).strip()
+                    if parallel_worker_mode:
+                        details["parallel_worker_mode"] = parallel_worker_mode
+                    if bool(pending_batch_details.get("hybrid_lineages", False)):
+                        details["hybrid_lineages"] = True
+                    append_ui_event(
+                        latest_project,
+                        "batch-finished",
+                        f"Batch failed for {', '.join(step_ids)}. Cause: {error_message}",
+                        details,
+                    )
+            clear_pending_events()
+
         try:
             def run_closeout_pass(latest_project, closeout_message: str):
                 append_ui_event(latest_project, "closeout-started", closeout_message)
@@ -195,6 +258,13 @@ def build_run_command_handlers(
                 )
                 if hybrid_lineages and step_kind in {"join", "barrier"}:
                     step = batch[0]
+                    pending_started_steps = [
+                        {
+                            "step_id": step.step_id,
+                            "title": step.title,
+                            "step_kind": step_kind,
+                        }
+                    ]
                     append_ui_event(
                         latest_project,
                         "step-started",
@@ -219,6 +289,7 @@ def build_run_command_handlers(
                             "step_kind": step_kind,
                         },
                     )
+                    clear_pending_events()
                     if result_step.status == "paused":
                         append_ui_event(project, "run-paused", "Paused immediately because an immediate stop was requested.")
                     if result_step.status != "completed":
@@ -226,6 +297,22 @@ def build_run_command_handlers(
                     continue
                 if hybrid_lineages:
                     step_ids = [item.step_id for item in batch]
+                    pending_started_steps = [
+                        {
+                            "step_id": step.step_id,
+                            "title": step.title,
+                            "execution_mode": "parallel",
+                            "hybrid_lineages": "true",
+                        }
+                        for step in batch
+                    ]
+                    pending_batch_details = {
+                        "step_ids": step_ids,
+                        "execution_mode": "parallel",
+                        "parallel_workers": parallel_plan.recommended_workers,
+                        "parallel_worker_mode": parallel_plan.worker_mode,
+                        "hybrid_lineages": True,
+                    }
                     if len(batch) > 1:
                         append_ui_event(
                             latest_project,
@@ -275,6 +362,7 @@ def build_run_command_handlers(
                                 "hybrid_lineages": True,
                             },
                         )
+                    clear_pending_events()
                     if any(item.status == "paused" for item in result_steps):
                         append_ui_event(project, "run-paused", "Paused immediately because an immediate stop was requested.")
                     if any(item.status != "completed" for item in result_steps):
@@ -286,6 +374,20 @@ def build_run_command_handlers(
                     and parallel_plan.recommended_workers > 1
                 ):
                     step_ids = [item.step_id for item in batch]
+                    pending_started_steps = [
+                        {
+                            "step_id": step.step_id,
+                            "title": step.title,
+                            "execution_mode": "parallel",
+                        }
+                        for step in batch
+                    ]
+                    pending_batch_details = {
+                        "step_ids": step_ids,
+                        "execution_mode": "parallel",
+                        "parallel_workers": parallel_plan.recommended_workers,
+                        "parallel_worker_mode": parallel_plan.worker_mode,
+                    }
                     append_ui_event(
                         latest_project,
                         "batch-started",
@@ -331,12 +433,14 @@ def build_run_command_handlers(
                             "statuses": {item.step_id: item.status for item in result_steps},
                         },
                     )
+                    clear_pending_events()
                     if any(item.status == "paused" for item in result_steps):
                         append_ui_event(project, "run-paused", "Paused immediately because an immediate stop was requested.")
                     if any(item.status != "completed" for item in result_steps):
                         break
                     continue
                 step = batch[0]
+                pending_started_steps = [{"step_id": step.step_id, "title": step.title}]
                 append_ui_event(
                     latest_project,
                     "step-started",
@@ -360,6 +464,7 @@ def build_run_command_handlers(
                         "commit_hash": result_step.commit_hash,
                     },
                 )
+                clear_pending_events()
                 if result_step.status == "paused":
                     append_ui_event(project, "run-paused", "Paused immediately because an immediate stop was requested.")
                 if result_step.status != "completed":
@@ -369,6 +474,13 @@ def build_run_command_handlers(
                 append_ui_event(latest, "run-finished", "Finished the run loop for the current project.")
                 return ctx.detail_payload(latest)
             return ctx.detail_payload(project)
+        except HANDLED_OPERATION_EXCEPTIONS:
+            latest = ctx.orchestrator.local_project(project_dir) or project
+            failure_message = str(latest.loop_state.stop_reason or "").strip()
+            if not failure_message:
+                failure_message = "Run failed."
+            mark_pending_steps_failed(latest, failure_message)
+            raise
         finally:
             latest = ctx.orchestrator.local_project(project_dir)
             if latest is not None:

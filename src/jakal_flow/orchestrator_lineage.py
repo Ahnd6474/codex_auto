@@ -223,7 +223,7 @@ class OrchestratorLineageMixin:
     def _sanitize_child_execution_plan_state(self, plan_state: ExecutionPlanState) -> ExecutionPlanState:
         sanitized = deepcopy(plan_state)
         for step in sanitized.steps:
-            if step.status not in {"running", "integrating"}:
+            if step.status == "completed":
                 continue
             step.status = "pending"
             step.started_at = None
@@ -231,7 +231,7 @@ class OrchestratorLineageMixin:
             step.commit_hash = None
             step.notes = ""
             self._clear_step_failure_metadata(step)
-        if sanitized.closeout_status == "running":
+        if sanitized.closeout_status != "completed":
             sanitized.closeout_status = "not_started"
             sanitized.closeout_started_at = None
             sanitized.closeout_completed_at = None
