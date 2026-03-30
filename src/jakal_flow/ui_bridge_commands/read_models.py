@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from ..chat_sessions import chat_payload
@@ -51,17 +52,34 @@ def build_read_model_handlers(
         include_listing = coerce_bool(ctx.payload.get("include_listing", True), True)
         detail_level = str(ctx.payload.get("detail_level", "core")).strip().lower() or "core"
         detail: dict[str, Any] | None = None
-        if str(ctx.payload.get("repo_id", "")).strip() or str(ctx.payload.get("project_dir", "")).strip():
-            project = resolve_project(ctx.orchestrator, ctx.payload)
-            if refresh_codex_status:
-                codex_snapshot_service.invalidate(project.runtime.codex_path)
-            detail = ctx.detail_payload(
+        has_project_selector = bool(str(ctx.payload.get("repo_id", "")).strip() or str(ctx.payload.get("project_dir", "")).strip())
+        project = resolve_project(ctx.orchestrator, ctx.payload) if has_project_selector else None
+        if project is not None and refresh_codex_status:
+            codex_snapshot_service.invalidate(project.runtime.codex_path)
+
+        def build_detail() -> dict[str, Any] | None:
+            if project is None:
+                return None
+            return ctx.detail_payload(
                 project,
                 refresh_codex_status=refresh_codex_status,
                 detail_level=detail_level,
             )
+
+        def build_listing() -> dict[str, Any] | None:
+            return list_projects_payload(ctx.orchestrator) if include_listing else None
+
+        if include_listing and project is not None:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                listing_future = executor.submit(build_listing)
+                detail_future = executor.submit(build_detail)
+                return {
+                    "listing": listing_future.result(),
+                    "detail": detail_future.result(),
+                }
+        detail = build_detail()
         return {
-            "listing": list_projects_payload(ctx.orchestrator) if include_listing else None,
+            "listing": build_listing(),
             "detail": detail,
         }
 

@@ -6,6 +6,7 @@ import { bridgeEventJob, bridgeEventProject, compactBridgeEventQueue, isJobUpdat
 import {
   mergeRefreshRepoId,
   projectRefreshDebounceMs,
+  shouldForceCodexRefreshForManualRefresh,
   shouldRefreshListingForProjectEvent,
   shouldRefreshSelectedProject,
 } from "../controller/projectRefresh";
@@ -1092,7 +1093,21 @@ export function useDesktopController() {
 
   async function forceRefresh() {
     try {
-      const jobSnapshot = await syncRunningJobSnapshot(activeJobId);
+      const refreshCodexStatus = shouldForceCodexRefreshForManualRefresh(centerTab);
+      const jobSnapshotPromise = syncRunningJobSnapshot(activeJobId);
+      const projectStatePromise = selectedProjectId
+        ? refreshVisibleProjectState(
+            bridgeRequest,
+            workspaceRoot,
+            selectedProjectId,
+            {
+              refreshCodexStatus,
+              detailLevel: wantsExpandedDetail ? "full" : "core",
+              refreshListing: true,
+            },
+          )
+        : loadProjectListing(bridgeRequest, workspaceRoot);
+      const [jobSnapshot, refreshedState] = await Promise.all([jobSnapshotPromise, projectStatePromise]);
       applyCurrentJobSnapshot(jobSnapshot);
       const selectedJob = projectJobFromJobs(jobsRef.current, {
         repo_id: selectedProjectId,
@@ -1101,46 +1116,42 @@ export function useDesktopController() {
         last_run_at: projectDetail?.project?.last_run_at || "",
       });
       if (selectedProjectId) {
-        const { listing, detail } = await refreshVisibleProjectState(
-          bridgeRequest,
-          workspaceRoot,
-          selectedProjectId,
-          {
-            refreshCodexStatus: true,
-            detailLevel: wantsExpandedDetail ? "full" : "core",
-            refreshListing: true,
-          },
-        );
+        const { listing, detail } = refreshedState || {};
         const nextProjects = applyListingState({
           listing,
           runningJob: jobsRef.current,
           setProjects,
           setWorkspaceStats,
         });
-        setHistoryProjects(listing?.history || []);
-        projectsRef.current = nextProjects;
-        if (detail) {
-          applyProjectDetail(detail, { preserveSelectedStep: true, runningJob: selectedJob });
-        }
+        startTransition(() => {
+          setHistoryProjects(listing?.history || []);
+          projectsRef.current = nextProjects;
+          if (detail) {
+            applyProjectDetail(detail, { preserveSelectedStep: true, runningJob: selectedJob });
+          }
+        });
       } else {
-        const listing = await loadProjectListing(bridgeRequest, workspaceRoot);
+        const listing = refreshedState;
         const nextProjects = applyListingState({
           listing,
           runningJob: jobsRef.current,
           setProjects,
           setWorkspaceStats,
         });
-        setHistoryProjects(listing?.history || []);
-        projectsRef.current = nextProjects;
-
-        if (selectedHistoryId) {
-          const detail = await fetchHistoryDetailOnce(selectedHistoryId, {
+        const historyDetail = selectedHistoryId
+          ? await fetchHistoryDetailOnce(selectedHistoryId, {
             detailLevel: centerTab === "history" ? "full" : "core",
-          });
-          setHistoryDetail(detail);
-        } else if (nextProjects.length) {
-          setSelectedProjectId(nextProjects[0].repo_id);
-        }
+          })
+          : null;
+        startTransition(() => {
+          setHistoryProjects(listing?.history || []);
+          projectsRef.current = nextProjects;
+          if (selectedHistoryId && historyDetail) {
+            setHistoryDetail(historyDetail);
+          } else if (!selectedHistoryId && nextProjects.length) {
+            setSelectedProjectId(nextProjects[0].repo_id);
+          }
+        });
       }
 
       setMessage(messagePayload("info", activeJobId ? translate(language, "message.runStateRefreshed") : translate(language, "message.projectStateRefreshed")));
@@ -2219,7 +2230,9 @@ export function useDesktopController() {
       setMessage(messagePayload("error", translate(language, "message.noProjectOpen")));
       return;
     }
-    await loadProject(selectedProjectId, { refreshCodexStatus: true });
+    await loadProject(selectedProjectId, {
+      refreshCodexStatus: shouldForceCodexRefreshForManualRefresh(centerTab),
+    });
     setMessage(messagePayload("success", translate(language, "message.projectReloaded")));
   }
 
