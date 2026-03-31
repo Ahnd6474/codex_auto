@@ -6796,6 +6796,52 @@ class UIBridgeTests(unittest.TestCase):
 
             self.assertEqual(cached_state.to_dict(), saved_state.to_dict())
 
+    def test_workspace_recovers_project_root_from_stale_registry_entry(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            workspace = WorkspaceManager(workspace_root)
+            context = workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=RuntimeOptions(),
+                origin_url="",
+                display_name="Lit Project",
+            )
+
+            actual_root = context.paths.project_root
+            stale_root = workspace.projects_root / "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc"
+            stale_root.mkdir(parents=True, exist_ok=True)
+            stale_metadata = json.loads((actual_root / "metadata.json").read_text(encoding="utf-8"))
+            stale_metadata["project_root"] = str(stale_root)
+            stale_metadata["repo_path"] = r"C:\Users\ahnd6\OneDrive\Documents\GitHub\lit"
+            stale_metadata["slug"] = "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc"
+            (stale_root / "metadata.json").write_text(json.dumps(stale_metadata, indent=2, sort_keys=True), encoding="utf-8")
+
+            registry = json.loads(workspace.registry_file.read_text(encoding="utf-8"))
+            registry["projects"][context.metadata.repo_id]["project_root"] = str(stale_root)
+            registry["projects"][context.metadata.repo_id]["slug"] = "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc"
+            registry["projects"][context.metadata.repo_id]["repo_path"] = r"C:\Users\ahnd6\OneDrive\Documents\GitHub\lit"
+            workspace.registry_file.write_text(json.dumps(registry, indent=2, sort_keys=True), encoding="utf-8")
+
+            projects = workspace.list_projects()
+
+            self.assertEqual(len(projects), 1)
+            self.assertEqual(projects[0].metadata.repo_id, context.metadata.repo_id)
+            self.assertEqual(projects[0].paths.project_root.resolve(), actual_root.resolve())
+
+            refreshed_registry = json.loads(workspace.registry_file.read_text(encoding="utf-8"))
+            self.assertEqual(
+                refreshed_registry["projects"][context.metadata.repo_id]["project_root"],
+                str(actual_root),
+            )
+            self.assertEqual(
+                refreshed_registry["projects"][context.metadata.repo_id]["repo_path"],
+                str(repo_dir.resolve()),
+            )
+
     def test_load_project_full_detail_reads_each_log_tail_once_on_cache_miss(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"

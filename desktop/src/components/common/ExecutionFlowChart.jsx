@@ -378,9 +378,18 @@ function getChartTopology(steps = []) {
 function effectiveChartStepStatus(step = null, projectStatus = "", activeLineageId = "", checkpointState = null, checkpointFamily = "") {
   const currentStatus = effectiveStepStatus(step, projectStatus);
   const normalizedStepStatus = String(step?.status || "").trim().toLowerCase();
+  const normalizedProjectStatus = String(projectStatus || "").trim().toLowerCase();
   const stepLineageId = String(step?.metadata?.lineage_id || "").trim();
   const activeLineage = String(checkpointState?.currentCheckpointLineageId || activeLineageId || "").trim();
-  const normalizedProjectStatus = String(projectStatus || "").trim().toLowerCase();
+  const statusByStepId = checkpointState?.statusByStepId instanceof Map ? checkpointState.statusByStepId : null;
+  const statusByLineageId = checkpointState?.statusByLineageId instanceof Map ? checkpointState.statusByLineageId : null;
+  const checkpointStatus =
+    (statusByStepId && statusByStepId.get(String(step?.step_id || "").trim()))
+    || (statusByLineageId && statusByLineageId.get(stepLineageId))
+    || "";
+  if (checkpointStatus) {
+    return checkpointStatus;
+  }
   const lineageIsActive =
     Boolean(activeLineage)
     && Boolean(stepLineageId)
@@ -397,9 +406,8 @@ function effectiveChartStepStatus(step = null, projectStatus = "", activeLineage
       || normalizedProjectStatus === "awaiting_review"
       || isDebuggingStatus(projectStatus));
   if (lineageIsActive) {
-    const pendingStatus = String(checkpointState?.pending?.status || "").trim().toLowerCase();
     if (checkpointState?.waitingForApproval || checkpointFamily === "checkpoint" || normalizedProjectStatus === "awaiting_checkpoint_approval" || normalizedProjectStatus === "awaiting_review") {
-      return pendingStatus || "awaiting_review";
+      return String(checkpointState?.pending?.status || "awaiting_review").trim().toLowerCase() || "awaiting_review";
     }
     if (checkpointFamily === "failed" || normalizedProjectStatus.endsWith("failed")) {
       return "failed";
@@ -422,11 +430,57 @@ function effectiveChartStepStatus(step = null, projectStatus = "", activeLineage
 }
 
 function buildChartData(steps = [], projectStatus = "", language = "en", activeLineageId = "", checkpointState = null, checkpointFamily = "") {
+  const statusByStepId = new Map();
+  const statusByLineageId = new Map();
+  const registerStatus = (key, status) => {
+    const normalizedKey = String(key || "").trim();
+    const normalizedStatus = String(status || "").trim().toLowerCase();
+    if (!normalizedKey || !normalizedStatus) {
+      return;
+    }
+    statusByStepId.set(normalizedKey, normalizedStatus);
+  };
+  const registerLineageStatus = (key, status) => {
+    const normalizedKey = String(key || "").trim();
+    const normalizedStatus = String(status || "").trim().toLowerCase();
+    if (!normalizedKey || !normalizedStatus) {
+      return;
+    }
+    statusByLineageId.set(normalizedKey, normalizedStatus);
+  };
+  const checkpointItems = Array.isArray(checkpointState?.items) ? checkpointState.items : [];
+  for (const item of checkpointItems) {
+    const itemStatus = String(item?.status || "").trim().toLowerCase();
+    const lineageId = String(item?.lineage_id || "").trim();
+    const planRefs = Array.isArray(item?.plan_refs) ? item.plan_refs : [];
+    for (const ref of planRefs) {
+      registerStatus(ref, itemStatus);
+      if (lineageId) {
+        registerLineageStatus(lineageId, itemStatus);
+      }
+    }
+  }
+  if (checkpointState?.pending && typeof checkpointState.pending === "object") {
+    const pendingStatus = String(checkpointState.pending.status || "awaiting_review").trim().toLowerCase() || "awaiting_review";
+    const pendingLineageId = String(checkpointState.pending.lineage_id || checkpointState.currentCheckpointLineageId || "").trim();
+    const pendingRefs = Array.isArray(checkpointState.pending.plan_refs) ? checkpointState.pending.plan_refs : [];
+    for (const ref of pendingRefs) {
+      registerStatus(ref, pendingStatus);
+      if (pendingLineageId) {
+        registerLineageStatus(pendingLineageId, pendingStatus);
+      }
+    }
+  }
+  const checkpointLookup = {
+    ...checkpointState,
+    statusByStepId,
+    statusByLineageId,
+  };
   const topology = getChartTopology(steps);
   return {
     ...topology,
     nodes: topology.nodes.map((node) => {
-      const stepStatus = effectiveChartStepStatus(node.step, projectStatus, activeLineageId, checkpointState, checkpointFamily);
+      const stepStatus = effectiveChartStepStatus(node.step, projectStatus, activeLineageId, checkpointLookup, checkpointFamily);
       const tone = statusTone(stepStatus);
       const palette = PALETTE[tone] || PALETTE.neutral;
       const failureReason = failureReasonLabel(node.step, language);
@@ -452,21 +506,16 @@ function buildChartData(steps = [], projectStatus = "", language = "en", activeL
 function ExecutionFlowChartComponent({ steps = [], detail = null, activeJob = null, language = "en", selectedStepId = "", onSelectStep = null }) {
   const arrowId = useId().replace(/:/g, "-");
   const executionState = useMemo(() => deriveExecutionUiState(detail, null, activeJob), [detail, activeJob]);
-  const activeLineageId = String(
-    executionState.checkpointExecutionState?.currentCheckpointLineageId
-    || executionState.checkpointPending?.lineage_id
-    || "",
-  ).trim();
   const chart = useMemo(
     () => buildChartData(
       steps,
       executionState.displayStatusValue,
       language,
-      activeLineageId,
+      String(executionState.checkpointExecutionState?.currentCheckpointLineageId || executionState.checkpointPending?.lineage_id || "").trim(),
       executionState.checkpointExecutionState,
       executionState.checkpointFamily,
     ),
-    [steps, executionState.displayStatusValue, language, activeLineageId, executionState.checkpointExecutionState, executionState.checkpointFamily],
+    [steps, executionState.displayStatusValue, language, executionState.checkpointExecutionState, executionState.checkpointFamily, executionState.checkpointPending?.lineage_id],
   );
 
   if (!steps.length) {

@@ -47,6 +47,85 @@ class WorkspaceManager:
             self._path_cache_token(paths.loop_state_file),
         )
 
+    def _project_root_has_required_files(self, project_root: Path) -> bool:
+        paths = self.build_paths_from_root(project_root)
+        metadata_data = read_json(paths.metadata_file, default=None)
+        runtime_data = read_json(paths.project_config_file, default=None)
+        loop_state_data = read_json(paths.loop_state_file, default=None)
+        return bool(metadata_data and runtime_data and loop_state_data)
+
+    def _resolve_registry_item_project_root(self, item: dict[str, str], base_dir: Path) -> Path | None:
+        project_root_text = str(item.get("project_root", "")).strip()
+        slug = str(item.get("slug", "")).strip()
+        repo_id = str(item.get("repo_id", "")).strip() or str(item.get("source_repo_id", "")).strip()
+        repo_path_text = str(item.get("repo_path", "")).strip()
+
+        def _normalized_path(value: str) -> Path | None:
+            if not value:
+                return None
+            try:
+                return Path(value).expanduser().resolve()
+            except OSError:
+                return Path(value)
+
+        repo_path = _normalized_path(repo_path_text)
+        best_match: Path | None = None
+        best_score = -1
+
+        def consider(candidate: Path) -> None:
+            nonlocal best_match, best_score
+            if not candidate.exists() or not self._project_root_has_required_files(candidate):
+                return
+            metadata_data = read_json(self.build_paths_from_root(candidate).metadata_file, default=None)
+            if not isinstance(metadata_data, dict):
+                return
+            child_repo_id = str(metadata_data.get("repo_id", "")).strip()
+            child_slug = str(metadata_data.get("slug", "")).strip()
+            child_repo_path = _normalized_path(str(metadata_data.get("repo_path", "")).strip())
+
+            score = 0
+            if repo_path and child_repo_path and child_repo_path == repo_path:
+                score = 3
+            elif repo_id and child_repo_id == repo_id:
+                score = 2
+            elif slug and child_slug == slug:
+                score = 1
+
+            if score > best_score:
+                best_match = candidate.resolve()
+                best_score = score
+
+        for candidate_text in (project_root_text, str(base_dir / slug).strip() if slug else ""):
+            if candidate_text:
+                consider(Path(candidate_text))
+
+        if base_dir.exists():
+            for child in base_dir.iterdir():
+                if child.is_dir():
+                    consider(child)
+
+        if best_score > 0 and best_match is not None:
+            return best_match
+        if best_match is not None:
+            return best_match
+        return None
+
+    def _sync_registry_project_root(self, repo_id: str, context: ProjectContext) -> None:
+        registry = self._read_registry()
+        item = registry["projects"].get(repo_id)
+        normalized_item = self._active_registry_item(context)
+        if item != normalized_item:
+            registry["projects"][repo_id] = normalized_item
+            self._write_registry(registry)
+
+    def _sync_registry_history_root(self, archive_id: str, context: ProjectContext) -> None:
+        registry = self._read_registry()
+        item = registry["history"].get(archive_id)
+        normalized_item = self._history_registry_item(context)
+        if item != normalized_item:
+            registry["history"][archive_id] = normalized_item
+            self._write_registry(registry)
+
     def _cache_project_context(self, context: ProjectContext) -> None:
         cache_key = self._project_cache_key(context.paths.project_root)
         self._project_context_cache[cache_key] = (
@@ -499,18 +578,46 @@ class WorkspaceManager:
         item = registry["projects"].get(repo_id)
         if not item:
             raise KeyError(f"Unknown repository id: {repo_id}")
-        return self.load_project_from_root(Path(item["project_root"]))
+        registry_root_text = str(item.get("project_root", "")).strip()
+        if registry_root_text:
+            registry_root = Path(registry_root_text)
+            cache_key = self._project_cache_key(registry_root)
+            cached = self._project_context_cache.get(cache_key)
+            if cached is not None and cached[0] == self._project_context_signature(self.build_paths_from_root(registry_root)):
+                return self._copy_project_context(cached[1])
+        resolved_root = self._resolve_registry_item_project_root(item, self.projects_root)
+        if resolved_root is None:
+            resolved_root = Path(registry_root_text)
+        context = self.load_project_from_root(resolved_root)
+        self._sync_registry_project_root(repo_id, context)
+        return context
 
     def load_history_by_id(self, archive_id: str) -> ProjectContext:
         registry = self._read_registry()
         item = registry["history"].get(archive_id)
         if not item:
             raise KeyError(f"Unknown archive id: {archive_id}")
-        context = self.load_project_from_root(Path(item["project_root"]))
+        registry_root_text = str(item.get("project_root", "")).strip()
+        if registry_root_text:
+            registry_root = Path(registry_root_text)
+            cache_key = self._project_cache_key(registry_root)
+            cached = self._project_context_cache.get(cache_key)
+            if cached is not None and cached[0] == self._project_context_signature(self.build_paths_from_root(registry_root)):
+                context = self._copy_project_context(cached[1])
+                context.metadata.archived = True
+                context.metadata.archive_id = archive_id
+                context.metadata.archived_at = str(item.get("archived_at", "")).strip() or context.metadata.archived_at
+                context.metadata.source_repo_id = str(item.get("source_repo_id", "")).strip() or context.metadata.source_repo_id
+                return context
+        resolved_root = self._resolve_registry_item_project_root(item, self.history_root)
+        if resolved_root is None:
+            resolved_root = Path(registry_root_text)
+        context = self.load_project_from_root(resolved_root)
         context.metadata.archived = True
         context.metadata.archive_id = archive_id
         context.metadata.archived_at = str(item.get("archived_at", "")).strip() or context.metadata.archived_at
         context.metadata.source_repo_id = str(item.get("source_repo_id", "")).strip() or context.metadata.source_repo_id
+        self._sync_registry_history_root(archive_id, context)
         return context
 
     def load_project_by_slug(self, slug: str) -> ProjectContext:
@@ -599,10 +706,10 @@ class WorkspaceManager:
         self.ensure_workspace()
         registry = self._read_registry()
         projects: list[ProjectContext] = []
-        for item in registry["projects"].values():
+        for repo_id in registry["projects"].keys():
             try:
-                projects.append(self.load_project_from_root(Path(str(item.get("project_root", "")).strip())))
-            except FileNotFoundError:
+                projects.append(self.load_project_by_id(repo_id))
+            except (FileNotFoundError, KeyError):
                 continue
         return sorted(projects, key=lambda ctx: ctx.metadata.created_at)
 
@@ -610,15 +717,11 @@ class WorkspaceManager:
         self.ensure_workspace()
         registry = self._read_registry()
         history_projects: list[ProjectContext] = []
-        for archive_id, item in registry["history"].items():
+        for archive_id in registry["history"].keys():
             try:
-                context = self.load_project_from_root(Path(str(item.get("project_root", "")).strip()))
-            except FileNotFoundError:
+                context = self.load_history_by_id(archive_id)
+            except (FileNotFoundError, KeyError):
                 continue
-            context.metadata.archived = True
-            context.metadata.archive_id = archive_id
-            context.metadata.archived_at = str(item.get("archived_at", "")).strip() or context.metadata.archived_at
-            context.metadata.source_repo_id = str(item.get("source_repo_id", "")).strip() or context.metadata.source_repo_id
             history_projects.append(context)
         return sorted(
             history_projects,

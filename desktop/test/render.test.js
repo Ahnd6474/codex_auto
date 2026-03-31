@@ -1148,6 +1148,61 @@ test("ExecutionFlowChart uses checkpoint failure state for the active lineage in
   assert.doesNotMatch(html, /Success/);
 });
 
+test("ExecutionFlowChart follows checkpoint plan refs so sibling steps do not inherit the active step status", async () => {
+  const html = await renderBundledComponent(
+    "execution-flow-chart-checkpoint-plan-refs-render",
+    "./src/components/common/ExecutionFlowChart.jsx",
+    "ExecutionFlowChart",
+    {
+      detail: {
+        project: {
+          current_status: "running:st4",
+        },
+        checkpoints: {
+          items: [
+            {
+              checkpoint_id: "CP4",
+              plan_refs: ["ST4"],
+              lineage_id: "",
+              status: "running",
+              title: "Reconcile Automation And Workspace Foundations",
+            },
+            {
+              checkpoint_id: "CP5",
+              plan_refs: ["ST5"],
+              lineage_id: "LN3",
+              status: "failed",
+              title: "Complete Workflow Runtime And Git Bridge Surfaces",
+            },
+          ],
+          pending: null,
+        },
+        loop_state: {
+          current_checkpoint_id: "CP4",
+          current_checkpoint_lineage_id: "",
+          pending_checkpoint_approval: false,
+        },
+      },
+      activeJob: {
+        id: "job-run",
+        status: "running",
+        command: "run-plan",
+      },
+      steps: [
+        { step_id: "ST4", title: "Reconcile", status: "running", metadata: { lineage_id: "" } },
+        { step_id: "ST5", title: "Complete", status: "failed", metadata: { lineage_id: "LN3" } },
+      ],
+      selectedStepId: "ST4",
+      language: "en",
+      onSelectStep: noop,
+    },
+  );
+
+  assert.match(html, /<tspan[^>]*>ST4<\/tspan>[\s\S]*?<tspan[^>]*>Running<\/tspan>/);
+  assert.match(html, /<tspan[^>]*>ST5<\/tspan>[\s\S]*?<tspan[^>]*>Failed<\/tspan>/);
+  assert.doesNotMatch(html, /<tspan[^>]*>ST5<\/tspan>[\s\S]*?<tspan[^>]*>Running<\/tspan>/);
+});
+
 test("CenterWorkspace keeps the step editor hidden until a block is selected", async () => {
   const html = await renderBundledComponent(
     "parallel-workspace-no-selection-render",
