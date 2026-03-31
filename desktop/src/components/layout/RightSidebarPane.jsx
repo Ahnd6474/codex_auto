@@ -250,6 +250,12 @@ function rightSidebarPanePropsEqual(previousProps, nextProps) {
         && previousProps.detail?.runtime === nextProps.detail?.runtime
         && previousProps.modelCatalog === nextProps.modelCatalog
         && previousProps.modelPresets === nextProps.modelPresets
+        && previousProps.onSelectChatSession === nextProps.onSelectChatSession
+        && previousProps.onStartNewChatSession === nextProps.onStartNewChatSession
+        && previousProps.onSendChatMessage === nextProps.onSendChatMessage
+        && previousProps.onChangeChatModelSelection === nextProps.onChangeChatModelSelection
+        && previousProps.onChangeChatReasoningEffort === nextProps.onChangeChatReasoningEffort
+        && previousProps.onRequestStop === nextProps.onRequestStop
       );
     case "flow":
       return (
@@ -263,6 +269,22 @@ function rightSidebarPanePropsEqual(previousProps, nextProps) {
         && previousProps.canRequestStop === nextProps.canRequestStop
         && previousProps.canCancelReservation === nextProps.canCancelReservation
         && sameQueuedJobs(previousProps.queuedJobs, nextProps.queuedJobs)
+        && previousProps.onChangeForm === nextProps.onChangeForm
+        && previousProps.onGeneratePlan === nextProps.onGeneratePlan
+        && previousProps.onPromptChange === nextProps.onPromptChange
+        && previousProps.onSavePlan === nextProps.onSavePlan
+        && previousProps.onResetPlan === nextProps.onResetPlan
+        && previousProps.onRunPlan === nextProps.onRunPlan
+        && previousProps.onRunManualDebugger === nextProps.onRunManualDebugger
+        && previousProps.onRunManualMerger === nextProps.onRunManualMerger
+        && previousProps.onRequestStop === nextProps.onRequestStop
+        && previousProps.onCancelQueuedJob === nextProps.onCancelQueuedJob
+        && previousProps.onChangeAutoRunAfterPlan === nextProps.onChangeAutoRunAfterPlan
+        && previousProps.onSelectStep === nextProps.onSelectStep
+        && previousProps.onUpdateStepField === nextProps.onUpdateStepField
+        && previousProps.onSaveStepLocal === nextProps.onSaveStepLocal
+        && previousProps.onAddStep === nextProps.onAddStep
+        && previousProps.onDeleteStep === nextProps.onDeleteStep
       );
     case "output":
       return true;
@@ -303,6 +325,13 @@ function rightSidebarPanePropsEqual(previousProps, nextProps) {
         && previousProps.planDraft === nextProps.planDraft
         && previousProps.activeJob === nextProps.activeJob
         && previousProps.selectedStepId === nextProps.selectedStepId
+        && previousProps.onResolveCommonRequirement === nextProps.onResolveCommonRequirement
+        && previousProps.onReopenCommonRequirement === nextProps.onReopenCommonRequirement
+        && previousProps.onRecordSpineCheckpoint === nextProps.onRecordSpineCheckpoint
+        && previousProps.onUpdateCommonRequirement === nextProps.onUpdateCommonRequirement
+        && previousProps.onDeleteCommonRequirement === nextProps.onDeleteCommonRequirement
+        && previousProps.onUpdateSpineCheckpoint === nextProps.onUpdateSpineCheckpoint
+        && previousProps.onDeleteSpineCheckpoint === nextProps.onDeleteSpineCheckpoint
       );
     default:
       return false;

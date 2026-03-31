@@ -281,6 +281,22 @@ function parallelRunControlViewPropsEqual(previousProps, nextProps) {
     && previousProps.canCancelReservation === nextProps.canCancelReservation
     && sameQueuedJobs(previousProps.queuedJobs, nextProps.queuedJobs)
     && previousProps.hidePromptStrip === nextProps.hidePromptStrip
+    && previousProps.onPromptChange === nextProps.onPromptChange
+    && previousProps.onChangeForm === nextProps.onChangeForm
+    && previousProps.onGeneratePlan === nextProps.onGeneratePlan
+    && previousProps.onSavePlan === nextProps.onSavePlan
+    && previousProps.onResetPlan === nextProps.onResetPlan
+    && previousProps.onRunPlan === nextProps.onRunPlan
+    && previousProps.onRunManualDebugger === nextProps.onRunManualDebugger
+    && previousProps.onRunManualMerger === nextProps.onRunManualMerger
+    && previousProps.onRequestStop === nextProps.onRequestStop
+    && previousProps.onCancelQueuedJob === nextProps.onCancelQueuedJob
+    && previousProps.onAutoRunAfterPlanChange === nextProps.onAutoRunAfterPlanChange
+    && previousProps.onSelectStep === nextProps.onSelectStep
+    && previousProps.onUpdateStepField === nextProps.onUpdateStepField
+    && previousProps.onSaveStepLocal === nextProps.onSaveStepLocal
+    && previousProps.onAddStep === nextProps.onAddStep
+    && previousProps.onDeleteStep === nextProps.onDeleteStep
   );
 }
 

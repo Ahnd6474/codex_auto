@@ -547,5 +547,18 @@ export const IdeToolbar = memo(function IdeToolbar({
     && samePlanningProgress(previousProps.projectDetail?.planning_progress, nextProps.projectDetail?.planning_progress)
     && planToolbarSignature(previousProps.planDraft) === planToolbarSignature(nextProps.planDraft)
     && planToolbarSignature(previousProps.projectDetail?.plan) === planToolbarSignature(nextProps.projectDetail?.plan)
+    && previousProps.onRefresh === nextProps.onRefresh
+    && previousProps.onOpenSettings === nextProps.onOpenSettings
+    && previousProps.onGeneratePlan === nextProps.onGeneratePlan
+    && previousProps.onRunPlan === nextProps.onRunPlan
+    && previousProps.onApproveCheckpoint === nextProps.onApproveCheckpoint
+    && previousProps.onSmartShareLink === nextProps.onSmartShareLink
+    && previousProps.onOpenFolder === nextProps.onOpenFolder
+    && previousProps.onOpenVsCode === nextProps.onOpenVsCode
+    && previousProps.onOpenGithub === nextProps.onOpenGithub
+    && previousProps.onSelectProject === nextProps.onSelectProject
+    && previousProps.onNewProject === nextProps.onNewProject
+    && previousProps.onDeleteSelectedProject === nextProps.onDeleteSelectedProject
+    && previousProps.onDeleteProject === nextProps.onDeleteProject
   );
 });

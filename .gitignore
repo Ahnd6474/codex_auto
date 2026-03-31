@@ -26,7 +26,9 @@ desktop/src-tauri/target/
 .tmp_share_manual/
 .parallel_runs/
 .lineages/
-
+/projects
+/jakal-flow-logs
+/jakal-flow-logx
 # Test and coverage artifacts
 .coverage
 .coverage.*
