@@ -125,7 +125,7 @@ function patchCheckpointsFromRunEvent(checkpoints = null, record = null, loopSta
         status: "awaiting_review",
       };
     }
-    if (!processActive && ["running", "awaiting_review"].includes(status)) {
+    if (!waitingForApproval && ["running", "awaiting_review"].includes(status)) {
       changed = true;
       return {
         ...item,

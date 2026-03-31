@@ -812,6 +812,122 @@ test("applyProjectDetailState preserves checkpoint approval state when the refre
   assert.match(nextProjectDetail.checkpoints.timeline_markdown, /awaiting_review/);
 });
 
+test("applyProjectDetailState normalizes stale running checkpoints back to pending when approval is not active", () => {
+  let nextProjectDetail = null;
+
+  const applied = applyProjectDetailState({
+    detail: {
+      project: {
+        repo_id: "demo",
+        repo_path: "/repo",
+        display_name: "Demo",
+        slug: "demo",
+        branch: "main",
+        origin_url: "",
+        current_status: "running:parallel",
+      },
+      loop_state: {
+        current_checkpoint_id: "",
+        current_checkpoint_lineage_id: "",
+        pending_checkpoint_approval: false,
+      },
+      plan: {
+        closeout_status: "not_started",
+        steps: [],
+      },
+      codex_status: {
+        model_catalog: [],
+      },
+      detail_level: "core",
+      checkpoints: {
+        current_checkpoint_id: "CP1",
+        current_checkpoint_lineage_id: "LN1",
+        items: [
+          {
+            checkpoint_id: "CP1",
+            lineage_id: "LN1",
+            title: "Review work",
+            target_block: 2,
+            status: "running",
+          },
+        ],
+        pending: {
+          checkpoint_id: "CP1",
+          lineage_id: "LN1",
+          title: "Review work",
+          target_block: 2,
+          status: "running",
+        },
+        timeline_markdown: "- CP1 | running | Review work",
+      },
+    },
+    refs: {
+      lastAppliedDetailSignatureRef: {
+        current: "",
+      },
+    },
+    state: {
+      projectDetail: {
+        project: {
+          repo_id: "demo",
+        },
+        checkpoints: {
+          current_checkpoint_id: "CP1",
+          current_checkpoint_lineage_id: "LN1",
+          items: [
+            {
+              checkpoint_id: "CP1",
+              lineage_id: "LN1",
+              title: "Review work",
+              target_block: 2,
+              status: "running",
+            },
+          ],
+          pending: {
+            checkpoint_id: "CP1",
+            lineage_id: "LN1",
+            title: "Review work",
+            target_block: 2,
+            status: "running",
+          },
+          timeline_markdown: "- CP1 | running | Review work",
+        },
+        codex_status: {},
+      },
+      modelCatalog: [],
+      activeJob: {
+        id: "job-1",
+        status: "running",
+        command: "run-plan",
+      },
+      defaultRuntime: {
+        model: "gpt-5.4-mini",
+        effort: "high",
+      },
+      planDirty: false,
+    },
+    setters: {
+      transition: (callback) => callback(),
+      setProjectDetail: (value) => {
+        nextProjectDetail = value;
+      },
+      setModelCatalog: () => {},
+      setShareSettings: () => {},
+      setLoadingProjectId: () => {},
+      setProjectForm: () => {},
+      setPlanDraft: () => {},
+      setSelectedStepId: () => {},
+      setPlanDirty: () => {},
+    },
+  });
+
+  assert.equal(applied.project.current_status, "setup_ready");
+  assert.equal(nextProjectDetail.checkpoints.current_checkpoint_id, null);
+  assert.equal(nextProjectDetail.checkpoints.pending, null);
+  assert.equal(nextProjectDetail.checkpoints.items[0].status, "pending");
+  assert.match(nextProjectDetail.checkpoints.timeline_markdown, /pending/);
+});
+
 test("applyProjectDetailState clears a stale selected step when the refreshed plan is already complete", () => {
   let nextSelectedStepId = "ST1";
   let nextPlanDraft = null;

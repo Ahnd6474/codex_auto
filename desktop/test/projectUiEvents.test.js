@@ -175,6 +175,48 @@ test("applyProjectUiEvent keeps checkpoint state idle when no visible execution 
   assert.equal(updated.checkpoints.items[1].status, "pending");
 });
 
+test("applyProjectUiEvent normalizes stale running checkpoints back to pending when approval is not active", () => {
+  const updated = applyProjectUiEvent(
+    {
+      project: { repo_id: "repo-1", current_status: "running:parallel" },
+      loop_state: {
+        current_task: "Running ST2",
+        current_checkpoint_id: "",
+        pending_checkpoint_approval: false,
+      },
+      checkpoints: {
+        items: [
+          { checkpoint_id: "CP1", status: "approved" },
+          { checkpoint_id: "CP2", status: "running", title: "Review integration" },
+        ],
+        pending: { checkpoint_id: "CP2", status: "running", title: "Review integration" },
+        timeline_markdown: "",
+      },
+    },
+    sampleEvent("project-state-synced", {
+      event: {
+        details: {
+          current_task: "Running ST2",
+          current_checkpoint_id: "CP2",
+          pending_checkpoint_approval: false,
+        },
+      },
+    }),
+    {
+      activeJob: {
+        id: "job-1",
+        status: "running",
+        command: "run-plan",
+      },
+    },
+  );
+
+  assert.equal(updated.loop_state.pending_checkpoint_approval, false);
+  assert.equal(updated.checkpoints.current_checkpoint_id, null);
+  assert.equal(updated.checkpoints.pending, null);
+  assert.equal(updated.checkpoints.items[1].status, "pending");
+});
+
 test("applyProjectUiEvent clears the live pending checkpoint when approval finishes", () => {
   const updated = applyProjectUiEvent(
     {

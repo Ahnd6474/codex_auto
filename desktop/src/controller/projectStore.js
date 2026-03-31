@@ -671,7 +671,7 @@ function normalizeCheckpointSectionForDetail(detail = null, activeJob = null) {
 
     if (waitingForApproval && matchesActiveCheckpoint) {
       nextItem.status = "awaiting_review";
-    } else if (!processActive && ["running", "awaiting_review"].includes(String(nextItem.status || "").trim().toLowerCase())) {
+    } else if (!waitingForApproval && ["running", "awaiting_review"].includes(String(nextItem.status || "").trim().toLowerCase())) {
       nextItem.status = "pending";
     }
     return nextItem;
