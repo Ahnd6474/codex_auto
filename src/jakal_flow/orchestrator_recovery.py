@@ -417,12 +417,31 @@ class OrchestratorRecoveryMixin:
             if returncode != 0:
                 return entry
         return None
+
+    def _pass_artifact_sort_key(self, path: Path, *, pass_name: str) -> tuple[int, int, str]:
+        attempt_index = 0
+        stem = path.name
+        prefix = f"{pass_name}.attempt_"
+        if stem.startswith(prefix):
+            remainder = stem[len(prefix) :]
+            attempt_text = remainder.split(".", 1)[0]
+            try:
+                attempt_index = int(attempt_text)
+            except (TypeError, ValueError):
+                attempt_index = 0
+        try:
+            mtime_ns = int(path.stat().st_mtime_ns)
+        except OSError:
+            mtime_ns = 0
+        return (mtime_ns, attempt_index, stem)
+
     def _pass_artifact_path(self, block_dir: Path, pass_name: str, suffix: str) -> Path | None:
-        direct = block_dir / f"{pass_name}{suffix}"
-        if direct.exists():
-            return direct
-        matches = sorted(block_dir.glob(f"{pass_name}.attempt_*{suffix}"))
-        return matches[-1] if matches else None
+        candidates = [block_dir / f"{pass_name}{suffix}"]
+        candidates.extend(block_dir.glob(f"{pass_name}.attempt_*{suffix}"))
+        existing_candidates = [candidate for candidate in candidates if candidate.exists()]
+        if not existing_candidates:
+            return None
+        return max(existing_candidates, key=lambda candidate: self._pass_artifact_sort_key(candidate, pass_name=pass_name))
     def _test_run_result_from_pass_entry(
         self,
         context: ProjectContext,

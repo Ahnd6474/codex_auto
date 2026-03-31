@@ -2115,6 +2115,35 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_root, ignore_errors=True)
 
+    def test_pass_artifact_path_prefers_latest_mtime_over_stale_direct_and_attempt_order(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_pass_artifact_path_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        orchestrator = Orchestrator(temp_root)
+        block_dir = temp_root / "logs" / "block_0018"
+        block_dir.mkdir(parents=True, exist_ok=True)
+
+        direct_file = block_dir / "plan-agent-b-packing.last_message.txt"
+        attempt_2_file = block_dir / "plan-agent-b-packing.attempt_2.last_message.txt"
+        attempt_10_file = block_dir / "plan-agent-b-packing.attempt_10.last_message.txt"
+
+        try:
+            direct_file.write_text("stale direct output", encoding="utf-8")
+            attempt_2_file.write_text("attempt 2 output", encoding="utf-8")
+            attempt_10_file.write_text("attempt 10 output", encoding="utf-8")
+
+            base_ns = time.time_ns()
+            os.utime(direct_file, ns=(base_ns, base_ns))
+            os.utime(attempt_2_file, ns=(base_ns + 1_000_000, base_ns + 1_000_000))
+            os.utime(attempt_10_file, ns=(base_ns + 2_000_000, base_ns + 2_000_000))
+
+            selected = orchestrator._pass_artifact_path(block_dir, "plan-agent-b-packing", ".last_message.txt")
+            selected_text = selected.read_text(encoding="utf-8") if selected else ""
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(selected, attempt_10_file)
+        self.assertEqual(selected_text, "attempt 10 output")
+
     def test_run_join_execution_step_skips_empty_cherry_pick_results(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_join_empty_cherry_pick_test"
         shutil.rmtree(temp_root, ignore_errors=True)
