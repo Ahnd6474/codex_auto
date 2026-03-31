@@ -86,11 +86,21 @@ def build_run_command_handlers(
 
     def request_stop(ctx: BridgeCommandContext) -> dict:
         project = resolve_project(ctx.orchestrator, ctx.payload)
+        raw_process_pids = ctx.payload.get("process_pids")
+        if raw_process_pids is None:
+            raw_execution_processes = ctx.payload.get("execution_processes")
+            if isinstance(raw_execution_processes, list):
+                raw_process_pids = [item.get("pid") for item in raw_execution_processes if isinstance(item, dict)]
+        process_pids = raw_process_pids if raw_process_pids is None else [
+            candidate
+            for candidate in (raw_process_pids if isinstance(raw_process_pids, (list, tuple, set)) else [raw_process_pids])
+            if candidate is not None
+        ]
         control = request_stop_immediately(
             project,
             request_source=str(ctx.payload.get("source", "desktop-ui")).strip() or "desktop-ui",
         )
-        execution_stop_registry.request_stop(execution_scope_id(project))
+        execution_stop_registry.request_stop(execution_scope_id(project), process_pids=process_pids)
         append_ui_event(project, "stop-requested", "Immediate stop requested. The current step will be ignored.", control)
         return {
             "repo_id": project.metadata.repo_id,

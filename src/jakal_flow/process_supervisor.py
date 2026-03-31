@@ -104,7 +104,16 @@ def terminate_process(pid: int) -> None:
                     finally:
                         kernel32.CloseHandle(handle)
         else:
-            os.kill(pid, signal.SIGTERM)
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except OSError:
+                return
+            if wait_for_condition(lambda: _process_is_gone(pid), timeout_seconds=0.3, interval_seconds=0.05):
+                return
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
     except OSError:
         pass
 
@@ -116,3 +125,11 @@ def wait_for_condition(predicate: Callable[[], bool], *, timeout_seconds: float,
             return True
         time.sleep(interval_seconds)
     return predicate()
+
+
+def _process_is_gone(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return True
+    return False

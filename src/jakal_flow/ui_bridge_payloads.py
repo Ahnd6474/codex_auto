@@ -30,7 +30,7 @@ from .utils import append_jsonl, compact_text, normalize_workflow_mode, now_utc_
 from .workspace import LOCAL_PROJECT_LOG_DIRNAME
 
 
-DETAIL_CACHE_VERSION = 16
+DETAIL_CACHE_VERSION = 17
 LIST_ITEM_CACHE_VERSION = 1
 WORKSPACE_LISTING_CACHE_VERSION = 1
 PROJECT_TREE_EXCLUDED_NAMES = frozenset({".git", LOCAL_PROJECT_LOG_DIRNAME, "ui_bridge_perf.jsonl"})
@@ -142,6 +142,30 @@ def _project_share_payload_signature(project: ProjectContext) -> str:
     return digest.hexdigest()
 
 
+def _normalize_execution_processes(execution_processes: Any) -> list[dict[str, Any]]:
+    if not isinstance(execution_processes, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for entry in execution_processes:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            pid = int(entry.get("pid", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if pid <= 0:
+            continue
+        normalized.append(
+            {
+                "scope_id": str(entry.get("scope_id", "")).strip(),
+                "label": str(entry.get("label", "")).strip(),
+                "pid": pid,
+            }
+        )
+    normalized.sort(key=lambda item: (item["pid"], item["label"], item["scope_id"]))
+    return normalized
+
+
 def _clone_cached_list_item_payload(payload: dict[str, Any]) -> dict[str, Any]:
     cloned = dict(payload)
     stats = payload.get("stats")
@@ -167,6 +191,9 @@ def _clone_cached_detail_payload(payload: dict[str, Any]) -> dict[str, Any]:
             key: (dict(value) if isinstance(value, dict) else value)
             for key, value in bottom_panels.items()
         }
+    execution_processes = payload.get("execution_processes")
+    if isinstance(execution_processes, list):
+        cloned["execution_processes"] = [dict(item) if isinstance(item, dict) else item for item in execution_processes]
     return cloned
 
 
@@ -197,8 +224,14 @@ def _store_section_payload(cache_key: str, signature: str, payload: dict[str, An
     return payload
 
 
-def project_detail_content_signature(project: ProjectContext, detail_level: str) -> str:
+def project_detail_content_signature(
+    project: ProjectContext,
+    detail_level: str,
+    *,
+    execution_processes: Any = None,
+) -> str:
     normalized_detail_level = "core" if str(detail_level).strip().lower() == "core" else "full"
+    normalized_execution_processes = _normalize_execution_processes(execution_processes)
     cache_key = f"{project.paths.project_root.resolve()}|{normalized_detail_level}"
     lightweight_pre_digest = hashlib.sha1()
     lightweight_pre_digest.update(f"detail-cache-v{DETAIL_CACHE_VERSION}:{normalized_detail_level}".encode("utf-8"))
@@ -207,6 +240,7 @@ def project_detail_content_signature(project: ProjectContext, detail_level: str)
     lightweight_pre_digest.update(str(project.metadata.current_safe_revision or "").encode("utf-8"))
     lightweight_pre_digest.update(str(project.loop_state.current_task or "").encode("utf-8"))
     lightweight_pre_digest.update(_json_or_text_signature(project.paths.execution_plan_file).encode("utf-8"))
+    lightweight_pre_digest.update(json.dumps(normalized_execution_processes, ensure_ascii=False, sort_keys=True).encode("utf-8"))
     tracked_files = [
         project.paths.metadata_file,
         project.paths.project_config_file,
@@ -1699,7 +1733,9 @@ def _build_project_detail_base_payload(
     load_run_control: Callable[[ProjectContext], dict[str, Any]],
     *,
     content_signature: str,
+    execution_processes: Any = None,
 ) -> dict[str, Any]:
+    normalized_execution_processes = _normalize_execution_processes(execution_processes)
     plan_state = orchestrator.load_execution_plan_state(project)
     current_status = effective_project_status(project.metadata.current_status, plan_state, project.loop_state)
     control = load_run_control(project)
@@ -1844,6 +1880,7 @@ def _build_project_detail_base_payload(
         "runtime": project.runtime.to_dict(),
         "loop_state": project.loop_state.to_dict(),
         "plan": plan_state.to_dict(),
+        "execution_processes": normalized_execution_processes,
         "summary": project_summary(
             orchestrator,
             project,
@@ -1907,13 +1944,18 @@ def _cached_project_detail_base_payload(
     normalized_detail_level: str,
     load_run_control: Callable[[ProjectContext], dict[str, Any]],
     *,
+    execution_processes: Any = None,
     bypass_cache: bool = False,
 ) -> tuple[dict[str, Any], str, bool, dict[str, Any]]:
     timings: dict[str, Any] = {
         "detail_level": normalized_detail_level,
     }
     started_at = perf_counter()
-    content_signature = project_detail_content_signature(project, normalized_detail_level)
+    content_signature = project_detail_content_signature(
+        project,
+        normalized_detail_level,
+        execution_processes=execution_processes,
+    )
     timings["content_signature_ms"] = round((perf_counter() - started_at) * 1000.0, 3)
     cache_file = _detail_cache_file(project, normalized_detail_level)
     memory_cache_key = f"{project.paths.project_root.resolve()}|{normalized_detail_level}"
@@ -1961,6 +2003,7 @@ def _cached_project_detail_base_payload(
         normalized_detail_level,
         load_run_control,
         content_signature=content_signature,
+        execution_processes=execution_processes,
     )
     timings["base_build_ms"] = round((perf_counter() - base_build_started_at) * 1000.0, 3)
     payload["content_signature"] = content_signature
@@ -2062,6 +2105,7 @@ def project_detail_payload(
     fetch_codex_status: Callable[[str], Any] = fetch_codex_backend_snapshot,
     refresh_codex_status: bool = True,
     detail_level: str = "full",
+    execution_processes: Any = None,
     bypass_detail_cache: bool = False,
 ) -> dict[str, Any]:
     normalized_detail_level = "core" if str(detail_level).strip().lower() == "core" else "full"
@@ -2071,6 +2115,7 @@ def project_detail_payload(
         project,
         normalized_detail_level,
         load_run_control,
+        execution_processes=execution_processes,
         bypass_cache=bypass_detail_cache,
     )
     codex_started_at = perf_counter()

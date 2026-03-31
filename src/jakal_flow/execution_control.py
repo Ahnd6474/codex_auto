@@ -30,6 +30,13 @@ class ManagedProcess:
     def pid(self) -> int:
         return int(self.process.pid or 0)
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "scope_id": self.scope_id,
+            "label": self.label,
+            "pid": self.pid,
+        }
+
 
 class ExecutionStopRegistry:
     def __init__(self) -> None:
@@ -37,12 +44,22 @@ class ExecutionStopRegistry:
         self._requested_scopes: set[str] = set()
         self._active_processes: dict[str, dict[int, ManagedProcess]] = {}
 
-    def request_stop(self, scope_id: str) -> None:
+    def request_stop(
+        self,
+        scope_id: str,
+        *,
+        process_pids: list[int] | tuple[int, ...] | set[int] | int | None = None,
+    ) -> None:
         normalized_scope = self._normalize_scope(scope_id)
         processes: list[ManagedProcess] = []
+        target_pids = self._normalize_process_pids(process_pids)
         with self._lock:
             self._requested_scopes.add(normalized_scope)
             processes = list(self._active_processes.get(normalized_scope, {}).values())
+        if process_pids is not None:
+            targeted_processes = [entry for entry in processes if entry.pid in target_pids]
+            if targeted_processes:
+                processes = targeted_processes
         for entry in processes:
             terminate_process(entry.pid)
 
@@ -55,6 +72,13 @@ class ExecutionStopRegistry:
         normalized_scope = self._normalize_scope(scope_id)
         with self._lock:
             return normalized_scope in self._requested_scopes
+
+    def active_processes(self, scope_id: str) -> list[dict[str, Any]]:
+        normalized_scope = self._normalize_scope(scope_id)
+        with self._lock:
+            scoped = list(self._active_processes.get(normalized_scope, {}).values())
+        scoped.sort(key=lambda entry: (entry.pid, entry.label))
+        return [entry.to_dict() for entry in scoped]
 
     @contextmanager
     def manage_process(
@@ -81,6 +105,23 @@ class ExecutionStopRegistry:
         normalized = str(scope_id or "").strip()
         if not normalized:
             raise ValueError("Execution stop scope id is required.")
+        return normalized
+
+    def _normalize_process_pids(self, process_pids: list[int] | tuple[int, ...] | set[int] | int | None) -> set[int]:
+        if process_pids is None:
+            return set()
+        if isinstance(process_pids, (list, tuple, set)):
+            candidates = process_pids
+        else:
+            candidates = [process_pids]
+        normalized: set[int] = set()
+        for candidate in candidates:
+            try:
+                pid = int(candidate)
+            except (TypeError, ValueError):
+                continue
+            if pid > 0:
+                normalized.add(pid)
         return normalized
 
 

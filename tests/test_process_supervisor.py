@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import signal
 import unittest
 from unittest import mock
 
@@ -8,6 +9,23 @@ from jakal_flow.process_supervisor import hidden_window_startupinfo, spawn_backg
 
 
 class ProcessSupervisorTests(unittest.TestCase):
+    @mock.patch("jakal_flow.process_supervisor.os.name", "posix")
+    @mock.patch("jakal_flow.process_supervisor.wait_for_condition", return_value=False)
+    @mock.patch("jakal_flow.process_supervisor.os.kill")
+    def test_terminate_process_escalates_to_sigkill_on_posix(
+        self,
+        kill_mock: mock.Mock,
+        _wait_mock: mock.Mock,
+    ) -> None:
+        terminate_process(2468)
+
+        kill_mock.assert_has_calls(
+            [
+                mock.call(2468, signal.SIGTERM),
+                mock.call(2468, signal.SIGKILL),
+            ]
+        )
+
     @mock.patch("jakal_flow.process_supervisor.os.name", "posix")
     def test_hidden_window_startupinfo_returns_none_off_windows(self) -> None:
         self.assertIsNone(hidden_window_startupinfo())

@@ -2206,6 +2206,11 @@ export function useDesktopController() {
     const effectiveProjectDir = resolveProjectDirectory(projectForm, projectDetail);
     const runningProjectJob = String(stoppableJob?.status || "").trim().toLowerCase() === "running";
     const repoId = String(projectDetail?.project?.repo_id || selectedProjectId || "").trim();
+    const executionProcessPids = Array.isArray(projectDetail?.execution_processes)
+      ? projectDetail.execution_processes
+          .map((entry) => Number.parseInt(String(entry?.pid || 0), 10))
+          .filter((pid) => Number.isInteger(pid) && pid > 0)
+      : [];
     if (!effectiveProjectDir || !runningProjectJob) {
       return;
     }
@@ -2215,6 +2220,7 @@ export function useDesktopController() {
         {
           ...(repoId ? { repo_id: repoId } : {}),
           project_dir: effectiveProjectDir,
+          ...(executionProcessPids.length > 0 ? { process_pids: executionProcessPids } : {}),
           source: "tauri-react-ui",
         },
         workspaceRoot || null,

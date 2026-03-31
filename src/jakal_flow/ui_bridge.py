@@ -713,11 +713,16 @@ def run_command(command: str, workspace_root: Path, payload: dict[str, Any] | No
     orchestrator = orchestrator_for(workspace_root)
 
     def detail_payload(project: ProjectContext, **kwargs: Any) -> dict[str, Any]:
+        execution_processes = kwargs.pop(
+            "execution_processes",
+            EXECUTION_STOP_REGISTRY.active_processes(execution_scope_id(project)),
+        )
         return project_detail_payload(
             orchestrator,
             project,
             load_run_control=load_run_control,
             fetch_codex_status=lambda codex_path="": _codex_snapshot_service.get_snapshot(codex_path),
+            execution_processes=execution_processes,
             **kwargs,
         )
 

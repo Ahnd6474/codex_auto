@@ -344,6 +344,29 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(result["snapshot_sources"]["live_runtime"]["snapshot_kind"], "live_runtime")
             self.assertEqual(result["snapshot_sources"]["cache_view"]["snapshot_kind"], "cache_view")
 
+    def test_project_detail_payload_includes_execution_processes(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            project = build_test_project_context(temp_dir)
+            orchestrator = mock.Mock()
+            orchestrator.load_execution_plan_state.return_value = ExecutionPlanState(default_test_command=project.runtime.test_cmd)
+            execution_processes = [{"scope_id": "repo-1", "label": "Block 1", "pid": 4321}]
+            with mock.patch.object(ui_bridge_payloads, "_provider_statuses_for_detail", return_value={}), mock.patch.object(
+                ui_bridge_payloads,
+                "project_share_payload",
+                return_value={"share": "full"},
+            ):
+                result = ui_bridge_payloads.project_detail_payload(
+                    orchestrator,
+                    project,
+                    load_run_control=lambda _project: {},
+                    refresh_codex_status=False,
+                    detail_level="full",
+                    execution_processes=execution_processes,
+                    bypass_detail_cache=True,
+                )
+
+            self.assertEqual(result["execution_processes"], execution_processes)
+
     def test_load_visible_project_state_passes_bypass_detail_cache_to_detail_payload(self) -> None:
         with TemporaryTestDir() as temp_dir:
             project = build_test_project_context(temp_dir)
@@ -2771,6 +2794,34 @@ class UIBridgeTests(unittest.TestCase):
             self.assertTrue(control_path.exists())
             control_payload = json.loads(control_path.read_text(encoding="utf-8"))
             self.assertEqual(control_payload["request_source"], "unit-test")
+
+    def test_request_stop_forwards_process_pids(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"):
+                workspace = WorkspaceManager(workspace_root)
+                workspace.initialize_local_project(repo_dir, "main", runtime_from_payload({}), display_name="Plan Demo")
+
+            with mock.patch.object(
+                ui_bridge.EXECUTION_STOP_REGISTRY,
+                "request_stop",
+                wraps=ui_bridge.EXECUTION_STOP_REGISTRY.request_stop,
+            ) as request_stop_mock:
+                run_command(
+                    "request-stop",
+                    workspace_root,
+                    {
+                        "project_dir": str(repo_dir),
+                        "process_pids": [4321, 4322],
+                        "source": "unit-test",
+                    },
+                )
+
+            self.assertEqual(request_stop_mock.call_count, 1)
+            self.assertEqual(request_stop_mock.call_args.kwargs["process_pids"], [4321, 4322])
 
     def test_generate_plan_handles_immediate_stop_during_planning(self) -> None:
         with TemporaryTestDir() as temp_dir:
