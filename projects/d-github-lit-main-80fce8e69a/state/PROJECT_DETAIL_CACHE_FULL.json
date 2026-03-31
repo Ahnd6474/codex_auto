@@ -37,33 +37,44 @@
       "codex_status": {},
       "event_json": {
         "latest_block": {
-          "block_index": 2,
-          "changed_files": [],
-          "commit_hashes": [],
-          "lineage_manifest_file": null,
-          "lineage_push": null,
-          "promotion_assessment": null,
-          "promotion_class": "",
-          "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-          "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
-          "rollback_status": "lineage_rolled_back_to_safe_revision",
-          "selected_task": "Complete Workflow Runtime And Git Bridge Surfaces",
-          "status": "paused",
-          "test_summary": "Immediate stop requested while running Codex block-search-pass."
+          "block_index": 13,
+          "changed_files": [
+            "README.md",
+            "website/index.html"
+          ],
+          "commit_hashes": [
+            "77c06c419200e9769be6608037011ddc37b7cf22"
+          ],
+          "lineage_id": "main",
+          "repository_id": "80fce8e69a25273566bed3c6733740b589b26d4a",
+          "repository_slug": "d-github-lit-main-80fce8e69a",
+          "rollback_status": "not_needed",
+          "selected_task": "Project closeout",
+          "status": "closeout_completed",
+          "test_summary": "python -m pytest exited with 0"
         },
         "latest_pass": {
-          "block_index": 2,
-          "changed_files": [],
-          "commit_hash": null,
-          "lineage_manifest_file": null,
-          "lineage_push": null,
-          "promotion_assessment": null,
-          "promotion_class": "",
-          "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-          "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
-          "rollback_status": "lineage_rolled_back_to_safe_revision",
-          "selected_task": "Complete Workflow Runtime And Git Bridge Surfaces",
-          "test_results": null
+          "block_index": 13,
+          "changed_files": [
+            "README.md",
+            "website/index.html"
+          ],
+          "commit_hashes": [
+            "77c06c419200e9769be6608037011ddc37b7cf22"
+          ],
+          "lineage_id": "main",
+          "repository_id": "80fce8e69a25273566bed3c6733740b589b26d4a",
+          "repository_slug": "d-github-lit-main-80fce8e69a",
+          "rollback_status": "not_needed",
+          "selected_task": "Project closeout",
+          "status": "closeout_completed",
+          "test_summary": "python -m pytest exited with 0",
+          "test_results": {
+            "summary": "python -m pytest exited with 0",
+            "returncode": 0,
+            "command": "python -m pytest",
+            "cache_hit": false
+          }
         },
         "loop_state": {
           "block_index": 0,
@@ -306,8 +317,8 @@
           "returncode": 0,
           "source_duration_seconds": 68.672,
           "state_fingerprint": "f7685effd6b98d884c566a8bed9510c995542875",
-          "stderr_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
-          "stdout_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
+          "stderr_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
+          "stdout_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
           "summary": "python -m pytest exited with 0"
         }
       ],
@@ -467,6 +478,18 @@
     "history": {
       "blocks": [
         {
+          "block_index": 0,
+          "changed_files": [],
+          "commit_hashes": [],
+          "lineage_id": "main",
+          "repository_id": "80fce8e69a25273566bed3c6733740b589b26d4a",
+          "repository_slug": "d-github-lit-main-80fce8e69a",
+          "rollback_status": "not_needed",
+          "selected_task": "lit automation substrate upgrade",
+          "status": "completed",
+          "test_summary": "Planner Agent A decomposition and Planner Agent B packing completed successfully."
+        },
+        {
           "block_index": 13,
           "changed_files": [
             "README.md",
@@ -475,42 +498,13 @@
           "commit_hashes": [
             "77c06c419200e9769be6608037011ddc37b7cf22"
           ],
-          "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-          "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
+          "lineage_id": "main",
+          "repository_id": "80fce8e69a25273566bed3c6733740b589b26d4a",
+          "repository_slug": "d-github-lit-main-80fce8e69a",
           "rollback_status": "not_needed",
           "selected_task": "Project closeout",
           "status": "closeout_completed",
           "test_summary": "python -m pytest exited with 0"
-        },
-        {
-          "block_index": 1,
-          "changed_files": [],
-          "commit_hashes": [],
-          "lineage_manifest_file": null,
-          "lineage_push": null,
-          "promotion_assessment": null,
-          "promotion_class": "",
-          "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-          "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
-          "rollback_status": "lineage_rolled_back_to_safe_revision",
-          "selected_task": "Materialize Multi-Workspace Lineages",
-          "status": "paused",
-          "test_summary": "Immediate stop requested while running Codex block-search-pass."
-        },
-        {
-          "block_index": 2,
-          "changed_files": [],
-          "commit_hashes": [],
-          "lineage_manifest_file": null,
-          "lineage_push": null,
-          "promotion_assessment": null,
-          "promotion_class": "",
-          "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-          "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
-          "rollback_status": "lineage_rolled_back_to_safe_revision",
-          "selected_task": "Complete Workflow Runtime And Git Bridge Surfaces",
-          "status": "paused",
-          "test_summary": "Immediate stop requested while running Codex block-search-pass."
         }
       ],
       "flow_svg_path": "D:\\GitHub\\Jakal-flow\\projects\\d-github-lit-main-80fce8e69a\\docs\\EXECUTION_FLOW.svg",
@@ -532,7 +526,7 @@
                 "last_message_excerpt": "Closeout is complete. I kept it to low-risk cleanup and handoff quality.\n\n`python -m pytest` passed with 60/60 tests. I also verified the install flow with `python -m pip install -e .` and the CLI smoke check with `python -m lit --help`. I could not run the real GUI on this machine because `PySide6` is not installed, so I documented that explicitly.\n\nI tightened [README.md](C:/Users/ahnd6/AppData/Local/Temp/jakal-flow-cli/d3373e80bf9d/repo/README.md) to match the verified environment: cross-p...",
                 "returncode": 0,
                 "stderr_excerpt": "2026-03-29T13:19:41.688056Z ERROR codex_core::tools::router: error=Exit code: 1\nWall time: 0.8 seconds\nOutput:\nC:\\Users\\ahnd6\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\\python.exe: Error while finding module specification for 'lit_gui.app' (ModuleNotFoundError: No module named 'lit_gui')\r\n\n2026-03-29T13:19:41.688334Z ERROR codex_core::tools::router: error=Exit code: 1\nWall time: 0.8 seconds\nOutput:\nC:\\Users\\ahnd6\\AppData\\Local\\Microsoft\\WindowsApps\\...",
-                "stdout_excerpt": "{\"type\":\"thread.started\",\"thread_id\":\"019d39bf-55b3-7023-b9fa-ce31a708b1e2\"}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"agent_message\",\"text\":\"I\u2019m doing a closeout pass only: audit the repo for low-risk cleanup, verify the shipped workflows with tests and a local smoke run, then write the maintainer handoff in `docs/CLOSEOUT_REPORT.md`.\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\WINDOWS\\\\\\\\System32\\\\\\\\Windo...",
+                "stdout_excerpt": "{\"type\":\"thread.started\",\"thread_id\":\"019d39bf-55b3-7023-b9fa-ce31a708b1e2\"}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"agent_message\",\"text\":\"I’m doing a closeout pass only: audit the repo for low-risk cleanup, verify the shipped workflows with tests and a local smoke run, then write the maintainer handoff in `docs/CLOSEOUT_REPORT.md`.\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\WINDOWS\\\\\\\\System32\\\\\\\\Windo...",
                 "unexpected_token_detected": false
               }
             ],
@@ -543,8 +537,8 @@
           "commit_hash": "77c06c419200e9769be6608037011ddc37b7cf22",
           "duration_seconds": 353.203,
           "pass_type": "project-closeout-pass",
-          "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-          "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
+          "repository_id": "80fce8e69a25273566bed3c6733740b589b26d4a",
+          "repository_slug": "d-github-lit-main-80fce8e69a",
           "rollback_status": "not_needed",
           "search_enabled": false,
           "selected_task": "Project closeout",
@@ -557,8 +551,8 @@
             "returncode": 0,
             "source_duration_seconds": 68.672,
             "state_fingerprint": "f7685effd6b98d884c566a8bed9510c995542875",
-            "stderr_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
-            "stdout_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
+            "stderr_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
+            "stdout_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
             "summary": "python -m pytest exited with 0"
           },
           "usage": {
@@ -568,34 +562,6 @@
             "reasoning_output_tokens": 0,
             "total_tokens": 860991
           }
-        },
-        {
-          "block_index": 1,
-          "changed_files": [],
-          "commit_hash": null,
-          "lineage_manifest_file": null,
-          "lineage_push": null,
-          "promotion_assessment": null,
-          "promotion_class": "",
-          "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-          "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
-          "rollback_status": "lineage_rolled_back_to_safe_revision",
-          "selected_task": "Materialize Multi-Workspace Lineages",
-          "test_results": null
-        },
-        {
-          "block_index": 2,
-          "changed_files": [],
-          "commit_hash": null,
-          "lineage_manifest_file": null,
-          "lineage_push": null,
-          "promotion_assessment": null,
-          "promotion_class": "",
-          "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-          "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
-          "rollback_status": "lineage_rolled_back_to_safe_revision",
-          "selected_task": "Complete Workflow Runtime And Git Bridge Surfaces",
-          "test_results": null
         }
       ],
       "test_runs": [
@@ -610,8 +576,8 @@
           "returncode": 0,
           "source_duration_seconds": 68.672,
           "state_fingerprint": "f7685effd6b98d884c566a8bed9510c995542875",
-          "stderr_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
-          "stdout_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
+          "stderr_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
+          "stdout_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
           "summary": "python -m pytest exited with 0"
         }
       ],
@@ -1035,42 +1001,12 @@
         "commit_hashes": [
           "77c06c419200e9769be6608037011ddc37b7cf22"
         ],
-        "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-        "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
+        "repository_id": "80fce8e69a25273566bed3c6733740b589b26d4a",
+        "repository_slug": "d-github-lit-main-80fce8e69a",
         "rollback_status": "not_needed",
         "selected_task": "Project closeout",
         "status": "closeout_completed",
         "test_summary": "python -m pytest exited with 0"
-      },
-      {
-        "block_index": 1,
-        "changed_files": [],
-        "commit_hashes": [],
-        "lineage_manifest_file": null,
-        "lineage_push": null,
-        "promotion_assessment": null,
-        "promotion_class": "",
-        "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-        "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
-        "rollback_status": "lineage_rolled_back_to_safe_revision",
-        "selected_task": "Materialize Multi-Workspace Lineages",
-        "status": "paused",
-        "test_summary": "Immediate stop requested while running Codex block-search-pass."
-      },
-      {
-        "block_index": 2,
-        "changed_files": [],
-        "commit_hashes": [],
-        "lineage_manifest_file": null,
-        "lineage_push": null,
-        "promotion_assessment": null,
-        "promotion_class": "",
-        "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-        "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
-        "rollback_status": "lineage_rolled_back_to_safe_revision",
-        "selected_task": "Complete Workflow Runtime And Git Bridge Surfaces",
-        "status": "paused",
-        "test_summary": "Immediate stop requested while running Codex block-search-pass."
       }
     ],
     "recent_passes": [
@@ -1090,7 +1026,7 @@
               "last_message_excerpt": "Closeout is complete. I kept it to low-risk cleanup and handoff quality.\n\n`python -m pytest` passed with 60/60 tests. I also verified the install flow with `python -m pip install -e .` and the CLI smoke check with `python -m lit --help`. I could not run the real GUI on this machine because `PySide6` is not installed, so I documented that explicitly.\n\nI tightened [README.md](C:/Users/ahnd6/AppData/Local/Temp/jakal-flow-cli/d3373e80bf9d/repo/README.md) to match the verified environment: cross-p...",
               "returncode": 0,
               "stderr_excerpt": "2026-03-29T13:19:41.688056Z ERROR codex_core::tools::router: error=Exit code: 1\nWall time: 0.8 seconds\nOutput:\nC:\\Users\\ahnd6\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\\python.exe: Error while finding module specification for 'lit_gui.app' (ModuleNotFoundError: No module named 'lit_gui')\r\n\n2026-03-29T13:19:41.688334Z ERROR codex_core::tools::router: error=Exit code: 1\nWall time: 0.8 seconds\nOutput:\nC:\\Users\\ahnd6\\AppData\\Local\\Microsoft\\WindowsApps\\...",
-              "stdout_excerpt": "{\"type\":\"thread.started\",\"thread_id\":\"019d39bf-55b3-7023-b9fa-ce31a708b1e2\"}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"agent_message\",\"text\":\"I\u2019m doing a closeout pass only: audit the repo for low-risk cleanup, verify the shipped workflows with tests and a local smoke run, then write the maintainer handoff in `docs/CLOSEOUT_REPORT.md`.\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\WINDOWS\\\\\\\\System32\\\\\\\\Windo...",
+              "stdout_excerpt": "{\"type\":\"thread.started\",\"thread_id\":\"019d39bf-55b3-7023-b9fa-ce31a708b1e2\"}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"agent_message\",\"text\":\"I’m doing a closeout pass only: audit the repo for low-risk cleanup, verify the shipped workflows with tests and a local smoke run, then write the maintainer handoff in `docs/CLOSEOUT_REPORT.md`.\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\WINDOWS\\\\\\\\System32\\\\\\\\Windo...",
               "unexpected_token_detected": false
             }
           ],
@@ -1101,8 +1037,8 @@
         "commit_hash": "77c06c419200e9769be6608037011ddc37b7cf22",
         "duration_seconds": 353.203,
         "pass_type": "project-closeout-pass",
-        "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-        "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
+        "repository_id": "80fce8e69a25273566bed3c6733740b589b26d4a",
+        "repository_slug": "d-github-lit-main-80fce8e69a",
         "rollback_status": "not_needed",
         "search_enabled": false,
         "selected_task": "Project closeout",
@@ -1115,8 +1051,8 @@
           "returncode": 0,
           "source_duration_seconds": 68.672,
           "state_fingerprint": "f7685effd6b98d884c566a8bed9510c995542875",
-          "stderr_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
-          "stdout_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
+          "stderr_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
+          "stdout_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
           "summary": "python -m pytest exited with 0"
         },
         "usage": {
@@ -1126,34 +1062,6 @@
           "reasoning_output_tokens": 0,
           "total_tokens": 860991
         }
-      },
-      {
-        "block_index": 1,
-        "changed_files": [],
-        "commit_hash": null,
-        "lineage_manifest_file": null,
-        "lineage_push": null,
-        "promotion_assessment": null,
-        "promotion_class": "",
-        "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-        "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
-        "rollback_status": "lineage_rolled_back_to_safe_revision",
-        "selected_task": "Materialize Multi-Workspace Lineages",
-        "test_results": null
-      },
-      {
-        "block_index": 2,
-        "changed_files": [],
-        "commit_hash": null,
-        "lineage_manifest_file": null,
-        "lineage_push": null,
-        "promotion_assessment": null,
-        "promotion_class": "",
-        "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-        "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
-        "rollback_status": "lineage_rolled_back_to_safe_revision",
-        "selected_task": "Complete Workflow Runtime And Git Bridge Surfaces",
-        "test_results": null
       }
     ],
     "reports": {
@@ -1473,33 +1381,44 @@
     "snapshot": {
       "codex_status": {},
       "latest_block": {
-        "block_index": 2,
-        "changed_files": [],
-        "commit_hashes": [],
-        "lineage_manifest_file": null,
-        "lineage_push": null,
-        "promotion_assessment": null,
-        "promotion_class": "",
-        "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-        "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
-        "rollback_status": "lineage_rolled_back_to_safe_revision",
-        "selected_task": "Complete Workflow Runtime And Git Bridge Surfaces",
-        "status": "paused",
-        "test_summary": "Immediate stop requested while running Codex block-search-pass."
+        "block_index": 13,
+        "changed_files": [
+          "README.md",
+          "website/index.html"
+        ],
+        "commit_hashes": [
+          "77c06c419200e9769be6608037011ddc37b7cf22"
+        ],
+        "lineage_id": "main",
+        "repository_id": "80fce8e69a25273566bed3c6733740b589b26d4a",
+        "repository_slug": "d-github-lit-main-80fce8e69a",
+        "rollback_status": "not_needed",
+        "selected_task": "Project closeout",
+        "status": "closeout_completed",
+        "test_summary": "python -m pytest exited with 0"
       },
       "latest_pass": {
-        "block_index": 2,
-        "changed_files": [],
-        "commit_hash": null,
-        "lineage_manifest_file": null,
-        "lineage_push": null,
-        "promotion_assessment": null,
-        "promotion_class": "",
-        "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-        "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
-        "rollback_status": "lineage_rolled_back_to_safe_revision",
-        "selected_task": "Complete Workflow Runtime And Git Bridge Surfaces",
-        "test_results": null
+        "block_index": 13,
+        "changed_files": [
+          "README.md",
+          "website/index.html"
+        ],
+        "commit_hashes": [
+          "77c06c419200e9769be6608037011ddc37b7cf22"
+        ],
+        "lineage_id": "main",
+        "repository_id": "80fce8e69a25273566bed3c6733740b589b26d4a",
+        "repository_slug": "d-github-lit-main-80fce8e69a",
+        "rollback_status": "not_needed",
+        "selected_task": "Project closeout",
+        "status": "closeout_completed",
+        "test_summary": "python -m pytest exited with 0",
+        "test_results": {
+          "summary": "python -m pytest exited with 0",
+          "returncode": 0,
+          "command": "python -m pytest",
+          "cache_hit": false
+        }
       },
       "loop_state": {
         "block_index": 0,
@@ -1566,42 +1485,12 @@
           "commit_hashes": [
             "77c06c419200e9769be6608037011ddc37b7cf22"
           ],
-          "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-          "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
+          "repository_id": "80fce8e69a25273566bed3c6733740b589b26d4a",
+          "repository_slug": "d-github-lit-main-80fce8e69a",
           "rollback_status": "not_needed",
           "selected_task": "Project closeout",
           "status": "closeout_completed",
           "test_summary": "python -m pytest exited with 0"
-        },
-        {
-          "block_index": 1,
-          "changed_files": [],
-          "commit_hashes": [],
-          "lineage_manifest_file": null,
-          "lineage_push": null,
-          "promotion_assessment": null,
-          "promotion_class": "",
-          "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-          "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
-          "rollback_status": "lineage_rolled_back_to_safe_revision",
-          "selected_task": "Materialize Multi-Workspace Lineages",
-          "status": "paused",
-          "test_summary": "Immediate stop requested while running Codex block-search-pass."
-        },
-        {
-          "block_index": 2,
-          "changed_files": [],
-          "commit_hashes": [],
-          "lineage_manifest_file": null,
-          "lineage_push": null,
-          "promotion_assessment": null,
-          "promotion_class": "",
-          "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-          "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
-          "rollback_status": "lineage_rolled_back_to_safe_revision",
-          "selected_task": "Complete Workflow Runtime And Git Bridge Surfaces",
-          "status": "paused",
-          "test_summary": "Immediate stop requested while running Codex block-search-pass."
         }
       ],
       "recent_passes": [
@@ -1621,7 +1510,7 @@
                 "last_message_excerpt": "Closeout is complete. I kept it to low-risk cleanup and handoff quality.\n\n`python -m pytest` passed with 60/60 tests. I also verified the install flow with `python -m pip install -e .` and the CLI smoke check with `python -m lit --help`. I could not run the real GUI on this machine because `PySide6` is not installed, so I documented that explicitly.\n\nI tightened [README.md](C:/Users/ahnd6/AppData/Local/Temp/jakal-flow-cli/d3373e80bf9d/repo/README.md) to match the verified environment: cross-p...",
                 "returncode": 0,
                 "stderr_excerpt": "2026-03-29T13:19:41.688056Z ERROR codex_core::tools::router: error=Exit code: 1\nWall time: 0.8 seconds\nOutput:\nC:\\Users\\ahnd6\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\\python.exe: Error while finding module specification for 'lit_gui.app' (ModuleNotFoundError: No module named 'lit_gui')\r\n\n2026-03-29T13:19:41.688334Z ERROR codex_core::tools::router: error=Exit code: 1\nWall time: 0.8 seconds\nOutput:\nC:\\Users\\ahnd6\\AppData\\Local\\Microsoft\\WindowsApps\\...",
-                "stdout_excerpt": "{\"type\":\"thread.started\",\"thread_id\":\"019d39bf-55b3-7023-b9fa-ce31a708b1e2\"}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"agent_message\",\"text\":\"I\u2019m doing a closeout pass only: audit the repo for low-risk cleanup, verify the shipped workflows with tests and a local smoke run, then write the maintainer handoff in `docs/CLOSEOUT_REPORT.md`.\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\WINDOWS\\\\\\\\System32\\\\\\\\Windo...",
+                "stdout_excerpt": "{\"type\":\"thread.started\",\"thread_id\":\"019d39bf-55b3-7023-b9fa-ce31a708b1e2\"}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"agent_message\",\"text\":\"I’m doing a closeout pass only: audit the repo for low-risk cleanup, verify the shipped workflows with tests and a local smoke run, then write the maintainer handoff in `docs/CLOSEOUT_REPORT.md`.\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\WINDOWS\\\\\\\\System32\\\\\\\\Windo...",
                 "unexpected_token_detected": false
               }
             ],
@@ -1632,8 +1521,8 @@
           "commit_hash": "77c06c419200e9769be6608037011ddc37b7cf22",
           "duration_seconds": 353.203,
           "pass_type": "project-closeout-pass",
-          "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-          "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
+          "repository_id": "80fce8e69a25273566bed3c6733740b589b26d4a",
+          "repository_slug": "d-github-lit-main-80fce8e69a",
           "rollback_status": "not_needed",
           "search_enabled": false,
           "selected_task": "Project closeout",
@@ -1646,8 +1535,8 @@
             "returncode": 0,
             "source_duration_seconds": 68.672,
             "state_fingerprint": "f7685effd6b98d884c566a8bed9510c995542875",
-            "stderr_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
-            "stdout_file": "C:\\Users\\ahnd6\\OneDrive\\\ubb38\uc11c\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
+            "stderr_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
+            "stdout_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
             "summary": "python -m pytest exited with 0"
           },
           "usage": {
@@ -1657,34 +1546,6 @@
             "reasoning_output_tokens": 0,
             "total_tokens": 860991
           }
-        },
-        {
-          "block_index": 1,
-          "changed_files": [],
-          "commit_hash": null,
-          "lineage_manifest_file": null,
-          "lineage_push": null,
-          "promotion_assessment": null,
-          "promotion_class": "",
-          "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-          "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
-          "rollback_status": "lineage_rolled_back_to_safe_revision",
-          "selected_task": "Materialize Multi-Workspace Lineages",
-          "test_results": null
-        },
-        {
-          "block_index": 2,
-          "changed_files": [],
-          "commit_hash": null,
-          "lineage_manifest_file": null,
-          "lineage_push": null,
-          "promotion_assessment": null,
-          "promotion_class": "",
-          "repository_id": "679f7c0bcc19a6d693c7788c3ed055348b7e2578",
-          "repository_slug": "c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc",
-          "rollback_status": "lineage_rolled_back_to_safe_revision",
-          "selected_task": "Complete Workflow Runtime And Git Bridge Surfaces",
-          "test_results": null
         }
       ],
       "recent_usage": {

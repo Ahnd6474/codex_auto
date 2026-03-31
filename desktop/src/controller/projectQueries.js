@@ -33,6 +33,7 @@ export async function fetchProjectDetailBySelector(bridgeRequest, selector, work
   return loadProjectDetail(bridgeRequest, selector, workspaceRoot || null, {
     refreshCodexStatus: options.refreshCodexStatus ?? false,
     includeFull: (options.detailLevel ?? "full") === "full",
+    bypassDetailCache: options.bypassDetailCache ?? false,
   });
 }
 
@@ -97,6 +98,7 @@ export async function refreshVisibleProjectState(bridgeRequest, workspaceRoot, r
       detail_level: options.detailLevel ?? "core",
       include_listing: options.refreshListing ?? true,
       bypass_detail_cache: options.bypassDetailCache ?? false,
+      bypass_listing_cache: options.bypassListingCache ?? false,
     },
     workspaceRoot || null,
   );

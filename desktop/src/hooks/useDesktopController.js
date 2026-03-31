@@ -504,6 +504,7 @@ export function useDesktopController() {
       repoId || "",
       options.detailLevel ?? "core",
       options.refreshCodexStatus ? "refresh" : "cached",
+      options.bypassDetailCache ? "disk" : "cache",
     ].join("|");
     return projectDetailRequestDeduperRef.current.run(requestKey, () =>
       fetchProjectDetail(bridgeRequest, repoId, workspaceRoot, options)
@@ -1191,19 +1192,18 @@ export function useDesktopController() {
       const refreshCodexStatus = shouldForceCodexRefreshForManualRefresh(centerTab);
       const refreshListing = shouldRefreshListingForManualRefresh(selectedProjectId);
       const jobSnapshotPromise = syncRunningJobSnapshot(activeJobId);
-      const projectStatePromise = selectedProjectId
-        ? refreshVisibleProjectState(
-            bridgeRequest,
-            workspaceRoot,
-            selectedProjectId,
-            {
-              refreshCodexStatus,
-              detailLevel: wantsExpandedDetail ? "full" : "core",
-              refreshListing,
-              bypassDetailCache: true,
-            },
-          )
-        : loadProjectListing(bridgeRequest, workspaceRoot);
+      const projectStatePromise = refreshVisibleProjectState(
+        bridgeRequest,
+        workspaceRoot,
+        selectedProjectId || "",
+        {
+          refreshCodexStatus,
+          detailLevel: wantsExpandedDetail ? "full" : "core",
+          refreshListing,
+          bypassDetailCache: true,
+          bypassListingCache: true,
+        },
+      );
       const [jobSnapshot, refreshedState] = await Promise.all([jobSnapshotPromise, projectStatePromise]);
       applyCurrentJobSnapshot(jobSnapshot);
       const selectedJob = projectJobFromJobs(jobsRef.current, {
@@ -1233,7 +1233,7 @@ export function useDesktopController() {
           applyProjectDetail(detail, { preserveSelectedStep: true, runningJob: selectedJob, force: true });
         }
       } else {
-        const listing = refreshedState;
+        const listing = refreshedState?.listing || null;
         const nextProjects = applyListingState({
           listing,
           previousProjects: projectsRef.current,
@@ -1251,11 +1251,11 @@ export function useDesktopController() {
           projectsRef.current = nextProjects;
           if (selectedHistoryId && historyDetail) {
             setHistoryDetail(historyDetail);
-          } else if (!selectedHistoryId && nextProjects.length) {
-            setSelectedProjectId(nextProjects[0].repo_id);
-          } else if (!nextProjects.length) {
-            clearSelectedProjectState(defaultRuntime, { preserveProjectIdentity: false });
-          }
+        } else if (!selectedHistoryId && nextProjects.length) {
+          setSelectedProjectId(nextProjects[0].repo_id);
+        } else if (!nextProjects.length) {
+          clearSelectedProjectState(defaultRuntime, { preserveProjectIdentity: false });
+        }
         });
       }
 
@@ -1277,6 +1277,7 @@ export function useDesktopController() {
       const detail = await fetchProjectDetailOnce(repoId, {
         refreshCodexStatus: options.refreshCodexStatus ?? false,
         detailLevel: options.detailLevel ?? (wantsExpandedDetail ? "full" : "core"),
+        bypassDetailCache: options.bypassDetailCache ?? false,
       });
       if (!isCurrentProjectSelectionLoad(selectedProjectLoadSequenceRef, loadToken)) {
         return null;
@@ -2497,6 +2498,7 @@ export function useDesktopController() {
     }
     await loadProject(selectedProjectId, {
       refreshCodexStatus: shouldForceCodexRefreshForManualRefresh(centerTab),
+      bypassDetailCache: true,
     });
     setMessage(messagePayload("success", translate(language, "message.projectReloaded")));
   }

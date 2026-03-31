@@ -29,6 +29,7 @@ export async function loadProjectDetail(bridgeRequest, selector, workspaceRoot, 
       ...selectorPayload(selector),
       refresh_codex_status: options.refreshCodexStatus ?? false,
       detail_level: options.includeFull ? "full" : "core",
+      bypass_detail_cache: options.bypassDetailCache ?? false,
     },
     workspaceRoot || null,
   );

@@ -997,7 +997,15 @@ def checkpoint_payload_from_blocks(
             continue
         normalized = deepcopy(item)
         normalized["deadline_at"] = str(normalized.get("deadline_at", "")).strip()
-        if normalized.get("status") == "awaiting_review" and not waiting_for_approval:
+        is_active_checkpoint = bool(active_checkpoint_id) and str(normalized.get("checkpoint_id", "")).strip() == active_checkpoint_id
+        if active_checkpoint_lineage_id:
+            is_active_checkpoint = is_active_checkpoint and (
+                not str(normalized.get("lineage_id", "")).strip()
+                or str(normalized.get("lineage_id", "")).strip() == active_checkpoint_lineage_id
+            )
+        if waiting_for_approval and is_active_checkpoint and normalized.get("status") != "awaiting_review":
+            normalized["status"] = "awaiting_review"
+        elif normalized.get("status") == "awaiting_review" and not waiting_for_approval:
             normalized["status"] = "approved"
         checkpoints.append(normalized)
 
@@ -1030,6 +1038,8 @@ def checkpoint_payload_from_blocks(
             ),
             None,
         )
+    if pending is not None and pending.get("status") != "awaiting_review" and waiting_for_approval:
+        pending["status"] = "awaiting_review"
     return {
         "items": checkpoints,
         "pending": pending,
@@ -1057,6 +1067,14 @@ def pending_checkpoint_payload(context: ProjectContext) -> dict[str, Any] | None
         if isinstance(item, dict):
             normalized = deepcopy(item)
             normalized["deadline_at"] = str(normalized.get("deadline_at", "")).strip()
+            is_active_checkpoint = bool(active_checkpoint_id) and str(normalized.get("checkpoint_id", "")).strip() == active_checkpoint_id
+            if active_checkpoint_lineage_id:
+                is_active_checkpoint = is_active_checkpoint and (
+                    not str(normalized.get("lineage_id", "")).strip()
+                    or str(normalized.get("lineage_id", "")).strip() == active_checkpoint_lineage_id
+                )
+            if is_active_checkpoint and normalized.get("status") != "awaiting_review":
+                normalized["status"] = "awaiting_review"
             checkpoints.append(normalized)
     pending = None
     if active_checkpoint_id:
@@ -1087,6 +1105,8 @@ def pending_checkpoint_payload(context: ProjectContext) -> dict[str, Any] | None
             ),
             None,
         )
+    if pending is not None and pending.get("status") != "awaiting_review":
+        pending["status"] = "awaiting_review"
     return pending
 
 
@@ -1374,32 +1394,34 @@ def _cached_project_list_item_payload(
     project: ProjectContext,
     *,
     archived: bool,
+    bypass_cache: bool = False,
 ) -> dict[str, Any]:
     content_signature = _project_list_item_content_signature(project, archived=archived)
     memory_cache_key = _list_item_memory_cache_key(project, archived=archived)
     memory_cached = _LIST_ITEM_PAYLOAD_MEMORY_CACHE.get(memory_cache_key)
-    if (
+    if not bypass_cache and (
         memory_cached is not None
         and memory_cached[0] == LIST_ITEM_CACHE_VERSION
         and memory_cached[1] == content_signature
     ):
         return _clone_cached_list_item_payload(memory_cached[2])
     cache_file = _list_item_cache_file(project, archived=archived)
-    cached = read_json(cache_file, default=None)
-    if isinstance(cached, dict):
-        cached_signature = str(cached.get("content_signature", "")).strip()
-        cached_payload = cached.get("payload")
-        if (
-            int(cached.get("version", 0) or 0) == LIST_ITEM_CACHE_VERSION
-            and cached_signature == content_signature
-            and isinstance(cached_payload, dict)
-        ):
-            _LIST_ITEM_PAYLOAD_MEMORY_CACHE[memory_cache_key] = (
-                LIST_ITEM_CACHE_VERSION,
-                content_signature,
-                deepcopy(cached_payload),
-            )
-            return _clone_cached_list_item_payload(cached_payload)
+    if not bypass_cache:
+        cached = read_json(cache_file, default=None)
+        if isinstance(cached, dict):
+            cached_signature = str(cached.get("content_signature", "")).strip()
+            cached_payload = cached.get("payload")
+            if (
+                int(cached.get("version", 0) or 0) == LIST_ITEM_CACHE_VERSION
+                and cached_signature == content_signature
+                and isinstance(cached_payload, dict)
+            ):
+                _LIST_ITEM_PAYLOAD_MEMORY_CACHE[memory_cache_key] = (
+                    LIST_ITEM_CACHE_VERSION,
+                    content_signature,
+                    deepcopy(cached_payload),
+                )
+                return _clone_cached_list_item_payload(cached_payload)
     payload = _build_project_list_item_payload(orchestrator, project, archived=archived)
     _LIST_ITEM_PAYLOAD_MEMORY_CACHE[memory_cache_key] = (
         LIST_ITEM_CACHE_VERSION,
@@ -1417,12 +1439,22 @@ def _cached_project_list_item_payload(
     return payload
 
 
-def project_list_item_payload(orchestrator: Orchestrator, project: ProjectContext) -> dict[str, Any]:
-    return _cached_project_list_item_payload(orchestrator, project, archived=False)
+def project_list_item_payload(
+    orchestrator: Orchestrator,
+    project: ProjectContext,
+    *,
+    bypass_cache: bool = False,
+) -> dict[str, Any]:
+    return _cached_project_list_item_payload(orchestrator, project, archived=False, bypass_cache=bypass_cache)
 
 
-def history_list_item_payload(orchestrator: Orchestrator, project: ProjectContext) -> dict[str, Any]:
-    return _cached_project_list_item_payload(orchestrator, project, archived=True)
+def history_list_item_payload(
+    orchestrator: Orchestrator,
+    project: ProjectContext,
+    *,
+    bypass_cache: bool = False,
+) -> dict[str, Any]:
+    return _cached_project_list_item_payload(orchestrator, project, archived=True, bypass_cache=bypass_cache)
 
 
 def _build_project_detail_base_payload(
@@ -1763,36 +1795,37 @@ def project_detail_payload(
     return payload
 
 
-def list_projects_payload(orchestrator: Orchestrator) -> dict[str, Any]:
+def list_projects_payload(orchestrator: Orchestrator, *, bypass_cache: bool = False) -> dict[str, Any]:
     memory_cache_key = str(orchestrator.workspace.workspace_root.resolve())
     content_signature = _workspace_listing_content_signature(orchestrator)
     memory_cached = _WORKSPACE_LISTING_MEMORY_CACHE.get(memory_cache_key)
-    if (
+    if not bypass_cache and (
         memory_cached is not None
         and memory_cached[0] == WORKSPACE_LISTING_CACHE_VERSION
         and memory_cached[1] == content_signature
     ):
         return _clone_workspace_listing_payload(memory_cached[2])
     cache_file = _workspace_listing_cache_file(orchestrator)
-    cached = read_json(cache_file, default=None)
-    if isinstance(cached, dict):
-        cached_signature = str(cached.get("content_signature", "")).strip()
-        cached_payload = cached.get("payload")
-        if (
-            int(cached.get("version", 0) or 0) == WORKSPACE_LISTING_CACHE_VERSION
-            and cached_signature == content_signature
-            and isinstance(cached_payload, dict)
-        ):
-            _WORKSPACE_LISTING_MEMORY_CACHE[memory_cache_key] = (
-                WORKSPACE_LISTING_CACHE_VERSION,
-                content_signature,
-                deepcopy(cached_payload),
-            )
-            return _clone_workspace_listing_payload(cached_payload)
+    if not bypass_cache:
+        cached = read_json(cache_file, default=None)
+        if isinstance(cached, dict):
+            cached_signature = str(cached.get("content_signature", "")).strip()
+            cached_payload = cached.get("payload")
+            if (
+                int(cached.get("version", 0) or 0) == WORKSPACE_LISTING_CACHE_VERSION
+                and cached_signature == content_signature
+                and isinstance(cached_payload, dict)
+            ):
+                _WORKSPACE_LISTING_MEMORY_CACHE[memory_cache_key] = (
+                    WORKSPACE_LISTING_CACHE_VERSION,
+                    content_signature,
+                    deepcopy(cached_payload),
+                )
+                return _clone_workspace_listing_payload(cached_payload)
     projects = sorted(orchestrator.list_projects(), key=lambda item: item.metadata.created_at, reverse=True)
-    project_payloads = [project_list_item_payload(orchestrator, project) for project in projects]
+    project_payloads = [project_list_item_payload(orchestrator, project, bypass_cache=bypass_cache) for project in projects]
     history_projects = orchestrator.workspace.list_history_projects()
-    history_payloads = [history_list_item_payload(orchestrator, project) for project in history_projects]
+    history_payloads = [history_list_item_payload(orchestrator, project, bypass_cache=bypass_cache) for project in history_projects]
     payload = {
         "projects": project_payloads,
         "history": history_payloads,

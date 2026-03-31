@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   fetchProjectChat,
   fetchProjectCheckpoints,
+  fetchProjectDetail,
   fetchProjectHistory,
   fetchProjectReports,
   fetchProjectWorkspace,
@@ -43,6 +44,7 @@ test("refreshVisibleProjectState loads listing and selected project detail with 
         detail_level: "core",
         include_listing: true,
         bypass_detail_cache: false,
+        bypass_listing_cache: false,
       },
       workspaceRoot: "/workspace",
     },
@@ -71,6 +73,7 @@ test("refreshVisibleProjectState skips detail loading when no project is selecte
         detail_level: "core",
         include_listing: true,
         bypass_detail_cache: false,
+        bypass_listing_cache: false,
       },
       workspaceRoot: "/workspace",
     },
@@ -105,6 +108,7 @@ test("refreshVisibleProjectState can skip listing when only selected detail need
         detail_level: "full",
         include_listing: false,
         bypass_detail_cache: false,
+        bypass_listing_cache: false,
       },
       workspaceRoot: "/workspace",
     },
@@ -141,6 +145,77 @@ test("refreshVisibleProjectState can bypass cached detail when manually refreshi
         refresh_codex_status: false,
         detail_level: "core",
         include_listing: true,
+        bypass_detail_cache: true,
+        bypass_listing_cache: false,
+      },
+      workspaceRoot: "/workspace",
+    },
+  ]);
+});
+
+test("refreshVisibleProjectState can bypass cached listing and cached detail together", async () => {
+  const calls = [];
+  const bridgeRequest = async (command, payload, workspaceRoot) => {
+    calls.push({ command, payload, workspaceRoot });
+    if (command === "load-visible-project-state") {
+      return {
+        listing: { projects: [{ repo_id: "demo" }] },
+        detail: { project: { repo_id: "demo" }, detail_level: "core" },
+      };
+    }
+    throw new Error(`Unexpected command: ${command}`);
+  };
+
+  const result = await refreshVisibleProjectState(bridgeRequest, "/workspace", "demo", {
+    detailLevel: "core",
+    bypassDetailCache: true,
+    bypassListingCache: true,
+  });
+
+  assert.deepEqual(result, {
+    listing: { projects: [{ repo_id: "demo" }] },
+    detail: { project: { repo_id: "demo" }, detail_level: "core" },
+  });
+  assert.deepEqual(calls, [
+    {
+      command: "load-visible-project-state",
+      payload: {
+        repo_id: "demo",
+        refresh_codex_status: false,
+        detail_level: "core",
+        include_listing: true,
+        bypass_detail_cache: true,
+        bypass_listing_cache: true,
+      },
+      workspaceRoot: "/workspace",
+    },
+  ]);
+});
+
+test("fetchProjectDetail forwards bypassDetailCache to the bridge payload", async () => {
+  const calls = [];
+  const bridgeRequest = async (command, payload, workspaceRoot) => {
+    calls.push({ command, payload, workspaceRoot });
+    if (command === "load-project") {
+      return { project: { repo_id: "demo" }, detail_level: "core" };
+    }
+    throw new Error(`Unexpected command: ${command}`);
+  };
+
+  const result = await fetchProjectDetail(bridgeRequest, "demo", "/workspace", {
+    detailLevel: "core",
+    refreshCodexStatus: false,
+    bypassDetailCache: true,
+  });
+
+  assert.deepEqual(result, { project: { repo_id: "demo" }, detail_level: "core" });
+  assert.deepEqual(calls, [
+    {
+      command: "load-project",
+      payload: {
+        repo_id: "demo",
+        refresh_codex_status: false,
+        detail_level: "core",
         bypass_detail_cache: true,
       },
       workspaceRoot: "/workspace",

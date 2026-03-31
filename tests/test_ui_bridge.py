@@ -348,6 +348,80 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(captured_kwargs["detail_level"], "core")
             self.assertFalse(captured_kwargs["refresh_codex_status"])
 
+    def test_load_project_passes_bypass_detail_cache_to_detail_payload(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            project = build_test_project_context(temp_dir)
+            captured_kwargs: dict[str, object] = {}
+
+            def fake_detail_payload(_project, **kwargs):
+                captured_kwargs.update(kwargs)
+                return {"project": {"repo_id": project.metadata.repo_id}}
+
+            handlers = build_read_model_handlers(
+                bootstrap_payload=lambda _workspace_root: {"workspace_root": str(temp_dir / "workspace")},
+                resolve_project=lambda _orchestrator, _payload: project,
+                resolve_history_project=lambda _orchestrator, _payload: project,
+                coerce_bool=lambda value, default=False: bool(value) if value is not None else default,
+                codex_snapshot_service=mock.Mock(invalidate=mock.Mock()),
+            )
+            ctx = mock.Mock(
+                orchestrator=mock.Mock(),
+                payload={
+                    "repo_id": project.metadata.repo_id,
+                    "refresh_codex_status": False,
+                    "detail_level": "core",
+                    "bypass_detail_cache": True,
+                },
+                detail_payload=fake_detail_payload,
+                workspace_root=project.paths.workspace_root,
+            )
+
+            result = handlers["load-project"](ctx)
+
+            self.assertEqual(result["project"]["repo_id"], project.metadata.repo_id)
+            self.assertTrue(captured_kwargs["bypass_detail_cache"])
+            self.assertEqual(captured_kwargs["detail_level"], "core")
+            self.assertFalse(captured_kwargs["refresh_codex_status"])
+
+    def test_load_visible_project_state_passes_bypass_listing_cache_to_listing_payload(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            project = build_test_project_context(temp_dir)
+            captured_kwargs: dict[str, object] = {}
+
+            def fake_list_projects_payload(_orchestrator, *, bypass_cache=False):
+                captured_kwargs["bypass_cache"] = bypass_cache
+                return {"projects": [{"repo_id": project.metadata.repo_id}], "history": []}
+
+            def fake_detail_payload(_project, **kwargs):
+                return {"project": {"repo_id": project.metadata.repo_id}}
+
+            handlers = build_read_model_handlers(
+                bootstrap_payload=lambda _workspace_root: {"workspace_root": str(temp_dir / "workspace")},
+                resolve_project=lambda _orchestrator, _payload: project,
+                resolve_history_project=lambda _orchestrator, _payload: project,
+                coerce_bool=lambda value, default=False: bool(value) if value is not None else default,
+                codex_snapshot_service=mock.Mock(invalidate=mock.Mock()),
+            )
+            ctx = mock.Mock(
+                orchestrator=mock.Mock(),
+                payload={
+                    "repo_id": project.metadata.repo_id,
+                    "refresh_codex_status": False,
+                    "detail_level": "core",
+                    "include_listing": True,
+                    "bypass_detail_cache": False,
+                    "bypass_listing_cache": True,
+                },
+                detail_payload=fake_detail_payload,
+                workspace_root=project.paths.workspace_root,
+            )
+
+            with mock.patch("jakal_flow.ui_bridge_commands.read_models.list_projects_payload", side_effect=fake_list_projects_payload):
+                result = handlers["load-visible-project-state"](ctx)
+
+            self.assertEqual(result["listing"]["projects"][0]["repo_id"], project.metadata.repo_id)
+            self.assertTrue(captured_kwargs["bypass_cache"])
+
     def test_local_project_logs_are_written_under_repo_root_folder(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"
@@ -2922,6 +2996,49 @@ class UIBridgeTests(unittest.TestCase):
             self.assertIn("Status: awaiting_review", payload["timeline_markdown"])
             self.assertIn("Lineage: LN-1", payload["timeline_markdown"])
 
+    def test_checkpoint_payload_normalizes_active_running_checkpoint_to_awaiting_review(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            context = build_test_project_context(temp_dir)
+            context.loop_state.current_checkpoint_id = "CP1"
+            context.loop_state.current_checkpoint_lineage_id = "LN-1"
+            context.loop_state.pending_checkpoint_approval = True
+
+            context.paths.checkpoint_state_file.write_text(
+                json.dumps(
+                    {
+                        "checkpoints": [
+                            {
+                                "checkpoint_id": "CP1",
+                                "title": "Review me",
+                                "target_block": 1,
+                                "status": "running",
+                                "lineage_id": "LN-1",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            context.paths.block_log_file.write_text(
+                json.dumps(
+                    {
+                        "block_index": 1,
+                        "lineage_id": "LN-1",
+                        "status": "completed",
+                        "selected_task": "Review me",
+                        "test_summary": "Checkpoint ready.",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            payload = ui_bridge_payloads.checkpoint_payload(context)
+
+            self.assertEqual(payload["items"][0]["status"], "awaiting_review")
+            self.assertEqual(payload["pending"]["status"], "awaiting_review")
+            self.assertIn("Status: awaiting_review", payload["timeline_markdown"])
+
     def test_checkpoint_and_flowchart_payloads_share_block_log_lineage_state(self) -> None:
         with TemporaryTestDir() as temp_dir:
             context = build_test_project_context(temp_dir)
@@ -4951,6 +5068,74 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(loaded["snapshot"]["project"]["current_status"], "setup_ready")
             self.assertEqual(loaded["bottom_panels"]["git_status"]["current_status"], "setup_ready")
 
+    def test_load_project_normalizes_active_running_checkpoint_to_awaiting_review(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Active Checkpoint Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "require_checkpoint_approval": True,
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            project_root = Path(detail["project"]["project_root"])
+            checkpoint_path = project_root / "state" / "CHECKPOINTS.json"
+            checkpoint_path.write_text(
+                json.dumps(
+                    {
+                        "checkpoints": [
+                            {
+                                "checkpoint_id": "CP1",
+                                "title": "Review me",
+                                "target_block": 1,
+                                "status": "running",
+                                "lineage_id": "LN-1",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            loop_state_path = project_root / "state" / "LOOP_STATE.json"
+            loop_state = json.loads(loop_state_path.read_text(encoding="utf-8"))
+            loop_state["current_checkpoint_id"] = "CP1"
+            loop_state["current_checkpoint_lineage_id"] = "LN-1"
+            loop_state["pending_checkpoint_approval"] = True
+            loop_state_path.write_text(json.dumps(loop_state), encoding="utf-8")
+
+            with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: fake_codex_snapshot()):
+                loaded = run_command(
+                    "load-project",
+                    workspace_root,
+                    {
+                        "project_dir": str(repo_dir),
+                        "refresh_codex_status": False,
+                        "detail_level": "full",
+                        "bypass_detail_cache": True,
+                    },
+                )
+
+            self.assertEqual(loaded["checkpoints"]["items"][0]["status"], "awaiting_review")
+            self.assertEqual(loaded["checkpoints"]["pending"]["status"], "awaiting_review")
+            self.assertEqual(loaded["project"]["current_status"], "awaiting_checkpoint_approval")
+
     def test_list_projects_normalizes_stale_awaiting_checkpoint_status_without_pending_flag(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"
@@ -5813,6 +5998,66 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(first["projects"][0]["repo_id"], detail["project"]["repo_id"])
             self.assertEqual(second["projects"], first["projects"])
             self.assertEqual(second["workspace"], first["workspace"])
+
+    def test_list_projects_bypass_cache_forces_workspace_refresh(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Workspace Listing Bypass Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+
+            ui_bridge._orchestrator_cache.clear()
+            ui_bridge_payloads._WORKSPACE_LISTING_MEMORY_CACHE.clear()
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            orchestrator = ui_bridge.orchestrator_for(workspace_root)
+            first = ui_bridge_payloads.list_projects_payload(orchestrator)
+
+            original_list_projects = workspace_module.WorkspaceManager.list_projects
+            original_list_history_projects = workspace_module.WorkspaceManager.list_history_projects
+            call_counts = {"projects": 0, "history": 0}
+
+            def counting_list_projects(self):
+                call_counts["projects"] += 1
+                return original_list_projects(self)
+
+            def counting_list_history_projects(self):
+                call_counts["history"] += 1
+                return original_list_history_projects(self)
+
+            with mock.patch.object(
+                workspace_module.WorkspaceManager,
+                "list_projects",
+                counting_list_projects,
+            ), mock.patch.object(
+                workspace_module.WorkspaceManager,
+                "list_history_projects",
+                counting_list_history_projects,
+            ):
+                second = ui_bridge_payloads.list_projects_payload(orchestrator, bypass_cache=True)
+
+            self.assertEqual(first["projects"][0]["repo_id"], detail["project"]["repo_id"])
+            self.assertEqual(second["projects"][0]["repo_id"], detail["project"]["repo_id"])
+            self.assertGreater(call_counts["projects"], 0)
+            self.assertGreater(call_counts["history"], 0)
 
     def test_list_projects_workspace_listing_cache_invalidates_when_metadata_changes(self) -> None:
         with TemporaryTestDir() as temp_dir:
