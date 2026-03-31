@@ -3,12 +3,13 @@ from __future__ import annotations
 import configparser
 import os
 import subprocess
+from io import StringIO
 from pathlib import Path
 
 from .errors import SubprocessTimeoutError
 from .models import CommandResult
 from .subprocess_utils import run_subprocess
-from .utils import decode_process_output, remove_tree
+from .utils import decode_process_output, read_text, remove_tree
 
 
 class GitCommandError(RuntimeError):
@@ -248,7 +249,7 @@ class GitOps:
         if not dot_git.is_file():
             return None
         try:
-            header = dot_git.read_text(encoding="utf-8").strip()
+            header = read_text(dot_git).strip()
         except OSError:
             return None
         prefix = "gitdir:"
@@ -270,7 +271,7 @@ class GitOps:
         if not git_file.is_file():
             return None
         try:
-            contents = git_file.read_text(encoding="utf-8").strip()
+            contents = read_text(git_file).strip()
         except OSError:
             return None
         prefix = "gitdir:"
@@ -309,7 +310,7 @@ class GitOps:
             return ""
         head_path = git_dir / "HEAD"
         try:
-            head_contents = head_path.read_text(encoding="utf-8").strip()
+            head_contents = read_text(head_path).strip()
         except OSError:
             return ""
         prefix = "ref:"
@@ -335,7 +336,7 @@ class GitOps:
 
     def _read_git_head(self, git_dir: Path) -> str:
         try:
-            return (git_dir / "HEAD").read_text(encoding="utf-8").strip()
+            return read_text(git_dir / "HEAD").strip()
         except OSError:
             return ""
 
@@ -345,14 +346,14 @@ class GitOps:
             return ""
         ref_path = git_dir / Path(normalized_ref)
         try:
-            revision = ref_path.read_text(encoding="utf-8").strip()
+            revision = read_text(ref_path).strip()
         except OSError:
             revision = ""
         if self._looks_like_git_revision(revision):
             return revision
         packed_refs_path = git_dir / "packed-refs"
         try:
-            packed_refs = packed_refs_path.read_text(encoding="utf-8").splitlines()
+            packed_refs = read_text(packed_refs_path).splitlines()
         except OSError:
             return ""
         for line in packed_refs:
@@ -378,7 +379,7 @@ class GitOps:
             return None
         parser = configparser.ConfigParser(interpolation=None)
         try:
-            with config_path.open("r", encoding="utf-8") as handle:
+            with StringIO(read_text(config_path)) as handle:
                 parser.read_file(handle)
         except (OSError, UnicodeError, configparser.Error):
             return None

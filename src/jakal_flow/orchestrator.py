@@ -4027,7 +4027,7 @@ class Orchestrator(
         if plan_input.strip():
             return plan_input.strip()
         if plan_path:
-            return Path(plan_path).read_text(encoding="utf-8").strip()
+            return read_text(Path(plan_path)).strip()
         return ""
 
     def _resolve_plan_text(
