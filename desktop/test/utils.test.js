@@ -335,6 +335,139 @@ test("execution consistency reports surface mismatches when checkpoint state div
   assert.match(report, /diff:/);
 });
 
+test("deriveExecutionUiState prefers terminal failure over stale checkpoint running state", () => {
+  const state = deriveExecutionUiState(
+    {
+      project: {
+        current_status: "failed",
+      },
+      plan: {
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [
+          {
+            step_id: "ST1",
+            title: "Build",
+            status: "failed",
+          },
+        ],
+      },
+      checkpoints: {
+        items: [
+          {
+            checkpoint_id: "CP1",
+            status: "running",
+            title: "Review build",
+          },
+        ],
+        pending: {
+          checkpoint_id: "CP1",
+          status: "running",
+          title: "Review build",
+        },
+      },
+    },
+    null,
+    null,
+  );
+  const report = executionConsistencyReport(
+    {
+      project: {
+        current_status: "failed",
+      },
+      plan: {
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [
+          {
+            step_id: "ST1",
+            title: "Build",
+            status: "failed",
+          },
+        ],
+      },
+      checkpoints: {
+        items: [
+          {
+            checkpoint_id: "CP1",
+            status: "running",
+            title: "Review build",
+          },
+        ],
+        pending: {
+          checkpoint_id: "CP1",
+          status: "running",
+          title: "Review build",
+        },
+      },
+    },
+    null,
+    null,
+  );
+
+  assert.equal(state.checkpointFamily, "failed");
+  assert.equal(state.displayFamily, "failed");
+  assert.equal(state.displayStatusValue, "failed");
+  assert.equal(state.consistent, true);
+  assert.match(report, /display: failed/);
+  assert.doesNotMatch(report, /display: syncing/);
+});
+
+test("deriveExecutionUiState lets an active rerun override stale failure snapshots", () => {
+  const state = deriveExecutionUiState(
+    {
+      project: {
+        current_status: "failed",
+      },
+      plan: {
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [
+          {
+            step_id: "ST1",
+            title: "Build",
+            status: "failed",
+          },
+        ],
+      },
+      checkpoints: {
+        items: [
+          {
+            checkpoint_id: "CP1",
+            lineage_id: "LN1",
+            status: "pending",
+            title: "Review build",
+          },
+        ],
+        pending: {
+          checkpoint_id: "CP1",
+          lineage_id: "LN1",
+          status: "pending",
+          title: "Review build",
+        },
+      },
+      loop_state: {
+        current_checkpoint_id: "CP1",
+        current_checkpoint_lineage_id: "LN1",
+        pending_checkpoint_approval: false,
+      },
+    },
+    null,
+    {
+      id: "job-run",
+      status: "running",
+      command: "run-plan",
+    },
+  );
+
+  assert.equal(state.processFamily, "running");
+  assert.equal(state.checkpointFamily, "running");
+  assert.equal(state.flowFamily, "running");
+  assert.equal(state.toolbarFamily, "running");
+  assert.equal(state.displayStatusValue, "running:run-plan");
+  assert.equal(state.consistent, true);
+});
+
 test("deriveExecutionUiState ignores stale checkpoint state when no visible execution job is active", () => {
   const state = deriveExecutionUiState(
     {
@@ -2333,6 +2466,7 @@ test("effectiveStepStatus overlays debugging on the active running step", () => 
   assert.equal(effectiveStepStatus({ status: "running" }, "running:parallel-debugging"), "running:debugging");
   assert.equal(effectiveStepStatus({ status: "pending" }, "running:debugging"), "pending");
   assert.equal(effectiveStepStatus({ status: "running" }, "running:block:2"), "running");
+  assert.equal(effectiveStepStatus({ status: "failed" }, "running:run-plan"), "running:run-plan");
 });
 
 test("shouldShowEstimatedCost only enables paid cost displays when configured", () => {

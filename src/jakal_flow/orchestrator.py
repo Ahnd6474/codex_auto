@@ -214,6 +214,14 @@ class Orchestrator(
             payload.pop(transient_key, None)
         return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
+    @staticmethod
+    def _step_trace_label(step: ExecutionStep) -> str:
+        metadata = step.metadata if isinstance(step.metadata, dict) else {}
+        block_id = str(metadata.get("candidate_block_id", "")).strip()
+        if block_id:
+            return f"{step.step_id} (block {block_id})"
+        return step.step_id
+
     def _static_plan_artifact_signature(self, context: ProjectContext, state: ExecutionPlanState) -> tuple[object, ...]:
         return (
             context.metadata.repo_url,
@@ -1199,25 +1207,26 @@ class Orchestrator(
         for step in steps:
             step_kind = self._step_kind(step)
             metadata = step.metadata if isinstance(step.metadata, dict) else {}
+            step_label = self._step_trace_label(step)
             if step_kind in {"join", "barrier"} and step.parallel_group.strip():
-                raise ValueError(f"{step.step_id} cannot use parallel_group because {step_kind} steps run alone.")
+                raise ValueError(f"{step_label} cannot use parallel_group because {step_kind} steps run alone.")
             if step_kind == "join":
                 if len(step.depends_on) < 2:
-                    raise ValueError(f"{step.step_id} must depend on at least two prior steps to act as a join node.")
+                    raise ValueError(f"{step_label} must depend on at least two prior steps to act as a join node.")
                 merge_from = self._coerce_string_list(metadata.get("merge_from", []))
                 if len(merge_from) < 2:
-                    raise ValueError(f"{step.step_id} must declare at least two merge_from step ids.")
+                    raise ValueError(f"{step_label} must declare at least two merge_from step ids.")
                 unknown_merge_targets = [item for item in merge_from if item not in step_ids]
                 if unknown_merge_targets:
-                    raise ValueError(f"{step.step_id} references unknown join targets: {', '.join(unknown_merge_targets)}")
+                    raise ValueError(f"{step_label} references unknown join targets: {', '.join(unknown_merge_targets)}")
                 invalid_merge_targets = [item for item in merge_from if item not in step.depends_on]
                 if invalid_merge_targets:
                     raise ValueError(
-                        f"{step.step_id} can only merge direct dependencies, but merge_from included: {', '.join(invalid_merge_targets)}"
+                        f"{step_label} can only merge direct dependencies, but merge_from included: {', '.join(invalid_merge_targets)}"
                     )
                 join_policy = self._normalize_join_policy(metadata.get("join_policy", ""))
                 if join_policy != "all":
-                    raise ValueError(f"{step.step_id} uses unsupported join_policy '{join_policy}'. Only 'all' is supported.")
+                    raise ValueError(f"{step_label} uses unsupported join_policy '{join_policy}'. Only 'all' is supported.")
                 metadata["join_policy"] = join_policy
                 metadata["merge_from"] = merge_from
                 step.metadata = metadata

@@ -545,6 +545,107 @@ test("ParallelRunControlView disables Run when the project status is already run
   assert.match(runMatch[0], /disabled=""/);
 });
 
+test("ParallelRunControlView treats an active rerun as running even when the saved plan still has failed steps", async () => {
+  const html = await renderBundledComponent(
+    "parallel-run-control-active-rerun-render",
+    "./src/components/views/ParallelRunControlView.jsx",
+    "ParallelRunControlView",
+    {
+      detail: {
+        project: {
+          current_status: "failed",
+        },
+        runtime: {
+          execution_mode: "parallel",
+          effort: "medium",
+        },
+        checkpoints: {
+          items: [
+            {
+              checkpoint_id: "CP1",
+              lineage_id: "LN1",
+              status: "pending",
+              title: "Review build",
+            },
+          ],
+          pending: {
+            checkpoint_id: "CP1",
+            lineage_id: "LN1",
+            status: "pending",
+            title: "Review build",
+          },
+        },
+        loop_state: {
+          current_checkpoint_id: "CP1",
+          current_checkpoint_lineage_id: "LN1",
+          pending_checkpoint_approval: false,
+        },
+        runtime_insights: {
+          execution: {
+            remaining_seconds: 0,
+          },
+          parallel: {
+            recommended_workers: 1,
+            cpu_parallel_limit: 4,
+            cpu_logical_count: 16,
+            memory_parallel_limit: 4,
+            memory_available_bytes: 8589934592,
+          },
+        },
+      },
+      planDraft: {
+        project_prompt: "Ship the UI",
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [
+          {
+            step_id: "ST1",
+            title: "Build",
+            display_description: "Build the screen",
+            codex_description: "Build the screen",
+            success_criteria: "Screen renders",
+            reasoning_effort: "high",
+            status: "failed",
+            metadata: {
+              lineage_id: "LN1",
+            },
+          },
+        ],
+      },
+      activeJob: {
+        id: "job-run",
+        status: "running",
+        command: "run-plan",
+      },
+      queuedJobs: [],
+      autoRunAfterPlan: false,
+      selectedStepId: "ST1",
+      busy: false,
+      canCancelReservation: false,
+      canRequestStop: false,
+      onPromptChange: noop,
+      onGeneratePlan: noop,
+      onSavePlan: noop,
+      onResetPlan: noop,
+      onRunPlan: noop,
+      onRequestStop: noop,
+      onCancelQueuedJob: noop,
+      onAutoRunAfterPlanChange: noop,
+      onSelectStep: noop,
+      onUpdateStepField: noop,
+      onSaveStepLocal: noop,
+      onAddStep: noop,
+      onDeleteStep: noop,
+    },
+  );
+
+  const runMatch = html.match(/<button[^>]*toolbar-btn toolbar-btn--accent[^>]*>(?:<[^>]+>|[^<])*<span>Run<\/span><\/button>/);
+  assert.ok(runMatch, "Run button should exist");
+  assert.match(runMatch[0], /disabled=""/);
+  assert.match(html, /Running/);
+  assert.doesNotMatch(html, /status-badge--danger">Failed/);
+});
+
 test("ParallelRunControlView shows failure reasons for failed blocks", async () => {
   const html = await renderBundledComponent(
     "parallel-run-control-failure-reason-render",
@@ -615,6 +716,7 @@ test("ParallelRunControlView shows failure reasons for failed blocks", async () 
   assert.match(html, /Failure Reason/);
   assert.match(html, /Verification tests failed/);
   assert.match(html, /verification_test_failed/);
+  assert.doesNotMatch(html, /Syncing/);
 });
 
 test("ParallelRunControlView treats closeout as editable and exposes all model choices", async () => {
@@ -644,6 +746,22 @@ test("ParallelRunControlView treats closeout as editable and exposes all model c
             cpu_logical_count: 16,
             memory_parallel_limit: 4,
             memory_available_bytes: 8589934592,
+          },
+        },
+        checkpoints: {
+          items: [
+            {
+              checkpoint_id: "CP1",
+              lineage_id: "LN1",
+              status: "running",
+              title: "Review build",
+            },
+          ],
+          pending: {
+            checkpoint_id: "CP1",
+            lineage_id: "LN1",
+            status: "running",
+            title: "Review build",
           },
         },
       },
@@ -1223,7 +1341,7 @@ test("RightSidebarPane shows the project default model name in the center chat s
   assert.match(html, /GPT-5\.4 \/ OpenAI/);
 });
 
-test("StatusBar falls back to syncing when execution surfaces diverge", async () => {
+test("StatusBar prefers the active rerun over stale failure snapshots", async () => {
   const html = await renderBundledComponent(
     "status-bar-syncing-render",
     "./src/components/layout/StatusBar.jsx",
@@ -1287,10 +1405,10 @@ test("StatusBar falls back to syncing when execution surfaces diverge", async ()
     },
   );
 
-  assert.match(html, /Syncing/);
+  assert.match(html, /Running/);
 });
 
-test("IdeToolbar falls back to syncing when execution surfaces diverge", async () => {
+test("IdeToolbar prefers the active rerun over stale failure snapshots", async () => {
   const html = await renderBundledComponent(
     "ide-toolbar-syncing-render",
     "./src/components/layout/IdeToolbar.jsx",
@@ -1380,7 +1498,7 @@ test("IdeToolbar falls back to syncing when execution surfaces diverge", async (
     },
   );
 
-  assert.match(html, /Syncing/);
+  assert.match(html, /Running/);
 });
 
 test("RightSidebarPane keeps the icon rail visible when the right panel is collapsed", async () => {
@@ -2791,7 +2909,7 @@ test("IdeToolbar keeps an active run-plan job from inheriting stale debugging st
   assert.doesNotMatch(html, /Debugging/);
 });
 
-test("IdeToolbar, StatusBar, and RunProgressPanel agree on the debugging label", async () => {
+test("IdeToolbar, StatusBar, and RunProgressPanel agree on the running label for an active rerun", async () => {
   const sharedRuntime = {
     model_provider: "openai",
     model: "gpt-5.4",
@@ -2911,10 +3029,10 @@ test("IdeToolbar, StatusBar, and RunProgressPanel agree on the debugging label",
     },
   );
 
-  assert.match(toolbarHtml, /Debugging/);
-  assert.match(statusHtml, /Debugging/);
-  assert.match(runProgressHtml, /Debugging/);
-  assert.doesNotMatch(runProgressHtml, /Working on ST2/);
+  assert.match(toolbarHtml, /Running/);
+  assert.match(statusHtml, /Running/);
+  assert.match(runProgressHtml, /Running/);
+  assert.doesNotMatch(runProgressHtml, /Debugging/);
 });
 
 test("IdeToolbar labels the run button as Running while execution is active", async () => {

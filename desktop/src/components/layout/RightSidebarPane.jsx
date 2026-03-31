@@ -1286,6 +1286,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
               detail={detail}
               selectedStep={selectedStep}
               modelPresets={modelPresets}
+              activeJob={activeJob}
               language={language}
             />
           </Suspense>

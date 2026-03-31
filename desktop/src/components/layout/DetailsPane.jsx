@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { effectiveStepStatus, formatCheckpointDisplayId, reasoningEffortLabel, resolveExecutionDisplayPlan, runtimeSummary, statusTone } from "../../utils";
+import { effectiveStepStatus, formatCheckpointDisplayId, projectStatusWithJob, reasoningEffortLabel, resolveExecutionDisplayPlan, runtimeSummary, statusTone, visibleExecutionJob } from "../../utils";
 
 function DocumentIcon() {
   return (
@@ -29,14 +29,16 @@ function DocumentCard({ title, kind, path, status, muted = false }) {
   );
 }
 
-export function DetailsPane({ detail, planDraft, selectedStepId, modelPresets, onHide }) {
+export function DetailsPane({ detail, planDraft, selectedStepId, modelPresets, activeJob = null, onHide }) {
   const { t } = useI18n();
   const [detailsTab, setDetailsTab] = useState("inspector");
   const outputRef = useRef(null);
-  const effectivePlan = resolveExecutionDisplayPlan(detail, planDraft, null);
+  const effectivePlan = resolveExecutionDisplayPlan(detail, planDraft, activeJob);
   const selectedStep = (effectivePlan?.steps || []).find((step) => step.step_id === selectedStepId) || null;
   const pendingCheckpoint = detail?.checkpoints?.pending || null;
-  const selectedStepStatus = effectiveStepStatus(selectedStep, detail?.project?.current_status || "");
+  const executionJob = visibleExecutionJob(activeJob);
+  const projectStatus = projectStatusWithJob(detail?.project?.current_status || "", executionJob);
+  const selectedStepStatus = effectiveStepStatus(selectedStep, projectStatus);
   const processOutput = detail?.subprocess_output || detail?.agent_output || detail?.process_log || "";
   const closeoutReportPath = String(detail?.files?.closeout_report_file || "").trim();
   const wordReportActualPath = String(detail?.reports?.word_report_path || "").trim();
@@ -135,8 +137,8 @@ export function DetailsPane({ detail, planDraft, selectedStepId, modelPresets, o
       <section className="details-card">
         <div className="details-card__header">
           <strong>{t("common.project")}</strong>
-          <span className={`status-badge status-badge--${statusTone(detail?.project?.current_status)}`}>
-            {displayStatus(detail?.project?.current_status || "idle", "en")}
+          <span className={`status-badge status-badge--${statusTone(projectStatus)}`}>
+            {displayStatus(projectStatus || "idle", "en")}
           </span>
         </div>
         <dl className="details-list">

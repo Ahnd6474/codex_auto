@@ -2087,6 +2087,34 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             {"LN1": "active", "LN2": "active"},
         )
 
+    def test_validate_hybrid_execution_steps_includes_candidate_block_id_in_join_errors(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_join_block_id_error_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        orchestrator = Orchestrator(temp_root)
+
+        try:
+            with self.assertRaisesRegex(
+                ValueError,
+                r"ST4 \(block B3\) must depend on at least two prior steps to act as a join node\.",
+            ):
+                orchestrator._validate_hybrid_execution_steps(
+                    [
+                        ExecutionStep(
+                            step_id="ST4",
+                            title="Document Harness Workflow",
+                            depends_on=["ST2"],
+                            metadata={
+                                "step_kind": "join",
+                                "candidate_block_id": "B3",
+                                "merge_from": ["ST2"],
+                                "join_policy": "all",
+                            },
+                        )
+                    ]
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
     def test_run_join_execution_step_skips_empty_cherry_pick_results(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_join_empty_cherry_pick_test"
         shutil.rmtree(temp_root, ignore_errors=True)

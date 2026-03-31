@@ -1169,11 +1169,15 @@ export function effectiveStepStatus(step = null, projectStatus = "") {
   if (!rawStepStatus) {
     return "";
   }
-  if (String(projectStatus || "").trim().toLowerCase() === "syncing") {
-    return "syncing";
-  }
-  if (isDebuggingStatus(projectStatus) && rawStepStatus === "running") {
+  const normalizedProjectStatus = String(projectStatus || "").trim().toLowerCase();
+  if (isDebuggingStatus(normalizedProjectStatus) && rawStepStatus === "running") {
     return "running:debugging";
+  }
+  if (rawStepStatus === "failed" && isActiveExecutionStatus(normalizedProjectStatus)) {
+    if (normalizedProjectStatus.startsWith("running:") || normalizedProjectStatus.startsWith("queued:")) {
+      return normalizedProjectStatus;
+    }
+    return normalizedProjectStatus.startsWith("queued") ? "queued" : "running";
   }
   return String(step?.status || "").trim();
 }
@@ -1485,17 +1489,27 @@ function executionFamilyFromJob(job = null) {
 
 function checkpointFamilyFromDetail(detail = null, activeJob = null) {
   const checkpointState = resolveCheckpointExecutionState(detail, activeJob);
+  const projectStatus = String(detail?.project?.current_status || "").trim().toLowerCase();
+  const closeoutStatus = String(detail?.plan?.closeout_status || "").trim().toLowerCase();
+  const planSteps = Array.isArray(detail?.plan?.steps) ? detail.plan.steps : [];
+  const terminalFailure =
+    projectStatus.endsWith("failed")
+    || closeoutStatus === "failed"
+    || planSteps.some((step) => String(step?.status || "").trim().toLowerCase() === "failed");
   if (checkpointState.waitingForApproval) {
     return "checkpoint";
   }
   if (checkpointState.processActive && (checkpointState.currentCheckpointId || checkpointState.currentCheckpointLineageId)) {
     return "running";
   }
+  if (terminalFailure) {
+    return "failed";
+  }
   const items = Array.isArray(checkpointState.items) ? checkpointState.items : [];
   if (items.length && items.every((item) => ["approved", "completed"].includes(String(item?.status || "").trim().toLowerCase()))) {
     return "completed";
   }
-  if (items.some((item) => String(item?.status || "").trim().toLowerCase().includes("failed"))) {
+  if (!checkpointState.processActive && items.some((item) => String(item?.status || "").trim().toLowerCase().includes("failed"))) {
     return "failed";
   }
   return "idle";
@@ -1607,8 +1621,33 @@ export function deriveExecutionUiState(detail = null, planDraft = null, activeJo
   const checkpointFamily = checkpointFamilyFromDetail(detail, executionJob);
   const projectStatus = String(detail?.project?.current_status || "").trim();
   const storedProjectFamily = normalizeExecutionSurfaceStatus(projectStatus);
+  const processStatus = String(executionJob?.status || "").trim().toLowerCase();
+  const processCommand = String(executionJob?.command || "").trim().toLowerCase();
+  const processStatusValue = processStatus === "queued"
+    ? `queued:${processCommand || "background-job"}`
+    : processStatus === "running"
+      ? `running:${processCommand || "background-job"}`
+      : "";
+  const terminalFailureFamily = (() => {
+    if (processStatusValue) {
+      return "";
+    }
+    const projectFamily = normalizeExecutionSurfaceStatus(projectStatus);
+    const closeoutStatus = String(livePlan?.closeout_status || detail?.plan?.closeout_status || "").trim().toLowerCase();
+    const planSteps = Array.isArray(livePlan?.steps) ? livePlan.steps : Array.isArray(detail?.plan?.steps) ? detail.plan.steps : [];
+    if (projectFamily === "failed" || projectFamily === "closeout_failed" || projectStatus.toLowerCase().endsWith("failed")) {
+      return "failed";
+    }
+    if (closeoutStatus === "failed") {
+      return "failed";
+    }
+    if (planSteps.some((step) => String(step?.status || "").trim().toLowerCase() === "failed")) {
+      return "failed";
+    }
+    return "";
+  })();
   const shouldDowngradeStoredStatus =
-    !executionJob
+    !processStatusValue
     && ["running", "queued", "planning", "closeout", "debugging", "merging", "checkpoint"].includes(storedProjectFamily);
   const resolvedProjectStatus = shouldDowngradeStoredStatus
     ? deriveIdleProjectStatus(
@@ -1616,7 +1655,7 @@ export function deriveExecutionUiState(detail = null, planDraft = null, activeJo
         computePlanStats(livePlan || {}),
         projectStatus,
       )
-    : projectStatus;
+    : (processStatusValue || projectStatus);
   const rawProjectFamily = normalizeExecutionSurfaceStatus(resolvedProjectStatus);
   const processFamily = executionFamilyFromJob(executionJob);
   const planningRunning = isPlanningProgressRunning(detail?.planning_progress);
@@ -1669,10 +1708,14 @@ export function deriveExecutionUiState(detail = null, planDraft = null, activeJo
     .filter(([, family]) => family !== "idle")
     .map(([, family]) => normalizeExecutionSurfaceStatus(family));
   const uniqueFamilies = [...new Set(activeFamilies)];
-  const consistent = uniqueFamilies.length <= 1;
-  const displayFamily = consistent ? (uniqueFamilies[0] || "idle") : "syncing";
+  const consistent = terminalFailureFamily ? true : uniqueFamilies.length <= 1;
+  const displayFamily = terminalFailureFamily || (consistent ? (uniqueFamilies[0] || "idle") : "syncing");
   let displayStatusValue = "idle";
-  if (!consistent) {
+  if (terminalFailureFamily) {
+    displayStatusValue = "failed";
+  } else if (processStatusValue) {
+    displayStatusValue = processStatusValue;
+  } else if (!consistent) {
     displayStatusValue = "syncing";
   } else if (checkpointFamily === "checkpoint") {
     displayStatusValue = String(checkpointPending?.status || "awaiting_checkpoint_approval").trim().toLowerCase() || "awaiting_checkpoint_approval";

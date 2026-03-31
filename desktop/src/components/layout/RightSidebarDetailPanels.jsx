@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { openInSystem } from "../../api";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { effectiveStepStatus, formatCheckpointDisplayId, reasoningEffortLabel, runtimeSummary, statusTone } from "../../utils";
+import { effectiveStepStatus, formatCheckpointDisplayId, projectStatusWithJob, reasoningEffortLabel, runtimeSummary, statusTone, visibleExecutionJob } from "../../utils";
 
 function RailTerminalIcon() {
   return (
@@ -717,19 +717,22 @@ export const InspectorPanel = memo(function InspectorPanel({
   detail,
   selectedStep,
   modelPresets,
+  activeJob = null,
   language = "en",
 }) {
   const { t } = useI18n();
   const pendingCheckpoint = detail?.checkpoints?.pending || null;
-  const selectedStepStatus = effectiveStepStatus(selectedStep, detail?.project?.current_status || "");
+  const executionJob = visibleExecutionJob(activeJob);
+  const projectStatus = projectStatusWithJob(detail?.project?.current_status || "", executionJob);
+  const selectedStepStatus = effectiveStepStatus(selectedStep, projectStatus);
 
   return (
     <div className="rsb-inspector">
       <section className="details-card">
         <div className="details-card__header">
           <strong>{t("common.project")}</strong>
-          <span className={`status-badge status-badge--${statusTone(detail?.project?.current_status)}`}>
-            {displayStatus(detail?.project?.current_status || "idle", language)}
+          <span className={`status-badge status-badge--${statusTone(projectStatus)}`}>
+            {displayStatus(projectStatus || "idle", language)}
           </span>
         </div>
         <dl className="details-list">

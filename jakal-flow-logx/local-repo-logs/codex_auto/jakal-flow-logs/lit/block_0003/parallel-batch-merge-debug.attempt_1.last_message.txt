@@ -1,5 +1,0 @@
-Resolved the ST2/ST3 merged-batch failure by intentionally fixing the cherry-pick conflict in [tests/test_bootstrap.py](C:/Users/alber/OneDrive/문서/GitHub/lit/tests/test_bootstrap.py). The merged test now keeps both behaviors: `checkout` parser coverage from ST2 and explicit `merge` / `rebase` revision parsing from ST3.
-
-The interrupted cherry-pick was completed successfully, and the repo is no longer in a conflicted state. I also recorded a short trace note in [RESEARCH_NOTES.md](C:/Users/alber/OneDrive/문서/GitHub/codex_auto/None/projects/c-users-alber-onedrive-github-lit-main-54cb49de20/docs/RESEARCH_NOTES.md).
-
-Verification: `python -m pytest` passed with `13 passed`.

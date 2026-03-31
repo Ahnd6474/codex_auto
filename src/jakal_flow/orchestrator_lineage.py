@@ -94,6 +94,7 @@ UTC = getattr(datetime, "UTC", timezone.utc)
 class OrchestratorLineageMixin:
     def _plan_uses_hybrid_lineages(self, plan_state: ExecutionPlanState) -> bool:
         return any(self._step_kind(step) in {"join", "barrier"} for step in plan_state.steps)
+
     def _load_lineage_states(self, context: ProjectContext) -> dict[str, LineageState]:
         payload = read_json(context.paths.lineage_state_file, default={"lineages": []})
         items = payload.get("lineages", []) if isinstance(payload, dict) else []
@@ -358,7 +359,9 @@ class OrchestratorLineageMixin:
         if not dependencies:
             lineage = self._create_lineage_state(context, lineages, source_revision=main_safe_revision)
         elif len(dependencies) > 1:
-            raise RuntimeError(f"{step.step_id} requires an explicit join or barrier before continuing from multiple dependencies.")
+            raise RuntimeError(
+                f"{self._step_trace_label(step)} requires an explicit join or barrier before continuing from multiple dependencies."
+            )
         else:
             parent_step = dependencies[0]
             if self._step_kind(parent_step) in {"join", "barrier"}:
