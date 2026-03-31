@@ -600,6 +600,61 @@ test("CenterWorkspace keeps AI Chat active without exposing the Flow tab in the 
   assert.match(html, /rsb-chat--center/);
 });
 
+test("CenterWorkspace forwards explicit chat settings into the AI chat workspace", async () => {
+  const html = await renderBundledComponent(
+    "center-workspace-chat-settings-render",
+    "./src/components/layout/CenterWorkspace.jsx",
+    "CenterWorkspace",
+    baseWorkspaceProps({
+      activeTab: "ai-chat",
+      detail: {
+        project: {
+          current_status: "plan_ready",
+        },
+        runtime: {
+          model_provider: "openai",
+          model: "gpt-5.4",
+          execution_model: "gpt-5.4",
+          model_slug_input: "gpt-5.4",
+          effort: "medium",
+        },
+      },
+      form: {
+        runtime: {
+          model_provider: "openai",
+          model: "gpt-5.4",
+          execution_model: "gpt-5.4",
+          model_slug_input: "gpt-5.4",
+          effort: "medium",
+        },
+      },
+      chatSettings: {
+        chat_model_provider: "openai",
+        chat_local_model_provider: "",
+        chat_model: "gpt-5.4-mini",
+        chat_effort: "high",
+      },
+      modelCatalog: [
+        {
+          model: "gpt-5.4",
+          display_name: "GPT-5.4",
+          hidden: false,
+          provider: "openai",
+        },
+        {
+          model: "gpt-5.4-mini",
+          display_name: "GPT-5.4 Mini",
+          hidden: false,
+          provider: "openai",
+        },
+      ],
+    }),
+  );
+
+  assert.match(html, /<option value="openai::::gpt-5\.4-mini" selected="">GPT-5\.4 Mini \/ OpenAI<\/option>/);
+  assert.doesNotMatch(html, /<option value="openai::::gpt-5\.4" selected="">GPT-5\.4 \/ OpenAI<\/option>/);
+});
+
 test("CenterWorkspace forwards stop requests into the AI chat workspace", async () => {
   const source = await readFile(path.join(desktopRoot, "src/components/layout/CenterWorkspace.jsx"), "utf-8");
 

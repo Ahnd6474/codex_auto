@@ -4,6 +4,9 @@ import {
   cloneValue,
   detailApplySignature,
   mergeProjectDetailCodexStatus,
+  mergeModelCatalogs,
+  normalizedLocalModelProvider,
+  normalizedModelProvider,
   projectFormFromDetail,
   sanitizeProjectDetailForJobState,
   sanitizeProjectListForJobState,
@@ -160,26 +163,60 @@ function preserveProjectIdentityForm(currentForm = null, nextForm = null) {
 }
 
 function preserveProjectRuntimeOverrides(currentForm = null, nextForm = null, previousDetail = null, sameProject = false) {
-  if (!sameProject) {
-    return nextForm;
-  }
   const current = currentForm && typeof currentForm === "object" ? currentForm : {};
   const next = nextForm && typeof nextForm === "object" ? nextForm : {};
+  const currentRuntime = current.runtime && typeof current.runtime === "object" ? current.runtime : {};
+  const nextRuntime = next.runtime && typeof next.runtime === "object" ? { ...next.runtime } : {};
+  if (sameProject) {
+    if (!String(current.project_dir || "").trim()) {
+      return nextForm;
+    }
+    let changed = false;
+    PROJECT_RUNTIME_OVERRIDE_KEYS.forEach((key) => {
+      if (!hasOwnValue(currentRuntime, key)) {
+        return;
+      }
+      const nextValue = cloneValue(currentRuntime[key]);
+      if (!Object.is(nextRuntime[key], nextValue)) {
+        changed = true;
+      }
+      nextRuntime[key] = nextValue;
+    });
+    if (!changed) {
+      return nextForm;
+    }
+    return {
+      ...next,
+      runtime: nextRuntime,
+    };
+  }
   if (!String(current.project_dir || "").trim()) {
     return nextForm;
   }
-  const currentRuntime = current.runtime && typeof current.runtime === "object" ? current.runtime : {};
-  const nextRuntime = next.runtime && typeof next.runtime === "object" ? { ...next.runtime } : {};
+  if (!previousDetail) {
+    return nextForm;
+  }
+  const previousRuntime = previousDetail?.runtime && typeof previousDetail.runtime === "object" ? previousDetail.runtime : {};
+  const currentProvider = normalizedModelProvider(currentRuntime);
+  const nextProvider = normalizedModelProvider(nextRuntime);
+  const currentLocalProvider = normalizedLocalModelProvider(currentRuntime);
+  const nextLocalProvider = normalizedLocalModelProvider(nextRuntime);
+  if (currentProvider !== nextProvider || currentLocalProvider !== nextLocalProvider) {
+    return nextForm;
+  }
   let changed = false;
   PROJECT_RUNTIME_OVERRIDE_KEYS.forEach((key) => {
     if (!hasOwnValue(currentRuntime, key)) {
       return;
     }
-    const nextValue = cloneValue(currentRuntime[key]);
-    if (!Object.is(nextRuntime[key], nextValue)) {
+    const currentValue = cloneValue(currentRuntime[key]);
+    if (Object.is(currentValue, previousRuntime[key])) {
+      return;
+    }
+    if (!Object.is(nextRuntime[key], currentValue)) {
       changed = true;
     }
-    nextRuntime[key] = nextValue;
+    nextRuntime[key] = currentValue;
   });
   if (!changed) {
     return nextForm;
@@ -199,12 +236,8 @@ function preserveProjectChatSelection(currentForm = null, nextForm = null) {
   const currentChatLocalProvider = String(currentRuntime.chat_local_model_provider || "").trim().toLowerCase();
   const currentChatModel = String(currentRuntime.chat_model || "").trim().toLowerCase();
   const currentChatEffort = String(currentRuntime.chat_effort || "").trim().toLowerCase();
-  const nextProvider = String(nextRuntime.model_provider || "").trim().toLowerCase();
-  const nextLocalProvider = String(nextRuntime.local_model_provider || "").trim().toLowerCase();
-  const nextChatProvider = String(nextRuntime.chat_model_provider || "").trim().toLowerCase();
-  const nextChatLocalProvider = String(nextRuntime.chat_local_model_provider || "").trim().toLowerCase();
-  const nextChatModel = String(nextRuntime.chat_model || "").trim().toLowerCase();
-  const nextChatEffort = String(nextRuntime.chat_effort || "").trim().toLowerCase();
+  const nextProvider = normalizedModelProvider(nextRuntime);
+  const nextLocalProvider = String(nextRuntime.chat_local_model_provider || nextRuntime.local_model_provider || "").trim().toLowerCase();
 
   if (!currentChatProvider || !currentChatModel) {
     return nextForm;
@@ -212,19 +245,25 @@ function preserveProjectChatSelection(currentForm = null, nextForm = null) {
   if (currentChatProvider !== nextProvider || currentChatLocalProvider !== nextLocalProvider) {
     return nextForm;
   }
-  if (nextChatProvider || nextChatLocalProvider || nextChatModel || nextChatEffort) {
+
+  const nextChatRuntime = {
+    ...nextRuntime,
+    chat_model_provider: currentChatProvider,
+    chat_local_model_provider: currentChatLocalProvider,
+    chat_model: currentChatModel,
+    chat_effort: currentChatEffort,
+  };
+  if (
+    Object.is(nextRuntime.chat_model_provider, nextChatRuntime.chat_model_provider)
+    && Object.is(nextRuntime.chat_local_model_provider, nextChatRuntime.chat_local_model_provider)
+    && Object.is(nextRuntime.chat_model, nextChatRuntime.chat_model)
+    && Object.is(nextRuntime.chat_effort, nextChatRuntime.chat_effort)
+  ) {
     return nextForm;
   }
-
   return {
     ...next,
-    runtime: {
-      ...nextRuntime,
-      chat_model_provider: currentChatProvider,
-      chat_local_model_provider: currentChatLocalProvider,
-      chat_model: currentChatModel,
-      chat_effort: currentChatEffort,
-    },
+    runtime: nextChatRuntime,
   };
 }
 
@@ -679,11 +718,16 @@ export function applyProjectDetailState({
   );
   const sameProject = sameProjectDetail(normalizedDetail, state.projectDetail);
   refs.lastAppliedDetailSignatureRef.current = applySignature;
-  setters.transition(() => {
-    setters.setProjectDetail(normalizedDetail);
-    setters.setModelCatalog(normalizedDetail?.codex_status?.model_catalog || state.modelCatalog);
-    setters.setShareSettings(shareSettingsFromDetail(normalizedDetail));
-    setters.setLoadingProjectId("");
+    setters.transition(() => {
+      setters.setProjectDetail(normalizedDetail);
+      setters.setModelCatalog(
+        mergeModelCatalogs(
+          normalizedDetail?.codex_status?.model_catalog || [],
+          state.modelCatalog,
+        ),
+      );
+      setters.setShareSettings(shareSettingsFromDetail(normalizedDetail));
+      setters.setLoadingProjectId("");
     setters.setProjectForm((current) => {
       if (current.project_dir && preserveDirtyPlan) {
         return current;
@@ -698,10 +742,7 @@ export function applyProjectDetailState({
         state.projectDetail,
         sameProject,
       );
-      const nextProjectFormWithChat = preserveProjectChatSelection(
-        current,
-        nextProjectForm,
-      );
+      const nextProjectFormWithChat = preserveProjectChatSelection(current, nextProjectForm);
       if (sameProject) {
         return nextProjectFormWithChat;
       }

@@ -44,6 +44,7 @@ import {
   isChatJob,
   isDuplicateProjectJobError,
   isPlanningProgressRunning,
+  mergeModelCatalogs,
   jobLaneForRequest,
   jobHasNewerActiveReplacement,
   planDependencyValidationMessage,
@@ -51,6 +52,7 @@ import {
   projectJobFromJobs,
   programSettingsEqual,
   programSettingsFromRuntime,
+  resolveChatRuntimeSelection,
   resolveProjectDirectory,
   sanitizeProjectListForJobState,
   shouldReplaceVisibleProject,
@@ -107,6 +109,7 @@ export function useDesktopController() {
   const [selectedHistoryId, setSelectedHistoryId] = usePersistentState("jakal-flow:selected-history", "");
   const [storedProgramSettings, setStoredProgramSettings] = usePersistentState("jakal-flow:program-settings", null);
   const [projectForm, setProjectForm] = useState(blankProjectForm(null));
+  const [chatRuntime, setChatRuntime] = useState({});
   const [programSettings, setProgramSettings] = useState(programSettingsFromRuntime(null));
   const [projectDetail, setProjectDetail] = useState(null);
   const [workspaceShareDetail, setWorkspaceShareDetail] = useState(null);
@@ -439,6 +442,17 @@ export function useDesktopController() {
       setWorkspaceShareDetail(normalizeWorkspaceShareDetail(detail.share));
     }
     if (normalizedDetail) {
+      const nextModelCatalog = mergeModelCatalogs(
+        normalizedDetail?.codex_status?.model_catalog || [],
+        modelCatalog,
+      );
+      startTransition(() => {
+        setChatRuntime((current) => resolveChatRuntimeSelection(
+          current,
+          normalizedDetail?.runtime || {},
+          nextModelCatalog,
+        ));
+      });
       const nextProjects = applyProjectDetailListingState({
         projects: projectsRef.current,
         detail: normalizedDetail,
@@ -1326,6 +1340,7 @@ export function useDesktopController() {
         setShareSettings,
       },
     });
+    setChatRuntime({});
   }
 
   function updateSelectedStep(field, value) {
@@ -1392,23 +1407,35 @@ export function useDesktopController() {
   }
 
   function setChatModelSelection(selection = null) {
+    const nextSelection = {
+      chat_model_provider: String(selection?.provider || "").trim().toLowerCase(),
+      chat_local_model_provider: String(selection?.localProvider || "").trim().toLowerCase(),
+      chat_model: String(selection?.model || "").trim().toLowerCase(),
+    };
+    setChatRuntime((current) => ({
+      ...(current || {}),
+      ...nextSelection,
+    }));
     setProjectForm((current) => ({
       ...(current || {}),
       runtime: {
         ...(current?.runtime || {}),
-        chat_model_provider: String(selection?.provider || "").trim().toLowerCase(),
-        chat_local_model_provider: String(selection?.localProvider || "").trim().toLowerCase(),
-        chat_model: String(selection?.model || "").trim().toLowerCase(),
+        ...nextSelection,
       },
     }));
   }
 
   function setChatReasoningEffort(value = "") {
+    const nextEffort = String(value || "").trim().toLowerCase();
+    setChatRuntime((current) => ({
+      ...(current || {}),
+      chat_effort: nextEffort,
+    }));
     setProjectForm((current) => ({
       ...(current || {}),
       runtime: {
         ...(current?.runtime || {}),
-        chat_effort: String(value || "").trim().toLowerCase(),
+        chat_effort: nextEffort,
       },
     }));
   }
@@ -1456,7 +1483,13 @@ export function useDesktopController() {
   }
 
   function restoreProjectForm(nextForm) {
-    setProjectForm(inheritProjectIdentityForm(nextForm, defaultRuntime));
+    const restoredForm = inheritProjectIdentityForm(nextForm, defaultRuntime);
+    setProjectForm(restoredForm);
+    setChatRuntime((current) => resolveChatRuntimeSelection(
+      current,
+      restoredForm.runtime || {},
+      modelCatalog,
+    ));
   }
 
   function restoreProjectPrompt(nextPlan) {
@@ -2039,22 +2072,32 @@ export function useDesktopController() {
       },
       planDraft,
     );
-    const chatRuntime = basePayload.runtime || {};
+    const chatRuntimeBase = {
+      ...(basePayload.runtime || {}),
+    };
+    delete chatRuntimeBase.chat_model_provider;
+    delete chatRuntimeBase.chat_local_model_provider;
+    delete chatRuntimeBase.chat_model;
+    delete chatRuntimeBase.chat_effort;
+    const chatRuntimeSelection = {
+      ...chatRuntimeBase,
+      ...(chatRuntime || {}),
+    };
     const visibleChatCatalog = (modelCatalog || []).filter((item) => {
       const model = String(item?.model || "").trim();
       return Boolean(model) && !item?.hidden;
     });
-    const requestedChatProvider = String(chatRuntime?.chat_model_provider || "").trim().toLowerCase();
-    const requestedChatLocalProvider = String(chatRuntime?.chat_local_model_provider || "").trim().toLowerCase();
-    const requestedChatModel = String(chatRuntime?.chat_model || "").trim().toLowerCase();
+    const requestedChatProvider = String(chatRuntimeSelection?.chat_model_provider || "").trim().toLowerCase();
+    const requestedChatLocalProvider = String(chatRuntimeSelection?.chat_local_model_provider || "").trim().toLowerCase();
+    const requestedChatModel = String(chatRuntimeSelection?.chat_model || "").trim().toLowerCase();
     const allowedChatEntry = visibleChatCatalog.find((item) => (
       String(item?.provider || "").trim().toLowerCase() === requestedChatProvider
       && String(item?.local_provider || "").trim().toLowerCase() === requestedChatLocalProvider
       && String(item?.model || "").trim().toLowerCase() === requestedChatModel
     )) || null;
-    const chatEffort = String(chatRuntime?.chat_effort || "").trim().toLowerCase();
+    const chatEffort = String(chatRuntimeSelection?.chat_effort || "").trim().toLowerCase();
     const nextRuntime = applyChatRuntimeSelectionToProject(
-      chatRuntime,
+      chatRuntimeSelection,
       modelCatalog,
       {
         provider: String(allowedChatEntry?.provider || requestedChatProvider || "").trim().toLowerCase(),
@@ -2594,6 +2637,7 @@ export function useDesktopController() {
     workspaceFilter,
     selectedChatSessionId,
     chatDraftSession,
+    chatRuntime,
     planDirty,
     setMessage,
     setProjectForm: updateProjectForm,

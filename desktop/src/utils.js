@@ -1991,6 +1991,60 @@ export function applyChatRuntimeSelectionToProject(currentRuntime = {}, modelCat
   );
 }
 
+function normalizeChatRuntimeSelection(runtime = {}) {
+  return {
+    chat_model_provider: String(runtime?.chat_model_provider || "").trim().toLowerCase(),
+    chat_local_model_provider: String(runtime?.chat_local_model_provider || "").trim().toLowerCase(),
+    chat_model: String(runtime?.chat_model || "").trim().toLowerCase(),
+    chat_effort: String(runtime?.chat_effort || "").trim().toLowerCase(),
+  };
+}
+
+function chatRuntimeSelectionKey(selection = {}) {
+  const provider = String(selection?.chat_model_provider || "").trim().toLowerCase();
+  const localProvider = String(selection?.chat_local_model_provider || "").trim().toLowerCase();
+  const model = String(selection?.chat_model || "").trim().toLowerCase();
+  return model ? [provider, localProvider, model].join("::") : "";
+}
+
+export function resolveChatRuntimeSelection(currentRuntime = {}, nextRuntime = {}, modelCatalog = []) {
+  const current = normalizeChatRuntimeSelection(currentRuntime);
+  const next = normalizeChatRuntimeSelection(nextRuntime);
+  const scopedCatalog = filterModelCatalogByProvider(modelCatalog, nextRuntime).filter(
+    (item) => !item?.hidden && Boolean(String(item?.model || "").trim()),
+  );
+  const allowedKeys = new Set(
+    scopedCatalog.map((item) => {
+      const provider = String(item?.provider || "openai").trim().toLowerCase() || "openai";
+      const localProvider = String(item?.local_provider || "").trim().toLowerCase();
+      const model = String(item?.model || "").trim().toLowerCase();
+      return [provider, localProvider, model].join("::");
+    }),
+  );
+  const currentKey = chatRuntimeSelectionKey(current);
+  const nextKey = chatRuntimeSelectionKey(next);
+  const hasValidatedSelection = allowedKeys.size > 0;
+  const resolvedSelection = hasValidatedSelection
+    ? (currentKey && allowedKeys.has(currentKey)
+      ? current
+      : nextKey && allowedKeys.has(nextKey)
+        ? next
+        : {
+            chat_model_provider: "",
+            chat_local_model_provider: "",
+            chat_model: "",
+          })
+    : (currentKey ? current : nextKey ? next : {
+        chat_model_provider: "",
+        chat_local_model_provider: "",
+        chat_model: "",
+      });
+  return {
+    ...resolvedSelection,
+    chat_effort: current.chat_effort || next.chat_effort || "",
+  };
+}
+
 export function configReasoningOptions(modelCatalog = [], model = "", fallback = "medium") {
   const supported = supportedReasoningOptions(modelCatalog, model, fallback);
   return [AUTO_REASONING_OPTION, ...supported];

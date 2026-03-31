@@ -443,6 +443,7 @@ export default function App() {
                 onSendChatMessage={controller.sendChatMessage}
                 onChangeChatModelSelection={controller.setChatModelSelection}
                 onChangeChatReasoningEffort={controller.setChatReasoningEffort}
+                chatSettings={controller.chatRuntime || {}}
                 activeJob={controller.activeJob}
                 chatJob={controller.chatJob}
                 hidePromptStrip
@@ -492,7 +493,7 @@ export default function App() {
                   queuedJobs={controller.queuedJobs}
                   onChangeForm={controller.setProjectForm}
                   chat={detail?.chat}
-                  chatSettings={controller.projectForm?.runtime || {}}
+                  chatSettings={controller.chatRuntime || {}}
                   selectedChatSessionId={controller.selectedChatSessionId}
                   chatDraftSession={controller.chatDraftSession}
                   onSelectChatSession={controller.loadChatSession}

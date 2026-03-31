@@ -213,6 +213,7 @@ function centerWorkspacePropsEqual(previousProps, nextProps) {
         && previousProps.chatJob === nextProps.chatJob
         && previousProps.selectedStepId === nextProps.selectedStepId
         && previousProps.form === nextProps.form
+        && previousProps.chatSettings === nextProps.chatSettings
         && previousProps.busy === nextProps.busy
         && previousProps.onRequestStop === nextProps.onRequestStop
         && previousProps.chat === nextProps.chat
@@ -328,6 +329,7 @@ export const CenterWorkspace = memo(function CenterWorkspace({
   chatJob,
   hidePromptStrip = false,
   chat,
+  chatSettings,
   selectedChatSessionId,
   chatDraftSession,
   onSelectChatSession,
@@ -430,7 +432,7 @@ export const CenterWorkspace = memo(function CenterWorkspace({
             onChangeForm={onChangeForm}
             onGeneratePlan={onGeneratePlan}
             chat={chat}
-            chatSettings={form?.runtime || {}}
+            chatSettings={chatSettings ?? (form?.runtime || {})}
             selectedChatSessionId={selectedChatSessionId}
             chatDraftSession={chatDraftSession}
             onSelectChatSession={onSelectChatSession}

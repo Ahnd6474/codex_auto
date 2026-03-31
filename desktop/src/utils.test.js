@@ -14,6 +14,7 @@ import {
   jobHasNewerActiveReplacement,
   mergeModelCatalogs,
   projectFormFromDetail,
+  resolveChatRuntimeSelection,
   selectedConfigReasoning,
   stepModelSelectionPatch,
 } from "./utils.js";
@@ -302,6 +303,121 @@ test("applyChatRuntimeSelectionToProject maps a chat selection into project mode
   assert.equal(nextRuntime.execution_model, "gpt-5.4");
   assert.equal(nextRuntime.effort, "high");
   assert.equal(nextRuntime.effort_selection_mode, "auto");
+});
+
+test("resolveChatRuntimeSelection keeps a manual OpenAI chat model when the project is reselected", () => {
+  const modelCatalog = [
+    {
+      model: "gpt-5.4",
+      display_name: "GPT-5.4",
+      provider: "openai",
+      hidden: false,
+    },
+    {
+      model: "gpt-5.4-mini",
+      display_name: "GPT-5.4 Mini",
+      provider: "openai",
+      hidden: false,
+    },
+  ];
+
+  const nextRuntime = resolveChatRuntimeSelection(
+    {
+      chat_model_provider: "openai",
+      chat_local_model_provider: "",
+      chat_model: "gpt-5.4-mini",
+      chat_effort: "high",
+    },
+    {
+      model_provider: "openai",
+      model: "gpt-5.4",
+      execution_model: "gpt-5.4",
+      model_slug_input: "gpt-5.4",
+      effort: "medium",
+    },
+    modelCatalog,
+  );
+
+  assert.equal(nextRuntime.chat_model_provider, "openai");
+  assert.equal(nextRuntime.chat_local_model_provider, "");
+  assert.equal(nextRuntime.chat_model, "gpt-5.4-mini");
+  assert.equal(nextRuntime.chat_effort, "high");
+});
+
+test("resolveChatRuntimeSelection uses the project's saved chat model when no manual override exists", () => {
+  const modelCatalog = [
+    {
+      model: "gpt-5.4",
+      display_name: "GPT-5.4",
+      provider: "openai",
+      hidden: false,
+    },
+    {
+      model: "gpt-5.4-mini",
+      display_name: "GPT-5.4 Mini",
+      provider: "openai",
+      hidden: false,
+    },
+  ];
+
+  const nextRuntime = resolveChatRuntimeSelection(
+    {
+      chat_model_provider: "",
+      chat_local_model_provider: "",
+      chat_model: "",
+      chat_effort: "",
+    },
+    {
+      model_provider: "openai",
+      chat_model_provider: "openai",
+      chat_local_model_provider: "",
+      chat_model: "gpt-5.4-mini",
+      chat_effort: "high",
+      model: "gpt-5.4",
+      execution_model: "gpt-5.4",
+      model_slug_input: "gpt-5.4",
+      effort: "medium",
+    },
+    modelCatalog,
+  );
+
+  assert.equal(nextRuntime.chat_model_provider, "openai");
+  assert.equal(nextRuntime.chat_local_model_provider, "");
+  assert.equal(nextRuntime.chat_model, "gpt-5.4-mini");
+  assert.equal(nextRuntime.chat_effort, "high");
+});
+
+test("resolveChatRuntimeSelection clears a stale chat model when the provider changes", () => {
+  const modelCatalog = [
+    {
+      model: "claude-sonnet-4-6",
+      display_name: "Claude Sonnet 4.6",
+      provider: "claude",
+      hidden: false,
+    },
+  ];
+
+  const nextRuntime = resolveChatRuntimeSelection(
+    {
+      chat_model_provider: "openai",
+      chat_local_model_provider: "",
+      chat_model: "gpt-5.4-mini",
+      chat_effort: "high",
+    },
+    {
+      model_provider: "claude",
+      model: "claude-sonnet-4-6",
+      execution_model: "claude-sonnet-4-6",
+      model_slug_input: "claude-sonnet-4-6",
+      effort: "high",
+    },
+    modelCatalog,
+  );
+
+  assert.equal(nextRuntime.chat_model_provider, "");
+  assert.equal(nextRuntime.chat_local_model_provider, "");
+  assert.equal(nextRuntime.chat_model, "");
+  assert.equal(nextRuntime.chat_effort, "high");
 });
 
 test("projectFormFromDetail preserves the project's saved model when selecting a project", () => {
