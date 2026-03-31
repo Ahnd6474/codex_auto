@@ -313,6 +313,37 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(captured_kwargs["detail_level"], "core")
             self.assertEqual(captured_kwargs["project_repo_id"], project.metadata.repo_id)
 
+    def test_project_detail_payload_includes_explicit_snapshot_sources(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            project = build_test_project_context(temp_dir)
+            orchestrator = mock.Mock()
+            orchestrator.load_execution_plan_state.return_value = ExecutionPlanState(default_test_command=project.runtime.test_cmd)
+            with mock.patch.object(ui_bridge_payloads, "_provider_statuses_for_detail", return_value={}), mock.patch.object(
+                ui_bridge_payloads,
+                "project_share_payload",
+                return_value={"share": "full"},
+            ):
+                result = ui_bridge_payloads.project_detail_payload(
+                    orchestrator,
+                    project,
+                    load_run_control=lambda _project: {},
+                    refresh_codex_status=False,
+                    detail_level="full",
+                    bypass_detail_cache=True,
+                )
+
+            self.assertEqual(result["snapshot"]["snapshot_kind"], "cache_view")
+            self.assertEqual(result["snapshot"]["state_origin"], "cache_view")
+            self.assertIn("snapshot_sources", result)
+            self.assertIn("persisted_state", result["snapshot_sources"])
+            self.assertIn("event_derived", result["snapshot_sources"])
+            self.assertIn("live_runtime", result["snapshot_sources"])
+            self.assertIn("cache_view", result["snapshot_sources"])
+            self.assertEqual(result["snapshot_sources"]["persisted_state"]["snapshot_kind"], "persisted_state")
+            self.assertEqual(result["snapshot_sources"]["event_derived"]["snapshot_kind"], "event_derived")
+            self.assertEqual(result["snapshot_sources"]["live_runtime"]["snapshot_kind"], "live_runtime")
+            self.assertEqual(result["snapshot_sources"]["cache_view"]["snapshot_kind"], "cache_view")
+
     def test_load_visible_project_state_passes_bypass_detail_cache_to_detail_payload(self) -> None:
         with TemporaryTestDir() as temp_dir:
             project = build_test_project_context(temp_dir)

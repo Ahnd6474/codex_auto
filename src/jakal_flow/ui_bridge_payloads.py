@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 from pathlib import Path
-from time import monotonic, perf_counter
+from time import monotonic, perf_counter, time
 from typing import Any, Callable
 
 from .chat_sessions import chat_active_session_file, chat_payload, chat_sessions_registry_file
@@ -30,7 +30,7 @@ from .utils import append_jsonl, compact_text, normalize_workflow_mode, now_utc_
 from .workspace import LOCAL_PROJECT_LOG_DIRNAME
 
 
-DETAIL_CACHE_VERSION = 15
+DETAIL_CACHE_VERSION = 16
 LIST_ITEM_CACHE_VERSION = 1
 WORKSPACE_LISTING_CACHE_VERSION = 1
 PROJECT_TREE_EXCLUDED_NAMES = frozenset({".git", LOCAL_PROJECT_LOG_DIRNAME, "ui_bridge_perf.jsonl"})
@@ -308,6 +308,140 @@ def _detail_signature(content_signature: str, codex_status: dict[str, Any]) -> s
     digest.update(content_signature.encode("utf-8"))
     digest.update(json.dumps(codex_status, sort_keys=True).encode("utf-8"))
     return digest.hexdigest()
+
+
+def _snapshot_epoch_ms() -> int:
+    return int(time() * 1000)
+
+
+def _snapshot_metadata(
+    snapshot_kind: str,
+    *,
+    source_signature: str,
+    source_cursor: dict[str, Any],
+    state_origin: str,
+    generated_at: str | None = None,
+    content_signature: str = "",
+    detail_signature: str = "",
+) -> dict[str, Any]:
+    cursor = deepcopy(source_cursor)
+    digest = hashlib.sha1()
+    for component in (
+        snapshot_kind,
+        source_signature,
+        content_signature,
+        detail_signature,
+        state_origin,
+    ):
+        digest.update(str(component).encode("utf-8"))
+    digest.update(json.dumps(cursor, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8"))
+    return {
+        "snapshot_kind": snapshot_kind,
+        "snapshot_id": digest.hexdigest(),
+        "snapshot_epoch": _snapshot_epoch_ms(),
+        "generated_at": generated_at or now_utc_iso(),
+        "state_origin": state_origin,
+        "source_signature": source_signature,
+        "source_cursor": cursor,
+    }
+
+
+def _persisted_state_source_signature(project: ProjectContext) -> str:
+    return "|".join(
+        (
+            _path_signature(project.paths.metadata_file),
+            _path_signature(project.paths.project_config_file),
+            _path_signature(project.paths.loop_state_file),
+            _path_signature(project.paths.checkpoint_state_file),
+            _json_or_text_signature(project.paths.execution_plan_file),
+            _path_signature(project.paths.ui_control_file),
+        )
+    )
+
+
+def _event_derived_source_signature(project: ProjectContext) -> str:
+    return "|".join(
+        (
+            _path_signature(project.paths.ui_event_log_file),
+            _path_signature(project.paths.block_log_file),
+            _path_signature(project.paths.pass_log_file),
+            _path_signature(project.paths.logs_dir / "test_runs.jsonl"),
+        )
+    )
+
+
+def _project_detail_snapshot_sources(
+    project: ProjectContext,
+    *,
+    normalized_detail_level: str,
+    content_signature: str,
+    codex_status: dict[str, Any],
+    generated_at: str | None = None,
+) -> dict[str, dict[str, Any]]:
+    generated_at = generated_at or now_utc_iso()
+    persisted_cursor = {
+        "metadata": _path_signature(project.paths.metadata_file),
+        "runtime": _path_signature(project.paths.project_config_file),
+        "loop_state": _path_signature(project.paths.loop_state_file),
+        "checkpoint_state": _path_signature(project.paths.checkpoint_state_file),
+        "execution_plan": _json_or_text_signature(project.paths.execution_plan_file),
+        "run_control": _path_signature(project.paths.ui_control_file),
+    }
+    event_cursor = {
+        "ui_events": _path_signature(project.paths.ui_event_log_file),
+        "blocks": _path_signature(project.paths.block_log_file),
+        "passes": _path_signature(project.paths.pass_log_file),
+        "test_runs": _path_signature(project.paths.logs_dir / "test_runs.jsonl"),
+    }
+    live_runtime_cursor = {
+        "codex_path": project.runtime.codex_path,
+        "refresh_codex_status": bool(codex_status),
+        "provider_statuses": (
+            str(sorted(codex_status.get("provider_statuses").keys()))
+            if isinstance(codex_status, dict) and isinstance(codex_status.get("provider_statuses"), dict)
+            else ""
+        ),
+    }
+    cache_view_cursor = {
+        "detail_level": normalized_detail_level,
+        "project_root": str(project.paths.project_root),
+        "repo_id": project.metadata.repo_id,
+    }
+    return {
+        "persisted_state": _snapshot_metadata(
+            "persisted_state",
+            source_signature=_persisted_state_source_signature(project),
+            source_cursor=persisted_cursor,
+            state_origin="disk",
+            generated_at=generated_at,
+            content_signature=content_signature,
+        ),
+        "event_derived": _snapshot_metadata(
+            "event_derived",
+            source_signature=_event_derived_source_signature(project),
+            source_cursor=event_cursor,
+            state_origin="events",
+            generated_at=generated_at,
+            content_signature=content_signature,
+        ),
+        "live_runtime": _snapshot_metadata(
+            "live_runtime",
+            source_signature=hashlib.sha1(json.dumps(codex_status, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest(),
+            source_cursor=live_runtime_cursor,
+            state_origin="process",
+            generated_at=generated_at,
+            content_signature=content_signature,
+        ),
+        "cache_view": _snapshot_metadata(
+            "cache_view",
+            source_signature=content_signature,
+            source_cursor=cache_view_cursor,
+            state_origin="cache_view",
+            generated_at=generated_at,
+            content_signature=content_signature,
+            detail_signature=_detail_signature(content_signature, codex_status),
+        ),
+    }
 
 
 def _detail_perf_log(project: ProjectContext, event_type: str, details: dict[str, Any]) -> None:
@@ -959,17 +1093,44 @@ def history_payload(context: ProjectContext) -> dict[str, Any]:
         "test_runs": read_jsonl_tail(context.paths.logs_dir / "test_runs.jsonl", 20),
         **_flow_svg_payload(context),
     }
+    payload.update(
+        _snapshot_metadata(
+            "event_derived",
+            source_signature=_event_derived_source_signature(context),
+            source_cursor={
+                "ui_events": _path_signature(context.paths.ui_event_log_file),
+                "blocks": _path_signature(context.paths.block_log_file),
+                "passes": _path_signature(context.paths.pass_log_file),
+                "test_runs": _path_signature(context.paths.logs_dir / "test_runs.jsonl"),
+            },
+            state_origin="events",
+        )
+    )
     return _store_section_payload(cache_key, signature, payload)
 
 
 def history_payload_from_snapshot(context: ProjectContext, snapshot: DetailLogSnapshot) -> dict[str, Any]:
-    return {
+    payload = {
         "ui_events": list(snapshot.ui_events),
         "blocks": list(snapshot.blocks),
         "passes": list(snapshot.passes),
         "test_runs": list(snapshot.test_runs),
         **_flow_svg_payload(context),
     }
+    payload.update(
+        _snapshot_metadata(
+            "event_derived",
+            source_signature=_event_derived_source_signature(context),
+            source_cursor={
+                "ui_events": len(snapshot.ui_events),
+                "blocks": len(snapshot.blocks),
+                "passes": len(snapshot.passes),
+                "test_runs": len(snapshot.test_runs),
+            },
+            state_origin="events",
+        )
+    )
+    return payload
 
 
 def checkpoint_payload(context: ProjectContext) -> dict[str, Any]:
@@ -1040,13 +1201,36 @@ def checkpoint_payload_from_blocks(
         )
     if pending is not None and pending.get("status") != "awaiting_review" and waiting_for_approval:
         pending["status"] = "awaiting_review"
-    return {
+    payload = {
         "items": checkpoints,
         "pending": pending,
         "current_checkpoint_id": active_checkpoint_id,
         "current_checkpoint_lineage_id": active_checkpoint_lineage_id,
         "timeline_markdown": checkpoint_timeline_markdown([Checkpoint.from_dict(item) for item in checkpoints]),
     }
+    payload.update(
+        _snapshot_metadata(
+            "cache_view",
+            source_signature="|".join(
+                (
+                    _path_signature(context.paths.checkpoint_state_file),
+                    _path_signature(context.paths.block_log_file),
+                    _path_signature(context.paths.loop_state_file),
+                )
+            ),
+            source_cursor={
+                "checkpoint_state": _path_signature(context.paths.checkpoint_state_file),
+                "block_log": _path_signature(context.paths.block_log_file),
+                "loop_state": _path_signature(context.paths.loop_state_file),
+                "checkpoint_count": len(checkpoints),
+                "pending_checkpoint_id": active_checkpoint_id,
+                "pending_checkpoint_lineage_id": active_checkpoint_lineage_id,
+                "approval_requested": waiting_for_approval,
+            },
+            state_origin="disk",
+        )
+    )
+    return payload
 
 
 def pending_checkpoint_payload(context: ProjectContext) -> dict[str, Any] | None:
@@ -1107,25 +1291,76 @@ def pending_checkpoint_payload(context: ProjectContext) -> dict[str, Any] | None
         )
     if pending is not None and pending.get("status") != "awaiting_review":
         pending["status"] = "awaiting_review"
+        pending.update(
+            _snapshot_metadata(
+                "cache_view",
+                source_signature="|".join(
+                    (
+                        _path_signature(context.paths.checkpoint_state_file),
+                        _path_signature(context.paths.block_log_file),
+                        _path_signature(context.paths.loop_state_file),
+                    )
+                ),
+                source_cursor={
+                    "checkpoint_state": _path_signature(context.paths.checkpoint_state_file),
+                    "block_log": _path_signature(context.paths.block_log_file),
+                    "loop_state": _path_signature(context.paths.loop_state_file),
+                    "checkpoint_id": active_checkpoint_id,
+                    "checkpoint_lineage_id": active_checkpoint_lineage_id,
+                    "approval_requested": True,
+                },
+                state_origin="disk",
+            )
+        )
     return pending
 
 
 def config_payload(context: ProjectContext) -> dict[str, Any]:
-    return {
+    payload = {
         "metadata_json": safe_json(context.paths.metadata_file, default={}) or {},
         "runtime_json": safe_json(context.paths.project_config_file, default={}) or {},
         "loop_state_json": safe_json(context.paths.loop_state_file, default={}) or {},
         "run_control_json": safe_json(context.paths.ui_control_file, default={}) or {},
     }
+    payload.update(
+        _snapshot_metadata(
+            "persisted_state",
+            source_signature=_persisted_state_source_signature(context),
+            source_cursor={
+                "metadata": _path_signature(context.paths.metadata_file),
+                "runtime": _path_signature(context.paths.project_config_file),
+                "loop_state": _path_signature(context.paths.loop_state_file),
+                "run_control": _path_signature(context.paths.ui_control_file),
+            },
+            state_origin="disk",
+        )
+    )
+    return payload
 
 
 def config_payload_from_snapshot(context: ProjectContext, snapshot: DetailLogSnapshot) -> dict[str, Any]:
-    return {
+    payload = {
         "metadata_json": safe_json(context.paths.metadata_file, default={}) or {},
         "runtime_json": safe_json(context.paths.project_config_file, default={}) or {},
         "loop_state_json": snapshot.loop_state_json,
         "run_control_json": snapshot.run_control_json,
     }
+    payload.update(
+        _snapshot_metadata(
+            "persisted_state",
+            source_signature=_persisted_state_source_signature(context),
+            source_cursor={
+                "metadata": _path_signature(context.paths.metadata_file),
+                "runtime": _path_signature(context.paths.project_config_file),
+                "loop_state": _path_signature(context.paths.loop_state_file),
+                "run_control": _path_signature(context.paths.ui_control_file),
+                "snapshot_loop_state": bool(snapshot.loop_state_json),
+                "snapshot_run_control": bool(snapshot.run_control_json),
+            },
+            state_origin="disk",
+        )
+    )
+    return payload
 
 
 def _load_detail_log_snapshot(context: ProjectContext) -> DetailLogSnapshot:
@@ -1462,6 +1697,8 @@ def _build_project_detail_base_payload(
     project: ProjectContext,
     normalized_detail_level: str,
     load_run_control: Callable[[ProjectContext], dict[str, Any]],
+    *,
+    content_signature: str,
 ) -> dict[str, Any]:
     plan_state = orchestrator.load_execution_plan_state(project)
     current_status = effective_project_status(project.metadata.current_status, plan_state, project.loop_state)
@@ -1554,6 +1791,14 @@ def _build_project_detail_base_payload(
     )
     if isinstance(bottom_panels.get("git_status"), dict):
         bottom_panels["git_status"]["current_status"] = current_status
+    generated_at = now_utc_iso()
+    snapshot_sources = _project_detail_snapshot_sources(
+        project,
+        normalized_detail_level=normalized_detail_level,
+        content_signature=content_signature,
+        codex_status={},
+        generated_at=generated_at,
+    )
     project_payload = project.metadata.to_dict()
     project_payload["current_status"] = current_status
     snapshot = {
@@ -1569,6 +1814,29 @@ def _build_project_detail_base_payload(
         "run_control": control,
         "latest_block": latest_block,
         "latest_pass": latest_pass,
+        "snapshot_kind": "cache_view",
+        "snapshot_epoch": _snapshot_epoch_ms(),
+        "snapshot_id": _snapshot_metadata(
+            "cache_view",
+            source_signature=content_signature,
+            source_cursor={
+                "detail_level": normalized_detail_level,
+                "project_root": str(project.paths.project_root),
+                "repo_id": project.metadata.repo_id,
+            },
+            state_origin="cache_view",
+            generated_at=generated_at,
+            content_signature=content_signature,
+        )["snapshot_id"],
+        "generated_at": generated_at,
+        "state_origin": "cache_view",
+        "source_signature": content_signature,
+        "source_cursor": {
+            "detail_level": normalized_detail_level,
+            "project_root": str(project.paths.project_root),
+            "repo_id": project.metadata.repo_id,
+        },
+        "snapshot_sources": snapshot_sources,
     }
     return {
         "detail_level": normalized_detail_level,
@@ -1599,6 +1867,7 @@ def _build_project_detail_base_payload(
         "checkpoints": checkpoints,
         "config": config,
         "chat": chat,
+        "snapshot_sources": snapshot_sources,
         "files": {
             "project_root": str(project.paths.project_root),
             "repo_dir": str(project.paths.repo_dir),
@@ -1686,7 +1955,13 @@ def _cached_project_detail_base_payload(
             return _clone_cached_detail_payload(payload), content_signature, True, timings
     timings["cache_lookup_ms"] = round((perf_counter() - cache_lookup_started_at) * 1000.0, 3)
     base_build_started_at = perf_counter()
-    payload = _build_project_detail_base_payload(orchestrator, project, normalized_detail_level, load_run_control)
+    payload = _build_project_detail_base_payload(
+        orchestrator,
+        project,
+        normalized_detail_level,
+        load_run_control,
+        content_signature=content_signature,
+    )
     timings["base_build_ms"] = round((perf_counter() - base_build_started_at) * 1000.0, 3)
     payload["content_signature"] = content_signature
     payload["payload_cache_hit"] = False
@@ -1721,9 +1996,41 @@ def _finalize_project_detail_payload(
     payload["content_signature"] = content_signature
     payload["detail_signature"] = _detail_signature(content_signature, codex_status)
     payload["payload_cache_hit"] = payload_cache_hit
+    snapshot_sources = payload.get("snapshot_sources")
+    if not isinstance(snapshot_sources, dict):
+        snapshot_sources = {}
+    snapshot_sources = deepcopy(snapshot_sources)
+    snapshot_sources["live_runtime"] = _snapshot_metadata(
+        "live_runtime",
+        source_signature=hashlib.sha1(json.dumps(codex_status, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest(),
+        source_cursor={
+            "codex_status_keys": sorted(codex_status.keys()) if isinstance(codex_status, dict) else [],
+            "provider_statuses_keys": sorted((codex_status.get("provider_statuses") or {}).keys())
+            if isinstance(codex_status, dict) and isinstance(codex_status.get("provider_statuses"), dict)
+            else [],
+        },
+        state_origin="process",
+        generated_at=payload.get("generated_at") if isinstance(payload.get("generated_at"), str) else None,
+        content_signature=content_signature,
+        detail_signature=payload["detail_signature"],
+    )
+    payload["snapshot_sources"] = snapshot_sources
     snapshot = payload.get("snapshot")
     if isinstance(snapshot, dict):
         snapshot["codex_status"] = codex_status
+        snapshot["snapshot_kind"] = "cache_view"
+        snapshot["snapshot_id"] = _snapshot_metadata(
+            "cache_view",
+            source_signature=content_signature,
+            source_cursor=snapshot.get("source_cursor", {}),
+            state_origin="cache_view",
+            generated_at=snapshot.get("generated_at") if isinstance(snapshot.get("generated_at"), str) else None,
+            content_signature=content_signature,
+            detail_signature=payload["detail_signature"],
+        )["snapshot_id"]
+        snapshot["detail_signature"] = payload["detail_signature"]
+        snapshot["snapshot_sources"] = snapshot_sources
+        snapshot["live_runtime_snapshot"] = snapshot_sources["live_runtime"]
     bottom_panels = payload.get("bottom_panels")
     if isinstance(bottom_panels, dict):
         bottom_panels["codex_status"] = codex_status
