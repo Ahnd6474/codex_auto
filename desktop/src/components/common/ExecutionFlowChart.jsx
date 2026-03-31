@@ -429,9 +429,11 @@ function effectiveChartStepStatus(step = null, projectStatus = "", activeLineage
   return currentStatus;
 }
 
-function buildChartData(steps = [], projectStatus = "", language = "en", activeLineageId = "", checkpointState = null, checkpointFamily = "") {
+function buildChartData(steps = [], projectStatus = "", language = "en", activeLineageId = "", checkpointState = null, checkpointFamily = "", statusSteps = []) {
   const statusByStepId = new Map();
   const statusByLineageId = new Map();
+  const liveStatusByStepId = new Map();
+  const liveStatusByLineageId = new Map();
   const registerStatus = (key, status) => {
     const normalizedKey = String(key || "").trim();
     const normalizedStatus = String(status || "").trim().toLowerCase();
@@ -448,6 +450,34 @@ function buildChartData(steps = [], projectStatus = "", language = "en", activeL
     }
     statusByLineageId.set(normalizedKey, normalizedStatus);
   };
+  const registerLiveStatus = (key, status) => {
+    const normalizedKey = String(key || "").trim();
+    const normalizedStatus = String(status || "").trim().toLowerCase();
+    if (!normalizedKey || !normalizedStatus) {
+      return;
+    }
+    liveStatusByStepId.set(normalizedKey, normalizedStatus);
+  };
+  const registerLiveLineageStatus = (key, status) => {
+    const normalizedKey = String(key || "").trim();
+    const normalizedStatus = String(status || "").trim().toLowerCase();
+    if (!normalizedKey || !normalizedStatus) {
+      return;
+    }
+    liveStatusByLineageId.set(normalizedKey, normalizedStatus);
+  };
+  const liveSteps = Array.isArray(statusSteps) ? statusSteps : [];
+  for (const item of liveSteps) {
+    const itemStatus = String(item?.status || "").trim().toLowerCase();
+    const stepId = String(item?.step_id || "").trim();
+    const lineageId = String(item?.metadata?.lineage_id || item?.lineage_id || "").trim();
+    if (stepId) {
+      registerLiveStatus(stepId, itemStatus);
+    }
+    if (lineageId) {
+      registerLiveLineageStatus(lineageId, itemStatus);
+    }
+  }
   const checkpointItems = Array.isArray(checkpointState?.items) ? checkpointState.items : [];
   for (const item of checkpointItems) {
     const itemStatus = String(item?.status || "").trim().toLowerCase();
@@ -480,10 +510,15 @@ function buildChartData(steps = [], projectStatus = "", language = "en", activeL
   return {
     ...topology,
     nodes: topology.nodes.map((node) => {
-      const stepStatus = effectiveChartStepStatus(node.step, projectStatus, activeLineageId, checkpointLookup, checkpointFamily);
+      const liveStatus =
+        liveStatusByStepId.get(String(node.step?.step_id || "").trim())
+        || liveStatusByLineageId.get(String(node.step?.metadata?.lineage_id || "").trim())
+        || "";
+      const renderedStep = liveStatus ? { ...node.step, status: liveStatus } : node.step;
+      const stepStatus = effectiveChartStepStatus(renderedStep, projectStatus, activeLineageId, checkpointLookup, checkpointFamily);
       const tone = statusTone(stepStatus);
       const palette = PALETTE[tone] || PALETTE.neutral;
-      const failureReason = failureReasonLabel(node.step, language);
+      const failureReason = failureReasonLabel(renderedStep, language);
       return {
         ...node,
         stepStatus,
@@ -491,7 +526,7 @@ function buildChartData(steps = [], projectStatus = "", language = "en", activeL
         palette,
         detailLines: wrapChartText(
           String(stepStatus || "").trim().toLowerCase().includes("failed")
-            ? failureReason || node.step.notes || node.detailSource
+            ? failureReason || renderedStep.notes || node.detailSource
             : node.detailSource,
           28,
           2,
@@ -514,8 +549,9 @@ function ExecutionFlowChartComponent({ steps = [], detail = null, activeJob = nu
       String(executionState.checkpointExecutionState?.currentCheckpointLineageId || executionState.checkpointPending?.lineage_id || "").trim(),
       executionState.checkpointExecutionState,
       executionState.checkpointFamily,
+      Array.isArray(detail?.plan?.steps) ? detail.plan.steps : [],
     ),
-    [steps, executionState.displayStatusValue, language, executionState.checkpointExecutionState, executionState.checkpointFamily, executionState.checkpointPending?.lineage_id],
+    [steps, detail?.plan?.steps, executionState.displayStatusValue, language, executionState.checkpointExecutionState, executionState.checkpointFamily, executionState.checkpointPending?.lineage_id],
   );
 
   if (!steps.length) {

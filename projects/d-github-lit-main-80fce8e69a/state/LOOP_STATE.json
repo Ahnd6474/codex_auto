@@ -7,7 +7,7 @@
   },
   "current_checkpoint_id": null,
   "current_safe_revision": null,
-  "current_task": "ST4",
+  "current_task": null,
   "last_block_completed_at": null,
   "last_candidates": [],
   "last_commit_hash": null,

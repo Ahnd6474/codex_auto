@@ -1235,6 +1235,48 @@ test("ExecutionFlowChart uses checkpoint failure state for the active lineage in
   assert.doesNotMatch(html, /Success/);
 });
 
+test("ExecutionFlowChart prefers live plan status over stale step props when the project is not running", async () => {
+  const html = await renderBundledComponent(
+    "execution-flow-chart-live-plan-status-render",
+    "./src/components/common/ExecutionFlowChart.jsx",
+    "ExecutionFlowChart",
+    {
+      detail: {
+        project: {
+          current_status: "failed",
+        },
+        plan: {
+          steps: [
+            { step_id: "ST4", title: "Reconcile", status: "failed", metadata: { lineage_id: "" } },
+            { step_id: "ST5", title: "Complete", status: "failed", metadata: { lineage_id: "LN3" } },
+          ],
+        },
+        checkpoints: {
+          items: [],
+          pending: null,
+        },
+        loop_state: {
+          current_checkpoint_id: null,
+          current_checkpoint_lineage_id: null,
+          pending_checkpoint_approval: false,
+        },
+      },
+      activeJob: null,
+      steps: [
+        { step_id: "ST4", title: "Reconcile", status: "running", metadata: { lineage_id: "" } },
+        { step_id: "ST5", title: "Complete", status: "running", metadata: { lineage_id: "LN3" } },
+      ],
+      selectedStepId: "ST4",
+      language: "en",
+      onSelectStep: noop,
+    },
+  );
+
+  assert.match(html, /<tspan[^>]*>ST4<\/tspan>[\s\S]*?<tspan[^>]*>Failed<\/tspan>/);
+  assert.match(html, /<tspan[^>]*>ST5<\/tspan>[\s\S]*?<tspan[^>]*>Failed<\/tspan>/);
+  assert.doesNotMatch(html, /<tspan[^>]*>ST4<\/tspan>[\s\S]*?<tspan[^>]*>Running<\/tspan>/);
+});
+
 test("ExecutionFlowChart follows checkpoint plan refs so sibling steps do not inherit the active step status", async () => {
   const html = await renderBundledComponent(
     "execution-flow-chart-checkpoint-plan-refs-render",

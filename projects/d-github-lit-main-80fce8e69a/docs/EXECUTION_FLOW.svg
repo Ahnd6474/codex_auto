@@ -1,4 +1,4 @@
-<!-- execution-flow-signature:f1d9616ba2563672b0b3997b5c702c2331b88e24 -->
+<!-- execution-flow-signature:ec79705f3ad349294dc30bfa176649c18510d674 -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1336" height="500" viewBox="0 0 1336 500" role="img">
 <rect width="100%" height="100%" fill="#f8fafc" />
 <defs><marker id="flow-arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8" /></marker></defs>
@@ -31,11 +31,11 @@
 <text x="406" y="286" fill="#ecfeff" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="13">Materialize<tspan x="406" dy="16">Multi-Workspace Lineages</tspan></text>
 <text x="406" y="320" fill="#ecfeff" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="11">Replace the<tspan x="406" dy="14">single-working-tree model...</tspan></text>
 <text x="406" y="358" fill="#ecfeff" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="11">completed</text>
-<rect x="728" y="72" rx="20" ry="20" width="220" height="136" fill="#1d4ed8" />
-<text x="746" y="98" fill="#eff6ff" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="14" font-weight="700">ST4</text>
-<text x="746" y="120" fill="#eff6ff" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="13">Reconcile Automation And<tspan x="746" dy="16">Workspace Foundations</tspan></text>
-<text x="746" y="154" fill="#eff6ff" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="11">Reconcile the automation and<tspan x="746" dy="14">workspace foundations aft...</tspan></text>
-<text x="746" y="192" fill="#eff6ff" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="11">running</text>
+<rect x="728" y="72" rx="20" ry="20" width="220" height="136" fill="#b91c1c" />
+<text x="746" y="98" fill="#fef2f2" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="14" font-weight="700">ST4</text>
+<text x="746" y="120" fill="#fef2f2" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="13">Reconcile Automation And<tspan x="746" dy="16">Workspace Foundations</tspan></text>
+<text x="746" y="154" fill="#fef2f2" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="11">Reconcile the automation and<tspan x="746" dy="14">workspace foundations aft...</tspan></text>
+<text x="746" y="192" fill="#fef2f2" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="11">failed</text>
 <rect x="1068" y="72" rx="20" ry="20" width="220" height="136" fill="#b91c1c" />
 <text x="1086" y="98" fill="#fef2f2" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="14" font-weight="700">ST5</text>
 <text x="1086" y="120" fill="#fef2f2" font-family="Segoe UI, Malgun Gothic, sans-serif" font-size="13">Complete Workflow<tspan x="1086" dy="16">Runtime And Git Bridg...</tspan></text>

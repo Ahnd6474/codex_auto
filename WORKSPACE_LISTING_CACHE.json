@@ -1,5 +1,5 @@
 {
-  "content_signature": "cc39492079979fc638c245a92c3151ca8a96a583",
+  "content_signature": "0c9dc166caee5c38175ee1d14f9c4bd765affb3b",
   "payload": {
     "history": [],
     "projects": [
@@ -12,28 +12,28 @@
         "created_at": "2026-03-30T14:02:17+00:00",
         "detail": "Branch main",
         "display_name": "lit",
-        "last_run_at": null,
+        "last_run_at": "2026-03-31T10:45:00+00:00",
         "origin_url": null,
-        "progress": "Completed 3/5 steps, running: ST4",
+        "progress": "Completed 3/5 steps, pending: ST4",
         "repo_id": "80fce8e69a25273566bed3c6733740b589b26d4a",
         "repo_path": "D:\\GitHub\\lit",
         "slug": "d-github-lit-main-80fce8e69a",
         "stats": {
           "completed_steps": 3,
-          "failed_steps": 1,
+          "failed_steps": 2,
           "remaining_steps": 2,
-          "running_steps": 1,
+          "running_steps": 0,
           "total_steps": 5
         },
-        "status": "running:st4",
-        "summary": "Name: lit\nDirectory: D:\\GitHub\\lit\nGitHub: Not connected\nBranch: main\nStatus: running:st4\nWorkflow: standard\nModel: auto  (medium) [OpenAI / Codex Cloud]\nVerification: python -m pytest\nRemaining Steps: ST4, ST5\nCloseout: not_started\nPlan Title: lit automation substrate upgrade\nRecent Blocks: failed, completed, failed"
+        "status": "failed",
+        "summary": "Name: lit\nDirectory: D:\\GitHub\\lit\nGitHub: Not connected\nBranch: main\nStatus: failed\nWorkflow: standard\nModel: auto  (medium) [OpenAI / Codex Cloud]\nVerification: python -m pytest\nRemaining Steps: ST4, ST5\nCloseout: not_started\nPlan Title: lit automation substrate upgrade\nLast Run: 2026-03-31T10:45:00+00:00\nRecent Blocks: failed, completed, failed"
       }
     ],
     "workspace": {
-      "failed": 0,
+      "failed": 1,
       "project_count": 1,
       "ready_like": 0,
-      "running": 1
+      "running": 0
     }
   },
   "version": 1
