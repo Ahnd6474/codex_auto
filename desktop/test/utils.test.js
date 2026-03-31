@@ -2431,8 +2431,10 @@ test("toolbarProgressCaptionDisplay shows planning progress while plan generatio
   );
 });
 
-test("canEditStep only allows pending steps when the controller is idle", () => {
+test("canEditStep allows pending, failed, and paused steps when the controller is idle", () => {
   assert.equal(canEditStep({ status: "pending" }, false), true);
+  assert.equal(canEditStep({ status: "failed" }, false), true);
+  assert.equal(canEditStep({ status: "paused" }, false), true);
   assert.equal(canEditStep({ status: "completed" }, false), false);
   assert.equal(canEditStep({ status: "pending" }, true), false);
   assert.equal(canEditStep(null, false), false);

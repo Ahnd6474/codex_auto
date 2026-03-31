@@ -3,8 +3,6 @@ import { useI18n } from "../../i18n";
 import {
   applyProviderDefaults,
   applyProjectModelSelection,
-  AUTO_REASONING_OPTION,
-  MODEL_REASONING_OPTIONS,
   defaultProviderApiKeyEnv,
   defaultProviderBaseUrl,
   modelDisplayName,
@@ -14,6 +12,7 @@ import {
   providerStatusReason,
   programSettingsAllowsModelSlugInput,
   reasoningEffortLabel,
+  resolveRuntimeModelSelectionState,
 } from "../../utils";
 
 function ConfigHeaderIcon() {
@@ -177,22 +176,15 @@ export const ConfigEditorView = memo(function ConfigEditorView({
   const liveRuntimeEditable = isRunning;
   const autoParallelWorkers = String(runtime.parallel_worker_mode || "auto").trim().toLowerCase() !== "manual";
   const selectedProvider = normalizedModelProvider(runtime);
-  const visibleModels = (modelCatalog || []).filter(
-    (item) => item && item.model && !item.hidden && String(item.model).trim().toLowerCase() !== "auto",
-  );
-  const selectedModel = String(runtime.model_slug_input || runtime.model || "").trim();
-  const selectedReasoning = String(runtime.effort_selection_mode || "").trim().toLowerCase() === AUTO_REASONING_OPTION
-    ? AUTO_REASONING_OPTION
-    : String(runtime.effort || "medium").trim().toLowerCase() || "medium";
-  const reasoningOptions = MODEL_REASONING_OPTIONS;
-  const executionModel = String(runtime.execution_model || "").trim();
-  const executionModelOptions = visibleModels.filter(
-    (item) => item && item.model && !item.hidden && String(item.model).trim().toLowerCase() !== "auto",
-  );
+  const selectionState = resolveRuntimeModelSelectionState(runtime, modelCatalog);
+  const visibleModels = selectionState.visibleModels;
+  const selectedModel = selectionState.selectedModel;
+  const selectedReasoning = selectionState.selectedReasoning;
+  const reasoningOptions = selectionState.reasoningOptions;
+  const executionModel = selectionState.selectedExecutionModel;
+  const executionModelOptions = visibleModels;
   const selectedExecutionModel = executionModel || "";
-  const selectedExecutionModelVisible = executionModelOptions.some(
-    (item) => String(item.model || "").trim().toLowerCase() === selectedExecutionModel.toLowerCase(),
-  );
+  const selectedExecutionModelVisible = selectionState.selectedExecutionModelVisible;
   const activeCategory = PROVIDER_CATEGORIES.find((category) => (
     category.providers.some((provider) => provider.value === selectedProvider)
   ))?.key || "closed";

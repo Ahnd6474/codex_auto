@@ -830,6 +830,93 @@ test("ParallelRunControlView treats closeout as editable and exposes all model c
   assert.doesNotMatch(html, /Report Formats/);
 });
 
+test("ParallelRunControlView keeps paused steps editable after execution is stopped", async () => {
+  const html = await renderBundledComponent(
+    "parallel-run-control-paused-step-editable-render",
+    "./src/components/views/ParallelRunControlView.jsx",
+    "ParallelRunControlView",
+    {
+      detail: {
+        project: {
+          current_status: "plan_ready",
+        },
+        runtime: {
+          execution_mode: "parallel",
+          model_provider: "openai",
+          model: "gpt-5.4",
+          execution_model: "gpt-5.4",
+          effort: "high",
+        },
+        runtime_insights: {
+          execution: {
+            remaining_seconds: 0,
+          },
+          parallel: {
+            recommended_workers: 1,
+            cpu_parallel_limit: 4,
+            cpu_logical_count: 16,
+            memory_parallel_limit: 4,
+            memory_available_bytes: 8589934592,
+          },
+        },
+        checkpoints: {
+          items: [],
+          pending: null,
+        },
+      },
+      planDraft: {
+        project_prompt: "Ship the UI",
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [
+          {
+            step_id: "ST1",
+            title: "Plan",
+            display_description: "Prepare the flow",
+            codex_description: "Prepare the flow",
+            success_criteria: "Flow exists",
+            reasoning_effort: "medium",
+            status: "completed",
+          },
+          {
+            step_id: "ST2",
+            title: "Build",
+            display_description: "Build the screen",
+            codex_description: "Build the screen",
+            success_criteria: "Screen renders",
+            reasoning_effort: "high",
+            status: "paused",
+          },
+        ],
+      },
+      activeJob: null,
+      autoRunAfterPlan: false,
+      selectedStepId: "ST2",
+      busy: false,
+      onPromptChange: noop,
+      onGeneratePlan: noop,
+      onSavePlan: noop,
+      onResetPlan: noop,
+      onRunPlan: noop,
+      onRequestStop: noop,
+      onAutoRunAfterPlanChange: noop,
+      onSelectStep: noop,
+      onUpdateStepField: noop,
+      onSaveStepLocal: noop,
+      onAddStep: noop,
+      onDeleteStep: noop,
+      modelCatalog: [
+        { model: "gpt-5.4", display_name: "GPT-5.4", provider: "openai" },
+      ],
+    },
+  );
+
+  assert.match(html, /value="Build"/);
+  assert.doesNotMatch(html, /<label class="field field--wide"><span>Title<\/span><input[^>]*value="Build"[^>]*disabled=""/);
+  assert.doesNotMatch(html, /<label class="field"><span>Deadline<\/span><input[^>]*disabled=""/);
+  assert.doesNotMatch(html, /<select[^>]*disabled=""/);
+});
+
 test("CenterWorkspace upgrades legacy serial plans into the parallel execution tree view", async () => {
   const html = await renderBundledComponent(
     "center-workspace-render",

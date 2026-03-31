@@ -59,7 +59,7 @@ def source_prompt_template_path(name: str) -> Path:
 
 @lru_cache(maxsize=None)
 def load_source_prompt_template(name: str) -> str:
-    return source_prompt_template_path(name).read_text(encoding="utf-8")
+    return read_text(source_prompt_template_path(name))
 
 
 def _normalize_execution_mode(value: str | None) -> str:

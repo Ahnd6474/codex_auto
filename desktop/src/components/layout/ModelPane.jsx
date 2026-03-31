@@ -1,12 +1,11 @@
 import { useI18n } from "../../i18n";
 import {
-  AUTO_REASONING_OPTION,
   applyConfigRuntimeModelSelection,
   applyProviderDefaults,
-  MODEL_REASONING_OPTIONS,
   MODEL_PROVIDER_OPTIONS,
   normalizedModelProvider,
   providerSupportsCatalog,
+  resolveRuntimeModelSelectionState,
   runtimeSummary,
 } from "../../utils";
 
@@ -39,12 +38,11 @@ export function ModelPane({ form, modelPresets, modelCatalog, onChangeForm, onHi
   const runtime = form?.runtime || {};
   const selectedProvider = normalizedModelProvider(runtime);
   const providerHasCatalog = providerSupportsCatalog(selectedProvider);
-  const visibleModels = (modelCatalog || []).filter((item) => item && item.model && !item.hidden && String(item.model).trim().toLowerCase() !== "auto");
-  const selectedModel = String(runtime.model_slug_input || runtime.model || "").trim();
-  const selectedEffort = String(runtime.effort_selection_mode || "").trim().toLowerCase() === AUTO_REASONING_OPTION
-    ? AUTO_REASONING_OPTION
-    : String(runtime.effort || "medium").trim().toLowerCase() || "medium";
-  const reasoningOptions = MODEL_REASONING_OPTIONS;
+  const selectionState = resolveRuntimeModelSelectionState(runtime, modelCatalog);
+  const visibleModels = selectionState.visibleModels;
+  const selectedModel = selectionState.selectedModel;
+  const selectedEffort = selectionState.selectedReasoning;
+  const reasoningOptions = selectionState.reasoningOptions;
 
   function applyModelChange(nextModel) {
     if (!form) return;

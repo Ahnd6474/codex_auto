@@ -2308,7 +2308,12 @@ export function clampReasoningEffort(modelCatalog = [], model = "", requestedEff
   return defaultReasoningOption(modelCatalog, model, fallback);
 }
 
-export function applyConfigRuntimeModelSelection(currentRuntime = {}, modelCatalog = [], nextModel = "", nextEffort = null) {
+function normalizeModelSelectionMode(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "codex" ? "codex" : "slug";
+}
+
+export function resolveRuntimeModelSelectionState(currentRuntime = {}, modelCatalog = [], nextModel = "", nextEffort = null) {
   const model = String(nextModel || "").trim()
     || defaultModelForRuntime(modelCatalog, currentRuntime)
     || defaultModelForProvider(currentRuntime?.model_provider || "openai", currentRuntime)
@@ -2319,40 +2324,50 @@ export function applyConfigRuntimeModelSelection(currentRuntime = {}, modelCatal
   const selection = supported.includes(preferred) ? preferred : supported[0] || "medium";
   const effort = selection === AUTO_REASONING_OPTION ? defaultReasoningOption(modelCatalog, model, currentRuntime?.effort || "medium") : selection;
   const planningEffort = clampReasoningEffort(modelCatalog, model, currentRuntime?.planning_effort || effort, effort);
-  return {
+  const visibleModels = filterModelCatalogByProvider(modelCatalog, currentRuntime).filter(
+    (item) => item && item.model && !item.hidden && String(item.model).trim().toLowerCase() !== "auto",
+  );
+  const executionModel = String(
+    currentRuntime?.execution_model
+      || currentRuntime?.model_slug_input
+      || currentRuntime?.model
+      || "",
+  ).trim();
+  const runtime = {
     ...currentRuntime,
     model,
-    execution_model: model,
     effort,
     planning_effort: planningEffort,
     effort_selection_mode: selection === AUTO_REASONING_OPTION ? AUTO_REASONING_OPTION : "explicit",
     model_preset: normalizedModel === "auto" ? (selection === AUTO_REASONING_OPTION ? "auto" : selection) : "",
-    model_selection_mode: "slug",
+    model_selection_mode: normalizeModelSelectionMode(currentRuntime?.model_selection_mode),
     model_slug_input: model,
+  };
+  return {
+    runtime,
+    model,
+    selectedModel: model,
+    selectedReasoning: selection,
+    reasoningOptions: configReasoningOptions(modelCatalog, model, currentRuntime?.effort || "medium"),
+    visibleModels,
+    executionModel,
+    selectedExecutionModel: executionModel,
+    selectedExecutionModelVisible: Boolean(executionModel)
+      ? visibleModels.some((item) => String(item.model || "").trim().toLowerCase() === executionModel.toLowerCase())
+      : false,
+  };
+}
+
+export function applyConfigRuntimeModelSelection(currentRuntime = {}, modelCatalog = [], nextModel = "", nextEffort = null) {
+  const selectionState = resolveRuntimeModelSelectionState(currentRuntime, modelCatalog, nextModel, nextEffort);
+  return {
+    ...selectionState.runtime,
+    execution_model: selectionState.model,
   };
 }
 
 export function applyProjectModelSelection(currentRuntime = {}, modelCatalog = [], nextModel = "", nextEffort = null) {
-  const model = String(nextModel || "").trim()
-    || defaultModelForRuntime(modelCatalog, currentRuntime)
-    || defaultModelForProvider(currentRuntime?.model_provider || "openai", currentRuntime)
-    || "";
-  const normalizedModel = model.toLowerCase();
-  const supported = configReasoningOptions(modelCatalog, model, currentRuntime?.effort || "medium");
-  const preferred = nextEffort || selectedConfigReasoning(modelCatalog, { ...currentRuntime, model });
-  const selection = supported.includes(preferred) ? preferred : supported[0] || "medium";
-  const effort = selection === AUTO_REASONING_OPTION ? defaultReasoningOption(modelCatalog, model, currentRuntime?.effort || "medium") : selection;
-  const planningEffort = clampReasoningEffort(modelCatalog, model, currentRuntime?.planning_effort || effort, effort);
-  return {
-    ...currentRuntime,
-    model,
-    effort,
-    planning_effort: planningEffort,
-    effort_selection_mode: selection === AUTO_REASONING_OPTION ? AUTO_REASONING_OPTION : "explicit",
-    model_preset: normalizedModel === "auto" ? (selection === AUTO_REASONING_OPTION ? "auto" : selection) : "",
-    model_selection_mode: "slug",
-    model_slug_input: model,
-  };
+  return resolveRuntimeModelSelectionState(currentRuntime, modelCatalog, nextModel, nextEffort).runtime;
 }
 
 export function applyChatRuntimeSelectionToProject(currentRuntime = {}, modelCatalog = [], selection = {}, nextEffort = null) {
@@ -2890,7 +2905,10 @@ export function executionProgressCaption(plan, language = "en") {
 
 export function canEditStep(step, busy) {
   const normalizedStatus = String(step?.status || "").trim().toLowerCase();
-  return Boolean(step) && (!isSystemStep(step) || isCloseoutStep(step)) && ["pending", "failed"].includes(normalizedStatus) && !busy;
+  return Boolean(step)
+    && (!isSystemStep(step) || isCloseoutStep(step))
+    && ["pending", "failed", "paused"].includes(normalizedStatus)
+    && !busy;
 }
 
 export function toolbarProgressCaption(plan) {

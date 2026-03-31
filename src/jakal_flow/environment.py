@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from .subprocess_utils import run_subprocess
-from .utils import decode_process_output, write_text
+from .utils import decode_process_output, read_text, write_text
 
 
 VENV_CREATION_TIMEOUT_SECONDS = 300.0
@@ -54,7 +54,7 @@ def ensure_gitignore(project_dir: Path, entries: list[str] | None = None) -> boo
     gitignore_path = project_dir / ".gitignore"
     existing_lines = []
     if gitignore_path.exists():
-        existing_lines = gitignore_path.read_text(encoding="utf-8").splitlines()
+        existing_lines = read_text(gitignore_path).splitlines()
     normalized_existing = {line.strip() for line in existing_lines if line.strip()}
     additions = [entry for entry in entries if entry.strip() and entry.strip() not in normalized_existing]
     if not additions:

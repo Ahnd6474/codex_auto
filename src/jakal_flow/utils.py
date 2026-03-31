@@ -84,7 +84,7 @@ def _atomic_write_bytes(path: Path, content: bytes) -> None:
 
 
 def write_text(path: Path, content: str) -> None:
-    _atomic_write_bytes(path, content.encode("utf-8"))
+  _atomic_write_bytes(path, content.encode("utf-8"))
 
 
 def write_text_if_changed(path: Path, content: str) -> bool:
@@ -100,10 +100,31 @@ def append_text(path: Path, content: str) -> None:
         handle.write(content)
 
 
+def decode_text_bytes(data: bytes) -> str:
+    if not data:
+        return ""
+    preferred_encodings: list[str] = ["utf-8", "utf-8-sig"]
+    locale_encoding = locale.getpreferredencoding(False)
+    if locale_encoding and locale_encoding.lower() not in {"utf-8", "utf8"}:
+        preferred_encodings.append(locale_encoding)
+    for encoding in ("cp949", "cp1252"):
+        if encoding not in preferred_encodings:
+            preferred_encodings.append(encoding)
+    for encoding in preferred_encodings:
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
+
+
 def read_text(path: Path, default: str = "") -> str:
     if not path.exists():
         return default
-    return path.read_text(encoding="utf-8")
+    try:
+        return decode_text_bytes(path.read_bytes())
+    except OSError:
+        return default
 
 
 def write_json(path: Path, data: Any) -> None:
@@ -121,7 +142,10 @@ def write_json_if_changed(path: Path, data: Any) -> bool:
 def read_json(path: Path, default: Any = None) -> Any:
     if not path.exists():
         return default
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return json.loads(read_text(path))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return default
 
 
 def _balanced_json_fragment(text: str, start: int) -> str | None:
@@ -215,7 +239,7 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     entries: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in read_text(path).splitlines():
         payload = _parse_jsonl_line(line)
         if payload is not None:
             entries.append(payload)
@@ -238,9 +262,9 @@ def _iter_jsonl_lines_from_end(path: Path, chunk_size: int = 8192):
             parts = buffer.split(b"\n")
             remainder = parts[0]
             for line in reversed(parts[1:]):
-                yield line.rstrip(b"\r").decode("utf-8")
+                yield decode_text_bytes(line.rstrip(b"\r"))
         if remainder:
-            yield remainder.rstrip(b"\r").decode("utf-8")
+            yield decode_text_bytes(remainder.rstrip(b"\r"))
 
 
 def read_jsonl_tail(path: Path, limit: int) -> list[dict[str, Any]]:
@@ -269,21 +293,7 @@ def read_last_jsonl(path: Path) -> dict[str, Any] | None:
 
 
 def decode_process_output(data: bytes) -> str:
-    if not data:
-        return ""
-    preferred_encodings: list[str] = ["utf-8"]
-    locale_encoding = locale.getpreferredencoding(False)
-    if locale_encoding and locale_encoding.lower() not in {"utf-8", "utf8"}:
-        preferred_encodings.append(locale_encoding)
-    for encoding in ("cp949", "utf-8-sig"):
-        if encoding not in preferred_encodings:
-            preferred_encodings.append(encoding)
-    for encoding in preferred_encodings:
-        try:
-            return data.decode(encoding)
-        except UnicodeDecodeError:
-            continue
-    return data.decode("utf-8", errors="replace")
+    return decode_text_bytes(data)
 
 
 def sanitized_subprocess_env(extra: dict[str, str] | None = None) -> dict[str, str]:
