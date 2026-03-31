@@ -7,7 +7,7 @@
   },
   "current_checkpoint_id": null,
   "current_safe_revision": null,
-  "current_task": null,
+  "current_task": "ST4",
   "last_block_completed_at": null,
   "last_candidates": [],
   "last_commit_hash": null,
@@ -16,5 +16,6 @@
   "repo_id": "80fce8e69a25273566bed3c6733740b589b26d4a",
   "repo_slug": "d-github-lit-main-80fce8e69a",
   "stop_reason": null,
-  "stop_requested": false
+  "stop_requested": false,
+  "current_checkpoint_lineage_id": null
 }
