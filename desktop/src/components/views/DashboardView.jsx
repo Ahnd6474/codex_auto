@@ -240,14 +240,14 @@ export const DashboardView = memo(function DashboardView({ detail, planDraft, mo
           <div className="dashboard-hero__left">
             <div className={`dashboard-hero__dot dashboard-hero__dot--${tone}`} />
             <div>
-              <span className="dashboard-hero__eyebrow">{language === "ko" ? "?꾩옱 ?곹깭" : "Current Status"}</span>
+              <span className="dashboard-hero__eyebrow">{language === "ko" ? "현재 상태" : "Current Status"}</span>
               <strong className="dashboard-hero__status">{activeStatus}</strong>
             </div>
           </div>
           {allSteps.length > 0 ? (
             <div className="dashboard-hero__right">
               <span className="dashboard-hero__progress-label">
-                {stepCounts.completed}/{allSteps.length} {language === "ko" ? "?④퀎 ?꾨즺" : "steps done"}
+                {stepCounts.completed}/{allSteps.length} {language === "ko" ? "단계 완료" : "steps done"}
               </span>
               <ProgressBar completed={stepCounts.completed} total={allSteps.length} tone={tone} />
             </div>
@@ -272,7 +272,7 @@ export const DashboardView = memo(function DashboardView({ detail, planDraft, mo
                 <strong>{t("dashboard.runtime")}</strong>
               </div>
               <div className="dashboard-detail-list">
-                <div className="dashboard-detail-row"><span>{language === "ko" ? "紐⑤뜽" : "Model"}</span><strong>{runtimeSummary(detail?.runtime || {}, modelPresets, language, modelCatalog)}</strong></div>
+                <div className="dashboard-detail-row"><span>{language === "ko" ? "모델" : "Model"}</span><strong>{runtimeSummary(detail?.runtime || {}, modelPresets, language, modelCatalog)}</strong></div>
                 <div className="dashboard-detail-row"><span>{t("field.parallelWorkers")}</span><strong>{parallelLimitValue}</strong></div>
                 <div className="dashboard-detail-row"><span>{t("run.parallelLimit")}</span><strong>{parallelLimitDetails}</strong></div>
                 <div className="dashboard-detail-row"><span>{t("run.estimatedTotal")}</span><strong>{formatDurationCompact(executionEstimate.estimated_total_seconds ?? 0, language)}</strong></div>

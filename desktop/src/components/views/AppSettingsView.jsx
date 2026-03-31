@@ -1,4 +1,4 @@
-import { memo, startTransition, useEffect, useRef, useState } from "react";
+﻿import { memo, startTransition, useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 import {
   applyConfigRuntimeModelSelection,
@@ -22,7 +22,7 @@ import {
   selectedConfigReasoning,
 } from "../../utils";
 
-/* ── Reusable toggle row ── */
+/* ?? Reusable toggle row ?? */
 function ToggleRow({ checked, onChange, disabled, label, hint }) {
   return (
     <label className="toggle-row">
@@ -38,7 +38,7 @@ function ToggleRow({ checked, onChange, disabled, label, hint }) {
   );
 }
 
-/* ── Section icons ── */
+/* ?? Section icons ?? */
 function AppIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none">
@@ -114,7 +114,7 @@ const SETTINGS_TAB_KEYS = new Set(["app", "execution", "dashboard", "share"]);
 const PROVIDER_CATEGORIES = [
   {
     key: "closed",
-    label_ko: "클로즈드",
+    label_ko: "?대줈利덈뱶",
     label_en: "Closed",
     providers: [
       { value: "openai", label: "OpenAI" },
@@ -124,7 +124,7 @@ const PROVIDER_CATEGORIES = [
   },
   {
     key: "opensource",
-    label_ko: "오픈소스",
+    label_ko: "?ㅽ뵂?뚯뒪",
     label_en: "OpenSource",
     providers: [
       { value: "qwen_code", label: "Qwen Code" },
@@ -148,10 +148,10 @@ const PROVIDER_CATEGORIES = [
   },
   {
     key: "ensemble",
-    label_ko: "앙상블",
+    label_ko: "Ensemble",
     label_en: "Ensemble",
     providers: [
-      { value: "ensemble", label: "Claude + GPT Ensemble", label_ko: "Claude + GPT 앙상블" },
+      { value: "ensemble", label: "Claude + GPT Ensemble", label_ko: "Claude + GPT Ensemble" },
     ],
   },
 ];
@@ -199,12 +199,12 @@ export const AppSettingsView = memo(function AppSettingsView({
   const [localDirty, setLocalDirty] = useState(false);
   const lastIncomingSettingsRef = useRef(cloneSettings(settings));
   const lastOutgoingSettingsRef = useRef(cloneSettings(settings));
-  const planningReasoningLabel = language === "ko" ? "계획 추론" : "Planning Reasoning";
+  const planningReasoningLabel = language === "ko" ? "怨꾪쉷 異붾줎" : "Planning Reasoning";
   const settingsTabs = [
-    { key: "app", label: language === "ko" ? "애플리케이션" : "Application" },
-    { key: "execution", label: language === "ko" ? "실행 설정" : "Execution" },
-    { key: "dashboard", label: language === "ko" ? "대시보드" : "Dashboard" },
-    { key: "share", label: language === "ko" ? "공유" : "Share" },
+    { key: "app", label: language === "ko" ? "?좏뵆由ъ??댁뀡" : "Application" },
+    { key: "execution", label: language === "ko" ? "?ㅽ뻾 ?ㅼ젙" : "Execution" },
+    { key: "dashboard", label: "Dashboard" },
+    { key: "share", label: language === "ko" ? "怨듭쑀" : "Share" },
   ];
   const activeShare = shareDetail?.active_session || shareDetail?.project_active_session || null;
   const shareServer = shareDetail?.server || null;
@@ -291,7 +291,7 @@ export const AppSettingsView = memo(function AppSettingsView({
         </div>
       </div>
 
-      {/* ── Sub-category tab bar ── */}
+      {/* ?? Sub-category tab bar ?? */}
       <div className="settings-subtabs">
         {settingsTabs.map((tab) => (
           <button
@@ -307,14 +307,14 @@ export const AppSettingsView = memo(function AppSettingsView({
 
       <div className="form-layout">
 
-        {/* ── Application tab ── */}
+        {/* ?? Application tab ?? */}
         {settingsTab === "app" ? (
         <div className="form-section" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
               icon={<AppIcon />}
               title={t("settings.application")}
-              description={language === "ko" ? "언어, 테마, 개발자 모드" : "Language, theme and developer options"}
+              description={language === "ko" ? "?몄뼱, ?뚮쭏, 媛쒕컻??紐⑤뱶" : "Language, theme and developer options"}
             />
 
             <label className="field" style={{ marginTop: "4px" }}>
@@ -332,14 +332,14 @@ export const AppSettingsView = memo(function AppSettingsView({
               checked={draftSettings.ui_theme === "light"}
               onChange={(event) => updateDraftSettings((current) => ({ ...current, ui_theme: event.target.checked ? "light" : "dark" }))}
               label={t("option.lightMode")}
-              hint={language === "ko" ? "밝은 배경의 라이트 테마로 전환" : "Switch to light background theme"}
+              hint={language === "ko" ? "諛앹? 諛곌꼍???쇱씠???뚮쭏濡??꾪솚" : "Switch to light background theme"}
             />
 
             <ToggleRow
               checked={Boolean(draftSettings.compact_mode)}
               onChange={(event) => updateDraftSettings((current) => ({ ...current, compact_mode: event.target.checked }))}
-              label={language === "ko" ? "컴팩트 모드" : "Compact Mode"}
-              hint={language === "ko" ? "패널 크기와 여백을 줄여 정보 밀도 증가" : "Reduce panel sizes and padding for higher information density"}
+              label={language === "ko" ? "而댄뙥??紐⑤뱶" : "Compact Mode"}
+              hint={language === "ko" ? "?⑤꼸 ?ш린? ?щ갚??以꾩뿬 ?뺣낫 諛??利앷?" : "Reduce panel sizes and padding for higher information density"}
             />
 
             <ToggleRow
@@ -352,7 +352,7 @@ export const AppSettingsView = memo(function AppSettingsView({
                 }))
               }
               label={t("option.developerMode")}
-              hint={language === "ko" ? "리포트 탭 및 추가 디버그 정보 표시" : "Show reports tab and extra debug info"}
+              hint={language === "ko" ? "由ы룷????諛?異붽? ?붾쾭洹??뺣낫 ?쒖떆" : "Show reports tab and extra debug info"}
             />
 
             {Boolean(draftSettings.developer_mode) ? (
@@ -360,21 +360,21 @@ export const AppSettingsView = memo(function AppSettingsView({
                 checked={Boolean(draftSettings.save_project_logs)}
                 onChange={(event) => updateDraftSettings((current) => ({ ...current, save_project_logs: event.target.checked }))}
                 label={t("option.saveProjectLogs")}
-                hint={language === "ko" ? "각 단계의 실행 로그를 파일로 저장" : "Persist execution logs to disk for each step"}
+                hint="Persist execution logs to disk for each step"
               />
             ) : null}
           </div>
         </div>
         ) : null}
 
-        {/* ── Dashboard tab ── */}
+        {/* Dashboard tab */}
         {settingsTab === "dashboard" ? (
         <div className="form-section" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
               icon={<DashboardIcon />}
               title={t("settings.dashboardPreferences")}
-              description={language === "ko" ? "대시보드에 표시할 지표 선택" : "Choose which metrics appear on the dashboard"}
+              description={language === "ko" ? "??쒕낫?쒖뿉 ?쒖떆??吏???좏깮" : "Choose which metrics appear on the dashboard"}
             />
 
             <div className="toggle-grid" style={{ marginTop: "4px" }}>
@@ -406,158 +406,24 @@ export const AppSettingsView = memo(function AppSettingsView({
         </div>
         ) : null}
 
-        {/* ── Execution tab ── */}
+        {/* ?? Execution tab ?? */}
         {settingsTab === "execution" ? (
         <div className="form-section" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
               icon={<ExecutionIcon />}
               title={t("settings.executionDefaults")}
-              description={language === "ko" ? "AI 모델, 병렬 실행, 체크포인트 설정" : "AI model provider, parallel execution and checkpoint settings"}
+              description={language === "ko" ? "병렬 실행과 체크포인트 설정" : "Parallel execution and checkpoint settings"}
             />
 
-            {/* Provider category selector */}
-            <div style={{ marginTop: "10px" }}>
-              <span style={{ fontSize: "11.5px", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>
-                {t("field.modelProvider")}
+                        <div className="info-callout" style={{ marginTop: "10px" }}>
+              <InfoIcon />
+              <span>
+                {language === "ko"
+                  ? "AI 설정은 이제 프로젝트 설정 탭에서 편집합니다."
+                  : "AI settings are now edited in the project settings tab."}
               </span>
-
-              {/* Category tabs */}
-              <div className="provider-category-tabs">
-                {PROVIDER_CATEGORIES.map((cat) => (
-                      <button
-                        key={cat.key}
-                        className={`provider-cat-tab ${activeCategory === cat.key ? "active" : ""}`}
-                        onClick={() => {
-                          const first = cat.providers[0].value;
-                          updateDraftSettings((current) => applyProviderDefaults(current, first));
-                        }}
-                    type="button"
-                    disabled={runtimeBusy}
-                  >
-                    {language === "ko" ? cat.label_ko : cat.label_en}
-                  </button>
-                ))}
-              </div>
-
-              {/* Sub-provider buttons */}
-              {activeCategory !== "ensemble" ? (
-                <div className="provider-sub-grid" style={{ marginTop: "8px" }}>
-                  {activeCategoryConfig.providers.map(({ value, label, label_ko: labelKo }) => {
-                    const installed = providerAvailable(value, codexStatus);
-                    const displayLabel = language === "ko" ? (labelKo || label) : label;
-                    return (
-                      <button
-                        key={value}
-                        className={`provider-sub-card ${selectedProvider === value ? "active" : ""}`}
-                        onClick={() => updateDraftSettings((current) => applyProviderDefaults(current, value))}
-                        type="button"
-                        disabled={runtimeBusy}
-                        title={!installed ? providerStatusReason(value, codexStatus) : undefined}
-                      >
-                        <span className="provider-sub-card__name">{displayLabel}</span>
-                        {!installed ? (
-                          <span className="provider-sub-card__badge">
-                            {language === "ko" ? "미설치" : "not installed"}
-                          </span>
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="provider-ensemble-info" style={{ marginTop: "8px" }}>
-                  <div className="provider-ensemble-badge">
-                    <span>GPT</span>
-                    <span className="provider-ensemble-plus">+</span>
-                    <span>Claude</span>
-                  </div>
-                  <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "6px 0 0" }}>
-                    {language === "ko"
-                      ? "GPT가 계획·실행을 맡고, Claude가 특정 단계를 처리합니다."
-                      : "GPT handles planning and execution. Claude handles specific steps."}
-                  </p>
-                </div>
-              )}
-
-              {providerUnavailable && providerReason ? (
-                <div className="info-callout info-callout--warning" style={{ marginTop: "8px" }}>
-                  <InfoIcon />
-                  <span>{providerReason}</span>
-                </div>
-              ) : null}
             </div>
-
-            {selectedProvider === "oss" ? (
-              <label className="field">
-                <span>{t("field.localProvider")}</span>
-                <select
-                  value={draftSettings.local_model_provider || "ollama"}
-                  onChange={(event) => updateDraftSettings((current) => ({ ...current, local_model_provider: event.target.value }))}
-                  disabled={runtimeBusy}
-                >
-                  <option value="ollama">{t("option.localProviderOllama")}</option>
-                  <option value="lmstudio">{t("option.localProviderLmStudio")}</option>
-                </select>
-              </label>
-            ) : null}
-
-            {selectedProvider !== "oss" && selectedProvider !== "ollama" ? (
-              <label className="field">
-                <span>{t("field.providerBaseUrl")}</span>
-                <input
-                  value={draftSettings.provider_base_url || defaultProviderBaseUrl(draftSettings.model_provider)}
-                  onChange={(event) => updateDraftSettings((current) => ({ ...current, provider_base_url: event.target.value }))}
-                  disabled={runtimeBusy}
-                />
-              </label>
-            ) : null}
-
-            {selectedProvider !== "oss" && selectedProvider !== "ollama" ? (
-              <label className="field">
-                <span>{t("field.providerApiKeyEnv")}</span>
-                <input
-                  value={draftSettings.provider_api_key_env || defaultProviderApiKeyEnv(draftSettings.model_provider)}
-                  onChange={(event) => updateDraftSettings((current) => ({ ...current, provider_api_key_env: event.target.value }))}
-                  disabled={runtimeBusy}
-                />
-                <small className="field-hint">
-                  {language === "ko" ? "해당 환경 변수에 API 키가 저장되어 있어야 합니다." : "The environment variable that holds your API key."}
-                </small>
-              </label>
-            ) : null}
-
-            {programSettingsAllowsModelSlugInput(selectedProvider) ? (
-              <>
-                {visibleModels.length ? (
-                  <label className="field">
-                    <span>{t("field.model")}</span>
-                    <select
-                      value={selectedModel}
-                      onChange={(event) => updateDraftSettings((current) => applyConfigRuntimeModelSelection(current, scopedModelCatalog, event.target.value))}
-                      disabled={runtimeBusy}
-                    >
-                      {visibleModels.map((item) => (
-                        <option key={item.model} value={item.model}>
-                          {item.display_name || item.model}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-
-                <label className="field">
-                  <span>{t("field.customModelSlug")}</span>
-                  <input
-                    value={draftSettings.model_slug_input || draftSettings.model || ""}
-                    onChange={(event) =>
-                      updateDraftSettings((current) => applyConfigRuntimeModelSelection(current, scopedModelCatalog, event.target.value))
-                    }
-                    disabled={runtimeBusy}
-                  />
-                </label>
-              </>
-            ) : null}
 
             {/* 2-col grid for smaller fields */}
             <div className="choice-grid">
@@ -600,38 +466,6 @@ export const AppSettingsView = memo(function AppSettingsView({
               </label>
 
               <label className="field">
-                <span>{t("field.gptReasoning")}</span>
-                <select
-                  value={selectedReasoning}
-                  onChange={(event) =>
-                    updateDraftSettings((current) => applyConfigRuntimeModelSelection(current, scopedModelCatalog, selectedModel, event.target.value))
-                  }
-                  disabled={busy}
-                >
-                  {reasoningOptions.map((effort) => (
-                    <option key={effort} value={effort}>
-                      {reasoningEffortLabel(effort, language)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="field">
-                <span>{planningReasoningLabel}</span>
-                <select
-                  value={draftSettings.planning_effort || draftSettings.effort || "medium"}
-                  onChange={(event) => updateDraftSettings((current) => ({ ...current, planning_effort: event.target.value }))}
-                  disabled={busy}
-                >
-                  {reasoningOptions.filter((effort) => effort !== "auto").map((effort) => (
-                    <option key={effort} value={effort}>
-                      {reasoningEffortLabel(effort, language)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="field">
                 <span>{t("field.checkpointInterval")}</span>
                 <input
                   type="number"
@@ -667,7 +501,7 @@ export const AppSettingsView = memo(function AppSettingsView({
             {/* Parallel workers */}
             <div style={{ borderTop: "1px solid var(--border)", paddingTop: "12px", marginTop: "4px" }}>
               <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "0 0 10px" }}>
-                {language === "ko" ? "병렬 실행 설정" : "Parallel execution settings"}
+                {language === "ko" ? "蹂묐젹 ?ㅽ뻾 ?ㅼ젙" : "Parallel execution settings"}
               </p>
 
               <ToggleRow
@@ -682,7 +516,7 @@ export const AppSettingsView = memo(function AppSettingsView({
                   }))
                 }
                 label={t("preset.auto")}
-                hint={language === "ko" ? "시스템 리소스에 따라 작업자 수 자동 조정" : "Automatically adjust worker count based on resources"}
+                hint={language === "ko" ? "?쒖뒪??由ъ냼?ㅼ뿉 ?곕씪 ?묒뾽?????먮룞 議곗젙" : "Automatically adjust worker count based on resources"}
                 disabled={runtimeBusy}
               />
 
@@ -773,14 +607,14 @@ export const AppSettingsView = memo(function AppSettingsView({
         </div>
         ) : null}
 
-        {/* ── Share tab ── */}
+        {/* ?? Share tab ?? */}
         {settingsTab === "share" ? (
         <div className="form-section" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
               icon={<ShareIcon />}
               title={t("run.remoteMonitor")}
-              description={language === "ko" ? "원격에서 실행 상태를 모니터링하는 공유 링크" : "Share a link to monitor your run from anywhere"}
+              description={language === "ko" ? "?먭꺽?먯꽌 ?ㅽ뻾 ?곹깭瑜?紐⑤땲?곕쭅?섎뒗 怨듭쑀 留곹겕" : "Share a link to monitor your run from anywhere"}
               badge={
                 <span className={`status-badge status-badge--${shareServer?.running ? "success" : "neutral"}`}>
                   {shareServer?.running ? t("common.on") : t("common.off")}
@@ -844,3 +678,6 @@ export const AppSettingsView = memo(function AppSettingsView({
     </section>
   );
 }, appSettingsViewPropsEqual);
+
+
+

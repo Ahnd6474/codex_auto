@@ -210,8 +210,8 @@ test("applyProjectDetailState reapplies program model defaults while keeping oth
   assert.equal(nextProjectForm.branch, "main");
   assert.equal(nextProjectForm.origin_url, "");
   assert.equal(nextProjectForm.github_mode, "existing");
-  assert.equal(nextProjectForm.runtime.model, "auto");
-  assert.equal(nextProjectForm.runtime.effort, "medium");
+  assert.equal(nextProjectForm.runtime.model, "gpt-5.4-mini");
+  assert.equal(nextProjectForm.runtime.effort, "high");
   assert.equal(nextProjectForm.runtime.parallel_memory_per_worker_gib, 7);
   assert.equal(nextProjectForm.runtime.test_cmd, "npm test");
   assert.deepEqual(nextPlanDraft, {

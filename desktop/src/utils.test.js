@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  applyChatRuntimeSelectionToProject,
   applyConfigRuntimeModelSelection,
+  applyProjectModelSelection,
   canEditStep,
   defaultModelForRuntime,
   failureReasonCode,
@@ -213,6 +215,75 @@ test("applyConfigRuntimeModelSelection keeps a concrete model while supporting a
   assert.equal(nextRuntime.model_slug_input, "gpt-5.4");
   assert.equal(nextRuntime.effort_selection_mode, "auto");
   assert.equal(selectedConfigReasoning(modelCatalog, nextRuntime), "auto");
+});
+
+test("applyProjectModelSelection updates model reasoning without touching execution_model", () => {
+  const modelCatalog = [
+    {
+      model: "gpt-5.4",
+      display_name: "GPT-5.4",
+      provider: "openai",
+      hidden: false,
+      default_reasoning_effort: "medium",
+      supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
+    },
+  ];
+
+  const nextRuntime = applyProjectModelSelection(
+    {
+      model_provider: "openai",
+      model: "gpt-4.1",
+      execution_model: "gpt-4.1",
+      model_slug_input: "gpt-4.1",
+      effort: "medium",
+      planning_effort: "medium",
+    },
+    modelCatalog,
+    "gpt-5.4",
+    "high",
+  );
+
+  assert.equal(nextRuntime.model, "gpt-5.4");
+  assert.equal(nextRuntime.model_slug_input, "gpt-5.4");
+  assert.equal(nextRuntime.execution_model, "gpt-4.1");
+  assert.equal(nextRuntime.effort, "high");
+  assert.equal(nextRuntime.planning_effort, "medium");
+});
+
+test("applyChatRuntimeSelectionToProject maps a chat selection into project model settings", () => {
+  const modelCatalog = [
+    {
+      model: "claude-sonnet-4-6",
+      display_name: "Claude Sonnet 4.6",
+      provider: "claude",
+      hidden: false,
+      default_reasoning_effort: "high",
+      supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
+    },
+  ];
+
+  const nextRuntime = applyChatRuntimeSelectionToProject(
+    {
+      model_provider: "openai",
+      model: "gpt-5.4",
+      execution_model: "gpt-5.4",
+      model_slug_input: "gpt-5.4",
+      effort: "medium",
+      planning_effort: "medium",
+    },
+    modelCatalog,
+    {
+      provider: "claude",
+      model: "claude-sonnet-4-6",
+    },
+    "auto",
+  );
+
+  assert.equal(nextRuntime.model_provider, "claude");
+  assert.equal(nextRuntime.model, "claude-sonnet-4-6");
+  assert.equal(nextRuntime.execution_model, "gpt-5.4");
+  assert.equal(nextRuntime.effort, "high");
+  assert.equal(nextRuntime.effort_selection_mode, "auto");
 });
 
 test("projectFormFromDetail preserves the project's saved model when selecting a project", () => {

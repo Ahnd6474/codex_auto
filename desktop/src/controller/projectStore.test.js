@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { applyProjectDetailState, clearSelectedProjectState, mergeProjectDetailSupplement, preserveProjectDetailSupplement } from "./projectStore.js";
+import {
+  applyProjectDetailState,
+  clearSelectedProjectState,
+  mergeProjectDetailSupplement,
+  preserveProjectDetailSupplement,
+} from "./projectStore.js";
 
 test("preserveProjectDetailSupplement keeps the previous workspace tree reference on core refresh", () => {
   const previousWorkspaceTree = [
@@ -245,6 +250,88 @@ test("applyProjectDetailState preserves the current project_dir when a sparse de
   assert.equal(capturedProjectForm.display_name, "Existing Repo");
   assert.equal(capturedProjectForm.runtime.model_provider, "openai");
   assert.equal(capturedProjectForm.runtime.execution_model, "gpt-5.4");
+});
+
+test("applyProjectDetailState keeps the selected project's saved AI settings instead of defaultRuntime values", () => {
+  let capturedProjectForm = {
+    project_dir: "C:/repo",
+    display_name: "Existing Repo",
+    branch: "main",
+    origin_url: "https://example.com/repo.git",
+    github_mode: "manual",
+    runtime: {
+      model_provider: "claude",
+      model: "claude-sonnet-4-6",
+      execution_model: "claude-sonnet-4-6",
+      model_slug_input: "claude-sonnet-4-6",
+      effort: "xhigh",
+      planning_effort: "high",
+    },
+  };
+
+  applyProjectDetailState({
+    detail: {
+      project: {
+        repo_id: "repo-1",
+        repo_path: "C:/repo",
+        display_name: "Existing Repo",
+        branch: "main",
+        origin_url: "https://example.com/repo.git",
+      },
+      runtime: {
+        model_provider: "claude",
+        model: "claude-sonnet-4-6",
+        execution_model: "claude-sonnet-4-6",
+        model_slug_input: "claude-sonnet-4-6",
+        effort: "xhigh",
+        planning_effort: "high",
+      },
+      plan: {
+        steps: [],
+      },
+      codex_status: {
+        model_catalog: [],
+      },
+    },
+    refs: {
+      lastAppliedDetailSignatureRef: { current: "" },
+    },
+    state: {
+      projectDetail: {
+        project: {
+          repo_id: "repo-1",
+        },
+      },
+      modelCatalog: [],
+      activeJob: null,
+      defaultRuntime: {
+        model_provider: "openai",
+        model: "gpt-5.4",
+        model_slug_input: "gpt-5.4",
+        effort: "medium",
+      },
+      planDirty: false,
+    },
+    setters: {
+      transition: (callback) => callback(),
+      setProjectDetail: () => {},
+      setModelCatalog: () => {},
+      setShareSettings: () => {},
+      setLoadingProjectId: () => {},
+      setProjectForm: (updater) => {
+        capturedProjectForm = typeof updater === "function" ? updater(capturedProjectForm) : updater;
+      },
+      setPlanDraft: () => {},
+      setSelectedStepId: () => {},
+      setPlanDirty: () => {},
+    },
+  });
+
+  assert.equal(capturedProjectForm.runtime.model_provider, "claude");
+  assert.equal(capturedProjectForm.runtime.model, "claude-sonnet-4-6");
+  assert.equal(capturedProjectForm.runtime.execution_model, "claude-sonnet-4-6");
+  assert.equal(capturedProjectForm.runtime.effort, "xhigh");
+  assert.equal(capturedProjectForm.runtime.planning_effort, "high");
 });
 
 test("applyProjectDetailState preserves local model and reasoning overrides on same-project refresh", () => {

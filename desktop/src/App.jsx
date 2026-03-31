@@ -4,7 +4,7 @@ import { IdeToolbar } from "./components/layout/IdeToolbar";
 import { RunProgressPanel } from "./components/layout/RunProgressPanel";
 import { Splitter } from "./components/layout/Splitter";
 import { StatusBar } from "./components/layout/StatusBar";
-import { nextSidebarTab } from "./controllerHelpers";
+import { nextRightSidebarState, nextSidebarTab } from "./controllerHelpers";
 import { useDesktopController } from "./hooks/useDesktopController";
 import { useI18n } from "./i18n";
 import { toggleStepSelection } from "./utils";
@@ -13,6 +13,7 @@ const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 500;
 const RIGHT_MIN = 260;
 const RIGHT_MAX = 520;
+const RIGHT_RAIL_WIDTH = 36;
 const BOTTOM_MIN = 120;
 const BOTTOM_MAX = 600;
 
@@ -214,7 +215,7 @@ export default function App() {
   const deferredDetail = useDeferredValue(detail);
   const sidebarOpen = Boolean(controller.sidebarTab);
   const sidebarStyle = sidebarOpen ? { width: controller.sidebarWidth, flex: `0 0 ${controller.sidebarWidth}px` } : undefined;
-  const rightPaneWidth = controller.rightWidth;
+  const rightPaneWidth = controller.rightCollapsed ? RIGHT_RAIL_WIDTH : controller.rightWidth;
   const rightSidebarStyle = { width: rightPaneWidth, minWidth: rightPaneWidth, flex: `0 0 ${rightPaneWidth}px` };
   const compact = Boolean(controller.programSettings?.compact_mode);
   const hasFlowContent = useMemo(() => {
@@ -254,6 +255,13 @@ export default function App() {
   const handleToggleBottom = useCallback(() => {
     controller.setBottomCollapsed((value) => !value);
   }, [controller.setBottomCollapsed]);
+  const handleRightSidebarChange = useCallback((nextTab) => {
+    const nextState = nextRightSidebarState(rightTab, nextTab, controller.rightCollapsed);
+    if (nextState.tab) {
+      setRightTab(nextState.tab);
+    }
+    controller.setRightCollapsed(nextState.collapsed);
+  }, [controller.rightCollapsed, controller.setRightCollapsed, rightTab]);
   const handleCloseCommandPalette = useCallback(() => {
     setCommandPaletteOpen(false);
   }, []);
@@ -459,22 +467,19 @@ export default function App() {
           </div>
 
           <>
+          {controller.rightCollapsed ? null : (
             <Splitter axis="vertical" onResize={rightSplitter.onResize} onDragEnd={rightSplitter.onDragEnd} title="Resize right sidebar" />
-            <div className="ide-pane" style={rightSidebarStyle}>
-              <Suspense fallback={<PanelSuspenseFallback className="ide-pane" />}>
-                <LazyRightSidebarPane
-                  activeTab={rightTab}
-                  collapsed={false}
-                  includeChatTab={false}
-                  onChangeTab={(nextTab) => {
-                    if (nextTab) {
-                      setRightTab(nextTab);
-                    }
-                    controller.setRightCollapsed(false);
-                  }}
-                  detail={detail}
-                  planDraft={controller.planDraft}
-                  selectedStepId={controller.selectedStepId}
+          )}
+          <div className="ide-pane" style={rightSidebarStyle}>
+            <Suspense fallback={<PanelSuspenseFallback className="ide-pane" />}>
+              <LazyRightSidebarPane
+                activeTab={rightTab}
+                collapsed={controller.rightCollapsed}
+                includeChatTab={false}
+                onChangeTab={handleRightSidebarChange}
+                detail={detail}
+                planDraft={controller.planDraft}
+                selectedStepId={controller.selectedStepId}
                   modelPresets={controller.modelPresets}
                   modelCatalog={controller.modelCatalog}
                   form={controller.projectForm}

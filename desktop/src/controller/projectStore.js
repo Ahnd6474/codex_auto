@@ -34,16 +34,8 @@ const PROJECT_RUNTIME_OVERRIDE_KEYS = [
 function enforceProgramModelDefaults(form = null, defaultRuntime = null) {
   const nextForm = form && typeof form === "object" ? cloneValue(form) : {};
   const nextRuntime = nextForm.runtime && typeof nextForm.runtime === "object" ? cloneValue(nextForm.runtime) : {};
-  const defaultModel = String(defaultRuntime?.model || "").trim();
-  const defaultEffort = String(defaultRuntime?.effort || "").trim();
-  if (defaultModel) {
-    nextRuntime.model = defaultModel;
-  }
   if (!String(nextRuntime.execution_model || "").trim()) {
-    nextRuntime.execution_model = defaultModel;
-  }
-  if (defaultEffort) {
-    nextRuntime.effort = defaultEffort;
+    nextRuntime.execution_model = String(nextRuntime.model || defaultRuntime?.model || "").trim();
   }
   return {
     ...nextForm,

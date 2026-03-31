@@ -32,6 +32,7 @@ import {
   applyProgramSettings,
   backgroundJobProjectKey,
   applyProgramSettingsToForm,
+  applyChatRuntimeSelectionToProject,
   basename,
   blankProjectForm,
   buildProjectPayload,
@@ -1836,7 +1837,10 @@ export function useDesktopController() {
     };
   }
 
-  async function generatePlan(promptOverride = null) {
+  async function generatePlan(promptOverride = null, options = {}) {
+    const runtimeOverride = options && typeof options === "object" && options.runtimeOverride && typeof options.runtimeOverride === "object"
+      ? options.runtimeOverride
+      : null;
     const hasPromptOverride = typeof promptOverride === "string";
     const nextPlanDraft = hasPromptOverride
       ? {
@@ -1844,6 +1848,15 @@ export function useDesktopController() {
           project_prompt: promptOverride,
         }
       : (planDraft || emptyPlanDraft());
+    const nextProjectForm = runtimeOverride
+      ? {
+          ...(projectForm || blankProjectForm(defaultRuntime)),
+          runtime: {
+            ...(projectForm?.runtime || {}),
+            ...runtimeOverride,
+          },
+        }
+      : projectForm;
     const prompt = String(nextPlanDraft?.project_prompt || "").trim();
     if (hasPromptOverride && nextPlanDraft.project_prompt !== String(planDraft?.project_prompt || "")) {
       syncPlan(nextPlanDraft);
@@ -1868,10 +1881,19 @@ export function useDesktopController() {
       return;
     }
     setRightCollapsed(false);
+    if (runtimeOverride) {
+      setProjectForm((current) => ({
+        ...current,
+        runtime: {
+          ...(current?.runtime || {}),
+          ...runtimeOverride,
+        },
+      }));
+    }
     await startJob(BRIDGE_COMMANDS.GENERATE_PLAN, {
-      ...buildProjectPayload(projectForm),
+      ...buildProjectPayload(nextProjectForm),
       prompt,
-      max_steps: Math.max(1, Number.parseInt(String(projectForm.runtime?.max_blocks || 5), 10) || 1),
+      max_steps: Math.max(1, Number.parseInt(String(nextProjectForm.runtime?.max_blocks || 5), 10) || 1),
     });
   }
 
@@ -1990,9 +2012,6 @@ export function useDesktopController() {
     if (!messageText) {
       return null;
     }
-    if (normalizedMode === "plan") {
-      return generatePlan(messageText);
-    }
     if (!effectiveProjectDir) {
       setMessage(messagePayload("error", translate(language, "message.openProjectFirst")));
       return null;
@@ -2034,6 +2053,19 @@ export function useDesktopController() {
       && String(item?.model || "").trim().toLowerCase() === requestedChatModel
     )) || null;
     const chatEffort = String(chatRuntime?.chat_effort || "").trim().toLowerCase();
+    const nextRuntime = applyChatRuntimeSelectionToProject(
+      chatRuntime,
+      modelCatalog,
+      {
+        provider: String(allowedChatEntry?.provider || requestedChatProvider || "").trim().toLowerCase(),
+        localProvider: String(allowedChatEntry?.local_provider || requestedChatLocalProvider || "").trim().toLowerCase(),
+        model: String(allowedChatEntry?.model || requestedChatModel || "").trim().toLowerCase(),
+      },
+      chatEffort || null,
+    );
+    if (normalizedMode === "plan") {
+      return generatePlan(messageText, { runtimeOverride: nextRuntime });
+    }
     return startJob(
       BRIDGE_COMMANDS.SEND_CHAT_MESSAGE,
       {

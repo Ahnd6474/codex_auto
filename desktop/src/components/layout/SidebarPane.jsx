@@ -1,5 +1,6 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
+import { usePersistentState } from "../../hooks/usePersistentState";
 import { displayStatus } from "../../locale";
 import { arePropsEqualExceptFunctions } from "../../shallowProps";
 import {
@@ -44,6 +45,16 @@ function SidebarProjectsIcon() {
       <path d="M8 9h8M8 13h8M8 17h5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
   );
+}
+
+const SIDEBAR_CHAT_MODE_KEY = "jakal-flow:sidebar-chat-mode";
+
+function normalizeChatMode(mode, fallbackMode = "conversation") {
+  const normalizedMode = String(mode || "").trim().toLowerCase();
+  if (["conversation", "debugger", "merger"].includes(normalizedMode)) {
+    return normalizedMode;
+  }
+  return fallbackMode;
 }
 
 function SidebarHistoryIcon() {
@@ -535,7 +546,8 @@ function ChatPanel({
   const activeSessionId = String(selectedChatSessionId || chat?.active_session_id || "").trim();
   const summaryFile = String(chat?.summary_file || "").trim();
   const [input, setInput] = useState("");
-  const [pendingMode, setPendingMode] = useState("conversation");
+  const [storedPendingMode, setStoredPendingMode] = usePersistentState(SIDEBAR_CHAT_MODE_KEY, "conversation");
+  const pendingMode = normalizeChatMode(storedPendingMode);
   const [menuOpen, setMenuOpen] = useState(false);
   const [localMessages, setLocalMessages] = useState(remoteMessages);
   const bottomRef = useRef(null);
@@ -606,7 +618,7 @@ function ChatPanel({
     };
     setLocalMessages((prev) => [...prev, msg]);
     setInput("");
-    setPendingMode("conversation");
+    setStoredPendingMode("conversation");
     setMenuOpen(false);
     void Promise.resolve(onSendChatMessage?.(text, mode)).catch(() => {});
   }
@@ -655,7 +667,7 @@ function ChatPanel({
         <button
           className="sidebar-chat-new"
           onClick={() => {
-            setPendingMode("conversation");
+            setStoredPendingMode("conversation");
             setMenuOpen(false);
             onStartNewChatSession?.();
           }}
@@ -717,7 +729,7 @@ function ChatPanel({
                 <button
                   type="button"
                   onClick={() => {
-                    setPendingMode("debugger");
+                    setStoredPendingMode("debugger");
                     setMenuOpen(false);
                   }}
                 >
@@ -726,7 +738,7 @@ function ChatPanel({
                 <button
                   type="button"
                   onClick={() => {
-                    setPendingMode("merger");
+                    setStoredPendingMode("merger");
                     setMenuOpen(false);
                   }}
                 >
@@ -743,7 +755,7 @@ function ChatPanel({
           ) : (
             <button
               className="sidebar-chat-mode-chip sidebar-chat-mode-chip--active"
-              onClick={() => setPendingMode("conversation")}
+              onClick={() => setStoredPendingMode("conversation")}
               type="button"
             >
               {language === "ko" ? "다음 전송:" : "Next send:"} {modeLabel(pendingMode)}

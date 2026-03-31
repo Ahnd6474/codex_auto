@@ -1,6 +1,7 @@
 ﻿import { Suspense, lazy, memo, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { ChatMessageContent } from "../../chatMarkdown";
 import { useI18n } from "../../i18n";
+import { usePersistentState } from "../../hooks/usePersistentState";
 import {
   defaultModelForRuntime,
   formatChatSessionTitle,
@@ -9,7 +10,6 @@ import {
   normalizedModelProvider,
   reasoningEffortLabel,
   resolveExecutionDisplayPlan,
-  runtimeSummary,
   supportedReasoningOptions,
   visibleExecutionJob,
 } from "../../utils";
@@ -339,6 +339,7 @@ const CHAT_ESTIMATED_ROW_HEIGHT = 92;
 const CHAT_OVERSCAN_ROWS = 6;
 const CHAT_DEFAULT_VIEWPORT_HEIGHT = 520;
 const DEFAULT_CHAT_MODE = "review";
+const RIGHT_SIDEBAR_CHAT_MODE_KEY = "jakal-flow:right-sidebar-chat-mode";
 
 function chatRoleLabel(role, language = "en") {
   if (role === "user") {
@@ -366,6 +367,14 @@ function chatModeLabel(mode, language = "en") {
   return language === "ko" ? "Conversation" : "Conversation";
 }
 
+function normalizeChatMode(mode, fallbackMode = DEFAULT_CHAT_MODE) {
+  const normalizedMode = String(mode || "").trim().toLowerCase();
+  if (["review", "conversation", "plan", "debugger", "merger"].includes(normalizedMode)) {
+    return normalizedMode;
+  }
+  return fallbackMode;
+}
+
 const ChatMessageBubble = memo(function ChatMessageBubble({
   message,
   fallbackKey,
@@ -380,7 +389,6 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
     >
       <span className="sidebar-chat-bubble__role">
         {chatRoleLabel(role, language)}
-        {mode && mode !== "conversation" ? ` / ${chatModeLabel(mode, language)}` : ""}
       </span>
       <ChatMessageContent role={role} text={message?.text} />
     </div>
@@ -428,8 +436,10 @@ const ProjectChatPane = memo(function ProjectChatPane({
   const selectedChatModel = String(chatSettings?.chat_model || "").trim().toLowerCase();
   const selectedChatEffort = String(chatSettings?.chat_effort || "").trim().toLowerCase();
   const chatJobStatus = String(chatJob?.status || "").trim().toLowerCase();
+  void onGeneratePlan;
   const [input, setInput] = useState("");
-  const [pendingMode, setPendingMode] = useState(DEFAULT_CHAT_MODE);
+  const [storedPendingMode, setStoredPendingMode] = usePersistentState(RIGHT_SIDEBAR_CHAT_MODE_KEY, DEFAULT_CHAT_MODE);
+  const pendingMode = normalizeChatMode(storedPendingMode);
   const [menuOpen, setMenuOpen] = useState(false);
   const [localMessages, setLocalMessages] = useState(deferredRemoteMessages);
   const [visibleMessageCount, setVisibleMessageCount] = useState(MAX_VISIBLE_CHAT_MESSAGES);
@@ -477,10 +487,6 @@ const ProjectChatPane = memo(function ProjectChatPane({
     () => (selectedChatIsAllowed ? selectedChatKey : ""),
     [selectedChatIsAllowed, selectedChatKey],
   );
-  const effectiveDefaultChatModel = useMemo(
-    () => defaultModelForRuntime(modelCatalog, projectDefaultRuntime),
-    [modelCatalog, projectDefaultRuntime],
-  );
   const selectedChatEntry = useMemo(
     () => (
       availableChatModels.find((item) => chatModelOptionValue(item) === selectedChatValue)
@@ -489,8 +495,8 @@ const ProjectChatPane = memo(function ProjectChatPane({
     [availableChatModels, selectedChatValue],
   );
   const effectiveChatModel = useMemo(
-    () => selectedChatEntry?.model || effectiveDefaultChatModel || "",
-    [effectiveDefaultChatModel, selectedChatEntry?.model],
+    () => selectedChatEntry?.model || defaultModelForRuntime(modelCatalog, projectDefaultRuntime) || "",
+    [modelCatalog, projectDefaultRuntime, selectedChatEntry?.model],
   );
   const availableChatEfforts = useMemo(
     () => supportedReasoningOptions(
@@ -504,30 +510,18 @@ const ProjectChatPane = memo(function ProjectChatPane({
     () => (availableChatEfforts.includes(selectedChatEffort) ? selectedChatEffort : ""),
     [availableChatEfforts, selectedChatEffort],
   );
-  const projectDefaultSummary = useMemo(
-    () => runtimeSummary(
-      {
-        ...projectDefaultRuntime,
-        model: effectiveDefaultChatModel || projectDefaultRuntime.model,
-        model_slug_input: projectDefaultRuntime.model_slug_input || effectiveDefaultChatModel || projectDefaultRuntime.model,
-      },
-      modelPresets,
-      language,
-      modelCatalog,
-    ),
-    [effectiveDefaultChatModel, language, modelCatalog, modelPresets, projectDefaultRuntime],
-  );
+  const projectDefaultLabel = language === "ko" ? "프로젝트 기본값" : "Project default";
   const chatTargetSummary = useMemo(
     () => (
       selectedChatEntry
         ? `${selectedChatEntry.display_name || selectedChatEntry.model} / ${chatProviderLabel(selectedChatEntry.provider, selectedChatEntry.local_provider, language)}`
-        : `${language === "ko" ? "Project default" : "Project default"} / ${projectDefaultSummary}`
+        : projectDefaultLabel
     ),
-    [language, projectDefaultSummary, selectedChatEntry],
+    [language, projectDefaultLabel, selectedChatEntry],
   );
   const projectDefaultOptionLabel = useMemo(
-    () => `${language === "ko" ? "Project default" : "Project default"}${projectDefaultSummary ? ` / ${projectDefaultSummary}` : ""}`,
-    [language, projectDefaultSummary],
+    () => projectDefaultLabel,
+    [projectDefaultLabel],
   );
   const visibleMessages = useMemo(() => {
     if (localMessages.length <= visibleMessageCount) {
@@ -687,13 +681,13 @@ const ProjectChatPane = memo(function ProjectChatPane({
     const mode = pendingMode;
     if (mode === "plan") {
       setInput("");
-      setPendingMode(DEFAULT_CHAT_MODE);
+      setStoredPendingMode(DEFAULT_CHAT_MODE);
       setMenuOpen(false);
-      void Promise.resolve(onGeneratePlan?.(text)).catch(() => {});
+      void Promise.resolve(onSendChatMessage?.(text, mode)).catch(() => {});
       return;
     }
     setInput("");
-    setPendingMode(DEFAULT_CHAT_MODE);
+    setStoredPendingMode(DEFAULT_CHAT_MODE);
     setMenuOpen(false);
     setLocalMessages((prev) => [
       ...prev,
@@ -746,10 +740,10 @@ const ProjectChatPane = memo(function ProjectChatPane({
   const stopLabel = language === "ko" ? "중단" : "Stop";
   const composerPlaceholder =
     pendingMode === "plan"
-      ? (language === "ko" ? "계획 생성 프롬프트를 입력하세요... (Enter로 생성)" : "Type a plan prompt... (Enter to generate)")
+      ? (language === "ko" ? "계획 프롬프트 입력... (Enter로 생성)" : "Plan prompt... (Enter to generate)")
       : pendingMode === "review"
-        ? (language === "ko" ? "코드나 변경 내용을 입력하세요... 요약, 평가, 개선점을 함께 제안합니다. (Enter로 전송)" : "Paste code or describe a change... I will summarize, evaluate, and suggest improvements. (Enter to send)")
-      : (language === "ko" ? "메시지를 입력하세요... (Enter로 전송)" : "Type a message… (Enter to send)");
+        ? (language === "ko" ? "코드나 변경 내용을 입력하세요 (Enter로 전송)" : "Paste code or change... (Enter to send)")
+      : (language === "ko" ? "메시지 입력 (Enter로 전송)" : "Message... (Enter to send)");
   const sendButtonTitle =
     pendingMode === "plan"
       ? (language === "ko" ? "계획 생성" : "Generate Plan")
@@ -821,7 +815,7 @@ const ProjectChatPane = memo(function ProjectChatPane({
             </select>
             <button
               className="sidebar-chat-new"
-              onClick={() => { setPendingMode(DEFAULT_CHAT_MODE); setMenuOpen(false); onStartNewChatSession?.(); }}
+              onClick={() => { setStoredPendingMode(DEFAULT_CHAT_MODE); setMenuOpen(false); onStartNewChatSession?.(); }}
               type="button"
               disabled={chatControlsDisabled}
             >
@@ -873,7 +867,7 @@ const ProjectChatPane = memo(function ProjectChatPane({
           <button
             className="sidebar-chat-new"
             onClick={() => {
-              setPendingMode(DEFAULT_CHAT_MODE);
+              setStoredPendingMode(DEFAULT_CHAT_MODE);
               setMenuOpen(false);
               onStartNewChatSession?.();
             }}
@@ -946,7 +940,7 @@ const ProjectChatPane = memo(function ProjectChatPane({
                 <button
                   type="button"
                   onClick={() => {
-                    setPendingMode("review");
+                    setStoredPendingMode("review");
                     setMenuOpen(false);
                   }}
                 >
@@ -955,7 +949,7 @@ const ProjectChatPane = memo(function ProjectChatPane({
                 <button
                   type="button"
                   onClick={() => {
-                    setPendingMode("conversation");
+                    setStoredPendingMode("conversation");
                     setMenuOpen(false);
                   }}
                 >
@@ -964,7 +958,7 @@ const ProjectChatPane = memo(function ProjectChatPane({
                 <button
                   type="button"
                   onClick={() => {
-                    setPendingMode("plan");
+                    setStoredPendingMode("plan");
                     setMenuOpen(false);
                   }}
                 >
@@ -973,7 +967,7 @@ const ProjectChatPane = memo(function ProjectChatPane({
                 <button
                   type="button"
                   onClick={() => {
-                    setPendingMode("debugger");
+                    setStoredPendingMode("debugger");
                     setMenuOpen(false);
                   }}
                 >
@@ -982,7 +976,7 @@ const ProjectChatPane = memo(function ProjectChatPane({
                 <button
                   type="button"
                   onClick={() => {
-                    setPendingMode("merger");
+                    setStoredPendingMode("merger");
                     setMenuOpen(false);
                   }}
                 >
@@ -999,7 +993,7 @@ const ProjectChatPane = memo(function ProjectChatPane({
           ) : (
             <button
               className="sidebar-chat-mode-chip sidebar-chat-mode-chip--active"
-              onClick={() => setPendingMode(DEFAULT_CHAT_MODE)}
+              onClick={() => setStoredPendingMode(DEFAULT_CHAT_MODE)}
               type="button"
             >
               {language === "ko" ? "Next send:" : "Next send:"} {chatModeLabel(pendingMode, language)}

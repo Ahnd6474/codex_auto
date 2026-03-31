@@ -1,5 +1,5 @@
 ﻿import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -46,7 +46,7 @@ async function importBundledModule(key, contents) {
   return import(`${pathToFileURL(modulePath).href}?v=${Date.now()}`);
 }
 
-function renderHarnessSnippet(importPath, exportName) {
+function renderHarnessSnippet(importPath, exportName, seededLocalStorage = null) {
   return `
     import React from "react";
     import { PassThrough } from "node:stream";
@@ -55,6 +55,36 @@ function renderHarnessSnippet(importPath, exportName) {
     import { ${exportName} } from "${importPath}";
 
     export async function renderComponent(props) {
+      const seededLocalStorage = ${JSON.stringify(seededLocalStorage)};
+      const previousWindow = globalThis.window;
+      let restoredWindow = false;
+      if (seededLocalStorage) {
+        const storage = new Map(Object.entries(seededLocalStorage));
+        globalThis.window = {
+          addEventListener() {},
+          cancelIdleCallback() {},
+          localStorage: {
+            clear() {
+              storage.clear();
+            },
+            getItem(key) {
+              const storageKey = String(key);
+              return storage.has(storageKey) ? storage.get(storageKey) : null;
+            },
+            removeItem(key) {
+              storage.delete(String(key));
+            },
+            setItem(key, value) {
+              storage.set(String(key), String(value));
+            },
+          },
+          removeEventListener() {},
+          requestIdleCallback(callback) {
+            return setTimeout(() => callback({ didTimeout: false, timeRemaining: () => 0 }), 0);
+          },
+        };
+        restoredWindow = true;
+      }
       return await new Promise((resolve, reject) => {
         const output = new PassThrough();
         let html = "";
@@ -88,13 +118,23 @@ function renderHarnessSnippet(importPath, exportName) {
           abort();
           finish(reject)(new Error("Timed out waiting for server render."));
         }, 5000);
+      }).finally(() => {
+        if (!restoredWindow) {
+          return;
+        }
+        if (typeof previousWindow === "undefined") {
+          delete globalThis.window;
+          return;
+        }
+        globalThis.window = previousWindow;
       });
     }
   `;
 }
 
-async function renderBundledComponent(key, importPath, exportName, props) {
-  const module = await importBundledModule(key, renderHarnessSnippet(importPath, exportName));
+async function renderBundledComponent(key, importPath, exportName, props, options = {}) {
+  const seededLocalStorage = options.localStorage || null;
+  const module = await importBundledModule(key, renderHarnessSnippet(importPath, exportName, seededLocalStorage));
   return module.renderComponent(props);
 }
 
@@ -560,6 +600,18 @@ test("CenterWorkspace keeps AI Chat active without exposing the Flow tab in the 
   assert.match(html, /rsb-chat--center/);
 });
 
+test("CenterWorkspace forwards stop requests into the AI chat workspace", async () => {
+  const source = await readFile(path.join(desktopRoot, "src/components/layout/CenterWorkspace.jsx"), "utf-8");
+
+  assert.match(source, /<AiChatWorkspaceView[\s\S]*onRequestStop=\{onRequestStop\}/);
+});
+
+test("AiChatWorkspaceView forwards stop requests to the chat pane", async () => {
+  const source = await readFile(path.join(desktopRoot, "src/components/views/AiChatWorkspaceView.jsx"), "utf-8");
+
+  assert.match(source, /<RightSidebarPane[\s\S]*onRequestStop=\{onRequestStop\}/);
+});
+
 test("CenterWorkspace renders the parallel execution flow chart for parallel plans", async () => {
   const html = await renderBundledComponent(
     "parallel-workspace-render",
@@ -767,6 +819,59 @@ test("RightSidebarPane renders the project chat on the right rail by default", a
   assert.match(html, /Default: code review/);
 });
 
+test("RightSidebarPane restores the last selected send mode", async () => {
+  const html = await renderBundledComponent(
+    "right-sidebar-chat-persisted-mode-render",
+    "./src/components/layout/RightSidebarPane.jsx",
+    "RightSidebarPane",
+    {
+      detail: {
+        project: {
+          current_status: "plan_ready",
+        },
+        runtime: {
+          effort: "medium",
+        },
+      },
+      planDraft: {
+        steps: [],
+      },
+      selectedStepId: "",
+      modelPresets: [],
+      modelCatalog: [],
+      form: {
+        runtime: {
+          generate_word_report: false,
+        },
+      },
+      activeJob: null,
+      busy: false,
+      chat: {
+        sessions: [],
+        active_session_id: "",
+        messages: [],
+        summary_file: "",
+      },
+      selectedChatSessionId: "",
+      chatDraftSession: true,
+      onChangeForm: noop,
+      onSelectChatSession: noop,
+      onStartNewChatSession: noop,
+      onSendChatMessage: noop,
+      onChangeChatModelSelection: noop,
+    },
+    {
+      localStorage: {
+        "jakal-flow:right-sidebar-chat-mode": JSON.stringify("plan"),
+      },
+    },
+  );
+
+  assert.match(html, /Next send:[\s\S]*Plan/);
+  assert.doesNotMatch(html, /Default: code review/);
+  assert.match(html, /Plan prompt\.\.\./);
+});
+
 test("RightSidebarPane merges plan generation into the center chat composer", async () => {
   const html = await renderBundledComponent(
     "right-sidebar-chat-center-plan-render",
@@ -895,7 +1000,8 @@ test("RightSidebarPane shows the project default model name in the center chat s
     },
   );
 
-  assert.match(html, /Project default \/ OpenAI\/Codex \| Standard Mode \| GPT-5\.4 \| reasoning High \| parallel auto/);
+  assert.match(html, /Project default/);
+  assert.match(html, /GPT-5\.4 \/ OpenAI/);
 });
 
 test("RightSidebarPane keeps the icon rail visible when the right panel is collapsed", async () => {
@@ -3831,6 +3937,59 @@ test("ConfigEditorView renders project settings loaded from an existing project"
   assert.match(html, /refactor/);
 });
 
+test("ConfigEditorView renders the moved AI settings in project configuration", async () => {
+  const html = await renderBundledComponent(
+    "config-editor-ai-settings-render",
+    "./src/components/views/ConfigEditorView.jsx",
+    "ConfigEditorView",
+    {
+      form: {
+        project_dir: "C:/work/demo",
+        display_name: "Demo App",
+        branch: "release",
+        github_mode: "manual",
+        origin_url: "https://github.com/openai/demo-app",
+        runtime: {
+          model_provider: "openrouter",
+          provider_base_url: "https://openrouter.ai/api/v1",
+          provider_api_key_env: "OPENROUTER_API_KEY",
+          model: "openai/gpt-5.4",
+          model_preset: "",
+          model_slug_input: "openai/gpt-5.4",
+          effort: "medium",
+          planning_effort: "medium",
+          workflow_mode: "standard",
+          execution_model: "openai/gpt-5.4",
+        },
+      },
+      modelPresets: [],
+      modelCatalog: [
+        {
+          model: "openai/gpt-5.4",
+          display_name: "GPT-5.4",
+          hidden: false,
+          provider: "openrouter",
+          default_reasoning_effort: "medium",
+          supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
+        },
+      ],
+      busy: false,
+      onChangeForm: noop,
+      onSaveProject: noop,
+      onChooseDirectory: noop,
+      onArchiveProject: noop,
+      onDeleteProject: noop,
+    },
+  );
+
+  assert.match(html, /AI Model/);
+  assert.match(html, /OpenRouter/);
+  assert.match(html, /Provider Base URL/);
+  assert.match(html, /Provider API Key Env/);
+  assert.match(html, /Block execution model/);
+  assert.match(html, /AI Reasoning/);
+});
+
 test("IdeToolbar, StatusBar, and ConfigEditorView stay aligned on the selected project", async () => {
   const sharedRuntime = {
     model_provider: "openai",
@@ -4111,7 +4270,7 @@ test("ConfigEditorView hides project-level model controls after setup", async ()
   assert.match(html, /GitHub Connection/);
 });
 
-test("AppSettingsView keeps direct model slug editing for OpenRouter only", async () => {
+test("AppSettingsView no longer exposes AI model controls in program settings", async () => {
   const html = await renderBundledComponent(
     "app-settings-openrouter-model-render",
     "./src/components/views/AppSettingsView.jsx",
@@ -4149,10 +4308,14 @@ test("AppSettingsView keeps direct model slug editing for OpenRouter only", asyn
     },
   );
 
-  assert.match(html, /Custom Model Slug/);
+  assert.doesNotMatch(html, /Custom Model Slug/);
+  assert.doesNotMatch(html, /provider base url/i);
+  assert.doesNotMatch(html, /API key env/i);
+  assert.doesNotMatch(html, /GPT Reasoning/);
+  assert.match(html, /Execution Defaults/);
 });
 
-test("AppSettingsView surfaces provider availability warnings in the execution tab", async () => {
+test("AppSettingsView keeps provider availability warnings out of program settings", async () => {
   const html = await renderBundledComponent(
     "app-settings-provider-availability-render",
     "./src/components/views/AppSettingsView.jsx",
@@ -4198,10 +4361,11 @@ test("AppSettingsView surfaces provider availability warnings in the execution t
     },
   );
 
-  assert.match(html, /not installed/);
-  assert.match(html, /Claude Code is not installed\./);
-  assert.match(html, /provider-sub-card active/);
-  assert.match(html, /Gemini/);
+  assert.doesNotMatch(html, /not installed/);
+  assert.doesNotMatch(html, /Claude Code is not installed\./);
+  assert.doesNotMatch(html, /provider-sub-card active/);
+  assert.doesNotMatch(html, /Gemini/);
+  assert.match(html, /Execution Defaults/);
 });
 
 test("ReportsView shows the saved Word report path next to the closeout report", async () => {

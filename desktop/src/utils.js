@@ -266,6 +266,21 @@ export const PROGRAM_RUNTIME_KEYS = [
   "parallel_memory_per_worker_gib",
   "save_project_logs",
 ];
+const PROGRAM_RUNTIME_APPLIED_KEYS = [
+  "approval_mode",
+  "sandbox_mode",
+  "checkpoint_interval_blocks",
+  "codex_path",
+  "allow_push",
+  "require_checkpoint_approval",
+  "workflow_mode",
+  "ml_max_cycles",
+  "execution_mode",
+  "parallel_worker_mode",
+  "parallel_workers",
+  "parallel_memory_per_worker_gib",
+  "save_project_logs",
+];
 export const DEFAULT_DASHBOARD_VISIBILITY = Object.freeze({
   status: true,
   remaining_steps: true,
@@ -484,7 +499,7 @@ export function programSettingsEqual(left = null, right = null) {
 
 export function applyProgramSettings(runtime, programSettings) {
   const normalizedSettings = programSettingsFromRuntime(programSettings);
-  const runtimeSettings = PROGRAM_RUNTIME_KEYS.reduce((settings, key) => {
+  const runtimeSettings = PROGRAM_RUNTIME_APPLIED_KEYS.reduce((settings, key) => {
     if (normalizedSettings[key] !== undefined) {
       settings[key] = normalizedSettings[key];
     }
@@ -1930,6 +1945,50 @@ export function applyConfigRuntimeModelSelection(currentRuntime = {}, modelCatal
     model_selection_mode: "slug",
     model_slug_input: model,
   };
+}
+
+export function applyProjectModelSelection(currentRuntime = {}, modelCatalog = [], nextModel = "", nextEffort = null) {
+  const model = String(nextModel || "").trim()
+    || defaultModelForRuntime(modelCatalog, currentRuntime)
+    || defaultModelForProvider(currentRuntime?.model_provider || "openai", currentRuntime)
+    || "";
+  const normalizedModel = model.toLowerCase();
+  const supported = configReasoningOptions(modelCatalog, model, currentRuntime?.effort || "medium");
+  const preferred = nextEffort || selectedConfigReasoning(modelCatalog, { ...currentRuntime, model });
+  const selection = supported.includes(preferred) ? preferred : supported[0] || "medium";
+  const effort = selection === AUTO_REASONING_OPTION ? defaultReasoningOption(modelCatalog, model, currentRuntime?.effort || "medium") : selection;
+  const planningEffort = clampReasoningEffort(modelCatalog, model, currentRuntime?.planning_effort || effort, effort);
+  return {
+    ...currentRuntime,
+    model,
+    effort,
+    planning_effort: planningEffort,
+    effort_selection_mode: selection === AUTO_REASONING_OPTION ? AUTO_REASONING_OPTION : "explicit",
+    model_preset: normalizedModel === "auto" ? (selection === AUTO_REASONING_OPTION ? "auto" : selection) : "",
+    model_selection_mode: "slug",
+    model_slug_input: model,
+  };
+}
+
+export function applyChatRuntimeSelectionToProject(currentRuntime = {}, modelCatalog = [], selection = {}, nextEffort = null) {
+  const nextRuntime = {
+    ...(cloneValue(currentRuntime) || {}),
+  };
+  const provider = String(selection?.provider || "").trim().toLowerCase();
+  const localProvider = String(selection?.localProvider || "").trim().toLowerCase();
+  const model = String(selection?.model || "").trim();
+  if (provider) {
+    nextRuntime.model_provider = provider;
+  }
+  if (localProvider) {
+    nextRuntime.local_model_provider = localProvider;
+  }
+  return applyProjectModelSelection(
+    nextRuntime,
+    modelCatalog,
+    model || nextRuntime.model || nextRuntime.model_slug_input || "",
+    nextEffort,
+  );
 }
 
 export function configReasoningOptions(modelCatalog = [], model = "", fallback = "medium") {
