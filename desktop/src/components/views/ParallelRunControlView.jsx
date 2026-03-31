@@ -681,10 +681,10 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
         {steps.length ? (
           <ExecutionFlowChart
             steps={steps}
-            projectStatus={projectStatus}
+            detail={detail}
+            activeJob={activeJob}
             language={language}
             selectedStepId={selectedStepId}
-            activeLineageId={activeCheckpointLineageId}
             onSelectStep={onSelectStep}
           />
         ) : (

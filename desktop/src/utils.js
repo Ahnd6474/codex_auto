@@ -1623,10 +1623,11 @@ export function deriveExecutionUiState(detail = null, planDraft = null, activeJo
   const storedProjectFamily = normalizeExecutionSurfaceStatus(projectStatus);
   const processStatus = String(executionJob?.status || "").trim().toLowerCase();
   const processCommand = String(executionJob?.command || "").trim().toLowerCase();
+  const processFamily = executionFamilyFromJob(executionJob);
   const processStatusValue = processStatus === "queued"
     ? `queued:${processCommand || "background-job"}`
     : processStatus === "running"
-      ? `running:${processCommand || "background-job"}`
+      ? (processFamily === "debugging" ? "running:debugging" : `running:${processCommand || "background-job"}`)
       : "";
   const terminalFailureFamily = (() => {
     if (processStatusValue) {
@@ -1657,7 +1658,6 @@ export function deriveExecutionUiState(detail = null, planDraft = null, activeJo
       )
     : (processStatusValue || projectStatus);
   const rawProjectFamily = normalizeExecutionSurfaceStatus(resolvedProjectStatus);
-  const processFamily = executionFamilyFromJob(executionJob);
   const planningRunning = isPlanningProgressRunning(detail?.planning_progress);
 
   let flowFamily = "idle";
@@ -1750,6 +1750,7 @@ export function deriveExecutionUiState(detail = null, planDraft = null, activeJo
     executionJob,
     livePlan,
     progress,
+    checkpointExecutionState,
     checkpointPending,
     checkpointFamily,
     processFamily,

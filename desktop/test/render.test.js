@@ -1055,12 +1055,41 @@ test("ExecutionFlowChart overlays the active lineage as running while the stored
     "./src/components/common/ExecutionFlowChart.jsx",
     "ExecutionFlowChart",
     {
+      detail: {
+        project: {
+          current_status: "running:run-plan",
+        },
+        checkpoints: {
+          items: [
+            {
+              checkpoint_id: "CP2",
+              lineage_id: "LN2",
+              status: "running",
+              title: "Build",
+            },
+          ],
+          pending: {
+            checkpoint_id: "CP2",
+            lineage_id: "LN2",
+            status: "running",
+            title: "Build",
+          },
+        },
+        loop_state: {
+          current_checkpoint_id: "CP2",
+          current_checkpoint_lineage_id: "LN2",
+          pending_checkpoint_approval: false,
+        },
+      },
+      activeJob: {
+        id: "job-1",
+        status: "running",
+        command: "run-plan",
+      },
       steps: [
         { step_id: "ST1", title: "Plan", status: "completed", metadata: { lineage_id: "LN1" } },
         { step_id: "ST2", title: "Build", status: "pending", metadata: { lineage_id: "LN2" } },
       ],
-      projectStatus: "running:run-plan",
-      activeLineageId: "LN2",
       selectedStepId: "ST2",
       language: "en",
       onSelectStep: noop,
@@ -1070,6 +1099,53 @@ test("ExecutionFlowChart overlays the active lineage as running while the stored
   assert.match(html, /Running/);
   assert.match(html, /execution-flow-chart__node--info selected/);
   assert.doesNotMatch(html, />Pending<\/tspan>/);
+});
+
+test("ExecutionFlowChart uses checkpoint failure state for the active lineage instead of stale success", async () => {
+  const html = await renderBundledComponent(
+    "execution-flow-chart-active-lineage-failed-render",
+    "./src/components/common/ExecutionFlowChart.jsx",
+    "ExecutionFlowChart",
+    {
+      detail: {
+        project: {
+          current_status: "failed",
+        },
+        checkpoints: {
+          items: [
+            {
+              checkpoint_id: "CP3",
+              lineage_id: "LN3",
+              status: "failed",
+              title: "Verify",
+            },
+          ],
+          pending: {
+            checkpoint_id: "CP3",
+            lineage_id: "LN3",
+            status: "failed",
+            title: "Verify",
+          },
+        },
+        loop_state: {
+          current_checkpoint_id: "CP3",
+          current_checkpoint_lineage_id: "LN3",
+          pending_checkpoint_approval: false,
+        },
+      },
+      activeJob: null,
+      steps: [
+        { step_id: "ST3", title: "Verify", status: "completed", metadata: { lineage_id: "LN3" } },
+      ],
+      selectedStepId: "ST3",
+      language: "en",
+      onSelectStep: noop,
+    },
+  );
+
+  assert.match(html, /Failed/);
+  assert.match(html, /execution-flow-chart__node--danger selected/);
+  assert.doesNotMatch(html, /Success/);
 });
 
 test("CenterWorkspace keeps the step editor hidden until a block is selected", async () => {
@@ -2909,7 +2985,7 @@ test("IdeToolbar keeps an active run-plan job from inheriting stale debugging st
   assert.doesNotMatch(html, /Debugging/);
 });
 
-test("IdeToolbar, StatusBar, and RunProgressPanel agree on the running label for an active rerun", async () => {
+test("IdeToolbar, StatusBar, and RunProgressPanel agree on the debugging label", async () => {
   const sharedRuntime = {
     model_provider: "openai",
     model: "gpt-5.4",
@@ -3029,10 +3105,10 @@ test("IdeToolbar, StatusBar, and RunProgressPanel agree on the running label for
     },
   );
 
-  assert.match(toolbarHtml, /Running/);
-  assert.match(statusHtml, /Running/);
-  assert.match(runProgressHtml, /Running/);
-  assert.doesNotMatch(runProgressHtml, /Debugging/);
+  assert.match(toolbarHtml, /Debugging/);
+  assert.match(statusHtml, /Debugging/);
+  assert.match(runProgressHtml, /Debugging/);
+  assert.doesNotMatch(runProgressHtml, /Working on ST2/);
 });
 
 test("IdeToolbar labels the run button as Running while execution is active", async () => {

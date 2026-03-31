@@ -1,6 +1,6 @@
 import { memo, useId, useMemo } from "react";
 import { displayStatus } from "../../locale";
-import { effectiveStepStatus, failureReasonLabel, isDebuggingStatus, statusTone } from "../../utils";
+import { deriveExecutionUiState, effectiveStepStatus, failureReasonLabel, isDebuggingStatus, statusTone } from "../../utils";
 
 const FONT_FAMILY = '"Segoe UI", "Malgun Gothic", sans-serif';
 const BOX_WIDTH = 220;
@@ -375,32 +375,58 @@ function getChartTopology(steps = []) {
   return topology;
 }
 
-function effectiveChartStepStatus(step = null, projectStatus = "", activeLineageId = "") {
+function effectiveChartStepStatus(step = null, projectStatus = "", activeLineageId = "", checkpointState = null, checkpointFamily = "") {
   const currentStatus = effectiveStepStatus(step, projectStatus);
   const normalizedStepStatus = String(step?.status || "").trim().toLowerCase();
-  if (["completed", "failed"].includes(normalizedStepStatus)) {
-    return currentStatus;
-  }
   const stepLineageId = String(step?.metadata?.lineage_id || "").trim();
-  const activeLineage = String(activeLineageId || "").trim();
+  const activeLineage = String(checkpointState?.currentCheckpointLineageId || activeLineageId || "").trim();
   const normalizedProjectStatus = String(projectStatus || "").trim().toLowerCase();
-  if (
-    activeLineage
-    && stepLineageId
+  const lineageIsActive =
+    Boolean(activeLineage)
+    && Boolean(stepLineageId)
     && stepLineageId === activeLineage
-    && (normalizedProjectStatus.startsWith("running:") || normalizedProjectStatus === "running" || normalizedProjectStatus.startsWith("queued:") || normalizedProjectStatus === "queued" || isDebuggingStatus(projectStatus))
-  ) {
-    return isDebuggingStatus(projectStatus) ? "running:debugging" : "running";
+    && (checkpointState?.hasActiveCheckpoint
+      || checkpointFamily === "checkpoint"
+      || checkpointFamily === "failed"
+      || checkpointFamily === "completed"
+      || normalizedProjectStatus.startsWith("running:")
+      || normalizedProjectStatus === "running"
+      || normalizedProjectStatus.startsWith("queued:")
+      || normalizedProjectStatus === "queued"
+      || normalizedProjectStatus === "awaiting_checkpoint_approval"
+      || normalizedProjectStatus === "awaiting_review"
+      || isDebuggingStatus(projectStatus));
+  if (lineageIsActive) {
+    const pendingStatus = String(checkpointState?.pending?.status || "").trim().toLowerCase();
+    if (checkpointState?.waitingForApproval || checkpointFamily === "checkpoint" || normalizedProjectStatus === "awaiting_checkpoint_approval" || normalizedProjectStatus === "awaiting_review") {
+      return pendingStatus || "awaiting_review";
+    }
+    if (checkpointFamily === "failed" || normalizedProjectStatus.endsWith("failed")) {
+      return "failed";
+    }
+    if (checkpointFamily === "completed" || normalizedProjectStatus === "completed") {
+      return "completed";
+    }
+    if (normalizedProjectStatus.startsWith("queued:") || normalizedProjectStatus === "queued") {
+      return "queued";
+    }
+    if (isDebuggingStatus(projectStatus)) {
+      return "running:debugging";
+    }
+    if (checkpointState?.processActive || normalizedProjectStatus.startsWith("running:") || normalizedProjectStatus === "running") {
+      return "running";
+    }
+    return normalizedStepStatus || currentStatus || "pending";
   }
   return currentStatus;
 }
 
-function buildChartData(steps = [], projectStatus = "", language = "en", activeLineageId = "") {
+function buildChartData(steps = [], projectStatus = "", language = "en", activeLineageId = "", checkpointState = null, checkpointFamily = "") {
   const topology = getChartTopology(steps);
   return {
     ...topology,
     nodes: topology.nodes.map((node) => {
-      const stepStatus = effectiveChartStepStatus(node.step, projectStatus, activeLineageId);
+      const stepStatus = effectiveChartStepStatus(node.step, projectStatus, activeLineageId, checkpointState, checkpointFamily);
       const tone = statusTone(stepStatus);
       const palette = PALETTE[tone] || PALETTE.neutral;
       const failureReason = failureReasonLabel(node.step, language);
@@ -423,9 +449,25 @@ function buildChartData(steps = [], projectStatus = "", language = "en", activeL
   };
 }
 
-function ExecutionFlowChartComponent({ steps = [], projectStatus = "", language = "en", selectedStepId = "", activeLineageId = "", onSelectStep = null }) {
+function ExecutionFlowChartComponent({ steps = [], detail = null, activeJob = null, language = "en", selectedStepId = "", onSelectStep = null }) {
   const arrowId = useId().replace(/:/g, "-");
-  const chart = useMemo(() => buildChartData(steps, projectStatus, language, activeLineageId), [steps, projectStatus, language, activeLineageId]);
+  const executionState = useMemo(() => deriveExecutionUiState(detail, null, activeJob), [detail, activeJob]);
+  const activeLineageId = String(
+    executionState.checkpointExecutionState?.currentCheckpointLineageId
+    || executionState.checkpointPending?.lineage_id
+    || "",
+  ).trim();
+  const chart = useMemo(
+    () => buildChartData(
+      steps,
+      executionState.displayStatusValue,
+      language,
+      activeLineageId,
+      executionState.checkpointExecutionState,
+      executionState.checkpointFamily,
+    ),
+    [steps, executionState.displayStatusValue, language, activeLineageId, executionState.checkpointExecutionState, executionState.checkpointFamily],
+  );
 
   if (!steps.length) {
     return null;

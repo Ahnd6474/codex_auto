@@ -317,8 +317,8 @@
           "returncode": 0,
           "source_duration_seconds": 68.672,
           "state_fingerprint": "f7685effd6b98d884c566a8bed9510c995542875",
-          "stderr_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
-          "stdout_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
+          "stderr_file": "D:\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
+          "stdout_file": "D:\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
           "summary": "python -m pytest exited with 0"
         }
       ],
@@ -551,8 +551,8 @@
             "returncode": 0,
             "source_duration_seconds": 68.672,
             "state_fingerprint": "f7685effd6b98d884c566a8bed9510c995542875",
-            "stderr_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
-            "stdout_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
+            "stderr_file": "D:\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
+            "stdout_file": "D:\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
             "summary": "python -m pytest exited with 0"
           },
           "usage": {
@@ -576,8 +576,8 @@
           "returncode": 0,
           "source_duration_seconds": 68.672,
           "state_fingerprint": "f7685effd6b98d884c566a8bed9510c995542875",
-          "stderr_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
-          "stdout_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
+          "stderr_file": "D:\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
+          "stdout_file": "D:\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
           "summary": "python -m pytest exited with 0"
         }
       ],
@@ -1051,8 +1051,8 @@
           "returncode": 0,
           "source_duration_seconds": 68.672,
           "state_fingerprint": "f7685effd6b98d884c566a8bed9510c995542875",
-          "stderr_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
-          "stdout_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
+          "stderr_file": "D:\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
+          "stdout_file": "D:\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
           "summary": "python -m pytest exited with 0"
         },
         "usage": {
@@ -1535,8 +1535,8 @@
             "returncode": 0,
             "source_duration_seconds": 68.672,
             "state_fingerprint": "f7685effd6b98d884c566a8bed9510c995542875",
-            "stderr_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
-            "stdout_file": "C:\\Users\\ahnd6\\OneDrive\\문서\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
+            "stderr_file": "D:\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stderr.log",
+            "stdout_file": "D:\\GitHub\\lit\\jakal-flow-logs\\block_0013\\project-closeout-pass.test.stdout.log",
             "summary": "python -m pytest exited with 0"
           },
           "usage": {
