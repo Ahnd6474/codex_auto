@@ -45,7 +45,7 @@ import {
   deriveExecutionUiState,
 } from "../../utils";
 
-/* ── Metric card icons ── */
+/* ?�?� Metric card icons ?�?� */
 function StatusMetricIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none">
@@ -128,7 +128,7 @@ function MetricCard({ tone, icon, iconTone, label, value, sub }) {
   );
 }
 
-/* ── Button icons ── */
+/* ?�?� Button icons ?�?� */
 function GenerateIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none">
@@ -169,7 +169,7 @@ function ResetIcon() {
   );
 }
 
-/* ── Report format icons ── */
+/* ?�?� Report format icons ?�?� */
 function WordIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none">
@@ -197,14 +197,14 @@ function WebpageIcon() {
   );
 }
 
-/* ── Effort labels ── */
+/* ?�?� Effort labels ?�?� */
 function effortShortLabel(value, language) {
   const ko = language === "ko";
   switch (String(value || "").toLowerCase()) {
-    case "auto": return ko ? "자동" : "Auto";
-    case "low": return ko ? "낮음" : "Low";
+    case "auto": return ko ? "?�동" : "Auto";
+    case "low": return ko ? "??��" : "Low";
     case "medium": return ko ? "중간" : "Med";
-    case "high": return ko ? "높음" : "High";
+    case "high": return ko ? "?�음" : "High";
     case "xhigh": return ko ? "최고" : "Max";
     default: return value;
   }
@@ -213,16 +213,16 @@ function effortShortLabel(value, language) {
 function effortDescription(value, language) {
   const ko = language === "ko";
   switch (String(value || "").toLowerCase()) {
-    case "auto": return ko ? "동적으로 조절" : "Dynamic adjustment";
-    case "low": return ko ? "가장 빠름" : "Fastest";
+    case "auto": return ko ? "?�적?�로 조절" : "Dynamic adjustment";
+    case "low": return ko ? "가??빠름" : "Fastest";
     case "medium": return ko ? "균형" : "Balanced";
-    case "high": return ko ? "더 정밀" : "More thorough";
-    case "xhigh": return ko ? "최고 수준" : "Maximum depth";
+    case "high": return ko ? "???��?" : "More thorough";
+    case "xhigh": return ko ? "최고 ?��?" : "Maximum depth";
     default: return "";
   }
 }
 
-/* ── Model chip label helpers ── */
+/* ?�?� Model chip label helpers ?�?� */
 const PROVIDER_SHORT = {
   openai: "Codex", claude: "Claude", gemini: "Gemini", ensemble: "Ensemble",
   ollama: "Ollama", deepseek: "DeepSeek", qwen_code: "Qwen", kimi: "Kimi", minimax: "MiniMax",
@@ -293,7 +293,7 @@ function modelChipLabel(form, detail) {
   return PROVIDER_SHORT[provider] || provider;
 }
 
-/* ── ModelEffortChip: single button + popover ── */
+/* ?�?� ModelEffortChip: single button + popover ?�?� */
 function ModelEffortChip({ form, detail, busy, onChangeForm, language, modelCatalog = [] }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -320,7 +320,7 @@ function ModelEffortChip({ form, detail, busy, onChangeForm, language, modelCata
         className={`mec-chip${open ? " mec-chip--open" : ""}`}
         onClick={() => setOpen((v) => !v)}
         disabled={busy}
-        title={language === "ko" ? "모델 및 추론 강도 설정" : "Model & reasoning settings"}
+        title={language === "ko" ? "모델 �?추론 강도 ?�정" : "Model & reasoning settings"}
       >
         <span className="mec-chip__model">{chipModel}</span>
         <span className="mec-chip__sep">·</span>
@@ -371,20 +371,20 @@ function ModelEffortChip({ form, detail, busy, onChangeForm, language, modelCata
   );
 }
 
-/* ── Helpers ── */
+/* ?�?� Helpers ?�?� */
 function autoProviderLabel(language) {
-  return language === "ko" ? "자동 (AGENTS.md 선호)" : "Auto (AGENTS.md preference)";
+  return language === "ko" ? "?�동 (AGENTS.md ?�호)" : "Auto (AGENTS.md preference)";
 }
 
 function stepAutoModelHint(language, runtime) {
   const provider = String(runtime?.model_provider || "openai").trim().toLowerCase();
   if (provider === "ensemble") {
     return language === "ko"
-      ? "비워두면 ensemble 라우팅을 따릅니다. 계획과 일반 구현은 Codex CLI를 쓰고, UI/프론트엔드 단계는 Claude Code를 우선 사용하며 Claude가 없으면 Gemini CLI로 대체합니다."
+      ? "비워?�면 ensemble ?�우?�을 ?�릅?�다. 계획�??�반 구현?� Codex CLI�??�고, UI/?�론?�엔???�계??Claude Code�??�선 ?�용?�며 Claude가 ?�으�?Gemini CLI�??�체합?�다."
       : "Leave blank to follow ensemble routing: planning and general steps use Codex CLI, UI/frontend steps prefer Claude Code with Gemini CLI as fallback.";
   }
   return language === "ko"
-    ? "비워두면 AGENTS.md 규칙에 따라 UI 단계는 Gemini CLI, 그 외 단계는 Codex CLI를 자동 선택합니다."
+    ? "비워?�면 AGENTS.md 규칙???�라 UI ?�계??Gemini CLI, �????�계??Codex CLI�??�동 ?�택?�니??"
     : "Leave blank to follow AGENTS.md: UI steps prefer Gemini CLI, other steps prefer Codex CLI.";
 }
 
@@ -447,7 +447,7 @@ function reservationProjectLabel(job, fallbackLabel) {
   return String(job?.display_name || "").trim() || basename(job?.project_dir || "") || String(job?.repo_id || "").trim() || fallbackLabel;
 }
 
-/* ── Main view ── */
+/* ?�?� Main view ?�?� */
 export const ParallelRunControlView = memo(function ParallelRunControlView({
   detail,
   codexStatus,
@@ -491,10 +491,7 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
   );
   const livePlan = executionState.livePlan;
   const promptValue = livePlan?.project_prompt || "";
-  const [promptDraft, setPromptDraft] = useState(promptValue);
   const [failureDismissed, setFailureDismissed] = useState(false);
-  // Prompt collapsed when already has content; expanded when empty (first-time input)
-  const [promptExpanded, setPromptExpanded] = useState(!promptValue);
   const steps = useMemo(
     () =>
       planStepsWithCloseout(livePlan, {
@@ -571,29 +568,15 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
         || failureArtifacts.length
       ),
   );
-  const manualDebuggerLabel = language === "ko" ? "디버거 호출" : "Run Debugger";
-  const manualMergerLabel = language === "ko" ? "머저 호출" : "Run Merger";
+  const manualDebuggerLabel = language === "ko" ? "?�버�??�출" : "Run Debugger";
+  const manualMergerLabel = language === "ko" ? "머�? ?�출" : "Run Merger";
   const manualRecoveryHint = language === "ko"
-    ? "자동 복구가 실패했을 때 최근 실패 로그로 debugger를 다시 실행하거나, 현재 git 충돌 상태를 merger에 넘길 수 있습니다."
+    ? "?�동 복구가 ?�패?�을 ??최근 ?�패 로그�?debugger�??�시 ?�행?�거?? ?�재 git 충돌 ?�태�?merger???�길 ???�습?�다."
     : "When automatic recovery falls short, rerun the debugger against the latest failure logs or hand the current git conflict to the merger.";
 
   useEffect(() => {
     setFailureDismissed(false);
   }, [latestFailure?.summary, latestFailure?.report_markdown_file, latestFailure?.report_json_file]);
-
-  useEffect(() => {
-    setPromptDraft(promptValue);
-  }, [promptValue]);
-
-  useEffect(() => {
-    if (promptDraft === promptValue || typeof onPromptChange !== "function") {
-      return undefined;
-    }
-    const timer = window.setTimeout(() => {
-      onPromptChange(promptDraft);
-    }, 180);
-    return () => window.clearTimeout(timer);
-  }, [onPromptChange, promptDraft, promptValue]);
 
   // Auto-resize textarea based on content
   useEffect(() => {
@@ -601,7 +584,7 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
-  }, [promptDraft]);
+  }, [promptValue]);
 
   useEffect(() => {
     if (!selectedStep) return undefined;
@@ -612,7 +595,7 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
 
   return (
     <section className="workspace-view run-view">
-      {/* ── Compact metric ribbon ── */}
+      {/* ?�?� Compact metric ribbon ?�?� */}
       <div className="run-ribbon">
         <div className="run-ribbon__metrics">
           <span className={`run-ribbon__chip run-ribbon__chip--${statusTone(projectStatus)}`}>{displayStatus(projectStatus || "idle", language)}</span>
@@ -650,7 +633,7 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
         </div>
       </div>
 
-      {/* ── Failure card ── */}
+      {/* ?�?� Failure card ?�?� */}
       {showFailureCard && !failureDismissed ? (
         <div className="content-card" style={{ borderColor: "rgba(200,93,97,0.4)" }}>
           <div className="content-card__header">
@@ -660,9 +643,9 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
               className="step-editor-close"
               onClick={() => setFailureDismissed(true)}
               type="button"
-              title={language === "ko" ? "닫기" : "Dismiss"}
-              aria-label={language === "ko" ? "닫기" : "Dismiss"}
-            >✕</button>
+              title={language === "ko" ? "?�기" : "Dismiss"}
+              aria-label={language === "ko" ? "?�기" : "Dismiss"}
+            >??/button>
           </div>
           <div className="step-editor-grid">
             {latestFailure?.summary ? <div className="field field--wide"><span>{t("common.status")}</span><p>{latestFailure.summary}</p></div> : null}
@@ -682,7 +665,7 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
         </div>
       ) : null}
 
-      {/* ── Flow chart (main area) ── */}
+      {/* ?�?� Flow chart (main area) ?�?� */}
       <div className="run-flow-area">
         {steps.length ? (
           <ExecutionFlowChart steps={steps} projectStatus={projectStatus} language={language} selectedStepId={selectedStepId} onSelectStep={onSelectStep} />
@@ -694,13 +677,13 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
             </svg>
             <span>{t("run.noSteps")}</span>
             <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>
-              {language === "ko" ? "플랜을 생성하면 단계가 표시됩니다." : "Generate a plan to see execution steps here."}
+              {language === "ko" ? "?�랜???�성?�면 ?�계가 ?�시?�니??" : "Generate a plan to see execution steps here."}
             </span>
           </div>
         )}
       </div>
 
-      {/* ── Queue (inline if any) ── */}
+      {/* ?�?� Queue (inline if any) ?�?� */}
       {queuedJobs.length ? (
         <div className="run-queue-strip">
           <strong>{t("run.reservations")} ({queuedJobs.length})</strong>
@@ -716,7 +699,7 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
         </div>
       ) : null}
 
-      {/* ── Step editor (below flow) ── */}
+      {/* ?�?� Step editor (below flow) ?�?� */}
       {selectedStep ? (
         <div className="run-step-editor">
           <div className="run-step-editor__header">
@@ -731,9 +714,9 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
               className="step-editor-close"
               onClick={() => onSelectStep?.(null)}
               type="button"
-              title={language === "ko" ? "닫기 (Esc)" : "Close (Esc)"}
-              aria-label={language === "ko" ? "닫기" : "Close"}
-            >✕</button>
+              title={language === "ko" ? "?�기 (Esc)" : "Close (Esc)"}
+              aria-label={language === "ko" ? "?�기" : "Close"}
+            >??/button>
           </div>
 
           {selectedSystemStep ? (
@@ -743,7 +726,7 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
               <div className="field field--wide"><span>{t("field.dependsOn")}</span><p>{(selectedStep.depends_on || []).join(", ") || t("common.none")}</p></div>
               {String(selectedStepStatus || "").trim().toLowerCase().includes("failed") && selectedStepFailureReason ? (
                 <div className="field field--wide">
-                  <span>{language === "ko" ? "실패 사유" : "Failure Reason"}</span>
+                  <span>{language === "ko" ? "?�패 ?�유" : "Failure Reason"}</span>
                   <p>{selectedStepFailureReason}</p>
                   {selectedStepFailureCode ? <small className="field-hint"><code>{selectedStepFailureCode}</code></small> : null}
                 </div>
@@ -751,7 +734,7 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
               {selectedStep.notes ? <div className="field field--wide"><span>{stepNoteLabel}</span><p>{selectedStep.notes}</p></div> : null}
               {selectedStep.step_id === CLOSEOUT_STEP_ID ? (
                 <div className="field field--wide">
-                  <span>{language === "ko" ? "보고서 형식" : "Report Formats"}</span>
+                  <span>{language === "ko" ? "보고???�식" : "Report Formats"}</span>
                   <div className="report-format-row">
                     <span className="report-format-chip report-format-chip--word"><WordIcon />Word</span>
                     <span className="report-format-chip report-format-chip--ppt"><PptIcon />PowerPoint</span>
@@ -765,7 +748,7 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
               {selectedStepEstimate ? (
                 <div className="field field--wide">
                   <div style={{ display: "flex", gap: "16px", padding: "6px 10px", background: "var(--bg-panel-alt)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: "11px" }}>
-                    <div><span style={{ color: "var(--text-dim)" }}>{language === "ko" ? "예상" : "Est."}</span> <strong>{formatDurationCompact(selectedStepEstimate?.estimated_duration_seconds ?? 0, language)}</strong></div>
+                    <div><span style={{ color: "var(--text-dim)" }}>{language === "ko" ? "?�상" : "Est."}</span> <strong>{formatDurationCompact(selectedStepEstimate?.estimated_duration_seconds ?? 0, language)}</strong></div>
                     <div><span style={{ color: "var(--text-dim)" }}>{t("run.currentRemaining")}</span> <strong>{formatDurationCompact(selectedStepEstimate?.remaining_seconds ?? 0, language)}</strong></div>
                   </div>
                 </div>
@@ -779,7 +762,7 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
                   value={selectedStep.deadline_at || ""}
                   onChange={(event) => onUpdateStepField("deadline_at", event.target.value)}
                   disabled={!editableStep}
-                  placeholder={language === "ko" ? "예: 2026-04-05 18:00" : "Example: 2026-04-05 18:00"}
+                  placeholder={language === "ko" ? "?? 2026-04-05 18:00" : "Example: 2026-04-05 18:00"}
                 />
               </label>
 
@@ -808,7 +791,7 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
                   }}
                   disabled={!editableStep}
                 >
-                  <option value="">{language === "ko" ? `기본 실행 모델 사용 (${selectedStepExecutionModelLabel})` : `Use execution model (${selectedStepExecutionModelLabel})`}</option>
+                  <option value="">{language === "ko" ? `기본 ?�행 모델 ?�용 (${selectedStepExecutionModelLabel})` : `Use execution model (${selectedStepExecutionModelLabel})`}</option>
                   {!selectedStepModelVisible && selectedStepModel ? (
                     <option value={selectedStepModel}>
                       {modelDisplayName(modelCatalog, selectedStepModel) || selectedStepModel}
@@ -822,20 +805,20 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
                 </select>
                 <small className="field-hint">
                   {language === "ko"
-                    ? "기본은 실행 모델을 따르고, 다른 모델을 고르면 이 블록에만 덮어씁니다."
+                    ? "기본?� ?�행 모델???�르�? ?�른 모델??고르�???블록?�만 ??��?�니??"
                     : "Leave this synced with the execution model, or pick another model to override this block."}
                 </small>
               </label>
 
               <label className="field field--wide"><span>{t("field.dependsOn")}</span><input value={(selectedStep.depends_on || []).join(", ")} onChange={(event) => onUpdateStepField("depends_on", normalizeListText(event.target.value))} disabled={!editableStep} placeholder="step_id1, step_id2" /></label>
-              <label className="field field--wide"><span>{t("field.ownedPaths")}</span><textarea value={(selectedStep.owned_paths || []).join("\n")} onChange={(event) => onUpdateStepField("owned_paths", normalizeListText(event.target.value))} disabled={!editableStep} placeholder={language === "ko" ? "한 줄에 하나씩 파일 경로" : "One file path per line"} style={{ minHeight: "48px" }} /></label>
+              <label className="field field--wide"><span>{t("field.ownedPaths")}</span><textarea value={(selectedStep.owned_paths || []).join("\n")} onChange={(event) => onUpdateStepField("owned_paths", normalizeListText(event.target.value))} disabled={!editableStep} placeholder={language === "ko" ? "??줄에 ?�나???�일 경로" : "One file path per line"} style={{ minHeight: "48px" }} /></label>
               <label className="field field--wide"><span>{t("field.description")}</span><textarea value={selectedStep.display_description || ""} onChange={(event) => onUpdateStepField("display_description", event.target.value)} disabled={!editableStep} style={{ minHeight: "56px" }} /></label>
               <label className="field field--wide"><span>{t("field.codexInstruction")}</span><textarea value={selectedStep.codex_description || ""} onChange={(event) => onUpdateStepField("codex_description", event.target.value)} disabled={!editableStep} style={{ minHeight: "56px" }} /></label>
               <label className="field field--wide"><span>{t("field.successCriteria")}</span><textarea value={selectedStep.success_criteria || ""} onChange={(event) => onUpdateStepField("success_criteria", event.target.value)} disabled={!editableStep} style={{ minHeight: "48px" }} /></label>
 
               {String(selectedStepStatus || "").trim().toLowerCase().includes("failed") && selectedStepFailureReason ? (
                 <div className="field field--wide">
-                  <span>{language === "ko" ? "실패 사유" : "Failure Reason"}</span>
+                  <span>{language === "ko" ? "?�패 ?�유" : "Failure Reason"}</span>
                   <p>{selectedStepFailureReason}</p>
                   {selectedStepFailureCode ? <small className="field-hint"><code>{selectedStepFailureCode}</code></small> : null}
                 </div>
@@ -851,65 +834,26 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
           )}
         </div>
       ) : null}
-      {/* ── Prompt strip (bottom) — hidden when prompt lives in chat pane ── */}
-      {hidePromptStrip ? null : <div className={`run-prompt-strip run-prompt-strip--bottom${promptExpanded ? "" : " run-prompt-strip--collapsed"}`}>
-        {promptExpanded ? (
-          /* Expanded: full textarea */
-          <div className="run-prompt-strip__inner">
-            <div className="run-prompt-strip__toolbar">
-              <span className="run-prompt-strip__count">{promptDraft.length} {language === "ko" ? "자" : "chars"}</span>
-              <ModelEffortChip form={form} detail={detail} busy={busy} onChangeForm={onChangeForm} language={language} modelCatalog={detail?.codex_status?.model_catalog || []} />
-              {promptDraft.trim() ? (
-                <button
-                  type="button"
-                  className="run-prompt-strip__collapse-btn"
-                  onClick={() => {
-                    if (promptDraft !== promptValue) onPromptChange?.(promptDraft);
-                    setPromptExpanded(false);
-                  }}
-                  title={language === "ko" ? "접기" : "Collapse"}
-                >
-                  <svg viewBox="0 0 16 16" fill="none" width="12" height="12">
-                    <path d="M3 10l5-5 5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-              ) : null}
-            </div>
-            <textarea
-              ref={promptRef}
-              className="run-prompt-strip__input"
-              value={promptDraft}
-              onChange={(event) => setPromptDraft(event.target.value)}
-              onBlur={() => {
-                if (promptDraft !== promptValue) onPromptChange?.(promptDraft);
-                if (promptDraft.trim()) setPromptExpanded(false);
-              }}
-              disabled={busy}
-              placeholder={language === "ko" ? "프로젝트 프롬프트를 입력하세요..." : "Enter your project prompt…"}
-            />
-          </div>
-        ) : (
-          /* Collapsed: compact single row */
-          <div className="run-prompt-collapsed">
-            <svg className="run-prompt-collapsed__icon" viewBox="0 0 16 16" fill="none" width="14" height="14">
-              <path d="M2 4h12M2 8h8M2 12h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-            <span className="run-prompt-collapsed__text">
-              {promptValue
-                ? (promptValue.length > 72 ? `${promptValue.slice(0, 72)}\u2026` : promptValue)
-                : (language === "ko" ? "프롬프트 없음" : "No prompt")}
+      {/* ?�?� Prompt strip (bottom) ??hidden when prompt lives in chat pane ?�?� */}
+      {hidePromptStrip ? null : <div className="run-prompt-strip run-prompt-strip--bottom run-prompt-strip--fixed">
+        <div className="run-prompt-strip__inner">
+          <div className="run-prompt-strip__toolbar">
+            <span className="run-prompt-strip__count">{promptValue.length} {language === "ko" ? "��" : "chars"}</span>
+            <span className="status-badge status-badge--info" style={{ fontSize: "10px" }}>
+              {language === "ko" ? "����" : "Read only"}
             </span>
-            <button
-              type="button"
-              className="run-prompt-collapsed__edit"
-              onClick={() => setPromptExpanded(true)}
-              disabled={busy}
-            >
-              {language === "ko" ? "편집" : "Edit"}
-            </button>
             <ModelEffortChip form={form} detail={detail} busy={busy} onChangeForm={onChangeForm} language={language} modelCatalog={detail?.codex_status?.model_catalog || []} />
           </div>
-        )}
+          <textarea
+            ref={promptRef}
+            className="run-prompt-strip__input"
+            value={promptValue}
+            readOnly
+            aria-readonly="true"
+            tabIndex={-1}
+            placeholder={language === "ko" ? "������Ʈ ������Ʈ�� �����ϴ�." : "No project prompt."}
+          />
+        </div>
       </div>}
     </section>
   );

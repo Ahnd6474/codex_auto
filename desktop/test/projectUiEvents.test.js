@@ -117,6 +117,13 @@ test("applyProjectUiEvent patches local detail without clearing existing history
         },
       },
     }),
+    {
+      activeJob: {
+        id: "job-1",
+        status: "running",
+        command: "run-plan",
+      },
+    },
   );
 
   assert.equal(updated.project.current_status, "running:parallel");
@@ -129,6 +136,43 @@ test("applyProjectUiEvent patches local detail without clearing existing history
   assert.equal(updated.activity[0], "2026-03-30T00:00:00+00:00 | project-state-synced | Updated project state.");
   assert.equal(updated.history.ui_events[0].event_type, "project-state-synced");
   assert.equal(updated.bottom_panels.git_status.pending_checkpoint_approval, true);
+});
+
+test("applyProjectUiEvent keeps checkpoint state idle when no visible execution job is active", () => {
+  const updated = applyProjectUiEvent(
+    {
+      project: { repo_id: "repo-1", current_status: "running:step" },
+      loop_state: {
+        current_task: "Waiting for approval",
+        current_checkpoint_id: "CP2",
+        pending_checkpoint_approval: true,
+      },
+      checkpoints: {
+        items: [
+          { checkpoint_id: "CP1", status: "approved" },
+          { checkpoint_id: "CP2", status: "running", title: "Review integration" },
+        ],
+        pending: { checkpoint_id: "CP2", status: "running", title: "Review integration" },
+        timeline_markdown: "",
+      },
+    },
+    sampleEvent("project-state-synced", {
+      event: {
+        details: {
+          current_task: "Waiting for approval",
+          current_checkpoint_id: "CP2",
+          pending_checkpoint_approval: true,
+        },
+      },
+    }),
+  );
+
+  assert.equal(updated.loop_state.current_task, "");
+  assert.equal(updated.loop_state.current_checkpoint_id, "");
+  assert.equal(updated.loop_state.pending_checkpoint_approval, false);
+  assert.equal(updated.checkpoints.current_checkpoint_id, null);
+  assert.equal(updated.checkpoints.pending, null);
+  assert.equal(updated.checkpoints.items[1].status, "pending");
 });
 
 test("applyProjectUiEvent clears the live pending checkpoint when approval finishes", () => {
@@ -214,6 +258,13 @@ test("applyProjectUiEvent patches running step state from run events", () => {
         },
       },
     }),
+    {
+      activeJob: {
+        id: "job-1",
+        status: "running",
+        command: "run-plan",
+      },
+    },
   );
 
   assert.equal(updated.plan.steps[1].status, "running");
@@ -255,6 +306,13 @@ test("applyProjectUiEvent marks a finished step completed and keeps the live sna
         },
       },
     }),
+    {
+      activeJob: {
+        id: "job-1",
+        status: "running",
+        command: "run-plan",
+      },
+    },
   );
 
   assert.equal(updated.project.current_status, "running:parallel");

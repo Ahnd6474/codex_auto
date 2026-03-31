@@ -1327,7 +1327,6 @@ export function deriveExecutionProgress(detail = null, planDraft = null, activeJ
     progressJob?.status === "running" ||
     runningStepList.length > 0 ||
     closeoutRunning ||
-    status.startsWith("running:") ||
     planningRunning;
 
   let phase = "idle";
@@ -1483,11 +1482,15 @@ function executionFamilyFromJob(job = null) {
   return normalizeExecutionFamilyToken(status) || commandFamily || "idle";
 }
 
-function checkpointFamilyFromDetail(detail = null) {
+function checkpointFamilyFromDetail(detail = null, activeJob = null) {
   const checkpoints = detail?.checkpoints && typeof detail.checkpoints === "object" ? detail.checkpoints : null;
   const pending = checkpoints?.pending && typeof checkpoints.pending === "object" ? checkpoints.pending : null;
   const items = Array.isArray(checkpoints?.items) ? checkpoints.items.filter((item) => item && typeof item === "object") : [];
-  if (pending || items.some((item) => ["awaiting_review", "pending"].includes(String(item?.status || "").trim().toLowerCase()))) {
+  const executionJob = visibleExecutionJob(activeJob);
+  const processStatus = String(executionJob?.status || "").trim().toLowerCase();
+  const processActive = Boolean(executionJob) && (processStatus === "running" || processStatus === "queued");
+  const hasActiveCheckpoint = pending || items.some((item) => ["awaiting_review", "pending"].includes(String(item?.status || "").trim().toLowerCase()));
+  if (processActive && hasActiveCheckpoint) {
     return "checkpoint";
   }
   if (items.length && items.every((item) => ["approved", "completed"].includes(String(item?.status || "").trim().toLowerCase()))) {
@@ -1515,9 +1518,20 @@ export function deriveExecutionUiState(detail = null, planDraft = null, activeJo
   const progress = deriveExecutionProgress(detail, planDraft, activeJob);
   const checkpointState = detail?.checkpoints && typeof detail.checkpoints === "object" ? detail.checkpoints : {};
   const checkpointPending = checkpointState?.pending && typeof checkpointState.pending === "object" ? checkpointState.pending : null;
-  const checkpointFamily = checkpointFamilyFromDetail(detail);
+  const checkpointFamily = checkpointFamilyFromDetail(detail, executionJob);
   const projectStatus = String(detail?.project?.current_status || "").trim();
-  const rawProjectFamily = normalizeExecutionSurfaceStatus(projectStatus);
+  const storedProjectFamily = normalizeExecutionSurfaceStatus(projectStatus);
+  const shouldDowngradeStoredStatus =
+    !executionJob
+    && ["running", "queued", "planning", "closeout", "debugging", "merging", "checkpoint"].includes(storedProjectFamily);
+  const resolvedProjectStatus = shouldDowngradeStoredStatus
+    ? deriveIdleProjectStatus(
+        livePlan,
+        computePlanStats(livePlan || {}),
+        projectStatus,
+      )
+    : projectStatus;
+  const rawProjectFamily = normalizeExecutionSurfaceStatus(resolvedProjectStatus);
   const processFamily = rawProjectFamily === "debugging" ? "debugging" : executionFamilyFromJob(executionJob);
   const planningRunning = isPlanningProgressRunning(detail?.planning_progress);
 
@@ -1578,18 +1592,22 @@ export function deriveExecutionUiState(detail = null, planDraft = null, activeJo
     displayStatusValue = "running:closeout";
   } else if (progress.phase === "debugging" || isDebuggingStatus(progress.status)) {
     displayStatusValue = "running:debugging";
-  } else if (projectStatus.toLowerCase().startsWith("running:") || projectStatus.toLowerCase().startsWith("queued:")) {
-    displayStatusValue = projectStatus.toLowerCase();
-  } else if (processFamily === "queued") {
-    const queuedCommand = String(executionJob?.command || "").trim().toLowerCase();
-    displayStatusValue = queuedCommand ? `queued:${queuedCommand}` : "queued";
-  } else if (processFamily === "merging") {
-    displayStatusValue = "running:merging";
-  } else if (processFamily === "running") {
-    const runningCommand = String(executionJob?.command || "").trim().toLowerCase();
-    displayStatusValue = runningCommand ? `running:${runningCommand}` : "running";
-  } else if (projectStatus) {
-    displayStatusValue = String(projectStatus).trim().toLowerCase();
+  } else if (progress.isActive) {
+    if (processFamily === "queued") {
+      const queuedCommand = String(executionJob?.command || "").trim().toLowerCase();
+      displayStatusValue = queuedCommand ? `queued:${queuedCommand}` : "queued";
+    } else if (processFamily === "merging") {
+      displayStatusValue = "running:merging";
+    } else if (processFamily === "running") {
+      const runningCommand = String(executionJob?.command || "").trim().toLowerCase();
+      displayStatusValue = runningCommand ? `running:${runningCommand}` : "running";
+    } else {
+      displayStatusValue = normalizeExecutionSurfaceStatus(progress.status) || "running";
+    }
+  } else if (resolvedProjectStatus.toLowerCase().startsWith("running:") || resolvedProjectStatus.toLowerCase().startsWith("queued:")) {
+    displayStatusValue = resolvedProjectStatus.toLowerCase();
+  } else if (resolvedProjectStatus) {
+    displayStatusValue = String(resolvedProjectStatus).trim().toLowerCase();
   }
   const mismatchEntries = Object.entries(surfaces)
     .filter(([, family]) => family !== "idle")
@@ -1612,7 +1630,7 @@ export function deriveExecutionUiState(detail = null, planDraft = null, activeJo
     surfaces,
     mismatchSummary: consistent ? "" : mismatchEntries.join(" | "),
     reportLines: [
-      formatExecutionConsistencyLine("toolbar", toolbarFamily, projectStatus),
+      formatExecutionConsistencyLine("toolbar", toolbarFamily, resolvedProjectStatus),
       formatExecutionConsistencyLine("flow", flowFamily, progress.phase || progress.status),
       formatExecutionConsistencyLine("checkpoint", checkpointFamily, checkpointPending?.status || ""),
       formatExecutionConsistencyLine("process", processFamily, `${String(executionJob?.status || "").trim()} ${String(executionJob?.command || "").trim()}`.trim()),

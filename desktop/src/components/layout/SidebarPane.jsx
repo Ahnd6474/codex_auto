@@ -241,13 +241,27 @@ function treeStructureSignature(nodes = []) {
   ].join("::")).join("|");
 }
 
-function collectTreePaths(nodes = [], paths = []) {
-  (nodes || []).forEach((node) => {
-    const path = String(node?.path || "").trim();
-    if (path) {
-      paths.push(path);
+function workspaceTreeNodeIdentity(node = null, parentKey = "", index = 0) {
+  const path = String(node?.path || "").trim();
+  if (path) {
+    return path;
+  }
+  const explicitId = String(node?.id || node?.key || "").trim();
+  if (explicitId) {
+    return explicitId;
+  }
+  const label = String(node?.label || "").trim() || "node";
+  const kind = String(node?.kind || "").trim() || "node";
+  return `${parentKey || "root"}::${kind}::${label}::${index}`;
+}
+
+function collectTreePaths(nodes = [], paths = [], parentKey = "") {
+  (nodes || []).forEach((node, index) => {
+    const nodeId = workspaceTreeNodeIdentity(node, parentKey, index);
+    if (nodeId) {
+      paths.push(nodeId);
     }
-    collectTreePaths(node?.children || [], paths);
+    collectTreePaths(node?.children || [], paths, nodeId);
   });
   return paths;
 }
@@ -301,16 +315,18 @@ function defaultTreeExpanded(path = "", depth = 0) {
   return depth < 1 || path === "/";
 }
 
-function buildVisibleTreeRows(nodes = [], expandedPaths = {}, normalizedQuery = "", depth = 0, rows = []) {
-  (nodes || []).forEach((node) => {
+function buildVisibleTreeRows(nodes = [], expandedPaths = {}, normalizedQuery = "", depth = 0, rows = [], parentKey = "") {
+  (nodes || []).forEach((node, index) => {
     const isFolder = isTreeFolder(node);
-    const path = String(node?.path || `${node?.label || "node"}-${depth}`).trim();
-    const isExpanded = normalizedQuery ? true : expandedPaths[path] ?? defaultTreeExpanded(path, depth);
+    const nodeId = workspaceTreeNodeIdentity(node, parentKey, index);
+    const path = String(node?.path || nodeId).trim();
+    const isExpanded = normalizedQuery ? true : expandedPaths[nodeId] ?? defaultTreeExpanded(path, depth);
     const extension = isFolder ? "" : fileExtension(node?.label || "");
     const parentLabel = parentPathLabel(path);
     const childCount = Array.isArray(node?.children) ? node.children.length : 0;
     rows.push({
-      key: path || `${node?.label || "node"}-${depth}-${rows.length}`,
+      key: nodeId,
+      nodeId,
       path,
       label: node?.label || "",
       kind: node?.kind || "file",
@@ -323,7 +339,7 @@ function buildVisibleTreeRows(nodes = [], expandedPaths = {}, normalizedQuery = 
         : parentLabel,
     });
     if (isFolder && node?.children?.length && isExpanded) {
-      buildVisibleTreeRows(node.children, expandedPaths, normalizedQuery, depth + 1, rows);
+      buildVisibleTreeRows(node.children, expandedPaths, normalizedQuery, depth + 1, rows, nodeId);
     }
   });
   return rows;
@@ -411,17 +427,17 @@ const WorkspaceTreeView = memo(function WorkspaceTreeView({
             key={row.key}
             className={`tree-node__row tree-node__row--${row.kind || "file"} ${row.isFolder ? "tree-node__row--folder" : ""}`}
             onClick={() => {
-              if (row.isFolder && !normalizedQuery) {
-                onToggle?.(row.path, row.isExpanded);
-              }
-            }}
+                if (row.isFolder && !normalizedQuery) {
+                 onToggle?.(row.nodeId || row.path, row.isExpanded);
+                }
+              }}
             type="button"
             style={{
               "--tree-depth": row.depth,
               paddingLeft: `${10 + row.depth * 18}px`,
               minHeight: `${TREE_ROW_HEIGHT}px`,
             }}
-            title={row.path || row.label}
+            title={row.path || row.nodeId || row.label}
           >
             <span className="tree-node__guide" aria-hidden="true" />
             <span className="tree-node__prefix" aria-hidden="true">

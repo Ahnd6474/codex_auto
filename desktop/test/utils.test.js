@@ -334,6 +334,117 @@ test("execution consistency reports surface mismatches when checkpoint state div
   assert.match(report, /diff:/);
 });
 
+test("deriveExecutionUiState ignores stale checkpoint state when no visible execution job is active", () => {
+  const state = deriveExecutionUiState(
+    {
+      project: {
+        current_status: "setup_ready",
+      },
+      plan: {
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [],
+      },
+      checkpoints: {
+        pending: {
+          checkpoint_id: "CP1",
+          status: "awaiting_review",
+          title: "Review build",
+        },
+        items: [
+          {
+            checkpoint_id: "CP1",
+            status: "running",
+            title: "Review build",
+          },
+        ],
+      },
+    },
+    {
+      execution_mode: "parallel",
+      closeout_status: "not_started",
+      steps: [],
+    },
+    null,
+  );
+
+  assert.equal(state.consistent, true);
+  assert.equal(state.checkpointFamily, "idle");
+  assert.equal(state.toolbarFamily, "idle");
+  assert.equal(state.flowFamily, "idle");
+  assert.equal(state.processFamily, "idle");
+  assert.equal(state.displayFamily, "idle");
+  assert.match(executionConsistencyReport(
+    {
+      project: {
+        current_status: "setup_ready",
+      },
+      plan: {
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [],
+      },
+      checkpoints: {
+        pending: {
+          checkpoint_id: "CP1",
+          status: "awaiting_review",
+          title: "Review build",
+        },
+        items: [
+          {
+            checkpoint_id: "CP1",
+            status: "running",
+            title: "Review build",
+          },
+        ],
+      },
+    },
+    {
+      execution_mode: "parallel",
+      closeout_status: "not_started",
+      steps: [],
+    },
+    null,
+  ), /consistent: yes/);
+});
+
+test("deriveExecutionUiState lowers stale running status to the saved idle state when no visible execution job is active", () => {
+  const state = deriveExecutionUiState(
+    {
+      project: {
+        current_status: "running:parallel",
+      },
+      plan: {
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [
+          { step_id: "ST1", title: "Plan", status: "completed" },
+          { step_id: "ST2", title: "Build", status: "pending" },
+        ],
+      },
+      checkpoints: {
+        items: [],
+      },
+    },
+    {
+      execution_mode: "parallel",
+      closeout_status: "not_started",
+      steps: [
+        { step_id: "ST1", title: "Plan", status: "completed" },
+        { step_id: "ST2", title: "Build", status: "pending" },
+      ],
+    },
+    null,
+  );
+
+  assert.equal(state.consistent, true);
+  assert.equal(state.displayFamily, "idle");
+  assert.equal(state.toolbarFamily, "idle");
+  assert.equal(state.flowFamily, "idle");
+  assert.equal(state.processFamily, "idle");
+  assert.equal(state.displayStatusValue, "plan_ready");
+});
+
 test("chat command helpers keep send-chat-message jobs out of execution widgets", () => {
   const chatJob = {
     id: "job-chat",

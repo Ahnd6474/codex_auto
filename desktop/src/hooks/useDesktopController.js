@@ -1089,7 +1089,9 @@ export function useDesktopController() {
         const shouldPatchSelectedProject = shouldRefreshSelectedProject(selectedProjectId, eventRepoId);
         if (shouldPatchSelectedProject) {
           startTransition(() => {
-            setProjectDetail((current) => applyProjectUiEvent(current, eventPayload));
+            setProjectDetail((current) => applyProjectUiEvent(current, eventPayload, {
+              activeJob: activeJobRef.current,
+            }));
           });
         }
         if (shouldPatchSelectedProject && shouldRefreshProjectDetailForUiEvent(eventPayload)) {
@@ -1459,11 +1461,19 @@ export function useDesktopController() {
         buildProjectPayload(formToSave),
         workspaceRoot || null,
       );
+      const jobSnapshot = await syncRunningJobSnapshot(activeJobId);
       lastAppliedDetailSignatureRef.current = "";
       setSelectedProjectId(detail.project.repo_id);
+      applyCurrentJobSnapshot(jobSnapshot);
       applyProjectDetail(detail, {
         force: true,
         preserveDirtyPlan: false,
+        runningJob: projectJobFromJobs(jobSnapshot?.jobs || [], {
+          repo_id: detail?.project?.repo_id || "",
+          project_dir: detail?.project?.repo_path || "",
+          current_status: detail?.project?.current_status || "",
+          last_run_at: detail?.project?.last_run_at || "",
+        }),
       });
       if (preserveLocalPlan) {
         setPlanDraft(cloneValue(planDraft));

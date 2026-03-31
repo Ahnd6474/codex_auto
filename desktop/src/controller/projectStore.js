@@ -2,7 +2,9 @@ import { defaultShareSettings, emptyPlanDraft, shareSettingsFromDetail } from ".
 import {
   blankProjectForm,
   cloneValue,
+  computePlanStats,
   detailApplySignature,
+  deriveIdleProjectStatus,
   mergeProjectDetailCodexStatus,
   mergeModelCatalogs,
   normalizedLocalModelProvider,
@@ -10,6 +12,7 @@ import {
   projectFormFromDetail,
   sanitizeProjectDetailForJobState,
   sanitizeProjectListForJobState,
+  visibleExecutionJob,
   shouldKeepUnsavedPlan,
   workspaceStatsFromProjects,
 } from "../utils.js";
@@ -100,6 +103,36 @@ function shallowObjectEqual(left = null, right = null) {
   return leftKeys.every((key) => Object.is(left[key], right[key]));
 }
 
+function shallowObjectEqualExcept(left = null, right = null, excludedKeys = []) {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") {
+    return false;
+  }
+  const excluded = new Set(Array.isArray(excludedKeys) ? excludedKeys : []);
+  const leftKeys = Object.keys(left).filter((key) => !excluded.has(key));
+  const rightKeys = Object.keys(right).filter((key) => !excluded.has(key));
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+  return leftKeys.every((key) => Object.is(left[key], right[key]));
+}
+
+function workspaceTreeNodeKey(node = null, parentKey = "", index = 0) {
+  const path = String(node?.path || "").trim();
+  if (path) {
+    return `path:${path}`;
+  }
+  const explicitId = String(node?.id || node?.key || "").trim();
+  if (explicitId) {
+    return `id:${explicitId}`;
+  }
+  const label = String(node?.label || "").trim() || "node";
+  const kind = String(node?.kind || "").trim() || "node";
+  return `${parentKey || "root"}::${kind}::${label}::${index}`;
+}
+
 function workspaceTreeNodesEqual(leftNodes = [], rightNodes = []) {
   if (leftNodes === rightNodes) {
     return true;
@@ -121,6 +154,66 @@ function workspaceTreeNodesEqual(leftNodes = [], rightNodes = []) {
   });
 }
 
+function mergeWorkspaceTreeNodes(previousNodes = [], nextNodes = [], parentKey = "") {
+  const prior = Array.isArray(previousNodes) ? previousNodes : [];
+  const incoming = Array.isArray(nextNodes) ? nextNodes : [];
+  if (!incoming.length) {
+    return incoming.length === prior.length ? prior : [];
+  }
+  if (prior.length && workspaceTreeNodesEqual(incoming, prior)) {
+    return prior;
+  }
+
+  const previousByKey = new Map();
+  prior.forEach((node, index) => {
+    previousByKey.set(workspaceTreeNodeKey(node, parentKey, index), node);
+  });
+
+  let changed = prior.length !== incoming.length;
+  const merged = incoming.map((nextNode, index) => {
+    if (!nextNode || typeof nextNode !== "object") {
+      if (!Object.is(prior[index], nextNode)) {
+        changed = true;
+      }
+      return nextNode;
+    }
+
+    const nodeKey = workspaceTreeNodeKey(nextNode, parentKey, index);
+    const previousNode = previousByKey.get(nodeKey) || null;
+    const nextChildren = Array.isArray(nextNode.children)
+      ? mergeWorkspaceTreeNodes(Array.isArray(previousNode?.children) ? previousNode.children : [], nextNode.children, nodeKey)
+      : (Array.isArray(previousNode?.children) ? previousNode.children : nextNode.children);
+    const candidate = Array.isArray(nextChildren)
+      ? (
+        nextChildren === nextNode.children
+          ? nextNode
+          : {
+              ...nextNode,
+              children: nextChildren,
+            }
+      )
+      : nextNode;
+
+    if (
+      previousNode
+      && shallowObjectEqualExcept(previousNode, candidate, ["children"])
+      && workspaceTreeNodesEqual(Array.isArray(previousNode.children) ? previousNode.children : [], Array.isArray(candidate.children) ? candidate.children : [])
+    ) {
+      if (prior[index] !== previousNode) {
+        changed = true;
+      }
+      return previousNode;
+    }
+
+    if (prior[index] !== candidate) {
+      changed = true;
+    }
+    return candidate;
+  });
+
+  return changed ? merged : prior;
+}
+
 function resolveWorkspaceTree(nextWorkspaceTree, previousWorkspaceTree = []) {
   const previousTree = Array.isArray(previousWorkspaceTree) ? previousWorkspaceTree : [];
   const incomingTree = Array.isArray(nextWorkspaceTree) ? nextWorkspaceTree : [];
@@ -130,7 +223,7 @@ function resolveWorkspaceTree(nextWorkspaceTree, previousWorkspaceTree = []) {
   if (previousTree.length && workspaceTreeNodesEqual(incomingTree, previousTree)) {
     return previousTree;
   }
-  return cloneValue(incomingTree);
+  return mergeWorkspaceTreeNodes(previousTree, incomingTree);
 }
 
 function mergeLoadedSections(currentSections = null, fallbackSections = null, detailLevel = "") {
@@ -344,7 +437,15 @@ function mergeCheckpointsSection(primary = null, fallback = null, preserveSparse
   return nextCheckpoints;
 }
 
-function checkpointApprovalIsActive(detail = null) {
+function checkpointApprovalIsActive(detail = null, activeJob = null) {
+  const processJob = visibleExecutionJob(activeJob);
+  if (!processJob) {
+    return false;
+  }
+  const processStatus = String(processJob.status || "").trim().toLowerCase();
+  if (processStatus !== "running" && processStatus !== "queued") {
+    return false;
+  }
   const currentStatus = String(detail?.project?.current_status || "").trim().toLowerCase();
   return Boolean(detail?.loop_state?.pending_checkpoint_approval) || currentStatus === "awaiting_checkpoint_approval";
 }
@@ -363,13 +464,16 @@ function checkpointTimelineMarkdownFromItems(items = []) {
     .join("\n");
 }
 
-function normalizeCheckpointSectionForDetail(detail = null) {
+function normalizeCheckpointSectionForDetail(detail = null, activeJob = null) {
   const checkpoints = detail?.checkpoints && typeof detail.checkpoints === "object" ? detail.checkpoints : null;
   if (!checkpoints) {
     return detail;
   }
 
-  const waitingForApproval = checkpointApprovalIsActive(detail);
+  const processJob = visibleExecutionJob(activeJob);
+  const processStatus = String(processJob?.status || "").trim().toLowerCase();
+  const processActive = Boolean(processJob) && (processStatus === "running" || processStatus === "queued");
+  const waitingForApproval = processActive && checkpointApprovalIsActive(detail, activeJob);
   const activeCheckpointId = String(detail?.loop_state?.current_checkpoint_id || checkpoints?.pending?.checkpoint_id || "")
     .trim();
   const activeCheckpointLineageId = String(detail?.loop_state?.current_checkpoint_lineage_id || "").trim();
@@ -389,10 +493,10 @@ function normalizeCheckpointSectionForDetail(detail = null) {
         || itemLineageId === activeCheckpointLineageId
       );
 
-    if (waitingForApproval) {
-      if (matchesActiveCheckpoint) {
-        nextItem.status = "awaiting_review";
-      }
+    if (waitingForApproval && matchesActiveCheckpoint) {
+      nextItem.status = "awaiting_review";
+    } else if (!processActive && ["running", "awaiting_review"].includes(String(nextItem.status || "").trim().toLowerCase())) {
+      nextItem.status = "pending";
     }
     return nextItem;
   });
@@ -432,8 +536,23 @@ function normalizeCheckpointSectionForDetail(detail = null) {
     }
   }
 
+  const currentStatus = String(detail?.project?.current_status || "").trim();
+  const nextStatus = waitingForApproval
+    ? "awaiting_checkpoint_approval"
+    : deriveIdleProjectStatus(
+        detail?.plan,
+        computePlanStats(detail?.plan || {}),
+        currentStatus,
+      );
+
   return {
     ...detail,
+    project: detail?.project
+      ? {
+          ...detail.project,
+          current_status: nextStatus,
+        }
+      : detail?.project,
     checkpoints: {
       ...checkpoints,
       current_checkpoint_id: waitingForApproval ? activeCheckpointId : null,
@@ -442,6 +561,47 @@ function normalizeCheckpointSectionForDetail(detail = null) {
       pending,
       timeline_markdown: checkpointTimelineMarkdownFromItems(items),
     },
+    loop_state: detail?.loop_state
+      ? {
+          ...detail.loop_state,
+          current_task: waitingForApproval ? detail.loop_state.current_task : "",
+          current_checkpoint_id: waitingForApproval ? activeCheckpointId : null,
+          current_checkpoint_lineage_id: waitingForApproval ? activeCheckpointLineageId : null,
+          pending_checkpoint_approval: waitingForApproval,
+        }
+      : detail?.loop_state,
+    snapshot: detail?.snapshot
+      ? {
+          ...detail.snapshot,
+          project: detail.snapshot.project
+            ? {
+                ...detail.snapshot.project,
+                current_status: nextStatus,
+              }
+            : detail.snapshot.project,
+          loop_state: detail.snapshot.loop_state
+            ? {
+                ...detail.snapshot.loop_state,
+                current_task: waitingForApproval ? detail.snapshot.loop_state.current_task : "",
+                current_checkpoint_id: waitingForApproval ? activeCheckpointId : null,
+                current_checkpoint_lineage_id: waitingForApproval ? activeCheckpointLineageId : null,
+                pending_checkpoint_approval: waitingForApproval,
+              }
+            : detail.snapshot.loop_state,
+        }
+      : detail?.snapshot,
+    bottom_panels: detail?.bottom_panels
+      ? {
+          ...detail.bottom_panels,
+          git_status: detail.bottom_panels.git_status
+            ? {
+                ...detail.bottom_panels.git_status,
+                current_status: nextStatus,
+                pending_checkpoint_approval: waitingForApproval,
+              }
+            : detail.bottom_panels.git_status,
+        }
+      : detail?.bottom_panels,
   };
 }
 
@@ -801,8 +961,9 @@ export function applyProjectDetailState({
 }) {
   const preservedDetail = preserveProjectDetailSupplement(detail, state.projectDetail);
   const mergedDetail = mergeProjectDetailCodexStatus(preservedDetail, state.projectDetail?.codex_status, state.modelCatalog);
-  const checkpointNormalizedDetail = normalizeCheckpointSectionForDetail(mergedDetail);
-  const normalizedDetail = sanitizeProjectDetailForJobState(checkpointNormalizedDetail, options.runningJob ?? state.activeJob);
+  const activeJob = options.runningJob ?? state.activeJob;
+  const checkpointNormalizedDetail = normalizeCheckpointSectionForDetail(mergedDetail, activeJob);
+  const normalizedDetail = sanitizeProjectDetailForJobState(checkpointNormalizedDetail, activeJob);
   const applySignature = detailApplySignature(normalizedDetail, options.runningJob ?? state.activeJob);
   if (
     !options.force &&

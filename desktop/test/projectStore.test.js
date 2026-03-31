@@ -533,8 +533,8 @@ test("applyProjectDetailState clears stale checkpoint approval state when the re
   assert.equal(applied.project.current_status, "setup_ready");
   assert.equal(nextProjectDetail.checkpoints.current_checkpoint_id, null);
   assert.equal(nextProjectDetail.checkpoints.pending, null);
-  assert.equal(nextProjectDetail.checkpoints.items[0].status, "awaiting_review");
-  assert.match(nextProjectDetail.checkpoints.timeline_markdown, /awaiting_review/);
+  assert.equal(nextProjectDetail.checkpoints.items[0].status, "pending");
+  assert.match(nextProjectDetail.checkpoints.timeline_markdown, /pending/);
 });
 
 test("applyProjectDetailState preserves checkpoint approval state when the refreshed project is actually waiting", () => {
@@ -597,7 +597,11 @@ test("applyProjectDetailState preserves checkpoint approval state when the refre
         codex_status: {},
       },
       modelCatalog: [],
-      activeJob: null,
+      activeJob: {
+        id: "job-1",
+        status: "running",
+        command: "run-plan",
+      },
       defaultRuntime: {
         model: "gpt-5.4-mini",
         effort: "high",
@@ -857,4 +861,69 @@ test("mergeProjectDetailSupplement keeps the current workspace tree reference wh
   );
 
   assert.equal(merged.workspace_tree, currentWorkspaceTree);
+});
+
+test("mergeProjectDetailSupplement preserves unchanged workspace tree branches when one branch changes", () => {
+  const previousWorkspaceTree = [
+    {
+      label: "repo",
+      path: "/repo",
+      kind: "dir",
+      children: [
+        {
+          label: "src",
+          path: "/repo/src",
+          kind: "dir",
+          children: [{ label: "app.js", path: "/repo/src/app.js", kind: "file" }],
+        },
+        {
+          label: "docs",
+          path: "/repo/docs",
+          kind: "dir",
+          children: [{ label: "guide.md", path: "/repo/docs/guide.md", kind: "file" }],
+        },
+      ],
+    },
+  ];
+
+  const merged = mergeProjectDetailSupplement(
+    {
+      detail_level: "core",
+      project: { repo_id: "demo" },
+      workspace_tree: previousWorkspaceTree,
+      loaded_sections: { workspace: true },
+    },
+    {
+      workspace_tree: [
+        {
+          label: "repo",
+          path: "/repo",
+          kind: "dir",
+          children: [
+            {
+              label: "src",
+              path: "/repo/src",
+              kind: "dir",
+              children: [{ label: "app.js", path: "/repo/src/app.js", kind: "file" }],
+            },
+            {
+              label: "docs",
+              path: "/repo/docs",
+              kind: "dir",
+              children: [
+                { label: "guide.md", path: "/repo/docs/guide.md", kind: "file" },
+                { label: "readme.md", path: "/repo/docs/readme.md", kind: "file" },
+              ],
+            },
+          ],
+        },
+      ],
+      loaded_sections: { workspace: true },
+    },
+  );
+
+  assert.notEqual(merged.workspace_tree, previousWorkspaceTree);
+  assert.equal(merged.workspace_tree[0].children[0], previousWorkspaceTree[0].children[0]);
+  assert.notEqual(merged.workspace_tree[0].children[1], previousWorkspaceTree[0].children[1]);
+  assert.equal(merged.workspace_tree[0].children[1].children[0], previousWorkspaceTree[0].children[1].children[0]);
 });

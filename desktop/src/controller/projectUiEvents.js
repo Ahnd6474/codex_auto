@@ -1,3 +1,9 @@
+import {
+  computePlanStats,
+  deriveIdleProjectStatus,
+  visibleExecutionJob,
+} from "../utils.js";
+
 const DEFAULT_PLANNING_STAGE_LABELS = Object.freeze({
   context_scan: "Scan repository context",
   planner_a: "Planner Agent A",
@@ -73,7 +79,7 @@ function terminalStepStatus(status = "") {
   return ["completed", "failed"].includes(normalizedText(status).toLowerCase());
 }
 
-function patchCheckpointsFromRunEvent(checkpoints = null, record = null, loopState = null) {
+function patchCheckpointsFromRunEvent(checkpoints = null, record = null, loopState = null, activeJob = null) {
   if (!checkpoints || typeof checkpoints !== "object" || !record) {
     return checkpoints;
   }
@@ -81,6 +87,9 @@ function patchCheckpointsFromRunEvent(checkpoints = null, record = null, loopSta
     return checkpoints;
   }
 
+  const processJob = visibleExecutionJob(activeJob);
+  const processStatus = normalizedText(processJob?.status).toLowerCase();
+  const processActive = Boolean(processJob) && (processStatus === "running" || processStatus === "queued");
   const currentCheckpointId = normalizedText(
     record.eventType === "project-state-synced"
       ? record.details?.current_checkpoint_id
@@ -89,9 +98,9 @@ function patchCheckpointsFromRunEvent(checkpoints = null, record = null, loopSta
   const waitingForApproval =
     record.eventType === "checkpoint-approved"
       ? false
-      : record.details?.pending_checkpoint_approval !== undefined
+      : processActive && record.details?.pending_checkpoint_approval !== undefined
         ? Boolean(record.details.pending_checkpoint_approval)
-        : Boolean(loopState?.pending_checkpoint_approval);
+        : processActive && Boolean(loopState?.pending_checkpoint_approval);
   const previousPendingId = normalizedText(checkpoints?.pending?.checkpoint_id);
   const targetCheckpointId = currentCheckpointId || previousPendingId;
   const items = Array.isArray(checkpoints.items) ? checkpoints.items : [];
@@ -102,7 +111,7 @@ function patchCheckpointsFromRunEvent(checkpoints = null, record = null, loopSta
     }
     const itemId = normalizedText(item.checkpoint_id);
     const status = normalizedText(item.status).toLowerCase();
-    if (!waitingForApproval && status === "awaiting_review") {
+    if (record.eventType === "checkpoint-approved" && status === "awaiting_review") {
       changed = true;
       return {
         ...item,
@@ -114,6 +123,13 @@ function patchCheckpointsFromRunEvent(checkpoints = null, record = null, loopSta
       return {
         ...item,
         status: "awaiting_review",
+      };
+    }
+    if (!processActive && ["running", "awaiting_review"].includes(status)) {
+      changed = true;
+      return {
+        ...item,
+        status: "pending",
       };
     }
     return item;
@@ -149,9 +165,14 @@ function patchCheckpointsFromRunEvent(checkpoints = null, record = null, loopSta
     nextPending = null;
   }
 
+  const nextCurrentCheckpointId = waitingForApproval ? currentCheckpointId : null;
+  const nextCurrentCheckpointLineageId = waitingForApproval ? normalizedText(loopState?.current_checkpoint_lineage_id) : null;
+
   if (
     normalizedText(nextPending?.checkpoint_id) !== normalizedText(checkpoints?.pending?.checkpoint_id)
     || normalizedText(nextPending?.status) !== normalizedText(checkpoints?.pending?.status)
+    || normalizedText(nextCurrentCheckpointId) !== normalizedText(checkpoints?.current_checkpoint_id)
+    || normalizedText(nextCurrentCheckpointLineageId) !== normalizedText(checkpoints?.current_checkpoint_lineage_id)
   ) {
     changed = true;
   }
@@ -161,6 +182,8 @@ function patchCheckpointsFromRunEvent(checkpoints = null, record = null, loopSta
   }
   return {
     ...checkpoints,
+    current_checkpoint_id: nextCurrentCheckpointId,
+    current_checkpoint_lineage_id: nextCurrentCheckpointLineageId,
     items: nextItems,
     pending: nextPending,
   };
@@ -388,11 +411,22 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
   const historyLimit = Math.max(1, parsePositiveInt(options.historyLimit, 40));
   const activityLine = projectUiEventActivityLine(record);
   const nextPlan = patchPlanFromRunEvent(detail.plan, record);
+  const activeExecutionJob = visibleExecutionJob(options.activeJob ?? options.runningJob ?? null);
+  const processStatus = normalizedText(activeExecutionJob?.status).toLowerCase();
+  const processActive = Boolean(activeExecutionJob) && (processStatus === "running" || processStatus === "queued");
+  const fallbackProjectStatus = deriveIdleProjectStatus(
+    detail.plan,
+    computePlanStats(detail.plan || {}),
+    detail.project?.current_status || "",
+  );
+  const nextProjectStatus = processActive
+    ? (record.projectStatus || detail.project.current_status)
+    : fallbackProjectStatus;
 
   const nextProject = detail.project
     ? {
         ...detail.project,
-        current_status: record.projectStatus || detail.project.current_status,
+        current_status: nextProjectStatus,
         last_run_at:
           record.eventType === "project-state-synced"
             ? normalizedText(record.details?.last_run_at) || detail.project.last_run_at
@@ -405,19 +439,21 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
         ...detail.loop_state,
         current_task:
           record.eventType === "project-state-synced"
-            ? normalizedText(record.details?.current_task)
+            ? (processActive ? normalizedText(record.details?.current_task) : "")
             : detail.loop_state.current_task,
         current_checkpoint_id:
           record.eventType === "project-state-synced"
-            ? normalizedText(record.details?.current_checkpoint_id)
+            ? (processActive ? normalizedText(record.details?.current_checkpoint_id) : "")
             : detail.loop_state.current_checkpoint_id,
         pending_checkpoint_approval:
-          record.eventType === "project-state-synced" && record.details?.pending_checkpoint_approval !== undefined
-            ? Boolean(record.details.pending_checkpoint_approval)
+          record.eventType === "project-state-synced"
+            ? (processActive && record.details?.pending_checkpoint_approval !== undefined
+              ? Boolean(record.details.pending_checkpoint_approval)
+              : false)
             : detail.loop_state.pending_checkpoint_approval,
       }
     : detail.loop_state;
-  const nextCheckpoints = patchCheckpointsFromRunEvent(detail.checkpoints, record, nextLoopState);
+  const nextCheckpoints = patchCheckpointsFromRunEvent(detail.checkpoints, record, nextLoopState, activeExecutionJob);
 
   const nextActivity = activityLine
     ? uniquePrepend(detail.activity, activityLine, activityLimit)
@@ -439,10 +475,12 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
         git_status: detail.bottom_panels.git_status && typeof detail.bottom_panels.git_status === "object"
           ? {
               ...detail.bottom_panels.git_status,
-              current_status: record.projectStatus || detail.bottom_panels.git_status.current_status,
+              current_status: nextProjectStatus || detail.bottom_panels.git_status.current_status,
               pending_checkpoint_approval:
-                record.eventType === "project-state-synced" && record.details?.pending_checkpoint_approval !== undefined
-                  ? Boolean(record.details.pending_checkpoint_approval)
+                record.eventType === "project-state-synced"
+                  ? (processActive && record.details?.pending_checkpoint_approval !== undefined
+                    ? Boolean(record.details.pending_checkpoint_approval)
+                    : false)
                   : detail.bottom_panels.git_status.pending_checkpoint_approval,
             }
           : detail.bottom_panels.git_status,
@@ -455,7 +493,7 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
         project: detail.snapshot.project && typeof detail.snapshot.project === "object"
           ? {
               ...detail.snapshot.project,
-              current_status: record.projectStatus || detail.snapshot.project.current_status,
+              current_status: nextProjectStatus || detail.snapshot.project.current_status,
               last_run_at:
                 record.eventType === "project-state-synced"
                   ? normalizedText(record.details?.last_run_at) || detail.snapshot.project.last_run_at
@@ -467,15 +505,17 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
               ...detail.snapshot.loop_state,
               current_task:
                 record.eventType === "project-state-synced"
-                  ? normalizedText(record.details?.current_task)
+                  ? (processActive ? normalizedText(record.details?.current_task) : "")
                   : detail.snapshot.loop_state.current_task,
               current_checkpoint_id:
                 record.eventType === "project-state-synced"
-                  ? normalizedText(record.details?.current_checkpoint_id)
+                  ? (processActive ? normalizedText(record.details?.current_checkpoint_id) : "")
                   : detail.snapshot.loop_state.current_checkpoint_id,
               pending_checkpoint_approval:
-                record.eventType === "project-state-synced" && record.details?.pending_checkpoint_approval !== undefined
-                  ? Boolean(record.details.pending_checkpoint_approval)
+                record.eventType === "project-state-synced"
+                  ? (processActive && record.details?.pending_checkpoint_approval !== undefined
+                    ? Boolean(record.details.pending_checkpoint_approval)
+                    : false)
                   : detail.snapshot.loop_state.pending_checkpoint_approval,
             }
           : detail.snapshot.loop_state,

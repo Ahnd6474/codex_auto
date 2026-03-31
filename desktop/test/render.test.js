@@ -294,6 +294,52 @@ test("ParallelRunControlView shows the auto-run toggle as off by default", async
   assert.doesNotMatch(html, /checked=""/);  // checkbox should be unchecked
 });
 
+test("ParallelRunControlView renders the bottom prompt as read only", async () => {
+  const html = await renderBundledComponent(
+    "parallel-run-control-prompt-readonly-render",
+    "./src/components/views/ParallelRunControlView.jsx",
+    "ParallelRunControlView",
+    {
+      detail: {
+        project: {
+          current_status: "plan_ready",
+        },
+        runtime: {
+          execution_mode: "parallel",
+          effort: "medium",
+        },
+      },
+      planDraft: {
+        project_prompt: "Ship the UI",
+        execution_mode: "parallel",
+        closeout_status: "not_started",
+        steps: [],
+      },
+      activeJob: null,
+      autoRunAfterPlan: false,
+      selectedStepId: null,
+      busy: false,
+      onPromptChange: noop,
+      onGeneratePlan: noop,
+      onSavePlan: noop,
+      onResetPlan: noop,
+      onRunPlan: noop,
+      onRequestStop: noop,
+      onAutoRunAfterPlanChange: noop,
+      onSelectStep: noop,
+      onUpdateStepField: noop,
+      onSaveStepLocal: noop,
+      onAddStep: noop,
+      onDeleteStep: noop,
+    },
+  );
+
+  assert.match(html, /Read only/);
+  assert.match(html, /readonly/);
+  assert.doesNotMatch(html, /run-prompt-collapsed__edit/);
+  assert.doesNotMatch(html, /onChange=/);
+});
+
 test("ParallelRunControlView renders queued reservations with cancellation controls", async () => {
   const html = await renderBundledComponent(
     "parallel-run-control-reservations-render",
@@ -1996,7 +2042,7 @@ test("CenterWorkspace prefers the live detail plan while a run is active", async
   );
 
   const runningNodeMatches = html.match(/execution-flow-chart__node--info/g) || [];
-  assert.match(html, /Running: Parallel/);
+  assert.match(html, /Running: Run plan/);
   assert.doesNotMatch(html, /Ship the stale UI/);
   assert.doesNotMatch(html, /Plan generation prompt/);
   assert.equal(runningNodeMatches.length, 2);
@@ -2042,7 +2088,7 @@ test("CenterWorkspace keeps using the live detail plan when project status is ru
   );
 
   const runningNodeMatches = html.match(/execution-flow-chart__node--info/g) || [];
-  assert.match(html, /Running: Parallel/);
+  assert.match(html, /Running/);
   assert.doesNotMatch(html, />Flow<\/button>/);
   assert.doesNotMatch(html, /Ship the stale draft/);
   assert.equal(runningNodeMatches.length, 1);
@@ -2699,6 +2745,68 @@ test("IdeToolbar shows Run when execution is idle", async () => {
   const runMatch = html.match(/<button[^>]*toolbar-btn toolbar-btn--accent[^>]*>(?:<[^>]+>|[^<])*<span>Run<\/span><\/button>/);
   assert.ok(runMatch, "Run button should exist");
   assert.doesNotMatch(runMatch[0], /disabled=""/);
+});
+
+test("IdeToolbar and StatusBar ignore stale running status when no visible execution job is active", async () => {
+  const staleDetail = {
+    project: {
+      display_name: "Demo",
+      branch: "main",
+      current_status: "running:parallel",
+    },
+    plan: {
+      execution_mode: "parallel",
+      closeout_status: "not_started",
+      steps: [
+        { step_id: "ST1", title: "Plan", status: "completed" },
+        { step_id: "ST2", title: "Build", status: "pending" },
+      ],
+    },
+  };
+
+  const toolbarHtml = await renderBundledComponent(
+    "ide-toolbar-stale-running-state-render",
+    "./src/components/layout/IdeToolbar.jsx",
+    "IdeToolbar",
+    {
+      projectDetail: staleDetail,
+      planDraft: staleDetail.plan,
+      busy: false,
+      activeJob: null,
+      activeCenterTab: "run",
+      onRefresh: noop,
+      onOpenSettings: noop,
+      onGeneratePlan: noop,
+      onRunPlan: noop,
+      onRunCloseout: noop,
+      onApproveCheckpoint: noop,
+    },
+  );
+
+  const statusHtml = await renderBundledComponent(
+    "status-bar-stale-running-state-render",
+    "./src/components/layout/StatusBar.jsx",
+    "StatusBar",
+    {
+      detail: {
+        ...staleDetail,
+        runtime_insights: {
+          cost: {},
+        },
+      },
+      activeJob: null,
+      queuedJobs: [],
+      modelPresets: [],
+      onToggleBottom: noop,
+      bottomCollapsed: true,
+    },
+  );
+
+  assert.match(toolbarHtml, /Plan ready/);
+  assert.match(toolbarHtml, /<span>Run<\/span>/);
+  assert.doesNotMatch(toolbarHtml, /Running/);
+  assert.match(statusHtml, /Plan ready/);
+  assert.doesNotMatch(statusHtml, /Running/);
 });
 
 test("IdeToolbar, StatusBar, and RunProgressPanel agree on the running label", async () => {
