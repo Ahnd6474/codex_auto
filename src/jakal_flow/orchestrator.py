@@ -2384,13 +2384,26 @@ class Orchestrator(
     def _normalize_execution_mode(self, value: str | None) -> str:
         return "parallel"
 
+    def _execution_runtime_options(self, runtime: RuntimeOptions) -> RuntimeOptions:
+        execution_model = normalize_step_model(
+            str(getattr(runtime, "execution_model", "") or getattr(runtime, "model", "") or getattr(runtime, "model_slug_input", ""))
+        )
+        if not execution_model:
+            return runtime
+        payload = runtime.to_dict()
+        payload["execution_model"] = execution_model
+        payload["model"] = execution_model
+        payload["model_slug_input"] = execution_model
+        return RuntimeOptions.from_dict(payload)
+
     def _execution_runtime_preflight_error(self, context: ProjectContext, runtime: RuntimeOptions) -> str:
+        execution_runtime = self._execution_runtime_options(runtime)
         return provider_execution_preflight_error(
-            str(getattr(runtime, "model_provider", "") or "").strip(),
-            codex_path=str(getattr(runtime, "codex_path", "") or "").strip(),
+            str(getattr(execution_runtime, "model_provider", "") or "").strip(),
+            codex_path=str(getattr(execution_runtime, "codex_path", "") or "").strip(),
             repo_dir=context.paths.repo_dir,
-            provider_api_key_env=str(getattr(runtime, "provider_api_key_env", "") or "").strip(),
-            model=str(getattr(runtime, "model", "") or getattr(runtime, "model_slug_input", "")).strip(),
+            provider_api_key_env=str(getattr(execution_runtime, "provider_api_key_env", "") or "").strip(),
+            model=str(getattr(execution_runtime, "model", "") or getattr(execution_runtime, "model_slug_input", "")).strip(),
         )
 
     def _step_model_runtime_overrides(

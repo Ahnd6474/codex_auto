@@ -3148,6 +3148,188 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_root, ignore_errors=True)
 
+    def test_run_manual_debugger_recovery_uses_execution_model_runtime(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_manual_debugger_execution_model_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model_provider="claude",
+            model="gpt-5.4",
+            execution_model="claude-sonnet-4-6",
+            model_slug_input="gpt-5.4",
+            effort="medium",
+            test_cmd="python -m pytest",
+        )
+        captured: dict[str, str] = {}
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            orchestrator.save_execution_plan_state(
+                context,
+                ExecutionPlanState(
+                    plan_title="Manual debugger execution model",
+                    default_test_command="python -m pytest",
+                    steps=[
+                        ExecutionStep(
+                            step_id="ST1",
+                            title="Repair failed batch",
+                            codex_description="Repair the failed batch safely.",
+                            test_command="python -m pytest",
+                            status="failed",
+                        )
+                    ],
+                ),
+            )
+            failing_stdout = context.paths.logs_dir / "manual-debugger.stdout.log"
+            failing_stderr = context.paths.logs_dir / "manual-debugger.stderr.log"
+            failing_stdout.write_text("assertion failed\n", encoding="utf-8")
+            failing_stderr.write_text("traceback\n", encoding="utf-8")
+            append_jsonl(
+                context.paths.logs_dir / "test_runs.jsonl",
+                {
+                    "label": "verify",
+                    "command": "python -m pytest",
+                    "returncode": 1,
+                    "summary": "python -m pytest exited with 1",
+                    "stdout_file": str(failing_stdout),
+                    "stderr_file": str(failing_stderr),
+                },
+            )
+
+            def fake_run_debugger_pass(**kwargs):
+                debug_context = kwargs["context"]
+                captured["model"] = str(debug_context.runtime.model)
+                captured["execution_model"] = str(debug_context.runtime.execution_model)
+                captured["model_slug_input"] = str(debug_context.runtime.model_slug_input)
+                return (
+                    "manual-debugger",
+                    CodexRunResult(
+                        pass_type="manual-debugger",
+                        prompt_file=context.paths.logs_dir / "manual-debugger.prompt.md",
+                        output_file=context.paths.logs_dir / "manual-debugger.last_message.txt",
+                        event_file=context.paths.logs_dir / "manual-debugger.events.jsonl",
+                        returncode=0,
+                        search_enabled=False,
+                        changed_files=[],
+                        usage={},
+                        last_message="Debugger recovery applied",
+                    ),
+                    TestRunResult(
+                        command="python -m pytest",
+                        returncode=0,
+                        stdout_file=failing_stdout,
+                        stderr_file=failing_stderr,
+                        summary="python -m pytest exited with 0",
+                    ),
+                    "debugger-commit",
+                )
+
+            with mock.patch.object(orchestrator, "_run_debugger_pass", side_effect=fake_run_debugger_pass):
+                _context, _saved, result = orchestrator.run_manual_debugger_recovery(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(captured["model"], "claude-sonnet-4-6")
+        self.assertEqual(captured["execution_model"], "claude-sonnet-4-6")
+        self.assertEqual(captured["model_slug_input"], "claude-sonnet-4-6")
+        self.assertEqual(result["commit_hash"], "debugger-commit")
+
+    def test_run_manual_merger_recovery_uses_execution_model_runtime(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_manual_merger_execution_model_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model_provider="claude",
+            model="gpt-5.4",
+            execution_model="claude-sonnet-4-6",
+            model_slug_input="gpt-5.4",
+            effort="high",
+            test_cmd="python -m pytest",
+        )
+        captured: dict[str, str] = {}
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            orchestrator.save_execution_plan_state(
+                context,
+                ExecutionPlanState(
+                    plan_title="Manual merger execution model",
+                    default_test_command="python -m pytest",
+                    steps=[
+                        ExecutionStep(
+                            step_id="ST1",
+                            title="Frontend slice",
+                            codex_description="Merge the frontend slice safely.",
+                            test_command="python -m pytest",
+                            status="failed",
+                        ),
+                        ExecutionStep(
+                            step_id="ST2",
+                            title="Backend slice",
+                            codex_description="Merge the backend slice safely.",
+                            test_command="python -m pytest",
+                            status="failed",
+                        ),
+                    ],
+                ),
+            )
+
+            def fake_run_merger_pass(**kwargs):
+                merge_context = kwargs["context"]
+                captured["model"] = str(merge_context.runtime.model)
+                captured["execution_model"] = str(merge_context.runtime.execution_model)
+                captured["model_slug_input"] = str(merge_context.runtime.model_slug_input)
+                return (
+                    "parallel-batch-merger",
+                    CodexRunResult(
+                        pass_type="parallel-batch-merger",
+                        prompt_file=context.paths.logs_dir / "parallel-batch-merger.prompt.md",
+                        output_file=context.paths.logs_dir / "parallel-batch-merger.last_message.txt",
+                        event_file=context.paths.logs_dir / "parallel-batch-merger.events.jsonl",
+                        returncode=0,
+                        search_enabled=False,
+                        changed_files=[],
+                        usage={},
+                        last_message="Merger recovery applied",
+                    ),
+                    True,
+                    "merger-commit",
+                )
+
+            with mock.patch.object(orchestrator.git, "conflicted_files", return_value=["src/conflict.py"]), mock.patch.object(
+                orchestrator.git,
+                "run",
+                return_value=CommandResult(command=["git", "status", "--short"], returncode=0, stdout="UU src/conflict.py\n", stderr=""),
+            ), mock.patch.object(orchestrator, "_run_merger_pass", side_effect=fake_run_merger_pass):
+                _context, _saved, result = orchestrator.run_manual_merger_recovery(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(captured["model"], "claude-sonnet-4-6")
+        self.assertEqual(captured["execution_model"], "claude-sonnet-4-6")
+        self.assertEqual(captured["model_slug_input"], "claude-sonnet-4-6")
+        self.assertEqual(result["commit_hash"], "merger-commit")
+
     def test_execute_pass_invokes_debugger_with_failure_logs_and_recovers(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_step_debugger_test"
         shutil.rmtree(temp_root, ignore_errors=True)

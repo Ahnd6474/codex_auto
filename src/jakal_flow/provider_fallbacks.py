@@ -189,7 +189,9 @@ def _fallback_runtime_for_provider(
 def _default_model_for_provider(provider: str, runtime: RuntimeOptions) -> str:
     normalized_provider = normalize_step_model_provider(provider) or "openai"
     runtime_provider = normalize_step_model_provider(getattr(runtime, "model_provider", ""))
-    runtime_model = normalize_step_model(getattr(runtime, "model", "") or getattr(runtime, "model_slug_input", ""))
+    runtime_model = normalize_step_model(
+        getattr(runtime, "execution_model", "") or getattr(runtime, "model", "") or getattr(runtime, "model_slug_input", "")
+    )
     ensemble_openai_model = normalize_step_model(getattr(runtime, "ensemble_openai_model", ""))
     ensemble_gemini_model = normalize_step_model(getattr(runtime, "ensemble_gemini_model", ""))
     ensemble_claude_model = normalize_step_model(getattr(runtime, "ensemble_claude_model", ""))

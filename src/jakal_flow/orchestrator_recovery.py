@@ -573,7 +573,8 @@ class OrchestratorRecoveryMixin:
         branch: str = "main",
         origin_url: str = "",
     ) -> tuple[ProjectContext, ExecutionPlanState, dict[str, object]]:
-        context = self.setup_local_project(project_dir=project_dir, runtime=runtime, branch=branch, origin_url=origin_url)
+        execution_runtime = self._execution_runtime_options(runtime)
+        context = self.setup_local_project(project_dir=project_dir, runtime=execution_runtime, branch=branch, origin_url=origin_url)
         plan_state = self.load_execution_plan_state(context)
         bundle_json = self._latest_failure_bundle_json(context)
         failing_test_entry = self._latest_failed_test_run_entry(context)
@@ -702,7 +703,8 @@ class OrchestratorRecoveryMixin:
         branch: str = "main",
         origin_url: str = "",
     ) -> tuple[ProjectContext, ExecutionPlanState, dict[str, object]]:
-        context = self.setup_local_project(project_dir=project_dir, runtime=runtime, branch=branch, origin_url=origin_url)
+        execution_runtime = self._execution_runtime_options(runtime)
+        context = self.setup_local_project(project_dir=project_dir, runtime=execution_runtime, branch=branch, origin_url=origin_url)
         plan_state = self.load_execution_plan_state(context)
         conflicted_files = self.git.conflicted_files(context.paths.repo_dir)
         if not conflicted_files:
