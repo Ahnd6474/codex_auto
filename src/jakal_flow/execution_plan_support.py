@@ -207,6 +207,7 @@ def repack_parallelizable_steps(
         parallelizable_after = coerce_string_list(metadata.get("parallelizable_after", []))
         if not parallelizable_after:
             continue
+        step_position = step_index.get(step.step_id, -1)
         resolved_dependencies = resolve_parallelizable_dependencies(
             parallelizable_after,
             step_by_block_id=step_by_block_id,
@@ -214,6 +215,11 @@ def repack_parallelizable_steps(
             skeleton_step_id=skeleton_step_id,
             current_step_id=step.step_id,
         )
+        resolved_dependencies = [
+            dependency
+            for dependency in resolved_dependencies
+            if 0 <= step_index.get(dependency, -1) < step_position
+        ]
         if not resolved_dependencies:
             continue
         current_dependencies = [dependency for dependency in step.depends_on if dependency and dependency != step.step_id]
@@ -222,7 +228,6 @@ def repack_parallelizable_steps(
             continue
         if len(current_dependencies) == 1 and current_dependencies[0] not in resolved_dependencies:
             current_dependency_index = step_index.get(current_dependencies[0], -1)
-            step_position = step_index.get(step.step_id, -1)
             if 0 <= current_dependency_index < step_position:
                 step.depends_on = resolved_dependencies
 

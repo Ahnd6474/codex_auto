@@ -135,14 +135,6 @@ def _path_signature(path: Path) -> str:
     return f"{stat_result.st_mtime_ns}:{stat_result.st_size}"
 
 
-def _clone_session_list(sessions: list[ChatSessionMeta]) -> list[ChatSessionMeta]:
-    return [ChatSessionMeta.from_dict(item.to_dict()) for item in sessions]
-
-
-def _clone_message_list(messages: list[ChatMessageEntry]) -> list[ChatMessageEntry]:
-    return [ChatMessageEntry.from_dict(item.to_dict()) for item in messages]
-
-
 def _clone_chat_payload(payload: dict[str, Any]) -> dict[str, Any]:
     sessions = payload.get("sessions")
     messages = payload.get("messages")

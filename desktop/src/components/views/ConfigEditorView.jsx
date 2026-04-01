@@ -659,7 +659,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
               <label className="field">
                 <span>{t("field.optimizationMode")}</span>
                 <select
-                  value={runtime.optimization_mode || "light"}
+                  value={runtime.optimization_mode || "off"}
                   onChange={(event) =>
                     onChangeForm((current) => ({
                       ...current,

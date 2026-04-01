@@ -154,7 +154,7 @@ def normalize_runtime_payload(
         default=int(default_values.get("empty_cycle_limit", 3) or 3),
     )
     merged["optimization_mode"] = normalize_optimization_mode(
-        merged.get("optimization_mode", default_values.get("optimization_mode", "light"))
+        merged.get("optimization_mode", default_values.get("optimization_mode", "off"))
     )
     merged["optimization_large_file_lines"] = coerce_positive_int(
         merged.get("optimization_large_file_lines", default_values.get("optimization_large_file_lines", 350)),

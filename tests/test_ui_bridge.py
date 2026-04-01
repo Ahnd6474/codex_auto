@@ -911,7 +911,7 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(runtime.regression_limit, 3)
         self.assertEqual(runtime.empty_cycle_limit, 1)
         self.assertEqual(runtime.checkpoint_interval_blocks, 1)
-        self.assertEqual(runtime.optimization_mode, "light")
+        self.assertEqual(runtime.optimization_mode, "off")
         self.assertEqual(runtime.optimization_large_file_lines, 50)
         self.assertEqual(runtime.optimization_long_function_lines, 80)
         self.assertEqual(runtime.optimization_duplicate_block_lines, 3)
@@ -1635,7 +1635,7 @@ class UIBridgeTests(unittest.TestCase):
         self.assertFalse(payload["default_runtime"]["generate_word_report"])
         self.assertFalse(payload["default_runtime"]["save_project_logs"])
         self.assertEqual(payload["default_runtime"]["sandbox_mode"], "danger-full-access")
-        self.assertEqual(payload["default_runtime"]["optimization_mode"], "light")
+        self.assertEqual(payload["default_runtime"]["optimization_mode"], "off")
 
     def test_append_ui_event_saves_project_activity_log_when_enabled(self) -> None:
         with TemporaryTestDir() as temp_dir:

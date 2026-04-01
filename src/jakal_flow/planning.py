@@ -1608,7 +1608,7 @@ def optimization_prompt(
             project_prompt=plan_state.project_prompt.strip() or "No prompt recorded.",
             plan_summary=plan_state.summary.strip() or "No execution summary recorded.",
             test_command=plan_state.default_test_command.strip() or context.runtime.test_cmd,
-            optimization_mode=getattr(scan_result, "mode", "light"),
+            optimization_mode=getattr(scan_result, "mode", "off"),
             scanned_file_count=int(getattr(scan_result, "scanned_file_count", 0) or 0),
             candidate_files=candidate_files,
             optimization_candidates=candidates_payload,

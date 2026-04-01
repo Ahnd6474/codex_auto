@@ -131,14 +131,6 @@ class BridgeJobStore:
             ),
         )
 
-    def _active_jobs_for_workspace_unlocked(self, workspace_root: Path) -> list[BridgeJobSnapshot]:
-        workspace_key = str(workspace_root)
-        return [
-            job
-            for job in self._jobs.values()
-            if job.workspace_root == workspace_key and str(job.status).strip().lower() in {"queued", "running"}
-        ]
-
     def _running_count_unlocked(self, workspace_root: Path) -> int:
         workspace_key = str(workspace_root)
         return sum(

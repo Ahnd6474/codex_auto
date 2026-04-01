@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from time import perf_counter
 
-from .commit_naming import build_commit_descriptor, build_initial_commit_descriptor
+from .commit_naming import build_commit_descriptor, build_initial_commit_descriptor, build_setup_commit_descriptor
 from .contract_wave import (
     current_spine_version,
     ensure_contract_wave_artifacts,
@@ -478,6 +478,7 @@ class Orchestrator(
         if origin_url.strip():
             self.git.set_remote_url(resolved_dir, "origin", origin_url.strip())
         detected_origin = self.git.remote_url(resolved_dir, "origin")
+        self._sync_local_setup_branch_from_origin(resolved_dir, active_branch)
 
         existing = self.workspace.find_project_by_repo_path(resolved_dir)
         if existing is None:
@@ -504,7 +505,7 @@ class Orchestrator(
             runtime.git_user_email,
         )
         ensure_virtualenv(context.paths.repo_dir)
-        ensure_gitignore(context.paths.repo_dir)
+        gitignore_updated = ensure_gitignore(context.paths.repo_dir)
         self._ensure_project_documents(context)
 
         if created_repo or not self.git.has_commits(context.paths.repo_dir):
@@ -516,8 +517,17 @@ class Orchestrator(
             )
         else:
             safe_revision = self.git.current_revision(context.paths.repo_dir)
+            if gitignore_updated:
+                setup_commit = build_setup_commit_descriptor(context)
+                safe_revision = self.git.commit_paths(
+                    context.paths.repo_dir,
+                    [".gitignore"],
+                    setup_commit.message,
+                    author_name=setup_commit.author_name,
+                )
 
         context.metadata.branch = self.git.current_branch(context.paths.repo_dir) or active_branch
+        self._push_local_setup_branch_to_origin(context.paths.repo_dir, context.metadata.branch)
         context.metadata.current_safe_revision = safe_revision
         context.metadata.current_status = "setup_ready"
         context.metadata.last_run_at = now_utc_iso()
@@ -532,6 +542,41 @@ class Orchestrator(
         self.workspace.save_project(context)
         self.save_execution_plan_state(context, self.load_execution_plan_state(context))
         return context
+
+    def _sync_local_setup_branch_from_origin(self, repo_dir: Path, branch: str) -> None:
+        target_branch = str(branch or "").strip()
+        if not target_branch:
+            return
+        remote_url = self.git.remote_url(repo_dir, "origin")
+        if not remote_url:
+            return
+        self.git.fetch(repo_dir, "origin", target_branch)
+        remote_head = self.git.remote_branch_revision(repo_dir, "origin", target_branch)
+        if not remote_head:
+            return
+        if not self.git.has_commits(repo_dir) and self.git.has_changes(repo_dir):
+            raise ExecutionPreflightError(
+                f"Cannot pull origin/{target_branch} into an uncommitted local repository. Commit or clone the remote first."
+            )
+        self.git.pull_ff_only(repo_dir, "origin", target_branch)
+
+    def _push_local_setup_branch_to_origin(self, repo_dir: Path, branch: str) -> None:
+        target_branch = str(branch or "").strip()
+        if not target_branch:
+            return
+        remote_url = self.git.remote_url(repo_dir, "origin")
+        if not remote_url or not self.git.has_commits(repo_dir):
+            return
+        local_head_result = self.git.run(["rev-parse", "--verify", target_branch], cwd=repo_dir, check=False)
+        if local_head_result.returncode != 0:
+            return
+        local_head = local_head_result.stdout.strip()
+        if not local_head:
+            return
+        remote_head = self.git.remote_branch_revision(repo_dir, "origin", target_branch)
+        if remote_head == local_head:
+            return
+        self.git.push(repo_dir, target_branch)
 
     def generate_execution_plan(
         self,

@@ -16,6 +16,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import jakal_flow.planning as planning_module
+import jakal_flow.execution_plan_support as execution_plan_support
 from jakal_flow.environment import ensure_gitignore
 from jakal_flow.errors import (
     AgentPassExecutionError,
@@ -262,6 +263,42 @@ class ExecutionPlanHelperTests(unittest.TestCase):
 
         self.assertEqual(len(steps), 1)
         self.assertEqual(steps[0].reasoning_effort, "xhigh")
+
+    def test_postprocess_generated_plan_steps_ignores_future_parallelizable_dependencies(self) -> None:
+        outline = """
+        {
+          "candidate_blocks": [
+            {"block_id": "B1", "goal": "Setup"},
+            {"block_id": "B2", "goal": "Task A", "parallelizable_after": ["B3"]},
+            {"block_id": "B3", "goal": "Join"}
+          ]
+        }
+        """
+        steps = [
+            ExecutionStep(step_id="ST1", title="Setup", metadata={"candidate_block_id": "B1"}),
+            ExecutionStep(
+                step_id="ST2",
+                title="Task A",
+                depends_on=["ST1"],
+                metadata={"candidate_block_id": "B2"},
+            ),
+            ExecutionStep(
+                step_id="ST4",
+                title="Join",
+                depends_on=["ST2"],
+                metadata={"candidate_block_id": "B3", "step_kind": "join"},
+            ),
+        ]
+
+        processed = execution_plan_support.postprocess_generated_plan_steps(
+            steps,
+            planner_outline=outline,
+            execution_mode="parallel",
+        )
+
+        self.assertEqual(processed[1].depends_on, ["ST1"])
+        self.assertEqual(processed[2].depends_on, ["ST2"])
+        self.assertEqual(execution_plan_support.find_parallel_dependency_cycle(processed), [])
 
     def test_execution_plan_markdown_explicitly_marks_pending_steps(self) -> None:
         context = SimpleNamespace(
@@ -7418,6 +7455,61 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn(".venv/", content)
         self.assertIn("__pycache__/", content)
         self.assertIn(".parallel_runs/", content)
+
+    def test_ensure_gitignore_creates_file_with_jakal_flow_logs_entry(self) -> None:
+        project_dir = Path(__file__).resolve().parents[1] / ".tmp_gitignore_create_test"
+        shutil.rmtree(project_dir, ignore_errors=True)
+        project_dir.mkdir(parents=True, exist_ok=True)
+
+        changed = ensure_gitignore(project_dir)
+        gitignore = project_dir / ".gitignore"
+        exists = gitignore.exists()
+        content = gitignore.read_text(encoding="utf-8")
+        shutil.rmtree(project_dir, ignore_errors=True)
+
+        self.assertTrue(changed)
+        self.assertTrue(exists)
+        self.assertIn("# jakal-flow", content)
+        self.assertIn("jakal-flow-logs/", content)
+
+    def test_setup_local_project_pushes_setup_gitignore_to_origin(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        workspace_root = Path(temp_dir.name) / "workspace"
+        remote_dir = Path(temp_dir.name) / "remote.git"
+        seed_dir = Path(temp_dir.name) / "seed"
+        repo_dir = Path(temp_dir.name) / "repo"
+        git = GitOps()
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            git_user_name="Test User",
+            git_user_email="test@example.com",
+        )
+
+        try:
+            git.run(["init", "--bare", str(remote_dir)], cwd=Path(temp_dir.name))
+            git.ensure_repository(seed_dir, "main")
+            git.configure_local_identity(seed_dir, "Test User", "test@example.com")
+            (seed_dir / "README.md").write_text("seed\n", encoding="utf-8")
+            git.create_initial_commit(seed_dir, "Initial commit")
+            git.set_remote_url(seed_dir, "origin", str(remote_dir))
+            git.push(seed_dir, "main")
+            git.run(["clone", "--branch", "main", str(remote_dir), str(repo_dir)], cwd=Path(temp_dir.name))
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"):
+                context = orchestrator.setup_local_project(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    branch="main",
+                )
+
+            gitignore_content = (repo_dir / ".gitignore").read_text(encoding="utf-8")
+            remote_gitignore = git.run(["show", "main:.gitignore"], cwd=remote_dir, check=False).stdout
+
+            self.assertEqual(context.metadata.branch, "main")
+            self.assertIn("jakal-flow-logs/", gitignore_content)
+            self.assertIn("jakal-flow-logs/", remote_gitignore)
+        finally:
+            temp_dir.cleanup()
 
     def test_jsonl_tail_helpers_only_return_recent_entries(self) -> None:
         temp_dir = Path(__file__).resolve().parents[1] / ".tmp_jsonl_tail_test"

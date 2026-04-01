@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ..execution_control import ImmediateStopRequested
 from .context import BridgeCommandContext, BridgeCommandHandler
+from .plan_updates import update_project_plan_from_payload
 from ..models import ExecutionPlanState
 from ..ui_bridge_payloads import list_projects_payload
 from ..utils import now_utc_iso
@@ -172,20 +173,13 @@ def build_project_command_handlers(
         return ctx.detail_payload(project)
 
     def save_plan(ctx: BridgeCommandContext) -> dict:
-        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload, ctx.orchestrator)
-        raw_plan = ctx.payload.get("plan", {})
-        if not isinstance(raw_plan, dict):
-            raise ValueError("plan payload must be an object.")
-        plan_state = parse_plan_state(raw_plan)
-        project, _saved = ctx.orchestrator.update_execution_plan(
-            project_dir=project_dir,
-            runtime=runtime,
-            plan_state=plan_state,
-            branch=branch,
-            origin_url=origin_url,
+        updated = update_project_plan_from_payload(
+            ctx,
+            common_project_inputs=common_project_inputs,
+            parse_plan_state=parse_plan_state,
         )
-        append_ui_event(project, "plan-saved", "Saved the edited execution plan.")
-        return ctx.detail_payload(project)
+        append_ui_event(updated.project, "plan-saved", "Saved the edited execution plan.")
+        return ctx.detail_payload(updated.project)
 
     def reset_plan(ctx: BridgeCommandContext) -> dict:
         project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload, ctx.orchestrator)

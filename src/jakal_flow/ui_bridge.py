@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import json
 import os
 from pathlib import Path
@@ -18,7 +17,6 @@ from .errors import HANDLED_OPERATION_EXCEPTIONS
 from .failure_logs import write_runtime_failure_log
 from .model_constants import AUTO_MODEL_SLUG, DEFAULT_LOCAL_MODEL_PROVIDER, DEFAULT_MODEL_PROVIDER
 from .execution_control import EXECUTION_STOP_REGISTRY, execution_scope_id
-from .optimization import normalize_optimization_mode
 from .model_selection import (
     DEFAULT_MODEL_PRESET_ID,
     MODEL_PRESETS,
@@ -50,7 +48,12 @@ from .run_control import (
     save_run_control,
     stop_requested,
 )
-from .runtime_config import desktop_runtime_defaults, runtime_from_payload as normalize_runtime_from_payload
+from .runtime_config import (
+    coerce_bool,
+    coerce_positive_int,
+    desktop_runtime_defaults,
+    runtime_from_payload as normalize_runtime_from_payload,
+)
 from .runtime_services import CodexBackendSnapshotService
 from .share import (
     DEFAULT_SHARE_HOST,
@@ -310,65 +313,6 @@ def stop_share_server_process(workspace_root: Path) -> dict[str, Any]:
             interval_seconds=0.1,
         )
     return share_server_status_payload(workspace_root)
-
-
-def coerce_positive_int(value: Any, default: int, minimum: int = 1) -> int:
-    try:
-        parsed = int(str(value).strip())
-    except (TypeError, ValueError):
-        return default
-    return max(minimum, parsed)
-
-
-def coerce_nonnegative_int(value: Any, default: int = 0) -> int:
-    try:
-        parsed = int(str(value).strip())
-    except (TypeError, ValueError):
-        return default
-    return max(0, parsed)
-
-
-def coerce_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(str(value).strip())
-    except (TypeError, ValueError):
-        return default
-
-
-def coerce_nonnegative_float(value: Any, default: float = 0.0) -> float:
-    try:
-        parsed = float(str(value).strip())
-    except (TypeError, ValueError):
-        return default
-    if parsed < 0:
-        return default
-    return parsed
-
-
-def coerce_positive_tenths_float(value: Any, default: float, minimum: float = 0.1) -> float:
-    try:
-        parsed = Decimal(str(value).strip())
-    except (InvalidOperation, TypeError, ValueError):
-        return default
-    quantized = parsed.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
-    minimum_decimal = Decimal(str(minimum))
-    if quantized < minimum_decimal:
-        quantized = minimum_decimal
-    return float(quantized)
-
-
-def coerce_bool(value: Any, default: bool) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"1", "true", "yes", "on"}:
-            return True
-        if normalized in {"0", "false", "no", "off"}:
-            return False
-    return default
 
 
 def optional_text(value: Any) -> str | None:

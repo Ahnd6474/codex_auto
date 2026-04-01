@@ -614,12 +614,6 @@ class OrchestratorParallelMixin:
             failed_summary="Parallel worker failed.",
         )
 
-    def _logged_pass_failure_detail(self, pass_entry: dict[str, object]) -> str:
-        return Reporter.logged_pass_failure_detail(pass_entry)
-
-    def _clean_logged_failure_detail(self, detail: str) -> str:
-        return Reporter.clean_logged_failure_detail(detail)
-
     def _cleanup_parallel_worker(self, repo_dir: Path, worker_result: dict[str, object]) -> None:
         worktree_dir = worker_result.get("worktree_dir")
         branch_name = str(worker_result.get("branch_name") or "").strip()

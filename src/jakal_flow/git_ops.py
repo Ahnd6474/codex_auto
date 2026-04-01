@@ -518,12 +518,26 @@ class GitOps:
         self.run(["commit", "-m", message], cwd=repo_dir, env=self._commit_env(author_name))
         return self.current_revision(repo_dir)
 
+    def add_paths(self, repo_dir: Path, paths: list[str]) -> None:
+        normalized_paths = [str(path).strip() for path in paths if str(path).strip()]
+        if not normalized_paths:
+            return
+        self.run(["add", "--", *normalized_paths], cwd=repo_dir)
+
     def add_all(self, repo_dir: Path) -> None:
         self.run(["add", "-A"], cwd=repo_dir)
 
     def create_initial_commit(self, repo_dir: Path, message: str, author_name: str | None = None) -> str:
         self.run(["add", "-A"], cwd=repo_dir)
         self.run(["commit", "--allow-empty", "-m", message], cwd=repo_dir, env=self._commit_env(author_name))
+        return self.current_revision(repo_dir)
+
+    def commit_paths(self, repo_dir: Path, paths: list[str], message: str, author_name: str | None = None) -> str:
+        normalized_paths = [str(path).strip() for path in paths if str(path).strip()]
+        if not normalized_paths:
+            raise ValueError("paths must not be empty.")
+        self.add_paths(repo_dir, normalized_paths)
+        self.run(["commit", "-m", message, "--", *normalized_paths], cwd=repo_dir, env=self._commit_env(author_name))
         return self.current_revision(repo_dir)
 
     def commit_staged(self, repo_dir: Path, message: str, author_name: str | None = None) -> str:

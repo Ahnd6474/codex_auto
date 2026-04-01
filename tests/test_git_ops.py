@@ -376,6 +376,47 @@ class GitOpsTests(unittest.TestCase):
             ),
         )
 
+    def test_commit_paths_uses_custom_author_name(self) -> None:
+        repo_dir = Path(__file__).resolve().parents[1]
+        git = GitOps()
+        calls: list[tuple[list[str], dict[str, str] | None]] = []
+
+        def fake_run(
+            args: list[str],
+            cwd: Path,
+            check: bool = True,
+            env: dict[str, str] | None = None,
+        ) -> CommandResult:
+            calls.append((args, env))
+            if args == ["rev-parse", "HEAD"]:
+                return CommandResult(command=["git", *args], returncode=0, stdout="setup123\n", stderr="")
+            return CommandResult(command=["git", *args], returncode=0, stdout="", stderr="")
+
+        with mock.patch.object(git, "_current_revision_from_head", return_value=""), mock.patch.object(
+            git,
+            "run",
+            side_effect=fake_run,
+        ):
+            revision = git.commit_paths(
+                repo_dir,
+                [".gitignore"],
+                "Demo environment setup",
+                author_name="Jakal-Flow-setup",
+            )
+
+        self.assertEqual(revision, "setup123")
+        self.assertEqual(calls[0], (["add", "--", ".gitignore"], None))
+        self.assertEqual(
+            calls[1],
+            (
+                ["commit", "-m", "Demo environment setup", "--", ".gitignore"],
+                {
+                    "GIT_AUTHOR_NAME": "Jakal-Flow-setup",
+                    "GIT_COMMITTER_NAME": "Jakal-Flow-setup",
+                },
+            ),
+        )
+
     def test_merge_ff_only_retries_when_identical_untracked_file_blocks_merge(self) -> None:
         git, temp_dir, repo_dir = self._create_repo_with_merge_blocker(
             tracked_contents="node_modules/\n",

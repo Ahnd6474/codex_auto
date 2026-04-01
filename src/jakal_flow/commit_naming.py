@@ -24,6 +24,14 @@ def build_initial_commit_descriptor(context: ProjectContext) -> CommitDescriptor
     )
 
 
+def build_setup_commit_descriptor(context: ProjectContext) -> CommitDescriptor:
+    project_name = _project_name(context)
+    return CommitDescriptor(
+        author_name="Jakal-Flow-setup",
+        message=f"{project_name} environment setup",
+    )
+
+
 def build_commit_descriptor(
     context: ProjectContext,
     pass_name: str,

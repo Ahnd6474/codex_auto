@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from ..chat_sessions import (
     chat_payload,
@@ -14,6 +14,7 @@ from ..errors import HANDLED_OPERATION_EXCEPTIONS
 from ..parallel_resources import build_parallel_resource_plan
 from ..utils import normalize_workflow_mode, read_json
 from .context import BridgeCommandContext, BridgeCommandHandler
+from .plan_updates import update_project_plan_from_payload
 
 
 def _effective_parallel_worker_count(recommended_workers: int, batch_size: int) -> int:
@@ -21,6 +22,64 @@ def _effective_parallel_worker_count(recommended_workers: int, batch_size: int) 
     if batch_size <= 1:
         return normalized
     return min(batch_size, max(2, normalized))
+
+
+@dataclass(frozen=True, slots=True)
+class ManualRecoverySpec:
+    chat_mode: str
+    command_name: str
+    runner_name: str
+    start_event: str
+    finish_event: str
+    started_message: str
+    chat_started_message: str
+    stopped_message: str
+    chat_stopped_message: str
+    failed_prefix: str
+    failed_message: str
+    completed_prefix: str
+
+
+@dataclass(slots=True)
+class ManualRecoveryOutcome:
+    project: object
+    assistant_text: str
+    metadata: dict[str, object]
+    error: str = ""
+    interrupted: bool = False
+    exception: Exception | None = None
+
+
+_MANUAL_RECOVERY_SPECS = {
+    "debugger": ManualRecoverySpec(
+        chat_mode="debugger",
+        command_name="run-manual-debugger",
+        runner_name="run_manual_debugger_recovery",
+        start_event="manual-debugger-started",
+        finish_event="manual-debugger-finished",
+        started_message="Started manual debugger recovery.",
+        chat_started_message="Started manual debugger recovery from chat.",
+        stopped_message="Manual debugger stopped by user.",
+        chat_stopped_message="Manual debugger stopped.",
+        failed_prefix="Manual debugger failed",
+        failed_message="Manual debugger recovery failed.",
+        completed_prefix="Manual debugger finished.",
+    ),
+    "merger": ManualRecoverySpec(
+        chat_mode="merger",
+        command_name="run-manual-merger",
+        runner_name="run_manual_merger_recovery",
+        start_event="manual-merger-started",
+        finish_event="manual-merger-finished",
+        started_message="Started manual merger recovery.",
+        chat_started_message="Started manual merger recovery from chat.",
+        stopped_message="Manual merger stopped by user.",
+        chat_stopped_message="Manual merger stopped.",
+        failed_prefix="Manual merger failed",
+        failed_message="Manual merger recovery failed.",
+        completed_prefix="Manual merger finished.",
+    ),
+}
 
 
 def build_run_command_handlers(
@@ -44,6 +103,94 @@ def build_run_command_handlers(
             "repo_path": str(project.metadata.repo_path),
             "current_status": str(project.metadata.current_status or "").strip(),
         }
+
+    def manual_recovery_spec(chat_mode: str) -> ManualRecoverySpec:
+        normalized_mode = str(chat_mode).strip().lower()
+        spec = _MANUAL_RECOVERY_SPECS.get(normalized_mode)
+        if spec is None:
+            raise ValueError(f"Unsupported manual recovery mode: {chat_mode}")
+        return spec
+
+    def run_manual_recovery(
+        ctx: BridgeCommandContext,
+        *,
+        spec: ManualRecoverySpec,
+        project,
+        project_dir,
+        runtime,
+        branch: str,
+        origin_url: str,
+        source: str = "",
+    ) -> ManualRecoveryOutcome:
+        started_message = spec.chat_started_message if source == "chat" else spec.started_message
+        append_ui_event(project, spec.start_event, started_message)
+        runner = getattr(ctx.orchestrator, spec.runner_name)
+        metadata: dict[str, object] = {"command": spec.command_name}
+        try:
+            project, _saved, result = runner(
+                project_dir=project_dir,
+                runtime=runtime,
+                branch=branch,
+                origin_url=origin_url,
+            )
+        except ImmediateStopRequested as exc:
+            latest_project = ctx.orchestrator.local_project(project_dir) or project
+            assistant_text = str(exc).strip() or (spec.chat_stopped_message if source == "chat" else spec.stopped_message)
+            details = {"status": "paused"}
+            if source:
+                details["source"] = source
+            append_ui_event(latest_project, spec.finish_event, assistant_text, details)
+            return ManualRecoveryOutcome(
+                project=latest_project,
+                assistant_text=assistant_text,
+                metadata=metadata,
+                interrupted=True,
+            )
+        except HANDLED_OPERATION_EXCEPTIONS as exc:
+            latest_project = ctx.orchestrator.local_project(project_dir)
+            error = str(exc).strip() or spec.failed_message
+            if latest_project is not None:
+                details = {"status": "failed"}
+                if source:
+                    details["source"] = source
+                append_ui_event(
+                    latest_project,
+                    spec.finish_event,
+                    f"{spec.failed_prefix}: {error}",
+                    details,
+                )
+            return ManualRecoveryOutcome(
+                project=project,
+                assistant_text=error,
+                metadata=metadata,
+                error=error,
+                exception=exc,
+            )
+        assistant_text = f"{spec.completed_prefix} {str(result.get('summary', '')).strip()}".strip()
+        metadata.update(
+            {
+                "pass_name": str(result.get("pass_name", "")).strip(),
+                "commit_hash": str(result.get("commit_hash", "")).strip(),
+            }
+        )
+        details = {
+            "status": "completed",
+            "pass_name": metadata.get("pass_name", ""),
+            "commit_hash": metadata.get("commit_hash", ""),
+        }
+        if source:
+            details["source"] = source
+        append_ui_event(
+            project,
+            spec.finish_event,
+            assistant_text,
+            details,
+        )
+        return ManualRecoveryOutcome(
+            project=project,
+            assistant_text=assistant_text,
+            metadata=metadata,
+        )
 
     def closeout_finished_event_payload(project, saved) -> tuple[str, dict]:
         details = {
@@ -123,18 +270,17 @@ def build_run_command_handlers(
         return ctx.detail_payload(latest_project)
 
     def run_plan(ctx: BridgeCommandContext) -> dict:
-        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload, ctx.orchestrator)
-        raw_plan = ctx.payload.get("plan", {})
-        if not isinstance(raw_plan, dict):
-            raise ValueError("plan payload must be an object.")
-        plan_state = parse_plan_state(raw_plan)
-        project, saved = ctx.orchestrator.update_execution_plan(
-            project_dir=project_dir,
-            runtime=runtime,
-            plan_state=plan_state,
-            branch=branch,
-            origin_url=origin_url,
+        updated = update_project_plan_from_payload(
+            ctx,
+            common_project_inputs=common_project_inputs,
+            parse_plan_state=parse_plan_state,
         )
+        project_dir = updated.project_dir
+        runtime = updated.runtime
+        branch = updated.branch
+        origin_url = updated.origin_url
+        project = updated.project
+        saved = updated.saved
         scope_id = execution_scope_id(project)
         execution_stop_registry.clear(scope_id)
         save_run_control(project, default_run_control())
@@ -516,18 +662,16 @@ def build_run_command_handlers(
                 execution_stop_registry.clear(execution_scope_id(latest))
 
     def run_closeout(ctx: BridgeCommandContext) -> dict:
-        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload, ctx.orchestrator)
-        raw_plan = ctx.payload.get("plan", {})
-        if not isinstance(raw_plan, dict):
-            raise ValueError("plan payload must be an object.")
-        plan_state = parse_plan_state(raw_plan)
-        project, _saved = ctx.orchestrator.update_execution_plan(
-            project_dir=project_dir,
-            runtime=runtime,
-            plan_state=plan_state,
-            branch=branch,
-            origin_url=origin_url,
+        updated = update_project_plan_from_payload(
+            ctx,
+            common_project_inputs=common_project_inputs,
+            parse_plan_state=parse_plan_state,
         )
+        project_dir = updated.project_dir
+        runtime = updated.runtime
+        branch = updated.branch
+        origin_url = updated.origin_url
+        project = updated.project
         execution_stop_registry.clear(execution_scope_id(project))
         ctx.orchestrator.clear_latest_failure_status(project)
         try:
@@ -556,108 +700,42 @@ def build_run_command_handlers(
                 execution_stop_registry.clear(execution_scope_id(latest))
 
     def run_manual_debugger(ctx: BridgeCommandContext) -> dict:
-        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload, ctx.orchestrator)
-        raw_plan = ctx.payload.get("plan", {})
-        if not isinstance(raw_plan, dict):
-            raise ValueError("plan payload must be an object.")
-        plan_state = parse_plan_state(raw_plan)
-        project, _saved = ctx.orchestrator.update_execution_plan(
-            project_dir=project_dir,
-            runtime=runtime,
-            plan_state=plan_state,
-            branch=branch,
-            origin_url=origin_url,
+        updated = update_project_plan_from_payload(
+            ctx,
+            common_project_inputs=common_project_inputs,
+            parse_plan_state=parse_plan_state,
         )
-        append_ui_event(project, "manual-debugger-started", "Started manual debugger recovery.")
-        try:
-            project, saved, result = ctx.orchestrator.run_manual_debugger_recovery(
-                project_dir=project_dir,
-                runtime=runtime,
-                branch=branch,
-                origin_url=origin_url,
-            )
-        except ImmediateStopRequested as exc:
-            latest_project = ctx.orchestrator.local_project(project_dir) or project
-            append_ui_event(
-                latest_project,
-                "manual-debugger-finished",
-                str(exc).strip() or "Manual debugger stopped by user.",
-                {"status": "paused"},
-            )
-            return ctx.detail_payload(latest_project)
-        except HANDLED_OPERATION_EXCEPTIONS as exc:
-            latest_project = ctx.orchestrator.local_project(project_dir)
-            if latest_project is not None:
-                append_ui_event(
-                    latest_project,
-                    "manual-debugger-finished",
-                    f"Manual debugger failed: {str(exc).strip() or 'unknown error'}",
-                    {"status": "failed"},
-                )
-            raise
-        append_ui_event(
-            project,
-            "manual-debugger-finished",
-            f"Manual debugger finished. {str(result.get('summary', '')).strip()}",
-            {
-                "status": "completed",
-                "pass_name": result.get("pass_name", ""),
-                "commit_hash": result.get("commit_hash", ""),
-            },
+        outcome = run_manual_recovery(
+            ctx,
+            spec=manual_recovery_spec("debugger"),
+            project=updated.project,
+            project_dir=updated.project_dir,
+            runtime=updated.runtime,
+            branch=updated.branch,
+            origin_url=updated.origin_url,
         )
-        return ctx.detail_payload(project)
+        if outcome.exception is not None:
+            raise outcome.exception
+        return ctx.detail_payload(outcome.project)
 
     def run_manual_merger(ctx: BridgeCommandContext) -> dict:
-        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(ctx.payload, ctx.orchestrator)
-        raw_plan = ctx.payload.get("plan", {})
-        if not isinstance(raw_plan, dict):
-            raise ValueError("plan payload must be an object.")
-        plan_state = parse_plan_state(raw_plan)
-        project, _saved = ctx.orchestrator.update_execution_plan(
-            project_dir=project_dir,
-            runtime=runtime,
-            plan_state=plan_state,
-            branch=branch,
-            origin_url=origin_url,
+        updated = update_project_plan_from_payload(
+            ctx,
+            common_project_inputs=common_project_inputs,
+            parse_plan_state=parse_plan_state,
         )
-        append_ui_event(project, "manual-merger-started", "Started manual merger recovery.")
-        try:
-            project, saved, result = ctx.orchestrator.run_manual_merger_recovery(
-                project_dir=project_dir,
-                runtime=runtime,
-                branch=branch,
-                origin_url=origin_url,
-            )
-        except ImmediateStopRequested as exc:
-            latest_project = ctx.orchestrator.local_project(project_dir) or project
-            append_ui_event(
-                latest_project,
-                "manual-merger-finished",
-                str(exc).strip() or "Manual merger stopped by user.",
-                {"status": "paused"},
-            )
-            return ctx.detail_payload(latest_project)
-        except HANDLED_OPERATION_EXCEPTIONS as exc:
-            latest_project = ctx.orchestrator.local_project(project_dir)
-            if latest_project is not None:
-                append_ui_event(
-                    latest_project,
-                    "manual-merger-finished",
-                    f"Manual merger failed: {str(exc).strip() or 'unknown error'}",
-                    {"status": "failed"},
-                )
-            raise
-        append_ui_event(
-            project,
-            "manual-merger-finished",
-            f"Manual merger finished. {str(result.get('summary', '')).strip()}",
-            {
-                "status": "completed",
-                "pass_name": result.get("pass_name", ""),
-                "commit_hash": result.get("commit_hash", ""),
-            },
+        outcome = run_manual_recovery(
+            ctx,
+            spec=manual_recovery_spec("merger"),
+            project=updated.project,
+            project_dir=updated.project_dir,
+            runtime=updated.runtime,
+            branch=updated.branch,
+            origin_url=updated.origin_url,
         )
-        return ctx.detail_payload(project)
+        if outcome.exception is not None:
+            raise outcome.exception
+        return ctx.detail_payload(outcome.project)
 
     def send_chat_message(ctx: BridgeCommandContext) -> dict:
         project = resolve_project(ctx.orchestrator, ctx.payload)
@@ -700,18 +778,17 @@ def build_run_command_handlers(
                 "extra_prompt": message,
             },
         }
-        project_dir, runtime, branch, origin_url, _display_name = common_project_inputs(payload_with_prompt, ctx.orchestrator)
-        raw_plan = ctx.payload.get("plan", {})
-        if not isinstance(raw_plan, dict):
-            raise ValueError("plan payload must be an object.")
-        plan_state = parse_plan_state(raw_plan)
-        project, _saved = ctx.orchestrator.update_execution_plan(
-            project_dir=project_dir,
-            runtime=runtime,
-            plan_state=plan_state,
-            branch=branch,
-            origin_url=origin_url,
+        updated = update_project_plan_from_payload(
+            ctx,
+            common_project_inputs=common_project_inputs,
+            parse_plan_state=parse_plan_state,
+            payload=payload_with_prompt,
         )
+        project_dir = updated.project_dir
+        runtime = updated.runtime
+        branch = updated.branch
+        origin_url = updated.origin_url
+        project = updated.project
         session = resolve_chat_session(
             project,
             session_id=session_id,
@@ -728,103 +805,24 @@ def build_run_command_handlers(
 
         error = ""
         detail = None
-        assistant_text = ""
-        metadata: dict[str, object] = {
-            "command": "run-manual-debugger" if chat_mode == "debugger" else "run-manual-merger",
-        }
-
-        if chat_mode == "debugger":
-            append_ui_event(project, "manual-debugger-started", "Started manual debugger recovery from chat.")
-            try:
-                project, _saved, result = ctx.orchestrator.run_manual_debugger_recovery(
-                    project_dir=project_dir,
-                    runtime=runtime,
-                    branch=branch,
-                    origin_url=origin_url,
-                )
-                assistant_text = f"Manual debugger finished. {str(result.get('summary', '')).strip()}".strip()
-                metadata.update(
-                    {
-                        "pass_name": str(result.get("pass_name", "")).strip(),
-                        "commit_hash": str(result.get("commit_hash", "")).strip(),
-                    }
-                )
-                append_ui_event(
-                    project,
-                    "manual-debugger-finished",
-                    assistant_text,
-                    {
-                        "status": "completed",
-                        "pass_name": metadata.get("pass_name", ""),
-                        "commit_hash": metadata.get("commit_hash", ""),
-                        "source": "chat",
-                    },
-                )
-                detail = ctx.detail_payload(project)
-            except ImmediateStopRequested as exc:
-                assistant_text = str(exc).strip() or "Manual debugger stopped."
-                metadata["interrupted"] = True
-                append_ui_event(
-                    project,
-                    "manual-debugger-finished",
-                    assistant_text,
-                    {"status": "paused", "source": "chat"},
-                )
-            except HANDLED_OPERATION_EXCEPTIONS as exc:
-                error = str(exc).strip() or "Manual debugger recovery failed."
-                assistant_text = error
-                append_ui_event(
-                    project,
-                    "manual-debugger-finished",
-                    f"Manual debugger failed: {assistant_text}",
-                    {"status": "failed", "source": "chat"},
-                )
-        else:
-            append_ui_event(project, "manual-merger-started", "Started manual merger recovery from chat.")
-            try:
-                project, _saved, result = ctx.orchestrator.run_manual_merger_recovery(
-                    project_dir=project_dir,
-                    runtime=runtime,
-                    branch=branch,
-                    origin_url=origin_url,
-                )
-                assistant_text = f"Manual merger finished. {str(result.get('summary', '')).strip()}".strip()
-                metadata.update(
-                    {
-                        "pass_name": str(result.get("pass_name", "")).strip(),
-                        "commit_hash": str(result.get("commit_hash", "")).strip(),
-                    }
-                )
-                append_ui_event(
-                    project,
-                    "manual-merger-finished",
-                    assistant_text,
-                    {
-                        "status": "completed",
-                        "pass_name": metadata.get("pass_name", ""),
-                        "commit_hash": metadata.get("commit_hash", ""),
-                        "source": "chat",
-                    },
-                )
-                detail = ctx.detail_payload(project)
-            except ImmediateStopRequested as exc:
-                assistant_text = str(exc).strip() or "Manual merger stopped."
-                metadata["interrupted"] = True
-                append_ui_event(
-                    project,
-                    "manual-merger-finished",
-                    assistant_text,
-                    {"status": "paused", "source": "chat"},
-                )
-            except HANDLED_OPERATION_EXCEPTIONS as exc:
-                error = str(exc).strip() or "Manual merger recovery failed."
-                assistant_text = error
-                append_ui_event(
-                    project,
-                    "manual-merger-finished",
-                    f"Manual merger failed: {assistant_text}",
-                    {"status": "failed", "source": "chat"},
-                )
+        outcome = run_manual_recovery(
+            ctx,
+            spec=manual_recovery_spec(chat_mode),
+            project=project,
+            project_dir=project_dir,
+            runtime=runtime,
+            branch=branch,
+            origin_url=origin_url,
+            source="chat",
+        )
+        project = outcome.project
+        assistant_text = outcome.assistant_text
+        metadata = dict(outcome.metadata)
+        if outcome.interrupted:
+            metadata["interrupted"] = True
+        error = outcome.error
+        if not error and not outcome.interrupted:
+            detail = ctx.detail_payload(project)
 
         save_chat_message(
             project,

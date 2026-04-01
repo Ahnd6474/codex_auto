@@ -212,6 +212,7 @@ const DEFAULT_PROGRAM_RUNTIME = {
   parallel_workers: 0,
   parallel_memory_per_worker_gib: 3,
   save_project_logs: false,
+  optimization_mode: "off",
 };
 const DEFAULT_PROGRAM_UI = {
   ui_theme: "dark",
@@ -613,7 +614,7 @@ export function blankProjectForm(defaultRuntime) {
       model_slug_input: defaultExecutionModel || defaultModelSlugInput,
       generate_word_report: runtimeDefaults.generate_word_report ?? false,
       max_blocks: runtimeDefaults.max_blocks || 5,
-      optimization_mode: runtimeDefaults.optimization_mode || "light",
+      optimization_mode: runtimeDefaults.optimization_mode || "off",
       test_cmd: runtimeDefaults.test_cmd || "python -m pytest",
       execution_mode: "parallel",
       allow_background_queue: runtimeDefaults.allow_background_queue ?? true,

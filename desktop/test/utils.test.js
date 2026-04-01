@@ -825,6 +825,7 @@ test("program settings helpers keep global runtime controls separate from projec
     parallel_workers: 0,
     parallel_memory_per_worker_gib: 3,
     save_project_logs: false,
+    optimization_mode: "off",
     developer_mode: false,
     ui_theme: "dark",
     dashboard_visibility: {
@@ -977,7 +978,7 @@ test("blankProjectForm falls back to repository defaults when runtime is missing
   assert.equal(form.runtime.model_slug_input, "gpt-5.4");
   assert.equal(form.runtime.generate_word_report, false);
   assert.equal(form.runtime.max_blocks, 5);
-  assert.equal(form.runtime.optimization_mode, "light");
+  assert.equal(form.runtime.optimization_mode, "off");
   assert.equal(form.runtime.test_cmd, "python -m pytest");
   assert.equal(form.runtime.allow_background_queue, true);
   assert.equal(form.runtime.background_queue_priority, 0);

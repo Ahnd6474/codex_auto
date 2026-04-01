@@ -16,6 +16,8 @@ from ..ui_bridge_payloads import (
 )
 from .context import BridgeCommandContext, BridgeCommandHandler
 
+_VISIBLE_PROJECT_STATE_EXECUTOR = ThreadPoolExecutor(max_workers=2)
+
 
 def build_read_model_handlers(
     *,
@@ -77,13 +79,12 @@ def build_read_model_handlers(
             return list_projects_payload(ctx.orchestrator, bypass_cache=bypass_listing_cache) if include_listing else None
 
         if include_listing and project is not None:
-            with ThreadPoolExecutor(max_workers=2) as executor:
-                listing_future = executor.submit(build_listing)
-                detail_future = executor.submit(build_detail)
-                return {
-                    "listing": listing_future.result(),
-                    "detail": detail_future.result(),
-                }
+            listing_future = _VISIBLE_PROJECT_STATE_EXECUTOR.submit(build_listing)
+            detail_future = _VISIBLE_PROJECT_STATE_EXECUTOR.submit(build_detail)
+            return {
+                "listing": listing_future.result(),
+                "detail": detail_future.result(),
+            }
         detail = build_detail()
         return {
             "listing": build_listing(),

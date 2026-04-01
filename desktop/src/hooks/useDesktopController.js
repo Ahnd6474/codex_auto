@@ -156,7 +156,7 @@ export function useDesktopController() {
   const wantsExpandedDetailRef = useRef(false);
   const languageRef = useRef("en");
   const creatingProjectDraftRef = useRef(false);
-  const refreshProjectsRef = useRef(null);
+  const forceRefreshRef = useRef(null);
   const projectDetailRequestDeduperRef = useRef(createRequestDeduper());
   const historyDetailRequestDeduperRef = useRef(createRequestDeduper());
   const projectSupplementRequestDeduperRef = useRef(createRequestDeduper());
@@ -315,8 +315,8 @@ export function useDesktopController() {
   }, [jobs]);
 
   useEffect(() => {
-    refreshProjectsRef.current = refreshProjects;
-  }, [refreshProjects]);
+    forceRefreshRef.current = forceRefresh;
+  }, [forceRefresh]);
 
   useEffect(() => {
     if (!workspaceRoot) {
@@ -327,7 +327,7 @@ export function useDesktopController() {
       if (pendingAction || bridgeRefreshInFlightRef.current) {
         return;
       }
-      void refreshProjectsRef.current?.();
+      void forceRefreshRef.current?.({ silent: true });
     }, 5000);
 
     return () => {
@@ -1262,10 +1262,11 @@ export function useDesktopController() {
     }
   }
 
-  async function forceRefresh() {
+  async function forceRefresh(options = {}) {
     try {
       const refreshCodexStatus = shouldForceCodexRefreshForManualRefresh(centerTab);
       const refreshListing = shouldRefreshListingForManualRefresh(selectedProjectId);
+      const silent = options.silent === true;
       const jobSnapshotPromise = syncRunningJobSnapshot(activeJobId);
       const projectStatePromise = refreshVisibleProjectState(
         bridgeRequest,
@@ -1296,11 +1297,11 @@ export function useDesktopController() {
             setHistoryProjects((current) => reuseProjectListingItems(current, listing?.history || []));
             projectsRef.current = nextProjects;
             if (detail) {
-              applyProjectDetail(detail, { preserveSelectedStep: true, runningJob: selectedJob, force: true });
+              applyProjectDetail(detail, { preserveSelectedStep: true, runningJob: selectedJob });
             }
           });
         } else if (detail) {
-          applyProjectDetail(detail, { preserveSelectedStep: true, runningJob: selectedJob, force: true });
+          applyProjectDetail(detail, { preserveSelectedStep: true, runningJob: selectedJob });
         }
       } else {
         const listing = refreshedState?.listing || null;
@@ -1329,9 +1330,13 @@ export function useDesktopController() {
         });
       }
 
-      setMessage(messagePayload("info", activeJobId ? translate(language, "message.runStateRefreshed") : translate(language, "message.projectStateRefreshed")));
+      if (!silent) {
+        setMessage(messagePayload("info", activeJobId ? translate(language, "message.runStateRefreshed") : translate(language, "message.projectStateRefreshed")));
+      }
     } catch (error) {
-      setMessage(messagePayload("error", String(error)));
+      if (!silent) {
+        setMessage(messagePayload("error", String(error)));
+      }
     }
   }
 

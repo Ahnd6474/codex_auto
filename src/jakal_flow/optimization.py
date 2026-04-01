@@ -88,7 +88,7 @@ class _CodeSnapshot:
     text: str
 
 
-def normalize_optimization_mode(value: str | None, fallback: str = "light") -> str:
+def normalize_optimization_mode(value: str | None, fallback: str = "off") -> str:
     normalized = str(value or "").strip().lower()
     if normalized in {"off", "light", "refactor"}:
         return normalized
@@ -96,7 +96,7 @@ def normalize_optimization_mode(value: str | None, fallback: str = "light") -> s
 
 
 def scan_optimization_candidates(repo_dir: Path, runtime: Any) -> OptimizationScanResult:
-    mode = normalize_optimization_mode(getattr(runtime, "optimization_mode", "light"))
+    mode = normalize_optimization_mode(getattr(runtime, "optimization_mode", "off"))
     if mode == "off":
         return OptimizationScanResult(mode=mode, scanned_file_count=0, candidate_files=[], candidates=[])
 
