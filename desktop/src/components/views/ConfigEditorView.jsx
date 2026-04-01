@@ -571,7 +571,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
                     disabled={executionLocked}
                   />
                   <small style={{ fontSize: "11px", color: "var(--text-dim)" }}>
-                    {language === "ko" ? "ML ?ㅽ뿕 理쒕? 諛섎났 ?잛닔" : "Max ML experiment iterations"}
+                    {language === "ko" ? "ML 최대 반복 횟수" : "Max ML experiment iterations"}
                   </small>
                 </label>
               ) : (
@@ -691,7 +691,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
                   }))
                 }
                 label={t("preset.auto")}
-                hint={language === "ko" ? "蹂묐젹 ?묒뾽 ?섎? ?먮룞?쇰줈 寃곗젙" : "Automatically determine parallel worker count"}
+                hint={language === "ko" ? "자원에 따라 작업자 수를 자동으로 조정합니다." : "Automatically determine parallel worker count"}
                 disabled={executionLocked}
               />
               <ToggleRow
@@ -714,7 +714,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
                   }))
                 }
                 label={t("option.requireCheckpointApproval")}
-                hint={language === "ko" ? "泥댄겕?ъ씤?몄뿉 ?꾨떖?섎㈃ ?ㅼ쓬 ?④퀎 ?꾩뿉 寃?좊? ?붿껌?⑸땲??" : "Pause for review when a checkpoint is reached."}
+                hint={language === "ko" ? "체크포인트에 도달하면 검토를 위해 일시 중지합니다." : "Pause for review when a checkpoint is reached."}
                 disabled={executionLocked && !allowSafeRuntimeEdits}
               />
               <ToggleRow
@@ -742,7 +742,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
             <SectionHeader
               icon={<GithubIcon />}
               title={t("config.githubConnection")}
-              description={language === "ko" ? "?먭꺽 ??μ냼 ?곌껐 諛⑹떇" : "How this project connects to a remote repository"}
+              description={language === "ko" ? "이 프로젝트가 원격 저장소와 연결되는 방식" : "How this project connects to a remote repository"}
             />
             <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "4px" }}>
               {[
