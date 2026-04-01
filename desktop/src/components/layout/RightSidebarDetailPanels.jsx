@@ -70,7 +70,7 @@ function OutputCard({ icon, title, description, enabled, checked, onChange, busy
         <div className="output-card__title">
           <strong>{title}</strong>
           {comingSoon ? (
-            <span className="output-card__badge">{language === "ko" ? "Coming soon" : "Coming soon"}</span>
+            <span className="output-card__badge">{language === "ko" ? "준비 중" : "Coming soon"}</span>
           ) : null}
         </div>
         <p className="output-card__desc">{description}</p>
@@ -97,18 +97,18 @@ function ReportFileCard({ title, kind, icon, path, displayPath = "", available, 
           <span className="rsb-file-card__path" title={visiblePath}>{visiblePath}</span>
         ) : (
           <span className="rsb-file-card__path rsb-file-card__path--empty">
-            {language === "ko" ? "Not generated yet" : "Not generated yet"}
+            {language === "ko" ? "아직 생성되지 않음" : "Not generated yet"}
           </span>
         )}
       </div>
       <div className="rsb-file-card__actions">
         <span className={`status-badge status-badge--${available ? "success" : "neutral"}`}>
-          {available ? (language === "ko" ? "Ready" : "Ready") : (language === "ko" ? "Pending" : "Pending")}
+          {available ? (language === "ko" ? "생성됨" : "Ready") : (language === "ko" ? "대기 중" : "Pending")}
         </span>
         {available && path ? (
-          <button className="rsb-file-card__open-btn" onClick={() => onOpen(path)} type="button" title={language === "ko" ? "Open file" : "Open file"}>
+          <button className="rsb-file-card__open-btn" onClick={() => onOpen(path)} type="button" title={language === "ko" ? "파일 열기" : "Open file"}>
             <OpenFolderIcon />
-            <span>{language === "ko" ? "Open" : "Open"}</span>
+            <span>{language === "ko" ? "열기" : "Open"}</span>
           </button>
         ) : null}
       </div>
@@ -138,7 +138,7 @@ export const OutputPanel = memo(function OutputPanel({ processOutput = "", langu
       ) : (
         <div className="details-output-empty">
           <RailTerminalIcon />
-          <span>{language === "ko" ? "No output yet." : "No output yet."}</span>
+          <span>{language === "ko" ? "아직 출력이 없습니다." : "No output yet."}</span>
         </div>
       )}
     </div>
@@ -172,14 +172,14 @@ export const FilesPanel = memo(function FilesPanel({
   return (
     <div className="rsb-files">
       <div className="rsb-files__section-label">
-        {language === "ko" ? "Document Generation" : "Document Generation"}
+        {language === "ko" ? "문서 생성" : "Document Generation"}
       </div>
 
       <div className="rsb-files__generation">
         <OutputCard
           icon={<WordDocIcon />}
           title="Word Report"
-          description={language === "ko" ? "Save execution results as a Word (.docx) report." : "Save execution results as a Word (.docx) report."}
+          description={language === "ko" ? "실행 결과를 Word(.docx) 보고서로 저장합니다." : "Save execution results as a Word (.docx) report."}
           enabled={Boolean(onChangeForm)}
           checked={Boolean(form?.runtime?.generate_word_report)}
           onChange={(event) =>
@@ -195,7 +195,7 @@ export const FilesPanel = memo(function FilesPanel({
         <OutputCard
           icon={<PptDocIcon />}
           title="PowerPoint"
-          description={language === "ko" ? "Auto-generate result slides as a PowerPoint presentation." : "Auto-generate result slides as a PowerPoint presentation."}
+          description={language === "ko" ? "결과 슬라이드를 PowerPoint 프레젠테이션으로 자동 생성합니다." : "Auto-generate result slides as a PowerPoint presentation."}
           enabled={false}
           checked={false}
           onChange={() => {}}
@@ -206,7 +206,7 @@ export const FilesPanel = memo(function FilesPanel({
         <OutputCard
           icon={<WebDocIcon />}
           title={language === "ko" ? "Website" : "Website"}
-          description={language === "ko" ? "Export results as a static HTML website." : "Export results as a static HTML website."}
+          description={language === "ko" ? "결과를 정적 HTML 웹사이트로 내보냅니다." : "Export results as a static HTML website."}
           enabled={false}
           checked={false}
           onChange={() => {}}
@@ -217,7 +217,7 @@ export const FilesPanel = memo(function FilesPanel({
       </div>
 
       <div className="rsb-files__section-label">
-        {language === "ko" ? "Reports & Outputs" : "Reports & Outputs"}
+        {language === "ko" ? "보고서 및 출력물" : "Reports & Outputs"}
       </div>
 
       <ReportFileCard title={language === "ko" ? "Closeout Report" : "Closeout Report"} kind="Markdown" icon={<MarkdownDocIcon />} path={closeoutPath} available={Boolean(detail?.reports?.closeout_report_text && closeoutPath)} onOpen={openInSystemSafe} language={language} />
@@ -228,12 +228,12 @@ export const FilesPanel = memo(function FilesPanel({
       {latestFailureArtifactFiles.length ? (
         <>
           <div className="rsb-files__section-label" style={{ marginTop: "12px" }}>
-            {language === "ko" ? "Failure Artifacts" : "Failure Artifacts"}
+            {language === "ko" ? "실패 아티팩트" : "Failure Artifacts"}
           </div>
           {latestFailureArtifactFiles.slice(0, 6).map((path) => (
             <div key={path} className="rsb-artifact-row">
               <span className="rsb-artifact-row__path" title={path}>{path}</span>
-              <button className="rsb-file-card__open-btn" onClick={() => openInSystemSafe(path)} type="button" title={language === "ko" ? "Open" : "Open"}>
+              <button className="rsb-file-card__open-btn" onClick={() => openInSystemSafe(path)} type="button" title={language === "ko" ? "열기" : "Open"}>
                 <OpenFolderIcon />
               </button>
             </div>

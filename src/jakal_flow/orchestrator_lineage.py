@@ -1477,6 +1477,16 @@ class OrchestratorLineageMixin:
         normalized = str(value or "").strip().lower()
         return normalized or "all"
     def _normalize_hybrid_step_metadata(self, steps: list[ExecutionStep]) -> None:
+        step_positions = {step.step_id: index for index, step in enumerate(steps)}
+
+        def _valid_join_ref(current_step: ExecutionStep, candidate: str) -> bool:
+            ref = str(candidate or "").strip()
+            if not ref:
+                return False
+            current_position = step_positions.get(current_step.step_id, -1)
+            target_position = step_positions.get(ref, -1)
+            return target_position >= 0 and target_position < current_position and ref != current_step.step_id
+
         for step in steps:
             metadata = deepcopy(step.metadata) if isinstance(step.metadata, dict) else {}
             step_kind = self._normalize_hybrid_step_kind(metadata.get("step_kind", ""))
@@ -1485,8 +1495,10 @@ class OrchestratorLineageMixin:
             else:
                 metadata.pop("step_kind", None)
             if step_kind == "join":
-                declared_merge_from = self._coerce_string_list(metadata.get("merge_from", []))
-                direct_dependencies = [item for item in step.depends_on if item]
+                declared_merge_from = [
+                    item for item in self._coerce_string_list(metadata.get("merge_from", [])) if _valid_join_ref(step, item)
+                ]
+                direct_dependencies = [item for item in step.depends_on if _valid_join_ref(step, item)]
                 if len(direct_dependencies) < 2 and len(declared_merge_from) >= 2:
                     direct_dependencies = list(declared_merge_from)
                     step.depends_on = direct_dependencies

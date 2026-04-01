@@ -33,6 +33,11 @@ function parsePositiveInt(value, fallback = 0) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function parseTimestampMs(value = "") {
+  const timestampMs = Date.parse(String(value || "").trim());
+  return Number.isFinite(timestampMs) ? timestampMs : null;
+}
+
 function normalizePlanningStatus(value = "") {
   const normalized = normalizedText(value).toLowerCase();
   if (["completed", "failed", "running"].includes(normalized)) {
@@ -509,7 +514,7 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
     },
     activeJob: activeExecutionJob,
     detailOptions: {
-      nowMs: options?.nowMs,
+      nowMs: Number.isFinite(options?.nowMs) ? options.nowMs : (parseTimestampMs(record.timestamp) ?? undefined),
     },
   }).detail;
 }

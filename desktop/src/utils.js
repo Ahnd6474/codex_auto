@@ -611,7 +611,7 @@ export function blankProjectForm(defaultRuntime) {
       execution_model: defaultExecutionModel,
       model_preset: defaultModelPreset,
       model_slug_input: defaultExecutionModel || defaultModelSlugInput,
-      generate_word_report: runtimeDefaults.generate_word_report ?? true,
+      generate_word_report: runtimeDefaults.generate_word_report ?? false,
       max_blocks: runtimeDefaults.max_blocks || 5,
       optimization_mode: runtimeDefaults.optimization_mode || "light",
       test_cmd: runtimeDefaults.test_cmd || "python -m pytest",
@@ -3390,6 +3390,15 @@ export function toolbarProgressCaptionDisplay(plan, language = "en", options = {
 
 export function commandLabel(command, language = "en") {
   const locale = normalizeLanguage(language);
+  if (command === "run-manual-debugger") {
+    return locale === "ko" ? "수동 디버거" : "Manual Debugger";
+  }
+  if (command === "run-manual-merger") {
+    return locale === "ko" ? "수동 머저" : "Manual Merger";
+  }
+  if (!command) {
+    return locale === "ko" ? "백그라운드 작업" : "Background Job";
+  }
   switch (command) {
     case "generate-plan":
       return translate(locale, "action.generatePlan");

@@ -103,7 +103,7 @@ def desktop_runtime_defaults() -> dict[str, Any]:
         auto_merge_pull_request=True,
         checkpoint_interval_blocks=1,
         require_checkpoint_approval=False,
-        generate_word_report=True,
+        generate_word_report=False,
         use_fast_mode=True,
         max_blocks=5,
         workflow_mode="standard",

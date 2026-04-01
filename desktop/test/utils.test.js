@@ -975,7 +975,7 @@ test("blankProjectForm falls back to repository defaults when runtime is missing
   assert.equal(form.runtime.model, "gpt-5.4");
   assert.equal(form.runtime.model_preset, "");
   assert.equal(form.runtime.model_slug_input, "gpt-5.4");
-  assert.equal(form.runtime.generate_word_report, true);
+  assert.equal(form.runtime.generate_word_report, false);
   assert.equal(form.runtime.max_blocks, 5);
   assert.equal(form.runtime.optimization_mode, "light");
   assert.equal(form.runtime.test_cmd, "python -m pytest");
@@ -1359,7 +1359,7 @@ test("inheritProjectIdentityForm keeps project links but resets runtime to app d
   assert.equal(form.runtime.parallel_memory_per_worker_gib, 3);
   assert.equal(form.runtime.test_cmd, "python -m pytest");
   assert.equal(form.runtime.optimization_mode, "light");
-  assert.equal(form.runtime.generate_word_report, true);
+  assert.equal(form.runtime.generate_word_report, false);
   assert.equal(form.runtime.max_blocks, 5);
   assert.equal(form.runtime.execution_mode, "parallel");
   assert.equal(form.runtime.model_slug_input, "gpt-5.4");

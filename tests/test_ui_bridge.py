@@ -1632,7 +1632,7 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(payload["default_runtime"]["model"], "gpt-5.4")
         self.assertEqual(payload["default_runtime"]["model_preset"], "")
         self.assertEqual(payload["default_runtime"]["model_slug_input"], "gpt-5.4")
-        self.assertTrue(payload["default_runtime"]["generate_word_report"])
+        self.assertFalse(payload["default_runtime"]["generate_word_report"])
         self.assertFalse(payload["default_runtime"]["save_project_logs"])
         self.assertEqual(payload["default_runtime"]["sandbox_mode"], "danger-full-access")
         self.assertEqual(payload["default_runtime"]["optimization_mode"], "light")

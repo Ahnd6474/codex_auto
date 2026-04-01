@@ -1097,15 +1097,38 @@ KO_HIGH_QUALITY_OVERRIDES["message.commandCancelled"] = "{command} 예약을 취
 KO_HIGH_QUALITY_OVERRIDES["status.queued"] = "대기열에 있음";
 KO_HIGH_QUALITY_OVERRIDES["status.queuedWithDetail"] = "대기열에 있음: {detail}";
 
-const STATIC_LANGUAGE_PACKS = new Map(
-  ["en", "ko"].map((language) => [
-    language,
+const STATIC_KO_FALLBACKS = {
+  "action.closeout": "마감",
+  "action.generatePlan": "계획 생성",
+  "action.runRemaining": "남은 단계 실행",
+  "preset.auto": "자동",
+  "preset.lowOnly": "낮음만",
+  "preset.mediumOnly": "중간만",
+  "preset.highOnly": "높음만",
+  "preset.xhighOnly": "매우 높음만",
+  "reasoning.auto": "자동",
+  "reasoning.low": "낮음",
+  "reasoning.medium": "중간",
+  "reasoning.high": "높음",
+  "reasoning.xhigh": "매우 높음",
+  "runtime.modelSummary": "{model} | 추론 {effort}",
+  "runtime.modelSummaryGeneric": "{model} | 추론 {effort}",
+};
+
+const STATIC_LANGUAGE_PACKS = new Map([
+  [
+    "en",
     {
-      ...(STRINGS[language] || {}),
-      ...(language === "ko" ? KO_HIGH_QUALITY_OVERRIDES : {}),
+      ...(STRINGS.en || {}),
     },
-  ]),
-);
+  ],
+  [
+    "ko",
+    {
+      ...STATIC_KO_FALLBACKS,
+    },
+  ],
+]);
 
 const loadedDynamicLanguagePacks = new Map();
 const pendingDynamicLanguagePacks = new Map();
