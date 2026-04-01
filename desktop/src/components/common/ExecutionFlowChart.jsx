@@ -1,6 +1,6 @@
 import { memo, useId, useMemo } from "react";
 import { displayStatus } from "../../locale";
-import { deriveExecutionUiState, effectiveStepStatus, failureReasonLabel, isDebuggingStatus, statusTone } from "../../utils";
+import { deriveExecutionUiState, effectiveStepStatus, failureReasonLabel, isDebuggingStatus } from "../../utils";
 
 const FONT_FAMILY = '"Segoe UI", "Malgun Gothic", sans-serif';
 const BOX_WIDTH = 220;
@@ -13,7 +13,7 @@ const SPLIT_GAP = 44;
 const MERGE_GAP = 38;
 
 const PALETTE = {
-  neutral: { fill: "#f8fafc", stroke: "#94a3b8", text: "#0f172a", meta: "#475569" },
+  neutral: { fill: "var(--bg-panel-alt)", stroke: "var(--border)", text: "var(--text)", meta: "var(--text-muted)" },
   info: { fill: "#e0f2fe", stroke: "#0284c7", text: "#082f49", meta: "#0369a1" },
   success: { fill: "#dcfce7", stroke: "#16a34a", text: "#14532d", meta: "#15803d" },
   warning: { fill: "#fef3c7", stroke: "#d97706", text: "#78350f", meta: "#b45309" },
@@ -217,6 +217,41 @@ function chartTopologySignature(steps = []) {
       (step?.owned_paths || []).length,
     ].join("|"))
     .join("::");
+}
+
+function chartStatusTone(status) {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (!normalized) {
+    return "neutral";
+  }
+  if (normalized === "completed") {
+    return "success";
+  }
+  if (normalized.includes("failed")) {
+    return "danger";
+  }
+  if (isDebuggingStatus(normalized)) {
+    return "warning";
+  }
+  if (normalized === "integrating" || normalized.includes("running")) {
+    return "info";
+  }
+  if (
+    normalized === "pending"
+    || normalized === "not_started"
+    || normalized === "idle"
+    || normalized === "ready"
+    || normalized === "blocked"
+    || normalized.includes("queued")
+    || normalized.includes("cancelled")
+  ) {
+    return "neutral";
+  }
+  return "warning";
+}
+
+function chartPaletteForTone(tone) {
+  return PALETTE[tone] || PALETTE.warning;
 }
 
 function buildChartTopology(steps = []) {
@@ -519,8 +554,8 @@ function buildChartData(steps = [], projectStatus = "", language = "en", activeL
         || "";
       const renderedStep = liveStatus ? { ...node.step, status: liveStatus } : node.step;
       const stepStatus = effectiveChartStepStatus(renderedStep, projectStatus, activeLineageId, checkpointLookup, checkpointFamily);
-      const tone = statusTone(stepStatus);
-      const palette = PALETTE[tone] || PALETTE.neutral;
+      const tone = chartStatusTone(stepStatus);
+      const palette = chartPaletteForTone(tone);
       const failureReason = failureReasonLabel(renderedStep, language);
       return {
         ...node,
@@ -662,4 +697,6 @@ export const __executionFlowChartTestables = {
   buildChartLevels,
   orderChartLevels,
   buildChartTopology,
+  chartStatusTone,
+  chartPaletteForTone,
 };
