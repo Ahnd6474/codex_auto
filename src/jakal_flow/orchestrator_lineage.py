@@ -1485,8 +1485,12 @@ class OrchestratorLineageMixin:
             else:
                 metadata.pop("step_kind", None)
             if step_kind == "join":
-                direct_dependencies = list(step.depends_on)
-                merge_from = [item for item in self._coerce_string_list(metadata.get("merge_from", [])) if item in direct_dependencies]
+                declared_merge_from = self._coerce_string_list(metadata.get("merge_from", []))
+                direct_dependencies = [item for item in step.depends_on if item]
+                if len(direct_dependencies) < 2 and len(declared_merge_from) >= 2:
+                    direct_dependencies = list(declared_merge_from)
+                    step.depends_on = direct_dependencies
+                merge_from = [item for item in declared_merge_from if item in direct_dependencies]
                 if len(merge_from) < 2:
                     merge_from = direct_dependencies
                 metadata["merge_from"] = merge_from

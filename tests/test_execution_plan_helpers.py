@@ -1202,6 +1202,121 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(plan_state.steps[3].step_id, "ST4")
         self.assertEqual(plan_state.steps[3].depends_on, ["ST3"])
 
+    def test_save_execution_plan_state_preserves_join_dependencies_when_pruning_transitive_dag_edges(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_join_dependency_prune_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", execution_mode="parallel")
+
+        try:
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"):
+                _context, plan_state = orchestrator.update_execution_plan(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    plan_state=ExecutionPlanState(
+                        execution_mode="parallel",
+                        default_test_command="python -m pytest",
+                        steps=[
+                            ExecutionStep(step_id="NODE-A", title="Frontend", owned_paths=["desktop/src"]),
+                            ExecutionStep(step_id="NODE-B", title="Backend", depends_on=["NODE-A"], owned_paths=["src/jakal_flow"]),
+                            ExecutionStep(
+                                step_id="NODE-C",
+                                title="Join both branches",
+                                depends_on=["NODE-A", "NODE-B"],
+                                metadata={"step_kind": "join", "merge_from": ["NODE-A", "NODE-B"], "join_policy": "all"},
+                            ),
+                        ],
+                    ),
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        join_step = plan_state.steps[2]
+        self.assertEqual(join_step.step_id, "ST3")
+        self.assertEqual(join_step.depends_on, ["ST1", "ST2"])
+        self.assertEqual(join_step.metadata["merge_from"], ["ST1", "ST2"])
+        self.assertEqual(join_step.metadata["join_policy"], "all")
+
+    def test_load_execution_plan_state_repairs_join_dependencies_from_merge_targets(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_join_repair_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", execution_mode="parallel")
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(project_dir=repo_dir, branch="main", runtime=runtime)
+            write_json(
+                context.paths.execution_plan_file,
+                ExecutionPlanState(
+                    plan_title="Recovered join plan",
+                    execution_mode="parallel",
+                    default_test_command="python -m pytest",
+                    steps=[
+                        ExecutionStep(step_id="ST1", title="Frontend", status="completed"),
+                        ExecutionStep(step_id="ST2", title="Backend", status="completed"),
+                        ExecutionStep(
+                            step_id="ST3",
+                            title="Join both branches",
+                            depends_on=["ST1"],
+                            metadata={"step_kind": "join", "merge_from": ["ST1", "ST2"], "join_policy": "all"},
+                        ),
+                    ],
+                ).to_dict(),
+            )
+
+            loaded = orchestrator.load_execution_plan_state(context)
+            saved = orchestrator.save_execution_plan_state(context, loaded)
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        join_step = saved.steps[2]
+        self.assertEqual(join_step.depends_on, ["ST1", "ST2"])
+        self.assertEqual(join_step.metadata["merge_from"], ["ST1", "ST2"])
+        self.assertEqual(join_step.metadata["join_policy"], "all")
+
+    def test_load_execution_plan_state_repairs_join_dependencies_from_cached_state(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_join_cached_repair_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", execution_mode="parallel")
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(project_dir=repo_dir, branch="main", runtime=runtime)
+            broken_state = ExecutionPlanState(
+                plan_title="Recovered cached join plan",
+                execution_mode="parallel",
+                default_test_command="python -m pytest",
+                steps=[
+                    ExecutionStep(step_id="ST1", title="Frontend", status="completed"),
+                    ExecutionStep(step_id="ST2", title="Backend", status="completed"),
+                    ExecutionStep(
+                        step_id="ST3",
+                        title="Join both branches",
+                        depends_on=["ST1"],
+                        metadata={"step_kind": "join", "merge_from": ["ST1", "ST2"], "join_policy": "all"},
+                    ),
+                ],
+            )
+            orchestrator._cache_execution_plan_state(context, broken_state)
+
+            loaded = orchestrator.load_execution_plan_state(context)
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        join_step = loaded.steps[2]
+        self.assertEqual(join_step.depends_on, ["ST1", "ST2"])
+        self.assertEqual(join_step.metadata["merge_from"], ["ST1", "ST2"])
+        self.assertEqual(join_step.metadata["join_policy"], "all")
+
     def test_save_execution_plan_state_normalizes_join_metadata(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_join_plan_test"
         shutil.rmtree(temp_root, ignore_errors=True)

@@ -342,7 +342,11 @@ def normalize_parallel_step_metadata(
     return normalized
 
 
-def reduce_redundant_parallel_dependencies(steps: list[ExecutionStep]) -> None:
+def reduce_redundant_parallel_dependencies(
+    steps: list[ExecutionStep],
+    *,
+    step_kind: Callable[[ExecutionStep], str] | None = None,
+) -> None:
     step_by_id = {step.step_id: step for step in steps}
     dependency_cache: dict[str, set[str]] = {}
 
@@ -368,6 +372,8 @@ def reduce_redundant_parallel_dependencies(steps: list[ExecutionStep]) -> None:
         return closure
 
     for step in steps:
+        if step_kind is not None and step_kind(step) in {"join", "barrier"}:
+            continue
         if len(step.depends_on) < 2:
             continue
         redundant_dependencies = {

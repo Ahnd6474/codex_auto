@@ -961,7 +961,9 @@ class Orchestrator(
         cached = self._execution_plan_state_cache.get(cache_key)
         if cached is not None and cached[0] == cache_signature:
             cached_state = deepcopy(cached[1])
+            self._normalize_loaded_execution_plan_state(context, cached_state)
             if not self._closeout_run_is_stale(context, cached_state):
+                self._cache_execution_plan_state(context, cached_state)
                 return cached_state
         payload = read_json(context.paths.execution_plan_file, default=None)
         if not isinstance(payload, dict):
@@ -974,6 +976,11 @@ class Orchestrator(
             self._cache_execution_plan_state(context, state)
             return state
         state = ExecutionPlanState.from_dict(payload)
+        self._normalize_loaded_execution_plan_state(context, state)
+        self._cache_execution_plan_state(context, state)
+        return state
+
+    def _normalize_loaded_execution_plan_state(self, context: ProjectContext, state: ExecutionPlanState) -> None:
         state.workflow_mode = normalize_workflow_mode(state.workflow_mode or context.runtime.workflow_mode)
         state.execution_mode = self._normalize_execution_mode(state.execution_mode or context.runtime.execution_mode)
         if not state.default_test_command:
@@ -985,8 +992,6 @@ class Orchestrator(
         for step in state.steps:
             step.reasoning_effort = normalize_reasoning_effort(step.reasoning_effort, fallback=fallback_effort)
         self._recover_stale_closeout_state(context, state)
-        self._cache_execution_plan_state(context, state)
-        return state
 
     def update_execution_plan(
         self,
@@ -1206,7 +1211,7 @@ class Orchestrator(
         return execution_plan_support.normalize_owned_path(value)
 
     def _reduce_redundant_parallel_dependencies(self, steps: list[ExecutionStep]) -> None:
-        execution_plan_support.reduce_redundant_parallel_dependencies(steps)
+        execution_plan_support.reduce_redundant_parallel_dependencies(steps, step_kind=self._step_kind)
 
     def _plan_uses_dag_parallelism(self, steps: list[ExecutionStep]) -> bool:
         return execution_plan_support.plan_uses_dag_parallelism(steps)
