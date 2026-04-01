@@ -16,10 +16,12 @@ import {
   jobHasNewerActiveReplacement,
   mergeModelCatalogs,
   projectDetailStatus,
+  projectScopedJobFromJobs,
   projectFormFromDetail,
   resolveChatRuntimeSelection,
   resolveRuntimeModelSelectionState,
   sanitizeProjectDetailForJobState,
+  sameQueuedJobs,
   selectedConfigReasoning,
   stepModelSelectionPatch,
 } from "./utils.js";

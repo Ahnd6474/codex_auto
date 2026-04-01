@@ -40,6 +40,7 @@ import {
   AUTO_REASONING_OPTION,
   MODEL_REASONING_OPTIONS,
   resolveRuntimeModelSelectionState,
+  sameQueuedJobs,
   shouldShowEstimatedCost,
   statusTone,
   deriveExecutionUiState,
@@ -245,27 +246,6 @@ const RUN_PROVIDER_OPTIONS = [
   ["local_openai", "Local OpenAI-Compatible"],
   ["oss", "LM Studio / Local OSS"],
 ];
-
-function sameQueuedJobs(previousJobs = [], nextJobs = []) {
-  if (previousJobs === nextJobs) {
-    return true;
-  }
-  if (!Array.isArray(previousJobs) || !Array.isArray(nextJobs) || previousJobs.length !== nextJobs.length) {
-    return false;
-  }
-  for (let index = 0; index < previousJobs.length; index += 1) {
-    const previousJob = previousJobs[index];
-    const nextJob = nextJobs[index];
-    if (
-      previousJob?.id !== nextJob?.id
-      || previousJob?.status !== nextJob?.status
-      || previousJob?.queue_position !== nextJob?.queue_position
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
 
 function parallelRunControlViewPropsEqual(previousProps, nextProps) {
   return (

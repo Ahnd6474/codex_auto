@@ -8,6 +8,7 @@ import {
   formatDurationCompact,
   reasoningEffortLabel,
   resolveExecutionDisplayPlan,
+  sameQueuedJobs,
   visibleExecutionJob,
 } from "../../utils";
 
@@ -157,27 +158,6 @@ function sameArtifactFiles(previousFiles = [], nextFiles = []) {
     return false;
   }
   return previousFiles.every((value, index) => value === nextFiles[index]);
-}
-
-function sameQueuedJobs(previousJobs = [], nextJobs = []) {
-  if (previousJobs === nextJobs) {
-    return true;
-  }
-  if (!Array.isArray(previousJobs) || !Array.isArray(nextJobs) || previousJobs.length !== nextJobs.length) {
-    return false;
-  }
-  for (let index = 0; index < previousJobs.length; index += 1) {
-    const previousJob = previousJobs[index];
-    const nextJob = nextJobs[index];
-    if (
-      previousJob?.id !== nextJob?.id
-      || previousJob?.status !== nextJob?.status
-      || previousJob?.queue_position !== nextJob?.queue_position
-    ) {
-      return false;
-    }
-  }
-  return true;
 }
 
 function rightRailTabIds(includeChatTab = true) {

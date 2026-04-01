@@ -56,6 +56,7 @@ import {
   providerSupportsCatalog,
   projectChatJobFromJobs,
   projectJobFromJobs,
+  projectScopedJobFromJobs,
   projectFormFromDetail,
   projectStatusWithJob,
   resolveProjectDirectory,
@@ -67,6 +68,7 @@ import {
   QWEN_CODE_DEFAULT_MODEL,
   sanitizeProjectDetailForJobState,
   sanitizeProjectListForJobState,
+  sameQueuedJobs,
   selectedConfigReasoning,
   stepModelSelectionPatch,
   shouldKeepUnsavedPlan,
@@ -157,8 +159,57 @@ test("project job helpers match jobs by repo id or project path and derive displ
 
   assert.equal(projectJobFromJobs(jobs, { repo_id: "repo-1" })?.id, "job-running");
   assert.equal(projectJobFromJobs(jobs, { repo_path: "c:/work/repo" })?.id, "job-queued");
+  assert.equal(
+    projectScopedJobFromJobs(jobs, { repo_id: "repo-1" }, { lane: "execution", ignoreSuperseded: true })?.id,
+    "job-running",
+  );
   assert.equal(projectStatusWithJob("plan_ready", jobs[0]), "queued:run-plan");
   assert.equal(projectStatusWithJob("setup_ready", jobs[1]), "running:generate-plan");
+});
+
+test("projectScopedJobFromJobs centralizes lane-aware matching and queued snapshot comparison", () => {
+  const jobs = [
+    {
+      id: "job-chat",
+      status: "running",
+      command: "send-chat-message",
+      repo_id: "repo-1",
+      updated_at_ms: 50,
+    },
+    {
+      id: "job-run",
+      status: "queued",
+      command: "run-plan",
+      repo_id: "repo-1",
+      updated_at_ms: 40,
+      queue_position: 2,
+    },
+    {
+      id: "job-other",
+      status: "queued",
+      command: "run-plan",
+      repo_id: "repo-2",
+      updated_at_ms: 30,
+      queue_position: 1,
+    },
+  ];
+
+  assert.equal(projectScopedJobFromJobs(jobs, { repo_id: "repo-1" }, { lane: "chat" })?.id, "job-chat");
+  assert.equal(projectScopedJobFromJobs(jobs, { repo_id: "repo-1" }, { lane: "execution" })?.id, "job-run");
+  assert.equal(
+    sameQueuedJobs(
+      [{ id: "job-run", status: "queued", queue_position: 2 }],
+      [{ id: "job-run", status: "queued", queue_position: 2 }],
+    ),
+    true,
+  );
+  assert.equal(
+    sameQueuedJobs(
+      [{ id: "job-run", status: "queued", queue_position: 2 }],
+      [{ id: "job-run", status: "queued", queue_position: 3 }],
+    ),
+    false,
+  );
 });
 
 test("chat jobs do not affect execution status or progress", () => {

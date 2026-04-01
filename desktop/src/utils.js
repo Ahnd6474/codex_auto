@@ -128,23 +128,41 @@ export function jobMatchesProject(job = null, project = {}) {
   return Boolean(jobProjectDir) && Boolean(projectDir) && jobProjectDir === projectDir;
 }
 
-export function projectJobFromJobs(jobs = [], project = {}) {
-  const jobItems = Array.isArray(jobs) ? jobs.filter(Boolean) : [];
-  const statusRank = {
+function jobStatusSortRank(job = null) {
+  return ({
     running: 0,
     queued: 1,
-  };
-  const matches = jobItems.filter((job) => jobMatchesProject(job, project) && !isChatJob(job));
+  })[String(job?.status || "").trim().toLowerCase()] ?? 9;
+}
+
+export function projectScopedJobFromJobs(jobs = [], project = {}, options = {}) {
+  const jobItems = Array.isArray(jobs) ? jobs.filter(Boolean) : [];
+  const lane = String(options?.lane || "execution").trim().toLowerCase();
+  const ignoreSuperseded = options?.ignoreSuperseded ?? (lane !== "chat");
+  const matches = jobItems.filter((job) => {
+    if (!jobMatchesProject(job, project)) {
+      return false;
+    }
+    if (lane === "chat") {
+      return isChatJob(job);
+    }
+    if (lane === "execution") {
+      return !isChatJob(job);
+    }
+    return true;
+  });
   if (!matches.length) {
     return null;
   }
-  const candidates = matches.filter((job) => !jobIsSupersededByProject(job, project));
+  const candidates = ignoreSuperseded
+    ? matches.filter((job) => !jobIsSupersededByProject(job, project))
+    : matches;
   if (!candidates.length) {
     return null;
   }
   return [...candidates].sort((left, right) => {
-    const leftRank = statusRank[String(left?.status || "").trim().toLowerCase()] ?? 9;
-    const rightRank = statusRank[String(right?.status || "").trim().toLowerCase()] ?? 9;
+    const leftRank = jobStatusSortRank(left);
+    const rightRank = jobStatusSortRank(right);
     if (leftRank !== rightRank) {
       return leftRank - rightRank;
     }
@@ -152,24 +170,18 @@ export function projectJobFromJobs(jobs = [], project = {}) {
   })[0] || null;
 }
 
+export function projectJobFromJobs(jobs = [], project = {}) {
+  return projectScopedJobFromJobs(jobs, project, {
+    lane: "execution",
+    ignoreSuperseded: true,
+  });
+}
+
 export function projectChatJobFromJobs(jobs = [], project = {}) {
-  const jobItems = Array.isArray(jobs) ? jobs.filter(Boolean) : [];
-  const statusRank = {
-    running: 0,
-    queued: 1,
-  };
-  const matches = jobItems.filter((job) => jobMatchesProject(job, project) && isChatJob(job));
-  if (!matches.length) {
-    return null;
-  }
-  return [...matches].sort((left, right) => {
-    const leftRank = statusRank[String(left?.status || "").trim().toLowerCase()] ?? 9;
-    const rightRank = statusRank[String(right?.status || "").trim().toLowerCase()] ?? 9;
-    if (leftRank !== rightRank) {
-      return leftRank - rightRank;
-    }
-    return (Number(right?.updated_at_ms || 0) || 0) - (Number(left?.updated_at_ms || 0) || 0);
-  })[0] || null;
+  return projectScopedJobFromJobs(jobs, project, {
+    lane: "chat",
+    ignoreSuperseded: false,
+  });
 }
 
 export function jobHasNewerActiveReplacement(job = null, jobs = []) {
@@ -224,6 +236,27 @@ export function projectStatusWithJob(status = "", activeJob = null) {
     return `running:${command}`;
   }
   return currentStatus;
+}
+
+export function sameQueuedJobs(previousJobs = [], nextJobs = []) {
+  if (previousJobs === nextJobs) {
+    return true;
+  }
+  if (!Array.isArray(previousJobs) || !Array.isArray(nextJobs) || previousJobs.length !== nextJobs.length) {
+    return false;
+  }
+  for (let index = 0; index < previousJobs.length; index += 1) {
+    const previousJob = previousJobs[index];
+    const nextJob = nextJobs[index];
+    if (
+      previousJob?.id !== nextJob?.id
+      || previousJob?.status !== nextJob?.status
+      || previousJob?.queue_position !== nextJob?.queue_position
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function detailApplySignature(detail = null, runningJob = null) {

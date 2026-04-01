@@ -1,6 +1,6 @@
 import { Suspense, lazy, memo, useEffect } from "react";
 import { useI18n } from "../../i18n";
-import { projectDetailStatus } from "../../utils";
+import { projectDetailStatus, sameQueuedJobs } from "../../utils";
 
 function AiChatTabIcon() {
   return (
@@ -153,27 +153,6 @@ function WorkspaceTab({ value, activeTab, onChange, onPrefetch, label }) {
       {label}
     </button>
   );
-}
-
-function sameQueuedJobs(previousJobs = [], nextJobs = []) {
-  if (previousJobs === nextJobs) {
-    return true;
-  }
-  if (!Array.isArray(previousJobs) || !Array.isArray(nextJobs) || previousJobs.length !== nextJobs.length) {
-    return false;
-  }
-  for (let index = 0; index < previousJobs.length; index += 1) {
-    const previousJob = previousJobs[index];
-    const nextJob = nextJobs[index];
-    if (
-      previousJob?.id !== nextJob?.id
-      || previousJob?.status !== nextJob?.status
-      || previousJob?.queue_position !== nextJob?.queue_position
-    ) {
-      return false;
-    }
-  }
-  return true;
 }
 
 function normalizeWorkspaceTab(tab) {
