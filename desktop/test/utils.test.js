@@ -23,6 +23,7 @@ import {
   CLAUDE_DEFAULT_MODEL,
   DEEPSEEK_DEFAULT_MODEL,
   defaultCodexPath,
+  defaultModelForProvider,
   planStepsWithCloseout,
   deriveExecutionProgress,
   deriveExecutionUiState,
@@ -1066,6 +1067,17 @@ test("applyProviderDefaults switches the runtime path for Gemini CLI and clears 
   assert.equal(runtime.model, GEMINI_DEFAULT_MODEL);
   assert.equal(runtime.model_slug_input, GEMINI_DEFAULT_MODEL);
   assert.equal(runtime.provider_api_key_env, "GEMINI_API_KEY");
+});
+
+test("defaultModelForProvider prefers execution_model over stale runtime.model", () => {
+  const model = defaultModelForProvider("gemini", {
+    model_provider: "gemini",
+    model: "gemini-3-flash-preview",
+    model_slug_input: "gemini-3-flash-preview",
+    execution_model: "gemini-2.5-flash",
+  });
+
+  assert.equal(model, "gemini-2.5-flash");
 });
 
 test("applyProviderDefaults switches the runtime path for Claude Code and applies Anthropic defaults", () => {

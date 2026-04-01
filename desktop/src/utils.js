@@ -462,9 +462,13 @@ function currentModelMatchesProvider(provider = "openai", model = "") {
   return false;
 }
 
+function selectedRuntimeModel(runtime = {}) {
+  return String(runtime?.execution_model || runtime?.model_slug_input || runtime?.model || "").trim().toLowerCase();
+}
+
 export function defaultModelForProvider(provider = "openai", runtime = {}) {
   const normalizedProvider = String(provider || "").trim().toLowerCase();
-  const currentModel = String(runtime?.model || runtime?.model_slug_input || "").trim().toLowerCase();
+  const currentModel = selectedRuntimeModel(runtime);
   if (normalizedProvider === "claude") {
     const ensembleClaudeModel = String(runtime?.ensemble_claude_model || "").trim().toLowerCase();
     if (normalizedModelProvider(runtime) === "ensemble" && ensembleClaudeModel) {
@@ -508,7 +512,7 @@ export function applyProviderDefaults(runtime = {}, nextProvider = "openai", nex
     ? String(nextProvider || "").trim().toLowerCase()
     : "openai";
   const previousProvider = normalizedModelProvider(runtime);
-  const previousModel = String(runtime?.model_slug_input || runtime?.model || "").trim().toLowerCase();
+  const previousModel = selectedRuntimeModel(runtime);
   const nextEnsembleOpenAiModel =
     String(runtime?.ensemble_openai_model || "").trim().toLowerCase()
       || (previousProvider === "openai" && previousModel && previousModel !== "auto" ? previousModel : "gpt-5.4");
@@ -526,7 +530,7 @@ export function applyProviderDefaults(runtime = {}, nextProvider = "openai", nex
         ? (String(nextLocalProvider || runtime?.local_model_provider || "ollama").trim().toLowerCase() === "lmstudio" ? "lmstudio" : "ollama")
         : "";
   const supportsAuto = providerSupportsAutoModel(provider);
-  const currentModel = String(runtime?.model_slug_input || runtime?.model || "").trim().toLowerCase();
+  const currentModel = selectedRuntimeModel(runtime);
   const autoModelBase =
     previousProvider === provider
       ? (currentModel && currentModel !== "auto" ? currentModel : defaultModelForProvider(provider, runtime))
@@ -2509,7 +2513,7 @@ export function filterModelCatalogByProvider(modelCatalog = [], runtime = {}, co
   const provider = normalizedModelProvider(runtime);
   const localProvider = normalizedLocalModelProvider(runtime);
   if (!providerSupportsCatalog(provider)) {
-    const currentModel = String(runtime?.model_slug_input || runtime?.model || "").trim();
+    const currentModel = String(selectedRuntimeModel(runtime) || "").trim();
     if (!currentModel) {
       return [];
     }

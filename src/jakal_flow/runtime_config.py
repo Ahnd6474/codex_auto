@@ -356,10 +356,8 @@ def normalize_runtime_payload(
     if not merged["execution_model"]:
         merged["execution_model"] = merged["model"] or merged["model_slug_input"] or ""
     if merged["execution_model"]:
-        if not str(source.get("model", "")).strip():
-            merged["model"] = merged["execution_model"]
-        if not str(source.get("model_slug_input", "")).strip():
-            merged["model_slug_input"] = merged["execution_model"]
+        merged["model"] = merged["execution_model"]
+        merged["model_slug_input"] = merged["execution_model"]
     if merged["chat_model_provider"] and not provider_supports_auto_model(merged["chat_model_provider"]) and merged["chat_model"] == AUTO_MODEL_SLUG:
         merged["chat_model"] = ""
     return merged

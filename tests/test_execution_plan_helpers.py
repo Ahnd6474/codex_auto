@@ -607,6 +607,21 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(choice.model, "gpt-5.5")
         self.assertEqual(choice.source, "auto")
 
+    def test_planning_effort_for_runtime_prefers_execution_model_when_model_is_stale(self) -> None:
+        orchestrator = Orchestrator(Path.cwd() / ".tmp_planning_effort_runtime_test")
+        runtime = RuntimeOptions(
+            model_provider="gemini",
+            model="gpt-5.4",
+            model_slug_input="gpt-5.4",
+            execution_model="gemini-2.5-flash",
+            effort="high",
+            planning_effort="high",
+        )
+
+        planning_effort = orchestrator._planning_effort_for_runtime(runtime, "high")
+
+        self.assertEqual(planning_effort, "high")
+
     def test_resolve_step_model_choice_prefers_claude_for_ensemble_ui_steps(self) -> None:
         runtime = RuntimeOptions(model="gpt-5.4", model_provider="ensemble")
         step = ExecutionStep(

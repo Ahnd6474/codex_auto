@@ -1489,6 +1489,20 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(runtime.model, GEMINI_DEFAULT_MODEL)
         self.assertEqual(runtime.model_slug_input, GEMINI_DEFAULT_MODEL)
 
+    def test_runtime_from_payload_syncs_stale_model_to_execution_model(self) -> None:
+        runtime = runtime_from_payload(
+            {
+                "model_provider": "gemini",
+                "model": "gemini-3-flash-preview",
+                "model_slug_input": "gemini-3-flash-preview",
+                "execution_model": "gemini-2.5-flash",
+            }
+        )
+
+        self.assertEqual(runtime.execution_model, "gemini-2.5-flash")
+        self.assertEqual(runtime.model, "gemini-2.5-flash")
+        self.assertEqual(runtime.model_slug_input, "gemini-2.5-flash")
+
     def test_runtime_from_payload_applies_claude_defaults(self) -> None:
         runtime = runtime_from_payload(
             {

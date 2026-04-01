@@ -874,9 +874,18 @@ class Orchestrator(
     def _planning_effort_for_runtime(self, runtime: RuntimeOptions, planning_effort: str) -> str:
         selected_provider = str(getattr(runtime, "model_provider", "") or "").strip().lower()
         if selected_provider == "ensemble":
-            planning_model = str(getattr(runtime, "ensemble_openai_model", "") or getattr(runtime, "model", "")).strip().lower()
+            planning_model = str(
+                getattr(runtime, "ensemble_openai_model", "")
+                or getattr(runtime, "execution_model", "")
+                or getattr(runtime, "model", "")
+                or getattr(runtime, "model_slug_input", "")
+            ).strip().lower()
         else:
-            planning_model = str(getattr(runtime, "model", "") or getattr(runtime, "model_slug_input", "")).strip().lower()
+            planning_model = str(
+                getattr(runtime, "execution_model", "")
+                or getattr(runtime, "model", "")
+                or getattr(runtime, "model_slug_input", "")
+            ).strip().lower()
         normalized_effort = normalize_reasoning_effort(planning_effort, fallback="high")
         if planning_model != "gpt-5.4":
             return normalized_effort
