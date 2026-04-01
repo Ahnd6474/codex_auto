@@ -1296,6 +1296,7 @@ test("projectFormFromDetail merges persisted runtime and derives GitHub mode", (
       background_queue_priority: 0,
       test_cmd: "npm run check",
       model: "gpt-5.4",
+      model_slug_input: "gpt-5.4",
       execution_model: "gpt-5.4",
     },
   });
@@ -2066,6 +2067,8 @@ test("buildProjectPayload preserves runtime fields that must reach the backend b
 
   assert.deepEqual(payload.runtime, {
     execution_model: "gpt-5.4-mini",
+    model: "gpt-5.4-mini",
+    model_slug_input: "gpt-5.4-mini",
     allow_background_queue: false,
     require_checkpoint_approval: false,
     checkpoint_interval_blocks: 3,
@@ -2105,16 +2108,17 @@ test("buildRunPlanPayloadFromDetail reuses the generated plan and persisted runt
     display_name: "Demo App",
     branch: "release",
     origin_url: "https://github.com/openai/demo-app",
-      runtime: {
-        max_blocks: 7,
-        effort: "high",
-        execution_mode: "parallel",
-        allow_background_queue: true,
-        background_queue_priority: 0,
-        model: "gpt-5.4",
-        execution_model: "gpt-5.4",
-        test_cmd: "npm run check",
-      },
+    runtime: {
+      max_blocks: 7,
+      effort: "high",
+      execution_mode: "parallel",
+      allow_background_queue: true,
+      background_queue_priority: 0,
+      model: "gpt-5.4",
+      model_slug_input: "gpt-5.4",
+      execution_model: "gpt-5.4",
+      test_cmd: "npm run check",
+    },
     plan: {
       workflow_mode: "standard",
       execution_mode: "parallel",

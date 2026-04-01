@@ -350,7 +350,9 @@ def normalize_runtime_payload(
         merged["model"] = merged["model_slug_input"]
     if not merged["model"] and merged["model_slug_input"]:
         merged["model"] = merged["model_slug_input"]
-    merged["execution_model"] = str(merged.get("execution_model", "")).strip().lower()
+    merged["execution_model"] = str(source.get("execution_model", merged.get("execution_model", ""))).strip().lower()
+    if "execution_model" not in source:
+        merged["execution_model"] = merged["model"] or merged["model_slug_input"] or merged["execution_model"]
     if not merged["execution_model"]:
         merged["execution_model"] = merged["model"] or merged["model_slug_input"] or ""
     if merged["execution_model"]:

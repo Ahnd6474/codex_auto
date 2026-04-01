@@ -26,6 +26,7 @@ const PROJECT_RUNTIME_OVERRIDE_KEYS = [
   "ensemble_openai_model",
   "ensemble_gemini_model",
   "ensemble_claude_model",
+  "model",
   "execution_model",
   "chat_model",
   "chat_effort",

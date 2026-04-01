@@ -366,7 +366,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
               : "Used as the default model for both planning and block execution. Per-block model overrides still take precedence."}
           </small>
         </label>
-      ) : programSettingsAllowsModelSlugInput(selectedProvider) ? (
+      ) : (selectedExecutionModel || programSettingsAllowsModelSlugInput(selectedProvider)) ? (
         <label className="field field--wide" style={{ marginTop: "4px" }}>
           <span>{t("field.customModelSlug")}</span>
           <input

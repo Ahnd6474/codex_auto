@@ -489,7 +489,8 @@ test("applyChatRuntimeSelectionToProject maps a chat selection into project mode
 
   assert.equal(nextRuntime.model_provider, "claude");
   assert.equal(nextRuntime.model, "claude-sonnet-4-6");
-  assert.equal(nextRuntime.execution_model, "gpt-5.4");
+  assert.equal(nextRuntime.execution_model, "claude-sonnet-4-6");
+  assert.equal(nextRuntime.model_slug_input, "claude-sonnet-4-6");
   assert.equal(nextRuntime.effort, "high");
   assert.equal(nextRuntime.effort_selection_mode, "auto");
 });
