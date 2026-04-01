@@ -14,8 +14,8 @@ from urllib.parse import quote
 from .models import ExecutionPlanState, ProjectContext
 from .errors import SubprocessTimeoutError
 from .planning import execution_plan_svg, resolve_execution_flow_steps
+from .project_snapshot import context_execution_snapshot
 from .run_control import load_run_control
-from .status_views import effective_project_status
 from .subprocess_utils import run_subprocess, windows_process_is_running
 from .utils import (
     append_jsonl,
@@ -890,7 +890,7 @@ def last_updated_timestamp(context: ProjectContext, plan_state: ExecutionPlanSta
 
 
 def current_phase(context: ProjectContext, plan_state: ExecutionPlanState) -> str | None:
-    status = effective_project_status(context.metadata.current_status, plan_state, context.loop_state)
+    status = context_execution_snapshot(context, plan_state).current_status
     if not status:
         return None
     if status.startswith("running:block:"):
@@ -917,15 +917,15 @@ def public_run_control(context: ProjectContext) -> dict[str, Any]:
 
 def can_pause_from_remote(context: ProjectContext, plan_state: ExecutionPlanState) -> bool:
     control = load_run_control(context)
-    status = effective_project_status(context.metadata.current_status, plan_state, context.loop_state)
-    return status.startswith("running:") and not bool(control.get("stop_after_current_step"))
+    execution_snapshot = context_execution_snapshot(context, plan_state)
+    return execution_snapshot.is_running and not bool(control.get("stop_after_current_step"))
 
 
 def can_resume_from_remote(context: ProjectContext, plan_state: ExecutionPlanState) -> bool:
-    if context.loop_state.pending_checkpoint_approval:
+    execution_snapshot = context_execution_snapshot(context, plan_state)
+    if execution_snapshot.waiting_for_checkpoint_approval:
         return False
-    status = effective_project_status(context.metadata.current_status, plan_state, context.loop_state)
-    if status.startswith("running:") or not plan_state.steps:
+    if execution_snapshot.is_running or not plan_state.steps:
         return False
     if any(step.status != "completed" for step in plan_state.steps):
         return True
@@ -977,17 +977,18 @@ def public_execution_flow_svg(context: ProjectContext, plan_state: ExecutionPlan
 
 
 def public_monitor_status(context: ProjectContext, plan_state: ExecutionPlanState, log_limit: int = 8) -> dict[str, Any]:
-    raw_status = str(context.metadata.current_status or "").strip()
-    status = effective_project_status(context.metadata.current_status, plan_state, context.loop_state)
-    if raw_status.lower().startswith("running:") and not status.startswith("running:"):
-        status = raw_status
+    execution_snapshot = context_execution_snapshot(
+        context,
+        plan_state,
+        prefer_raw_running_display=True,
+    )
     return {
         "project": {
             "repo_id": context.metadata.repo_id,
             "display_name": mask_public_text(context.metadata.display_name or context.metadata.slug, max_chars=80),
             "slug": context.metadata.slug,
         },
-        "overall_run_status": status,
+        "overall_run_status": execution_snapshot.display_status,
         "current_phase": current_phase(context, plan_state),
         "current_block_index": max(0, int(context.loop_state.block_index or 0)),
         "current_task": {
@@ -1014,16 +1015,19 @@ def _workspace_monitor_visibility(
 ) -> bool:
     if include_repo_ids and context.metadata.repo_id in include_repo_ids:
         return True
-    raw_status = str(context.metadata.current_status or "").strip().lower()
-    if raw_status.startswith("running:"):
+    execution_snapshot = context_execution_snapshot(
+        context,
+        plan_state,
+        prefer_raw_running_display=True,
+    )
+    if execution_snapshot.raw_status.lower().startswith("running:"):
         return True
     remote = public_remote_control_state(context, plan_state)
-    status = effective_project_status(context.metadata.current_status, plan_state, context.loop_state)
-    if context.loop_state.pending_checkpoint_approval:
+    if execution_snapshot.waiting_for_checkpoint_approval:
         return True
     if remote["can_pause"] or remote["can_resume"] or remote["pause_requested"]:
         return True
-    return status.startswith("running:")
+    return execution_snapshot.is_running
 
 
 def _workspace_monitor_sort_key(item: dict[str, Any]) -> tuple[int, float, str]:

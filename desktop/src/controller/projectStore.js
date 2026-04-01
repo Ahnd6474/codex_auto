@@ -12,7 +12,7 @@ import {
   visibleExecutionJob,
   shouldKeepUnsavedPlan,
 } from "../utils.js";
-import { buildProjectStateTree } from "./projectStateTree.js";
+import { reduceProjectDetailState, reduceProjectListingState } from "./projectStateReducer.js";
 
 const PROJECT_DETAIL_SECTION_KEYS = ["reports", "workspace", "checkpoints", "history", "config", "chat"];
 const PROJECT_RUNTIME_OVERRIDE_KEYS = [
@@ -821,13 +821,13 @@ export function reuseProjectListingItems(previousItems = [], nextItems = []) {
 }
 
 export function applyListingState({ listing, runningJob = null, setProjects, setWorkspaceStats }) {
-  const listingTree = buildProjectStateTree({
+  const listingState = reduceProjectListingState({
     projects: listing?.projects || [],
     runningJob,
   });
-  setProjects(listingTree.listing.normalized);
-  setWorkspaceStats(listingTree.listing.workspaceStats);
-  return listingTree.listing.normalized;
+  setProjects(listingState.projects);
+  setWorkspaceStats(listingState.workspaceStats);
+  return listingState.projects;
 }
 
 function projectListItemFromDetail(detail, fallbackProject = null) {
@@ -872,13 +872,13 @@ export function applyProjectDetailListingState({
     return projectListItemFromDetail(detail, project);
   });
   const mergedProjects = matched ? nextProjects : [projectListItemFromDetail(detail), ...(projects || [])];
-  const listingTree = buildProjectStateTree({
+  const listingState = reduceProjectListingState({
     projects: mergedProjects,
     runningJob,
   });
-  setProjects(listingTree.listing.normalized);
-  setWorkspaceStats(listingTree.listing.workspaceStats);
-  return listingTree.listing.normalized;
+  setProjects(listingState.projects);
+  setWorkspaceStats(listingState.workspaceStats);
+  return listingState.projects;
 }
 
 export function applyProjectEventListingState({
@@ -916,13 +916,13 @@ export function applyProjectEventListingState({
     return null;
   }
 
-  const listingTree = buildProjectStateTree({
+  const listingState = reduceProjectListingState({
     projects: nextProjects,
     runningJob,
   });
-  setProjects(listingTree.listing.normalized);
-  setWorkspaceStats(listingTree.listing.workspaceStats);
-  return listingTree.listing.normalized;
+  setProjects(listingState.projects);
+  setWorkspaceStats(listingState.workspaceStats);
+  return listingState.projects;
 }
 
 export function applyProjectEventDetailState(detail, project) {
@@ -988,11 +988,11 @@ export function applyProjectDetailState({
   const preservedDetail = preserveProjectDetailSupplement(detail, state.projectDetail);
   const mergedDetail = mergeProjectDetailCodexStatus(preservedDetail, state.projectDetail?.codex_status, state.modelCatalog);
   const activeJob = options.runningJob ?? state.activeJob;
-  const detailTree = buildProjectStateTree({
+  const detailState = reduceProjectDetailState({
     detail: mergedDetail,
     runningJob: activeJob,
   });
-  const normalizedDetail = detailTree.detail.normalized;
+  const normalizedDetail = detailState.detail;
   const applySignature = detailApplySignature(normalizedDetail, options.runningJob ?? state.activeJob);
   if (
     !options.force &&

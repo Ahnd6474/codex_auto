@@ -22,9 +22,9 @@ from .model_providers import normalize_local_model_provider, normalize_model_pro
 from .models import Checkpoint, ExecutionPlanState, ProjectContext
 from .orchestrator import Orchestrator
 from .planning import checkpoint_timeline_markdown, execution_plan_svg, reconcile_checkpoint_items_from_blocks, resolve_execution_flow_steps
+from .project_snapshot import context_execution_snapshot
 from .runtime_insights import build_runtime_insights
 from .share import project_share_config_payload, project_share_payload
-from .status_views import effective_project_status
 from .step_models import provider_statuses_payload
 from .utils import append_jsonl, compact_text, normalize_workflow_mode, now_utc_iso, read_json, read_jsonl_tail, read_last_jsonl, read_text, write_json, write_text_if_changed
 from .workspace import LOCAL_PROJECT_LOG_DIRNAME
@@ -1620,7 +1620,8 @@ def _build_project_list_item_payload(
     archived: bool,
 ) -> dict[str, Any]:
     plan_state = orchestrator.load_execution_plan_state(project)
-    current_status = effective_project_status(project.metadata.current_status, plan_state, project.loop_state)
+    execution_snapshot = context_execution_snapshot(project, plan_state)
+    current_status = execution_snapshot.current_status
     detail = project.metadata.origin_url or f"Branch {project.metadata.branch}"
     payload = {
         "repo_id": project.metadata.repo_id,
@@ -1810,12 +1811,12 @@ def _build_project_detail_base_payload(
         planning_progress = build_planning_progress(ui_events)
         latest_block = {}
         latest_pass = {}
-    current_status = effective_project_status(
-        project.metadata.current_status,
+    execution_snapshot = context_execution_snapshot(
+        project,
         plan_state,
-        project.loop_state,
         planning_progress=planning_progress,
     )
+    current_status = execution_snapshot.current_status
     bottom_panels = bottom_panel_payload(
         project,
         plan_state,

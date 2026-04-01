@@ -14,8 +14,9 @@ import {
   shouldRefreshListingForProjectEvent,
   shouldRefreshSelectedProject,
 } from "../controller/projectRefresh";
+import { reduceProjectDetailState, reduceProjectListingState, reduceSelectedProjectState } from "../controller/projectStateReducer";
+import { selectProjectLaneJob, selectProjectStateTree } from "../controller/projectStateSelectors";
 import { applyProjectUiEvent, shouldRefreshProjectDetailForUiEvent } from "../controller/projectUiEvents";
-import { buildProjectStateTree } from "../controller/projectStateTree";
 import {
   carryProjectPromptDraft,
   defaultShareSettings,
@@ -165,8 +166,8 @@ export function useDesktopController() {
     () => needsExpandedProjectDetail({ centerTab, sidebarTab, bottomCollapsed, bottomTab }),
     [bottomCollapsed, bottomTab, centerTab, sidebarTab],
   );
-  const selectedProjectStateTree = useMemo(
-    () => buildProjectStateTree({
+  const selectedProjectState = useMemo(
+    () => reduceSelectedProjectState({
       selectedProjectId,
       projectDetail,
       projectForm,
@@ -183,15 +184,15 @@ export function useDesktopController() {
       startingJobCount,
     ],
   );
-  const projectJob = selectedProjectStateTree.execution.selectedJob;
-  const activeJob = selectedProjectStateTree.execution.activeJob;
-  const chatJob = selectedProjectStateTree.execution.chatJob;
-  const stoppableJob = selectedProjectStateTree.execution.stoppableJob;
+  const projectJob = selectedProjectState.projectJob;
+  const activeJob = selectedProjectState.activeJob;
+  const chatJob = selectedProjectState.chatJob;
+  const stoppableJob = selectedProjectState.stoppableJob;
   const activeJobId = activeJob?.id || "";
-  const queuedJobs = selectedProjectStateTree.execution.queuedJobs;
-  const busy = selectedProjectStateTree.ui.busy;
-  const canRequestStop = selectedProjectStateTree.ui.canRequestStop;
-  const canCancelReservation = selectedProjectStateTree.ui.canCancelReservation;
+  const queuedJobs = selectedProjectState.queuedJobs;
+  const busy = selectedProjectState.busy;
+  const canRequestStop = selectedProjectState.canRequestStop;
+  const canCancelReservation = selectedProjectState.canCancelReservation;
   const shareBusy = pendingAction === "create_share_session" || pendingAction === "revoke_share_session";
   const savedProgramSettings = useMemo(
     () => programSettingsFromRuntime(storedProgramSettings),
@@ -366,18 +367,18 @@ export function useDesktopController() {
   ]);
 
   function reapplyProjectJobState(jobItems = jobsRef.current) {
-    const listingTree = buildProjectStateTree({
+    const listingState = reduceProjectListingState({
       projects: projectsRef.current,
       jobs: jobItems,
     });
-    setProjects(listingTree.listing.normalized);
-    setWorkspaceStats(listingTree.listing.workspaceStats);
-    projectsRef.current = listingTree.listing.normalized;
+    setProjects(listingState.projects);
+    setWorkspaceStats(listingState.workspaceStats);
+    projectsRef.current = listingState.projects;
   }
 
   function syncJobs(jobItems = []) {
     const nextJobs = Array.isArray(jobItems) ? jobItems.filter(Boolean) : [];
-    const nextStateTree = buildProjectStateTree({
+    const nextSelectedState = reduceSelectedProjectState({
       selectedProjectId,
       projectDetail,
       projectForm,
@@ -385,13 +386,13 @@ export function useDesktopController() {
     });
     jobsRef.current = nextJobs;
     setJobs(nextJobs);
-    const nextActiveJob = nextStateTree.execution.selectedJob;
-    activeJobRef.current = nextStateTree.execution.activeJob;
+    const nextActiveJob = nextSelectedState.projectJob;
+    activeJobRef.current = nextSelectedState.activeJob;
     startTransition(() => {
-      setProjectDetail((current) => buildProjectStateTree({
+      setProjectDetail((current) => reduceProjectDetailState({
         detail: current,
         jobs: nextJobs,
-      }).detail.normalized);
+      }).detail);
     });
     return nextActiveJob;
   }
@@ -511,32 +512,30 @@ export function useDesktopController() {
     startTransition(() => {
       setProjectDetail((current) => {
         const patched = applyProjectEventDetailState(current, projectLike) || current;
-        return buildProjectStateTree({
+        return reduceProjectDetailState({
           detail: patched,
           jobs: jobsRef.current,
-        }).detail.normalized;
+        }).detail;
       });
     });
     return true;
   }
 
   function selectedProjectExecutionJob(jobItems = jobsRef.current) {
-    return buildProjectStateTree({
+    return reduceSelectedProjectState({
       selectedProjectId,
       projectDetail,
       projectForm,
       jobs: jobItems,
-    }).execution.selectedJob;
+    }).projectJob;
   }
 
   function projectLaneJob(jobItems = jobsRef.current, projectLike = null, lane = "execution") {
-    const projectStateTree = buildProjectStateTree({
+    const projectStateTree = selectProjectStateTree({
       project: projectLike,
       jobs: jobItems,
     });
-    return lane === "chat"
-      ? projectStateTree.execution.chatJob
-      : projectStateTree.execution.selectedJob;
+    return selectProjectLaneJob(projectStateTree, lane);
   }
 
   function fetchProjectDetailOnce(repoId, options = {}) {

@@ -2,7 +2,7 @@ import {
   resolveCheckpointExecutionState,
   visibleExecutionJob,
 } from "../utils.js";
-import { buildProjectStateTree } from "./projectStateTree.js";
+import { reduceProjectDetailState } from "./projectStateReducer.js";
 
 const DEFAULT_PLANNING_STAGE_LABELS = Object.freeze({
   context_scan: "Scan repository context",
@@ -482,7 +482,7 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
       }
     : detail.snapshot;
 
-  return buildProjectStateTree({
+  return reduceProjectDetailState({
     detail: {
       ...detail,
       project: nextProject,
@@ -499,5 +499,5 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
     detailOptions: {
       nowMs: options?.nowMs,
     },
-  }).detail.normalized;
+  }).detail;
 }

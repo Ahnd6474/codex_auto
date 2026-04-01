@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, urlparse
 from ._version import __version__
 from .errors import HANDLED_OPERATION_EXCEPTIONS
 from .orchestrator import Orchestrator
+from .project_snapshot import context_execution_snapshot
 from .run_control import request_stop_after_current_step
 from .share import (
     DEFAULT_SHARE_HOST,
@@ -34,7 +35,6 @@ from .share import (
     share_server_status_file,
     validate_share_session,
 )
-from .status_views import effective_project_status
 from .ui_bridge import run_command
 from .utils import append_jsonl, now_utc_iso, parse_json_text, write_json
 
@@ -92,8 +92,8 @@ class ShareRemoteControlManager:
 
     def queue_resume(self, project, orchestrator: Orchestrator) -> dict[str, Any]:
         plan_state = orchestrator.load_execution_plan_state(project)
-        status = effective_project_status(project.metadata.current_status, plan_state, project.loop_state)
-        if status.startswith("running:"):
+        execution_snapshot = context_execution_snapshot(project, plan_state)
+        if execution_snapshot.is_running:
             raise RuntimeError("The run is already active.")
         if not can_resume_from_remote(project, plan_state):
             raise RuntimeError("No remaining paused or pending work is available to resume.")

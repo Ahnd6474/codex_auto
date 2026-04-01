@@ -10,8 +10,8 @@ from .errors import RuntimeConfigError
 from .failure_logs import write_runtime_failure_log
 from .models import RuntimeOptions
 from .orchestrator import Orchestrator
+from .project_snapshot import context_execution_snapshot
 from .runtime_config import load_runtime_from_sources, parse_runtime_overrides
-from .status_views import effective_project_status
 
 
 CLI_HANDLED_EXCEPTIONS = (
@@ -233,16 +233,16 @@ def runtime_from_args(args: argparse.Namespace) -> RuntimeOptions:
 
 
 def _list_repo_status(orchestrator: Orchestrator, project) -> str:
+    raw_status = str(project.metadata.current_status or "").strip()
     if project.loop_state.pending_checkpoint_approval:
         return "awaiting_checkpoint_approval"
-    raw_status = str(project.metadata.current_status or "").strip()
     if raw_status and raw_status.lower() != "awaiting_checkpoint_approval":
         return raw_status
     try:
         plan_state = orchestrator.load_execution_plan_state(project)
     except (FileNotFoundError, OSError, ValueError, json.JSONDecodeError):
         return raw_status or "setup_ready"
-    return effective_project_status(raw_status, plan_state, project.loop_state)
+    return context_execution_snapshot(project, plan_state).current_status
 
 
 def _best_effort_project(orchestrator: Orchestrator, args: argparse.Namespace):
