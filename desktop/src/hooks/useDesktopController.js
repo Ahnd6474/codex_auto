@@ -143,6 +143,16 @@ export function useDesktopController() {
   const planDirtyRef = useRef(false);
   const jobsRef = useRef([]);
   const projectsRef = useRef([]);
+  const selectedProjectIdRef = useRef("");
+  const projectFormRef = useRef(null);
+  const projectDetailRef = useRef(null);
+  const planDraftRef = useRef(null);
+  const modelCatalogRef = useRef([]);
+  const chatJobRef = useRef(null);
+  const canRequestStopRef = useRef(false);
+  const canRequestChatStopRef = useRef(false);
+  const wantsExpandedDetailRef = useRef(false);
+  const languageRef = useRef("en");
   const refreshProjectsRef = useRef(null);
   const projectDetailRequestDeduperRef = useRef(createRequestDeduper());
   const historyDetailRequestDeduperRef = useRef(createRequestDeduper());
@@ -195,10 +205,23 @@ export function useDesktopController() {
   const queuedJobs = selectedProjectState.queuedJobs;
   const busy = selectedProjectState.busy;
   const canRequestStop = selectedProjectState.canRequestStop;
+  const canRequestChatStop = selectedProjectState.canRequestChatStop;
   const canCancelReservation = selectedProjectState.canCancelReservation;
   const runActionDisabled = selectedProjectState.runActionDisabled;
   const runActionRunning = selectedProjectState.runActionRunning;
   const canRunPlan = selectedProjectState.canRunPlan;
+
+  selectedProjectIdRef.current = selectedProjectId;
+  projectFormRef.current = projectForm;
+  projectDetailRef.current = projectDetail;
+  planDraftRef.current = planDraft;
+  modelCatalogRef.current = modelCatalog;
+  activeJobRef.current = activeJob;
+  chatJobRef.current = chatJob;
+  canRequestStopRef.current = canRequestStop;
+  canRequestChatStopRef.current = canRequestChatStop;
+  wantsExpandedDetailRef.current = wantsExpandedDetail;
+  languageRef.current = language;
   const shareBusy = pendingAction === "create_share_session" || pendingAction === "revoke_share_session";
   const savedProgramSettings = useMemo(
     () => programSettingsFromRuntime(storedProgramSettings),
@@ -385,10 +408,10 @@ export function useDesktopController() {
   function syncJobs(jobItems = []) {
     const nextJobs = Array.isArray(jobItems) ? jobItems.filter(Boolean) : [];
     const nextSelectedState = reduceSelectedProjectState({
-      selectedProjectId,
-      projectDetail,
-      projectForm,
-      planDraft,
+      selectedProjectId: selectedProjectIdRef.current,
+      projectDetail: projectDetailRef.current,
+      projectForm: projectFormRef.current,
+      planDraft: planDraftRef.current,
       jobs: nextJobs,
     });
     jobsRef.current = nextJobs;
@@ -443,9 +466,9 @@ export function useDesktopController() {
         lastAppliedDetailSignatureRef,
       },
       state: {
-        projectDetail,
-        planDraft,
-        modelCatalog,
+        projectDetail: projectDetailRef.current,
+        planDraft: planDraftRef.current,
+        modelCatalog: modelCatalogRef.current,
         activeJob: activeJobRef.current,
         defaultRuntime: defaultRuntimeRef.current,
         planDirty: planDirtyRef.current,
@@ -468,7 +491,7 @@ export function useDesktopController() {
     if (normalizedDetail) {
       const nextModelCatalog = mergeModelCatalogs(
         normalizedDetail?.codex_status?.model_catalog || [],
-        modelCatalog,
+        modelCatalogRef.current,
       );
       startTransition(() => {
         setChatRuntime((current) => resolveChatRuntimeSelection(
@@ -507,9 +530,9 @@ export function useDesktopController() {
   }
 
   function applySelectedProjectDelta(projectLike) {
-    const currentRepoId = String(projectDetail?.project?.repo_id || "").trim();
+    const currentRepoId = String(projectDetailRef.current?.project?.repo_id || "").trim();
     const nextRepoId = String(projectLike?.repo_id || "").trim();
-    const currentRepoPath = String(projectDetail?.project?.repo_path || "").trim();
+    const currentRepoPath = String(projectDetailRef.current?.project?.repo_path || "").trim();
     const nextRepoPath = String(projectLike?.project_dir || "").trim();
     if (
       (!currentRepoId || !nextRepoId || currentRepoId !== nextRepoId)
@@ -531,10 +554,10 @@ export function useDesktopController() {
 
   function selectedProjectExecutionJob(jobItems = jobsRef.current) {
     return reduceSelectedProjectState({
-      selectedProjectId,
-      projectDetail,
-      projectForm,
-      planDraft,
+      selectedProjectId: selectedProjectIdRef.current,
+      projectDetail: projectDetailRef.current,
+      projectForm: projectFormRef.current,
+      planDraft: planDraftRef.current,
       jobs: jobItems,
     }).projectJob;
   }
@@ -2251,14 +2274,16 @@ export function useDesktopController() {
   }
 
   async function requestStop() {
-    const effectiveProjectDir = resolveProjectDirectory(projectForm, projectDetail);
-    const repoId = String(projectDetail?.project?.repo_id || selectedProjectId || "").trim();
-    const executionProcessPids = Array.isArray(projectDetail?.execution_processes)
-      ? projectDetail.execution_processes
+    const currentProjectForm = projectFormRef.current;
+    const currentProjectDetail = projectDetailRef.current;
+    const effectiveProjectDir = resolveProjectDirectory(currentProjectForm, currentProjectDetail);
+    const repoId = String(currentProjectDetail?.project?.repo_id || selectedProjectIdRef.current || "").trim();
+    const executionProcessPids = Array.isArray(currentProjectDetail?.execution_processes)
+      ? currentProjectDetail.execution_processes
           .map((entry) => Number.parseInt(String(entry?.pid || 0), 10))
           .filter((pid) => Number.isInteger(pid) && pid > 0)
       : [];
-    if (!effectiveProjectDir || !canRequestStop) {
+    if (!effectiveProjectDir || !canRequestStopRef.current) {
       return;
     }
     await withPending("request-stop", async () => {
@@ -2276,10 +2301,30 @@ export function useDesktopController() {
         bridgeRequest,
         { projectDir: effectiveProjectDir },
         workspaceRoot,
-        { refreshCodexStatus: false, detailLevel: wantsExpandedDetail ? "full" : "core" },
+        { refreshCodexStatus: false, detailLevel: wantsExpandedDetailRef.current ? "full" : "core" },
       );
       applyProjectDetail(detail, { preserveSelectedStep: true });
-      setMessage(messagePayload("info", translate(language, "message.stopRequested")));
+      setMessage(messagePayload("info", translate(languageRef.current, "message.stopRequested")));
+    });
+  }
+
+  async function requestChatStop() {
+    const chatJobId = String(chatJobRef.current?.id || "").trim();
+    const chatJobStatus = String(chatJobRef.current?.status || "").trim().toLowerCase();
+    if (!chatJobId || !["queued", "running"].includes(chatJobStatus) || !canRequestChatStopRef.current) {
+      return;
+    }
+    await withPending("request-chat-stop", async () => {
+      const job = await cancelBridgeJob(chatJobId);
+      mergeJobUpdate(job);
+      setMessage(
+        messagePayload(
+          "info",
+          translate(languageRef.current, "message.commandCancelled", {
+            command: commandLabel(job?.command, languageRef.current),
+          }),
+        ),
+      );
     });
   }
 
@@ -2762,6 +2807,7 @@ export function useDesktopController() {
     activeJobId,
     queuedJobs,
     canRequestStop,
+    canRequestChatStop,
     canCancelReservation,
     runActionDisabled,
     runActionRunning,
@@ -2829,6 +2875,7 @@ export function useDesktopController() {
     startNewChatSession,
     sendChatMessage,
     requestStop,
+    requestChatStop,
     cancelQueuedReservation,
     generateShareLink,
     revokeShareLink,

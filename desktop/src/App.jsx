@@ -435,6 +435,7 @@ export default function App() {
                 onRunManualDebugger={controller.runManualDebugger}
                 onRunManualMerger={controller.runManualMerger}
                 onRequestStop={controller.requestStop}
+                onRequestChatStop={controller.requestChatStop}
                 onCancelQueuedJob={controller.cancelQueuedReservation}
                 onSelectStep={handleSelectStep}
                 onUpdateStepField={controller.updateSelectedStep}
@@ -519,6 +520,7 @@ export default function App() {
                   onRunManualDebugger={controller.runManualDebugger}
                   onRunManualMerger={controller.runManualMerger}
                   onRequestStop={controller.requestStop}
+                  onRequestChatStop={controller.requestChatStop}
                   onCancelQueuedJob={controller.cancelQueuedReservation}
                   onChangeAutoRunAfterPlan={controller.setAutoRunAfterPlan}
                   onSelectStep={handleSelectStep}

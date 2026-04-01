@@ -1005,13 +1005,13 @@ test("CenterWorkspace forwards explicit chat settings into the AI chat workspace
 test("CenterWorkspace forwards stop requests into the AI chat workspace", async () => {
   const source = await readFile(path.join(desktopRoot, "src/components/layout/CenterWorkspace.jsx"), "utf-8");
 
-  assert.match(source, /<AiChatWorkspaceView[\s\S]*onRequestStop=\{onRequestStop\}/);
+  assert.match(source, /<AiChatWorkspaceView[\s\S]*onRequestChatStop=\{onRequestChatStop\}/);
 });
 
 test("AiChatWorkspaceView forwards stop requests to the chat pane", async () => {
   const source = await readFile(path.join(desktopRoot, "src/components/views/AiChatWorkspaceView.jsx"), "utf-8");
 
-  assert.match(source, /<RightSidebarPane[\s\S]*onRequestStop=\{onRequestStop\}/);
+  assert.match(source, /<RightSidebarPane[\s\S]*onRequestChatStop=\{onRequestChatStop\}/);
 });
 
 test("CenterWorkspace renders the parallel execution flow chart for parallel plans", async () => {

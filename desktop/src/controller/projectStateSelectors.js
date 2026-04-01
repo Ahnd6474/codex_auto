@@ -16,11 +16,13 @@ const EMPTY_EXECUTION = Object.freeze({
   chatJob: null,
   queuedJobs: [],
   stoppableJob: null,
+  chatStoppableJob: null,
 });
 
 const EMPTY_UI = Object.freeze({
   busy: false,
   canRequestStop: false,
+  canRequestChatStop: false,
   canCancelReservation: false,
   hasRunnablePlan: false,
   runActionDisabled: true,

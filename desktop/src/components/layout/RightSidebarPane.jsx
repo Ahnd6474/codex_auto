@@ -223,7 +223,7 @@ function rightSidebarPanePropsEqual(previousProps, nextProps) {
         && previousProps.onSendChatMessage === nextProps.onSendChatMessage
         && previousProps.onChangeChatModelSelection === nextProps.onChangeChatModelSelection
         && previousProps.onChangeChatReasoningEffort === nextProps.onChangeChatReasoningEffort
-        && previousProps.onRequestStop === nextProps.onRequestStop
+        && previousProps.onRequestChatStop === nextProps.onRequestChatStop
       );
     case "flow":
       return (
@@ -415,7 +415,7 @@ const ProjectChatPane = memo(function ProjectChatPane({
   language,
   centerMode = false,
   onGeneratePlan,
-  onRequestStop,
+  onRequestChatStop,
 }) {
   const sessions = Array.isArray(chat?.sessions) ? chat.sessions : [];
   const remoteMessages = Array.isArray(chat?.messages) ? chat.messages : [];
@@ -989,7 +989,7 @@ const ProjectChatPane = memo(function ProjectChatPane({
             <span className="sidebar-chat-status__dot" aria-hidden="true" />
             <span>{respondingLabel}</span>
             <strong>{formatDurationCompact(chatElapsedSeconds, language)}</strong>
-            <button className="toolbar-button toolbar-button--ghost" onClick={() => onRequestStop?.()} type="button">
+            <button className="toolbar-button toolbar-button--ghost" onClick={() => onRequestChatStop?.()} type="button">
               {stopLabel}
             </button>
           </div>
@@ -1040,7 +1040,7 @@ const ProjectChatPane = memo(function ProjectChatPane({
   && sameChatSessions(previousProps.chat?.sessions, nextProps.chat?.sessions)
   && sameChatMessages(previousProps.chat?.messages, nextProps.chat?.messages)
   && previousProps.centerMode === nextProps.centerMode
-  && previousProps.onRequestStop === nextProps.onRequestStop
+  && previousProps.onRequestChatStop === nextProps.onRequestChatStop
 ));
 
 export const RightSidebarPane = memo(function RightSidebarPane({
@@ -1088,6 +1088,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
   onRunManualDebugger,
   onRunManualMerger,
   onRequestStop,
+  onRequestChatStop,
   onCancelQueuedJob,
   onChangeAutoRunAfterPlan,
   onSelectStep,
@@ -1177,7 +1178,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
           language={language}
           centerMode
           onGeneratePlan={onGeneratePlan}
-          onRequestStop={onRequestStop}
+          onRequestChatStop={onRequestChatStop}
         />
       </div>
     );
@@ -1204,7 +1205,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
             chatJob={chatJob}
             busy={busy}
             language={language}
-            onRequestStop={onRequestStop}
+            onRequestChatStop={onRequestChatStop}
           />
         ) : null}
 

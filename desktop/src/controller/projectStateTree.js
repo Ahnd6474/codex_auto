@@ -68,15 +68,21 @@ export function queuedExecutionJobs(jobs = []) {
 export function projectStateIdentity(input = {}) {
   const explicitProject = normalizedProject(input.project);
   const detailProject = normalizedProject(input.projectDetail?.project ?? input.detail?.project);
+  const explicitProjectDir = normalizedText(
+    input.projectDir
+    || explicitProject.project_dir
+    || explicitProject.repo_path
+    || detailProject.repo_path,
+  );
+  const canUseFormProjectDir = Boolean(
+    input.allowFormIdentity
+    || normalizedText(input.selectedProjectId || input.repoId)
+    || normalizedText(explicitProject.repo_id || detailProject.repo_id)
+    || explicitProjectDir,
+  );
   return {
     repo_id: normalizedText(input.selectedProjectId || input.repoId || explicitProject.repo_id || detailProject.repo_id),
-    project_dir: normalizedText(
-      input.projectDir
-      || explicitProject.project_dir
-      || explicitProject.repo_path
-      || detailProject.repo_path
-      || input.projectForm?.project_dir,
-    ),
+    project_dir: explicitProjectDir || (canUseFormProjectDir ? normalizedText(input.projectForm?.project_dir) : ""),
     current_status: normalizedText(
       input.currentStatus
       || explicitProject.current_status
@@ -106,7 +112,8 @@ export function buildProjectExecutionBranch(input = {}) {
     activeJob,
     chatJob,
     queuedJobs,
-    stoppableJob: activeJob || chatJob || null,
+    stoppableJob: activeJob || null,
+    chatStoppableJob: chatJob || null,
   };
 }
 
@@ -137,10 +144,8 @@ export function buildProjectUiBranch(input = {}) {
       || input.startingJobCount > 0
       || ["queued", "running"].includes(normalizedStatus(execution.activeJob?.status))
     ),
-    canRequestStop:
-      runActionRunning
-      || normalizedStatus(execution.chatJob?.status) === "running"
-      || normalizedStatus(execution.stoppableJob?.status) === "running",
+    canRequestStop: runActionRunning || normalizedStatus(execution.stoppableJob?.status) === "running",
+    canRequestChatStop: ["queued", "running"].includes(normalizedStatus(execution.chatStoppableJob?.status)),
     canCancelReservation: normalizedStatus(execution.activeJob?.status) === "queued",
     hasRunnablePlan,
     runActionDisabled,

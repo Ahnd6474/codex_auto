@@ -11,7 +11,7 @@ function aiChatWorkspaceViewPropsEqual(previousProps, nextProps) {
     && previousProps.chatJob === nextProps.chatJob
     && previousProps.selectedStepId === nextProps.selectedStepId
     && previousProps.busy === nextProps.busy
-    && previousProps.onRequestStop === nextProps.onRequestStop
+    && previousProps.onRequestChatStop === nextProps.onRequestChatStop
     && previousProps.selectedChatSessionId === nextProps.selectedChatSessionId
     && previousProps.chatDraftSession === nextProps.chatDraftSession
     && previousProps.chatSettings === nextProps.chatSettings
@@ -36,7 +36,7 @@ export const AiChatWorkspaceView = memo(function AiChatWorkspaceView({
   onSelectChatSession,
   onStartNewChatSession,
   onSendChatMessage,
-  onRequestStop,
+  onRequestChatStop,
   onChangeChatModelSelection,
   onChangeChatReasoningEffort,
 }) {
@@ -62,7 +62,7 @@ export const AiChatWorkspaceView = memo(function AiChatWorkspaceView({
         onSelectChatSession={onSelectChatSession}
         onStartNewChatSession={onStartNewChatSession}
         onSendChatMessage={onSendChatMessage}
-        onRequestStop={onRequestStop}
+        onRequestChatStop={onRequestChatStop}
         onChangeChatModelSelection={onChangeChatModelSelection}
         onChangeChatReasoningEffort={onChangeChatReasoningEffort}
         onGeneratePlan={onGeneratePlan}

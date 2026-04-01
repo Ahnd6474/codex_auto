@@ -195,7 +195,7 @@ function centerWorkspacePropsEqual(previousProps, nextProps) {
         && previousProps.form === nextProps.form
         && previousProps.chatSettings === nextProps.chatSettings
         && previousProps.busy === nextProps.busy
-        && previousProps.onRequestStop === nextProps.onRequestStop
+        && previousProps.onRequestChatStop === nextProps.onRequestChatStop
         && previousProps.chat === nextProps.chat
         && previousProps.selectedChatSessionId === nextProps.selectedChatSessionId
         && previousProps.chatDraftSession === nextProps.chatDraftSession
@@ -303,6 +303,7 @@ export const CenterWorkspace = memo(function CenterWorkspace({
   onRunManualDebugger,
   onRunManualMerger,
   onRequestStop,
+  onRequestChatStop,
   onCancelQueuedJob,
   onSelectStep,
   onUpdateStepField,
@@ -424,7 +425,7 @@ export const CenterWorkspace = memo(function CenterWorkspace({
             onSelectChatSession={onSelectChatSession}
             onStartNewChatSession={onStartNewChatSession}
             onSendChatMessage={onSendChatMessage}
-            onRequestStop={onRequestStop}
+            onRequestChatStop={onRequestChatStop}
             onChangeChatModelSelection={onChangeChatModelSelection}
             onChangeChatReasoningEffort={onChangeChatReasoningEffort}
           />

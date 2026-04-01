@@ -107,7 +107,8 @@ test("project state reducer centralizes selected project execution flags", () =>
   assert.equal(selectedState.chatJob?.id, "job-chat");
   assert.equal(selectedState.queuedJobs[0]?.id, "job-run");
   assert.equal(selectedState.busy, true);
-  assert.equal(selectedState.canRequestStop, true);
+  assert.equal(selectedState.canRequestStop, false);
+  assert.equal(selectedState.canRequestChatStop, true);
   assert.equal(selectedState.canCancelReservation, true);
   assert.equal(selectedState.hasRunnablePlan, true);
   assert.equal(selectedState.runActionDisabled, true);
@@ -137,9 +138,38 @@ test("project state reducer keeps emergency stop available from project status w
   });
 
   assert.equal(selectedState.canRequestStop, true);
+  assert.equal(selectedState.canRequestChatStop, false);
   assert.equal(selectedState.runActionRunning, true);
   assert.equal(selectedState.runActionDisabled, true);
   assert.equal(selectedState.canRunPlan, false);
+});
+
+test("project state reducer does not bind draft project forms to background jobs without a selected project", () => {
+  const selectedState = reduceSelectedProjectState({
+    selectedProjectId: "",
+    projectDetail: null,
+    projectForm: {
+      project_dir: "C:/draft-repo",
+    },
+    planDraft: {
+      steps: [{ step_id: "ST1", title: "Draft", status: "pending" }],
+    },
+    jobs: [
+      {
+        id: "job-run",
+        status: "running",
+        command: "run-plan",
+        project_dir: "C:/draft-repo",
+        updated_at_ms: 10,
+      },
+    ],
+  });
+
+  assert.equal(selectedState.projectJob, null);
+  assert.equal(selectedState.activeJob, null);
+  assert.equal(selectedState.canRequestStop, false);
+  assert.equal(selectedState.canRequestChatStop, false);
+  assert.equal(selectedState.canRunPlan, true);
 });
 
 test("project reducers and selectors preserve the queued status invariant", () => {

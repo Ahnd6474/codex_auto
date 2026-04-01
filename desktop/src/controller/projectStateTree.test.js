@@ -135,10 +135,28 @@ test("buildProjectStateTree branches execution, detail, listing, and ui from one
   assert.equal(tree.execution.chatJob?.id, "job-chat");
   assert.deepEqual(tree.execution.queuedJobs.map((job) => job.id), ["job-other", "job-run"]);
   assert.equal(tree.ui.busy, true);
-  assert.equal(tree.ui.canRequestStop, true);
+  assert.equal(tree.ui.canRequestStop, false);
+  assert.equal(tree.ui.canRequestChatStop, true);
   assert.equal(tree.ui.canCancelReservation, true);
   assert.equal(tree.detail.normalized.project.current_status, "queued:run-plan");
   assert.equal(tree.detail.normalized.snapshot.project.current_status, "queued:run-plan");
   assert.equal(tree.listing.normalized[0].status, "queued:run-plan");
   assert.equal(tree.listing.workspaceStats.project_count, 1);
+});
+
+test("projectStateIdentity ignores draft form paths when no project is selected", () => {
+  const identity = projectStateIdentity({
+    selectedProjectId: "",
+    projectDetail: null,
+    projectForm: {
+      project_dir: "C:/draft-repo",
+    },
+  });
+
+  assert.deepEqual(identity, {
+    repo_id: "",
+    project_dir: "",
+    current_status: "",
+    last_run_at: "",
+  });
 });
