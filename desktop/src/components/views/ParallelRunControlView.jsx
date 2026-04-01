@@ -540,7 +540,6 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
     [executionEstimate.step_estimates, selectedStepId],
   );
   const editableStep = canEditStep(selectedStep, busy);
-  const editableStepModel = canEditStepModel(selectedStep, busy, projectStatus);
   const completedCount = useMemo(
     () => steps.filter((step) => step.status === "completed").length,
     [steps],
@@ -561,6 +560,7 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
   const parallelLimitCardTone = parallelLimitTone(parallelInsight);
   const executionJob = executionState.executionJob;
   const projectStatus = executionState.displayStatusValue;
+  const editableStepModel = canEditStepModel(selectedStep, busy, projectStatus);
   const activeCheckpointLineageId = String(
     executionState.checkpointPending?.lineage_id
     || detail?.loop_state?.current_checkpoint_lineage_id

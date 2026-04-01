@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from .models import ExecutionPlanState, LoopState
 
 
@@ -18,6 +20,13 @@ _READY_LIKE_STATUSES = {
     "plan_completed",
     "closed_out",
     "closeout_failed",
+}
+_PLANNING_READY_STATUSES = {
+    "initialized",
+    "ready",
+    "setup_ready",
+    "plan_ready",
+    "plan_completed",
 }
 
 
@@ -58,15 +67,30 @@ def _should_prefer_plan_status(raw_status: str, plan_status: str) -> bool:
     return False
 
 
+def _planning_progress_is_running(planning_progress: dict[str, Any] | None) -> bool:
+    if not isinstance(planning_progress, dict):
+        return False
+    current_stage_status = str(
+        planning_progress.get("current_stage_status", planning_progress.get("currentStageStatus", ""))
+    ).strip().lower()
+    return current_stage_status == "running"
+
+
 def effective_project_status(
     raw_status: str | None,
     plan_state: ExecutionPlanState,
     loop_state: LoopState,
+    planning_progress: dict[str, Any] | None = None,
 ) -> str:
     normalized = str(raw_status or "").strip()
     plan_status = status_from_plan_state(plan_state)
     if loop_state.pending_checkpoint_approval:
         return "awaiting_checkpoint_approval"
     if _should_prefer_plan_status(normalized, plan_status):
-        return plan_status
-    return normalized or plan_status
+        normalized = plan_status
+    effective_status = normalized or plan_status
+    if _planning_progress_is_running(planning_progress):
+        normalized_effective = str(effective_status or "").strip().lower()
+        if not normalized_effective or normalized_effective in _PLANNING_READY_STATUSES:
+            return "running:generate-plan"
+    return effective_status

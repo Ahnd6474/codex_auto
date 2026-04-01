@@ -1,6 +1,6 @@
 import { Suspense, lazy, memo, useEffect } from "react";
 import { useI18n } from "../../i18n";
-import { projectStatusWithJob } from "../../utils";
+import { projectDetailStatus } from "../../utils";
 
 function AiChatTabIcon() {
   return (
@@ -347,7 +347,7 @@ export const CenterWorkspace = memo(function CenterWorkspace({
   const visibleHistoryDetail = selectedHistoryId ? historyDetail : detail;
   const normalizedActiveTab = normalizeWorkspaceTab(activeTab);
   const hasFlowTab = planHasFlowContent(detail, planDraft);
-  const projectStatus = projectStatusWithJob(detail?.project?.current_status || "", activeJob);
+  const projectStatus = projectDetailStatus(detail, activeJob);
 
   function resolveTabView(tab) {
     switch (normalizeWorkspaceTab(tab)) {

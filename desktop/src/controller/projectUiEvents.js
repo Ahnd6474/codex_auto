@@ -1,7 +1,6 @@
 import {
-  computePlanStats,
-  deriveIdleProjectStatus,
   resolveCheckpointExecutionState,
+  sanitizeProjectDetailForJobState,
   visibleExecutionJob,
 } from "../utils.js";
 
@@ -386,19 +385,11 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
   const activeExecutionJob = visibleExecutionJob(options.activeJob ?? options.runningJob ?? null);
   const processStatus = normalizedText(activeExecutionJob?.status).toLowerCase();
   const processActive = Boolean(activeExecutionJob) && (processStatus === "running" || processStatus === "queued");
-  const fallbackProjectStatus = deriveIdleProjectStatus(
-    detail.plan,
-    computePlanStats(detail.plan || {}),
-    detail.project?.current_status || "",
-  );
-  const nextProjectStatus = processActive
-    ? (record.projectStatus || detail.project.current_status)
-    : fallbackProjectStatus;
 
   const nextProject = detail.project
     ? {
         ...detail.project,
-        current_status: nextProjectStatus,
+        current_status: record.projectStatus || detail.project.current_status,
         last_run_at:
           record.eventType === "project-state-synced"
             ? normalizedText(record.details?.last_run_at) || detail.project.last_run_at
@@ -417,6 +408,10 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
           record.eventType === "project-state-synced"
             ? (processActive ? normalizedText(record.details?.current_checkpoint_id) : "")
             : detail.loop_state.current_checkpoint_id,
+        current_checkpoint_lineage_id:
+          record.eventType === "project-state-synced"
+            ? (processActive ? normalizedText(record.details?.current_checkpoint_lineage_id) : "")
+            : detail.loop_state.current_checkpoint_lineage_id,
         pending_checkpoint_approval:
           record.eventType === "project-state-synced"
             ? (processActive && record.details?.pending_checkpoint_approval !== undefined
@@ -444,18 +439,6 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
         execution_log_lines: activityLine
           ? uniquePrepend(detail.bottom_panels.execution_log_lines, activityLine, activityLimit)
           : detail.bottom_panels.execution_log_lines,
-        git_status: detail.bottom_panels.git_status && typeof detail.bottom_panels.git_status === "object"
-          ? {
-              ...detail.bottom_panels.git_status,
-              current_status: nextProjectStatus || detail.bottom_panels.git_status.current_status,
-              pending_checkpoint_approval:
-                record.eventType === "project-state-synced"
-                  ? (processActive && record.details?.pending_checkpoint_approval !== undefined
-                    ? Boolean(record.details.pending_checkpoint_approval)
-                    : false)
-                  : detail.bottom_panels.git_status.pending_checkpoint_approval,
-            }
-          : detail.bottom_panels.git_status,
       }
     : detail.bottom_panels;
 
@@ -465,7 +448,7 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
         project: detail.snapshot.project && typeof detail.snapshot.project === "object"
           ? {
               ...detail.snapshot.project,
-              current_status: nextProjectStatus || detail.snapshot.project.current_status,
+              current_status: record.projectStatus || detail.snapshot.project.current_status,
               last_run_at:
                 record.eventType === "project-state-synced"
                   ? normalizedText(record.details?.last_run_at) || detail.snapshot.project.last_run_at
@@ -483,6 +466,10 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
                 record.eventType === "project-state-synced"
                   ? (processActive ? normalizedText(record.details?.current_checkpoint_id) : "")
                   : detail.snapshot.loop_state.current_checkpoint_id,
+              current_checkpoint_lineage_id:
+                record.eventType === "project-state-synced"
+                  ? (processActive ? normalizedText(record.details?.current_checkpoint_lineage_id) : "")
+                  : detail.snapshot.loop_state.current_checkpoint_lineage_id,
               pending_checkpoint_approval:
                 record.eventType === "project-state-synced"
                   ? (processActive && record.details?.pending_checkpoint_approval !== undefined
@@ -495,7 +482,7 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
       }
     : detail.snapshot;
 
-  return {
+  return sanitizeProjectDetailForJobState({
     ...detail,
     project: nextProject,
     loop_state: nextLoopState,
@@ -506,5 +493,7 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
     snapshot: nextSnapshot,
     plan: nextPlan,
     planning_progress: updatePlanningProgress(detail.planning_progress, record),
-  };
+  }, activeExecutionJob, {
+    nowMs: options?.nowMs,
+  });
 }

@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { openInSystem } from "../../api";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { effectiveStepStatus, formatCheckpointDisplayId, projectStatusWithJob, reasoningEffortLabel, runtimeSummary, statusTone, visibleExecutionJob } from "../../utils";
+import { effectiveStepStatus, formatCheckpointDisplayId, projectDetailStatus, reasoningEffortLabel, runtimeSummary, statusTone, visibleExecutionJob } from "../../utils";
 
 function RailTerminalIcon() {
   return (
@@ -723,7 +723,7 @@ export const InspectorPanel = memo(function InspectorPanel({
   const { t } = useI18n();
   const pendingCheckpoint = detail?.checkpoints?.pending || null;
   const executionJob = visibleExecutionJob(activeJob);
-  const projectStatus = projectStatusWithJob(detail?.project?.current_status || "", executionJob);
+  const projectStatus = projectDetailStatus(detail, executionJob);
   const selectedStepStatus = effectiveStepStatus(selectedStep, projectStatus);
 
   return (

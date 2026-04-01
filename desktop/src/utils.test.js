@@ -15,9 +15,11 @@ import {
   filterModelCatalogByProvider,
   jobHasNewerActiveReplacement,
   mergeModelCatalogs,
+  projectDetailStatus,
   projectFormFromDetail,
   resolveChatRuntimeSelection,
   resolveRuntimeModelSelectionState,
+  sanitizeProjectDetailForJobState,
   selectedConfigReasoning,
   stepModelSelectionPatch,
 } from "./utils.js";
@@ -593,4 +595,126 @@ test("projectFormFromDetail still falls back to program defaults for missing run
   assert.equal(form.runtime.model_slug_input, "gpt-5.5");
   assert.equal(form.runtime.effort, "xhigh");
   assert.equal(form.runtime.planning_effort, "high");
+});
+
+test("projectDetailStatus and sanitizeProjectDetailForJobState share the queued execution status", () => {
+  const detail = {
+    project: {
+      repo_id: "repo-1",
+      repo_path: "C:/repo",
+      current_status: "plan_ready",
+    },
+    plan: {
+      steps: [{ step_id: "ST1", title: "Plan", status: "pending" }],
+      closeout_status: "not_started",
+    },
+    loop_state: {
+      current_task: "",
+      current_checkpoint_id: "",
+      current_checkpoint_lineage_id: "",
+      pending_checkpoint_approval: false,
+    },
+    checkpoints: {
+      items: [],
+      pending: null,
+      timeline_markdown: "",
+    },
+    snapshot: {
+      project: {
+        current_status: "plan_ready",
+      },
+      loop_state: {
+        current_task: "",
+        current_checkpoint_id: "",
+        current_checkpoint_lineage_id: "",
+        pending_checkpoint_approval: false,
+      },
+      plan: {
+        steps: [{ step_id: "ST1", title: "Plan", status: "pending" }],
+        closeout_status: "not_started",
+      },
+    },
+    bottom_panels: {
+      git_status: {
+        current_status: "plan_ready",
+        pending_checkpoint_approval: false,
+      },
+    },
+  };
+  const queuedJob = {
+    repo_id: "repo-1",
+    project_dir: "C:/repo",
+    status: "queued",
+    command: "generate-plan",
+  };
+
+  const normalized = sanitizeProjectDetailForJobState(detail, queuedJob);
+
+  assert.equal(projectDetailStatus(detail, queuedJob), "queued:generate-plan");
+  assert.equal(normalized.project.current_status, "queued:generate-plan");
+  assert.equal(normalized.snapshot.project.current_status, "queued:generate-plan");
+  assert.equal(normalized.bottom_panels.git_status.current_status, "queued:generate-plan");
+  assert.equal(normalized.execution_state.project_status, "queued:generate-plan");
+});
+
+test("sanitizeProjectDetailForJobState clears stale running state across mirrored detail surfaces", () => {
+  const detail = {
+    project: {
+      repo_id: "repo-1",
+      repo_path: "C:/repo",
+      current_status: "running:st1",
+    },
+    plan: {
+      steps: [{ step_id: "ST1", title: "Build", status: "running" }],
+      closeout_status: "not_started",
+    },
+    loop_state: {
+      current_task: "Build",
+      current_checkpoint_id: "CP-1",
+      current_checkpoint_lineage_id: "LN-1",
+      pending_checkpoint_approval: false,
+    },
+    checkpoints: {
+      items: [{ checkpoint_id: "CP-1", lineage_id: "LN-1", status: "running", title: "Checkpoint" }],
+      pending: null,
+      timeline_markdown: "stale",
+    },
+    activity: ["2026-03-01T00:00:00Z | step-started | stale run"],
+    snapshot: {
+      project: {
+        current_status: "running:st1",
+      },
+      loop_state: {
+        current_task: "Build",
+        current_checkpoint_id: "CP-1",
+        current_checkpoint_lineage_id: "LN-1",
+        pending_checkpoint_approval: false,
+      },
+      plan: {
+        steps: [{ step_id: "ST1", title: "Build", status: "running" }],
+        closeout_status: "not_started",
+      },
+    },
+    bottom_panels: {
+      git_status: {
+        current_status: "running:st1",
+        pending_checkpoint_approval: false,
+      },
+    },
+  };
+
+  const normalized = sanitizeProjectDetailForJobState(detail, null, {
+    nowMs: Date.parse("2026-04-01T00:00:00Z"),
+  });
+
+  assert.equal(normalized.project.current_status, "plan_ready");
+  assert.equal(normalized.plan.steps[0].status, "pending");
+  assert.equal(normalized.loop_state.current_task, "");
+  assert.equal(normalized.loop_state.current_checkpoint_id, "");
+  assert.equal(normalized.loop_state.current_checkpoint_lineage_id, "");
+  assert.equal(normalized.checkpoints.items[0].status, "pending");
+  assert.equal(normalized.checkpoints.pending, null);
+  assert.equal(normalized.snapshot.project.current_status, "plan_ready");
+  assert.equal(normalized.bottom_panels.git_status.current_status, "plan_ready");
+  assert.equal(normalized.execution_state.project_status, "plan_ready");
 });

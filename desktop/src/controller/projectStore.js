@@ -2,16 +2,13 @@ import { defaultShareSettings, emptyPlanDraft, shareSettingsFromDetail } from ".
 import {
   blankProjectForm,
   cloneValue,
-  computePlanStats,
   detailApplySignature,
-  deriveIdleProjectStatus,
   CLOSEOUT_STEP_ID,
   mergeProjectDetailCodexStatus,
   mergeModelCatalogs,
   normalizedLocalModelProvider,
   normalizedModelProvider,
   projectFormFromDetail,
-  resolveCheckpointExecutionState,
   sanitizeProjectDetailForJobState,
   sanitizeProjectListForJobState,
   visibleExecutionJob,
@@ -627,107 +624,6 @@ function checkpointApprovalIsActive(detail = null, activeJob = null) {
   return Boolean(detail?.loop_state?.pending_checkpoint_approval) || currentStatus === "awaiting_checkpoint_approval";
 }
 
-function checkpointTimelineMarkdownFromItems(items = []) {
-  return (Array.isArray(items) ? items : [])
-    .filter((item) => item && typeof item === "object")
-    .map((item) => {
-      const checkpointId = String(item.checkpoint_id || "").trim();
-      const status = String(item.status || "").trim();
-      const title = String(item.title || "").trim();
-      const parts = [checkpointId, status, title].filter(Boolean);
-      return parts.length ? `- ${parts.join(" | ")}` : "";
-    })
-    .filter(Boolean)
-    .join("\n");
-}
-
-function normalizeCheckpointSectionForDetail(detail = null, activeJob = null) {
-  const checkpoints = detail?.checkpoints && typeof detail.checkpoints === "object" ? detail.checkpoints : null;
-  if (!checkpoints) {
-    return detail;
-  }
-
-  const checkpointState = resolveCheckpointExecutionState(detail, activeJob);
-  const items = Array.isArray(checkpointState.items) ? checkpointState.items : [];
-  const pending = checkpointState.waitingForApproval
-    ? (checkpointState.pending ? cloneValue(checkpointState.pending) : null)
-    : null;
-  const activeCheckpointId = checkpointState.currentCheckpointId;
-  const activeCheckpointLineageId = checkpointState.currentCheckpointLineageId;
-
-  const currentStatus = String(detail?.project?.current_status || "").trim();
-  const nextStatus = checkpointState.waitingForApproval
-    ? "awaiting_checkpoint_approval"
-    : checkpointState.processActive
-      ? currentStatus.toLowerCase().startsWith("running:")
-        ? currentStatus
-        : "running"
-    : deriveIdleProjectStatus(
-        detail?.plan,
-        computePlanStats(detail?.plan || {}),
-        currentStatus,
-      );
-
-  return {
-    ...detail,
-    project: detail?.project
-      ? {
-          ...detail.project,
-          current_status: nextStatus,
-        }
-      : detail?.project,
-    checkpoints: {
-      ...checkpoints,
-      current_checkpoint_id: checkpointState.processActive ? activeCheckpointId : null,
-      current_checkpoint_lineage_id: checkpointState.processActive ? activeCheckpointLineageId : null,
-      items,
-      pending,
-      timeline_markdown: checkpointTimelineMarkdownFromItems(items),
-    },
-    loop_state: detail?.loop_state
-      ? {
-          ...detail.loop_state,
-          current_task: checkpointState.processActive ? detail.loop_state.current_task : "",
-          current_checkpoint_id: checkpointState.processActive ? activeCheckpointId : null,
-          current_checkpoint_lineage_id: checkpointState.processActive ? activeCheckpointLineageId : null,
-          pending_checkpoint_approval: checkpointState.waitingForApproval,
-        }
-      : detail?.loop_state,
-    snapshot: detail?.snapshot
-      ? {
-          ...detail.snapshot,
-          project: detail.snapshot.project
-            ? {
-                ...detail.snapshot.project,
-                current_status: nextStatus,
-              }
-            : detail.snapshot.project,
-          loop_state: detail.snapshot.loop_state
-            ? {
-                ...detail.snapshot.loop_state,
-                current_task: checkpointState.processActive ? detail.snapshot.loop_state.current_task : "",
-                current_checkpoint_id: checkpointState.processActive ? activeCheckpointId : null,
-                current_checkpoint_lineage_id: checkpointState.processActive ? activeCheckpointLineageId : null,
-                pending_checkpoint_approval: checkpointState.waitingForApproval,
-              }
-            : detail.snapshot.loop_state,
-        }
-      : detail?.snapshot,
-    bottom_panels: detail?.bottom_panels
-      ? {
-          ...detail.bottom_panels,
-          git_status: detail.bottom_panels.git_status
-            ? {
-                ...detail.bottom_panels.git_status,
-                current_status: nextStatus,
-                pending_checkpoint_approval: checkpointState.waitingForApproval,
-              }
-            : detail.bottom_panels.git_status,
-        }
-      : detail?.bottom_panels,
-  };
-}
-
 function mergeHistorySection(primary = null, fallback = null, preserveSparse = false) {
   if (!primary && !fallback) {
     return primary ?? fallback;
@@ -1085,8 +981,7 @@ export function applyProjectDetailState({
   const preservedDetail = preserveProjectDetailSupplement(detail, state.projectDetail);
   const mergedDetail = mergeProjectDetailCodexStatus(preservedDetail, state.projectDetail?.codex_status, state.modelCatalog);
   const activeJob = options.runningJob ?? state.activeJob;
-  const checkpointNormalizedDetail = normalizeCheckpointSectionForDetail(mergedDetail, activeJob);
-  const normalizedDetail = sanitizeProjectDetailForJobState(checkpointNormalizedDetail, activeJob);
+  const normalizedDetail = sanitizeProjectDetailForJobState(mergedDetail, activeJob);
   const applySignature = detailApplySignature(normalizedDetail, options.runningJob ?? state.activeJob);
   if (
     !options.force &&

@@ -6,6 +6,7 @@ import {
   canEditProjectConfig,
   defaultProviderApiKeyEnv,
   defaultProviderBaseUrl,
+  isActiveExecutionStatus,
   modelDisplayName,
   normalizeMemoryBudgetGiB,
   normalizedModelProvider,
@@ -176,6 +177,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
   const runtime = form.runtime || {};
   const { language, t } = useI18n();
   const executionLocked = !canEditProjectConfig(projectStatus, activeJob?.status || "");
+  const allowSafeRuntimeEdits = isActiveExecutionStatus(projectStatus) || isActiveExecutionStatus(activeJob?.status || "");
   const autoParallelWorkers = String(runtime.parallel_worker_mode || "auto").trim().toLowerCase() !== "manual";
   const selectedProvider = normalizedModelProvider(runtime);
   const selectionState = resolveRuntimeModelSelectionState(runtime, modelCatalog);
@@ -450,7 +452,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
             className="toolbar-button toolbar-button--accent"
             onClick={onSaveProject}
             type="button"
-            disabled={executionLocked || !form.project_dir?.trim()}
+            disabled={!form.project_dir?.trim() || (executionLocked && !allowSafeRuntimeEdits)}
           >
             {t("action.saveConfiguration")}
           </button>
@@ -548,8 +550,8 @@ export const ConfigEditorView = memo(function ConfigEditorView({
                 <InfoIcon />
                 <span>
                   {language === "ko"
-                    ? "실행 중에는 설정 편집이 제한됩니다. 정지 상태에서는 다시 수정할 수 있습니다."
-                    : "Settings are locked while a run is active. They become editable again when paused."}
+                    ? "실행 중에도 체크포인트와 보고서 출력 같은 안전한 런타임 설정은 저장할 수 있습니다."
+                    : "Safe runtime settings like checkpoints and report output can still be saved while a run is active."}
                 </span>
               </div>
             ) : null}
@@ -669,7 +671,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
                       },
                     }))
                   }
-                  disabled={executionLocked}
+                  disabled={executionLocked && !allowSafeRuntimeEdits}
                 />
               </label>
 
@@ -732,7 +734,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
                 }
                 label={t("option.requireCheckpointApproval")}
                 hint={language === "ko" ? "泥댄겕?ъ씤?몄뿉 ?꾨떖?섎㈃ ?ㅼ쓬 ?④퀎 ?꾩뿉 寃?좊? ?붿껌?⑸땲??" : "Pause for review when a checkpoint is reached."}
-                disabled={executionLocked}
+                disabled={executionLocked && !allowSafeRuntimeEdits}
               />
               <ToggleRow
                 checked={Boolean(runtime.use_fast_mode)}

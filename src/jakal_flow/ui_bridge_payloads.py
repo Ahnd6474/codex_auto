@@ -1737,7 +1737,6 @@ def _build_project_detail_base_payload(
 ) -> dict[str, Any]:
     normalized_execution_processes = _normalize_execution_processes(execution_processes)
     plan_state = orchestrator.load_execution_plan_state(project)
-    current_status = effective_project_status(project.metadata.current_status, plan_state, project.loop_state)
     control = load_run_control(project)
     log_snapshot: DetailLogSnapshot | None = None
     if normalized_detail_level == "full":
@@ -1811,6 +1810,12 @@ def _build_project_detail_base_payload(
         planning_progress = build_planning_progress(ui_events)
         latest_block = {}
         latest_pass = {}
+    current_status = effective_project_status(
+        project.metadata.current_status,
+        plan_state,
+        project.loop_state,
+        planning_progress=planning_progress,
+    )
     bottom_panels = bottom_panel_payload(
         project,
         plan_state,

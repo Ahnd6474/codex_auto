@@ -1563,9 +1563,11 @@ export function resolveCheckpointExecutionState(detail = null, activeJob = null)
     const nextItem = cloneValue(item);
     const status = String(nextItem.status || "").trim().toLowerCase();
     const matches = matchesActiveCheckpoint(nextItem);
-    if (waitingForApproval && hasCheckpointContext && matches && status !== "awaiting_review") {
-      nextItem.status = "awaiting_review";
-      changed = true;
+    if (waitingForApproval && hasCheckpointContext && matches) {
+      if (status !== "awaiting_review") {
+        nextItem.status = "awaiting_review";
+        changed = true;
+      }
     } else if (processActive && hasCheckpointContext && matches && status !== "running") {
       nextItem.status = "running";
       changed = true;
@@ -1854,6 +1856,188 @@ export function normalizeInterruptedPlan(plan = null) {
   return nextPlan;
 }
 
+function checkpointTimelineMarkdown(items = []) {
+  return (Array.isArray(items) ? items : [])
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
+      const checkpointId = String(item.checkpoint_id || "").trim();
+      const status = String(item.status || "").trim();
+      const title = String(item.title || "").trim();
+      const parts = [checkpointId, status, title].filter(Boolean);
+      return parts.length ? `- ${parts.join(" | ")}` : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function resolveDetailExecutionJob(detail = null, activeJob = null) {
+  let matchedJob = Array.isArray(activeJob)
+    ? projectJobFromJobs(activeJob, detail?.project || {})
+    : activeJob;
+  if (jobIsSupersededByProject(matchedJob, detail?.project || {})) {
+    matchedJob = null;
+  }
+  return matchedJob;
+}
+
+function resolveProjectDetailExecution(detail = null, activeJob = null, options = {}) {
+  const executionJob = resolveDetailExecutionJob(detail, activeJob);
+  const executionState = deriveExecutionUiState(detail, null, executionJob);
+  const checkpointState = executionState.checkpointExecutionState;
+  const currentStatus = String(detail?.project?.current_status || "").trim();
+  const normalizedCurrentStatus = currentStatus.toLowerCase();
+  const processStatus = String(executionJob?.status || "").trim().toLowerCase();
+  const processCommand = String(executionJob?.command || "").trim().toLowerCase() || "background-job";
+  const planSteps = Array.isArray(detail?.plan?.steps) ? detail.plan.steps : [];
+  const planHasRunningStep = planSteps.some((step) =>
+    ["running", "integrating"].includes(String(step?.status || "").trim().toLowerCase())
+  );
+  const closeoutStatus = String(detail?.plan?.closeout_status || "").trim().toLowerCase();
+  const closeoutRunning = closeoutStatus === "running";
+  const terminalPlanState =
+    closeoutStatus === "completed"
+    || closeoutStatus === "failed"
+    || planSteps.some((step) => String(step?.status || "").trim().toLowerCase() === "failed")
+    || (planSteps.length > 0 && planSteps.every((step) => String(step?.status || "").trim().toLowerCase() === "completed"));
+
+  let nextPlan = detail?.plan;
+  let nextStats = detail?.stats;
+  let nextProgress = detail?.progress;
+
+  if (processStatus === "queued") {
+    return {
+      executionJob,
+      executionState,
+      checkpointState,
+      nextPlan,
+      nextStats,
+      nextProgress,
+      nextStatus: `queued:${processCommand}`,
+    };
+  }
+
+  if (processStatus === "running") {
+    let nextStatus = `running:${processCommand}`;
+    if (checkpointState.waitingForApproval && normalizedCurrentStatus === "awaiting_checkpoint_approval") {
+      nextStatus = "awaiting_checkpoint_approval";
+    } else if (executionState.progress.phase === "planning" || isPlanningProgressRunning(detail?.planning_progress)) {
+      nextStatus = "running:generate-plan";
+    } else if (executionState.processFamily === "merging" || normalizedCurrentStatus === "running:merging") {
+      nextStatus = "running:merging";
+    } else if (executionState.processFamily === "debugging" || isDebuggingStatus(currentStatus)) {
+      nextStatus = "running:debugging";
+    } else if (normalizedCurrentStatus.startsWith("running:")) {
+      nextStatus = currentStatus;
+    } else if (executionState.progress.phase === "closeout" || executionState.progress.closeoutRunning) {
+      nextStatus = "running:closeout";
+    }
+    return {
+      executionJob,
+      executionState,
+      checkpointState,
+      nextPlan,
+      nextStats,
+      nextProgress,
+      nextStatus,
+    };
+  }
+
+  if (checkpointState.waitingForApproval) {
+    return {
+      executionJob,
+      executionState,
+      checkpointState,
+      nextPlan,
+      nextStats,
+      nextProgress,
+      nextStatus: "awaiting_checkpoint_approval",
+    };
+  }
+
+  if (
+    isPlanningProgressRunning(detail?.planning_progress)
+    && !normalizedCurrentStatus.startsWith("running:")
+    && normalizedCurrentStatus !== "queued"
+    && !normalizedCurrentStatus.startsWith("queued:")
+  ) {
+    return {
+      executionJob,
+      executionState,
+      checkpointState,
+      nextPlan,
+      nextStats,
+      nextProgress,
+      nextStatus: "running:generate-plan",
+    };
+  }
+
+  const hasStaleActiveSurface =
+    normalizedCurrentStatus.startsWith("running:")
+    || normalizedCurrentStatus === "queued"
+    || normalizedCurrentStatus.startsWith("queued:")
+    || planHasRunningStep
+    || closeoutRunning;
+
+  if (hasStaleActiveSurface) {
+    const nowMs = Number.isFinite(options?.nowMs) ? options.nowMs : Date.now();
+    if (
+      !terminalPlanState
+      && shouldPreserveRecentRunningState({
+        plan: detail?.plan,
+        activity: detail?.activity,
+        pendingCheckpoint:
+          Boolean(detail?.checkpoints?.pending) ||
+          Boolean(detail?.loop_state?.pending_checkpoint_approval) ||
+          Boolean(detail?.bottom_panels?.git_status?.pending_checkpoint_approval),
+        nowMs,
+      })
+    ) {
+      return {
+        executionJob,
+        executionState,
+        checkpointState,
+        nextPlan,
+        nextStats,
+        nextProgress,
+        nextStatus: currentStatus || deriveIdleProjectStatus(detail?.plan, computePlanStats(detail?.plan || {}), currentStatus),
+      };
+    }
+
+    nextPlan = normalizeInterruptedPlan(detail?.plan);
+    nextStats = computePlanStats(nextPlan);
+    nextProgress = toolbarProgressCaptionDisplay(nextPlan, options?.language || "en", {
+      activeJob: executionJob,
+      planningProgress: detail?.planning_progress,
+    });
+    return {
+      executionJob,
+      executionState,
+      checkpointState,
+      nextPlan,
+      nextStats,
+      nextProgress,
+      nextStatus: deriveIdleProjectStatus(nextPlan, nextStats, currentStatus),
+    };
+  }
+
+  return {
+    executionJob,
+    executionState,
+    checkpointState,
+    nextPlan,
+    nextStats,
+    nextProgress,
+    nextStatus: currentStatus || deriveIdleProjectStatus(detail?.plan, computePlanStats(detail?.plan || {}), currentStatus),
+  };
+}
+
+export function projectDetailStatus(detail, activeJob = null, options = {}) {
+  if (!detail) {
+    return "";
+  }
+  return resolveProjectDetailExecution(detail, activeJob, options).nextStatus;
+}
+
 export function sanitizeProjectListForJobState(projects = [], activeJob = null, options = {}) {
   if (
     activeJob &&
@@ -1897,104 +2081,36 @@ export function sanitizeProjectListForJobState(projects = [], activeJob = null, 
 }
 
 export function sanitizeProjectDetailForJobState(detail, activeJob = null, options = {}) {
-  let matchedJob = Array.isArray(activeJob)
-    ? projectJobFromJobs(activeJob, detail?.project || {})
-    : activeJob;
-  if (jobIsSupersededByProject(matchedJob, detail?.project || {})) {
-    matchedJob = null;
-  }
-  if (!detail || ["queued", "running"].includes(String(matchedJob?.status || "").trim().toLowerCase())) {
+  if (!detail) {
     return detail;
   }
-  const currentStatus = String(detail?.project?.current_status || "").trim();
-  if (isPlanningProgressRunning(detail?.planning_progress) && !currentStatus.toLowerCase().startsWith("running:")) {
-    const nextStatus = "running:generate-plan";
-    return {
-      ...detail,
-      project: detail?.project
-        ? {
-            ...detail.project,
-            current_status: nextStatus,
-          }
-        : detail?.project,
-      snapshot: detail?.snapshot
-        ? {
-            ...detail.snapshot,
-            project: detail.snapshot.project
-              ? {
-                  ...detail.snapshot.project,
-                  current_status: nextStatus,
-                }
-              : detail.snapshot.project,
-          }
-        : detail?.snapshot,
-      bottom_panels: detail?.bottom_panels
-        ? {
-            ...detail.bottom_panels,
-            git_status: detail.bottom_panels.git_status
-              ? {
-                  ...detail.bottom_panels.git_status,
-                  current_status: nextStatus,
-                }
-              : detail.bottom_panels.git_status,
-          }
-        : detail?.bottom_panels,
-    };
-  }
-  const planSteps = Array.isArray(detail?.plan?.steps) ? detail.plan.steps : [];
-  const planHasRunningStep = planSteps.some((step) => step.status === "running");
-  const closeoutStatus = String(detail?.plan?.closeout_status || "").trim().toLowerCase();
-  const closeoutRunning = closeoutStatus === "running";
-  const terminalPlanState =
-    closeoutStatus === "completed"
-    || closeoutStatus === "failed"
-    || planSteps.some((step) => String(step?.status || "").trim().toLowerCase() === "failed")
-    || (planSteps.length > 0 && planSteps.every((step) => String(step?.status || "").trim().toLowerCase() === "completed"));
-  if (!currentStatus.toLowerCase().startsWith("running:") && !planHasRunningStep && !closeoutRunning) {
-    return detail;
-  }
-  const nowMs = Number.isFinite(options?.nowMs) ? options.nowMs : Date.now();
-  if (
-    !terminalPlanState
-    && shouldPreserveRecentRunningState({
-      plan: detail?.plan,
-      activity: detail?.activity,
-      pendingCheckpoint:
-        Boolean(detail?.checkpoints?.pending) ||
-        Boolean(detail?.loop_state?.pending_checkpoint_approval) ||
-        Boolean(detail?.bottom_panels?.git_status?.pending_checkpoint_approval),
-      nowMs,
-    })
-  ) {
-    return detail;
-  }
-
-  const nextPlan = normalizeInterruptedPlan(detail.plan);
-  const nextStats = computePlanStats(nextPlan);
-  const nextStatus = deriveIdleProjectStatus(nextPlan, nextStats, currentStatus);
-  const nextSnapshot = detail?.snapshot
-    ? {
-        ...detail.snapshot,
-        project: detail.snapshot.project
-          ? {
-              ...detail.snapshot.project,
-              current_status: nextStatus,
-            }
-          : detail.snapshot.project,
-        plan: nextPlan,
-      }
-    : detail.snapshot;
-  const nextBottomPanels = detail?.bottom_panels
-    ? {
-        ...detail.bottom_panels,
-        git_status: detail.bottom_panels.git_status
-          ? {
-              ...detail.bottom_panels.git_status,
-              current_status: nextStatus,
-            }
-          : detail.bottom_panels.git_status,
-      }
-    : detail.bottom_panels;
+  const {
+    executionState,
+    checkpointState,
+    nextPlan,
+    nextStats,
+    nextProgress,
+    nextStatus,
+  } = resolveProjectDetailExecution(detail, activeJob, options);
+  const checkpointItems = Array.isArray(checkpointState.items) ? checkpointState.items : [];
+  const nextPendingCheckpoint = checkpointState.waitingForApproval
+    ? (checkpointState.pending ? cloneValue(checkpointState.pending) : null)
+    : null;
+  const nextCurrentCheckpointId = checkpointState.processActive ? checkpointState.currentCheckpointId : null;
+  const nextCurrentCheckpointLineageId = checkpointState.processActive ? checkpointState.currentCheckpointLineageId : null;
+  const nextExecutionState = {
+    display_family: executionState.displayFamily,
+    display_status: executionState.displayStatusValue,
+    project_status: nextStatus,
+    consistent: executionState.consistent,
+    active_families: executionState.activeFamilies,
+    checkpoint_family: executionState.checkpointFamily,
+    flow_family: executionState.flowFamily,
+    process_family: executionState.processFamily,
+    toolbar_family: executionState.toolbarFamily,
+    mismatch_summary: executionState.mismatchSummary,
+    report_lines: executionState.reportLines,
+  };
 
   return {
     ...detail,
@@ -2005,10 +2121,61 @@ export function sanitizeProjectDetailForJobState(detail, activeJob = null, optio
         }
       : detail.project,
     plan: nextPlan,
-    stats: nextStats,
-    progress: toolbarProgressCaptionDisplay(nextPlan),
-    snapshot: nextSnapshot,
-    bottom_panels: nextBottomPanels,
+    stats: nextStats ?? detail.stats,
+    progress: nextProgress ?? detail.progress,
+    checkpoints: detail?.checkpoints
+      ? {
+          ...detail.checkpoints,
+          current_checkpoint_id: nextCurrentCheckpointId,
+          current_checkpoint_lineage_id: nextCurrentCheckpointLineageId,
+          items: checkpointItems,
+          pending: nextPendingCheckpoint,
+          timeline_markdown: checkpointTimelineMarkdown(checkpointItems),
+        }
+      : detail?.checkpoints,
+    loop_state: detail?.loop_state
+      ? {
+          ...detail.loop_state,
+          current_task: checkpointState.processActive ? detail.loop_state.current_task : "",
+          current_checkpoint_id: checkpointState.processActive ? nextCurrentCheckpointId : "",
+          current_checkpoint_lineage_id: checkpointState.processActive ? nextCurrentCheckpointLineageId : "",
+          pending_checkpoint_approval: checkpointState.waitingForApproval,
+        }
+      : detail?.loop_state,
+    snapshot: detail?.snapshot
+      ? {
+          ...detail.snapshot,
+          project: detail.snapshot.project
+            ? {
+                ...detail.snapshot.project,
+                current_status: nextStatus,
+              }
+            : detail.snapshot.project,
+          loop_state: detail.snapshot.loop_state
+            ? {
+                ...detail.snapshot.loop_state,
+                current_task: checkpointState.processActive ? detail.snapshot.loop_state.current_task : "",
+                current_checkpoint_id: checkpointState.processActive ? nextCurrentCheckpointId : "",
+                current_checkpoint_lineage_id: checkpointState.processActive ? nextCurrentCheckpointLineageId : "",
+                pending_checkpoint_approval: checkpointState.waitingForApproval,
+              }
+            : detail.snapshot.loop_state,
+          plan: nextPlan ?? detail.snapshot.plan,
+        }
+      : detail.snapshot,
+    bottom_panels: detail?.bottom_panels
+      ? {
+          ...detail.bottom_panels,
+          git_status: detail.bottom_panels.git_status
+            ? {
+                ...detail.bottom_panels.git_status,
+                current_status: nextStatus,
+                pending_checkpoint_approval: checkpointState.waitingForApproval,
+              }
+            : detail.bottom_panels.git_status,
+        }
+      : detail.bottom_panels,
+    execution_state: nextExecutionState,
   };
 }
 

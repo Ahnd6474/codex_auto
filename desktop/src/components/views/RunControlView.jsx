@@ -23,7 +23,7 @@ import {
   providerAvailable,
   providerUsable,
   providerStatusReason,
-  projectStatusWithJob,
+  projectDetailStatus,
   QWEN_CODE_DEFAULT_MODEL,
   REASONING_OPTIONS,
   reasoningEffortLabel,
@@ -220,7 +220,7 @@ export function RunControlView({
   const flowColumns = 3;
   const selectedSystemStep = isSystemStep(selectedStep) && selectedStep?.step_id !== CLOSEOUT_STEP_ID;
   const executionJob = visibleExecutionJob(activeJob);
-  const projectStatus = projectStatusWithJob(detail?.project?.current_status || "", executionJob);
+  const projectStatus = projectDetailStatus(detail, executionJob);
   const activeJobStatus = String(executionJob?.status || "").trim().toLowerCase();
   const selectedStepStatus = effectiveStepStatus(selectedStep, projectStatus);
   const selectedStepSelectionState = resolveRuntimeModelSelectionState(selectedStep || {}, modelCatalog);

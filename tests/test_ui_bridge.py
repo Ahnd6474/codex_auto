@@ -284,10 +284,12 @@ class UIBridgeTests(unittest.TestCase):
                 load_run_control,
                 *,
                 bypass_cache=False,
+                execution_processes=None,
             ):
                 captured_kwargs["bypass_cache"] = bypass_cache
                 captured_kwargs["detail_level"] = normalized_detail_level
                 captured_kwargs["project_repo_id"] = project_arg.metadata.repo_id
+                captured_kwargs["execution_processes"] = execution_processes
                 return base_payload, "sig-123", False, {"detail_level": normalized_detail_level}
 
             with mock.patch.object(
@@ -689,6 +691,22 @@ class UIBridgeTests(unittest.TestCase):
         )
 
         self.assertEqual(status, "running:merging")
+
+    def test_effective_project_status_promotes_running_planning_progress_over_ready_like_state(self) -> None:
+        status = effective_project_status(
+            "running:st1",
+            ExecutionPlanState(
+                execution_mode="parallel",
+                steps=[
+                    ExecutionStep(step_id="ST1", title="Root", status="completed"),
+                    ExecutionStep(step_id="ST2", title="Frontend", status="pending"),
+                ],
+            ),
+            mock.Mock(pending_checkpoint_approval=False),
+            planning_progress={"current_stage_status": "running"},
+        )
+
+        self.assertEqual(status, "running:generate-plan")
 
     def test_history_payload_refreshes_flow_svg_when_step_status_changes(self) -> None:
         with TemporaryTestDir() as temp_dir:
@@ -5690,6 +5708,9 @@ class UIBridgeTests(unittest.TestCase):
                 )
 
             planning_progress = loaded["planning_progress"]
+            self.assertEqual(loaded["project"]["current_status"], "running:generate-plan")
+            self.assertEqual(loaded["snapshot"]["project"]["current_status"], "running:generate-plan")
+            self.assertEqual(loaded["bottom_panels"]["git_status"]["current_status"], "running:generate-plan")
             self.assertEqual(planning_progress["current_stage_key"], "planner_a")
             self.assertEqual(planning_progress["current_stage_index"], 2)
             self.assertEqual(planning_progress["current_stage_label"], "Planner Agent A")

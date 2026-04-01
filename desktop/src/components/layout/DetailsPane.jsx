@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { effectiveStepStatus, formatCheckpointDisplayId, projectStatusWithJob, reasoningEffortLabel, resolveExecutionDisplayPlan, runtimeSummary, statusTone, visibleExecutionJob } from "../../utils";
+import { effectiveStepStatus, formatCheckpointDisplayId, projectDetailStatus, reasoningEffortLabel, resolveExecutionDisplayPlan, runtimeSummary, statusTone, visibleExecutionJob } from "../../utils";
 
 function DocumentIcon() {
   return (
@@ -37,7 +37,7 @@ export function DetailsPane({ detail, planDraft, selectedStepId, modelPresets, a
   const selectedStep = (effectivePlan?.steps || []).find((step) => step.step_id === selectedStepId) || null;
   const pendingCheckpoint = detail?.checkpoints?.pending || null;
   const executionJob = visibleExecutionJob(activeJob);
-  const projectStatus = projectStatusWithJob(detail?.project?.current_status || "", executionJob);
+  const projectStatus = projectDetailStatus(detail, executionJob);
   const selectedStepStatus = effectiveStepStatus(selectedStep, projectStatus);
   const processOutput = detail?.subprocess_output || detail?.agent_output || detail?.process_log || "";
   const closeoutReportPath = String(detail?.files?.closeout_report_file || "").trim();

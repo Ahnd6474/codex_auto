@@ -55,6 +55,7 @@ import {
   programSettingsFromRuntime,
   resolveChatRuntimeSelection,
   resolveProjectDirectory,
+  sanitizeProjectDetailForJobState,
   sanitizeProjectListForJobState,
   shouldReplaceVisibleProject,
   visibleExecutionJob,
@@ -401,6 +402,9 @@ export function useDesktopController() {
       last_run_at: projectDetail?.project?.last_run_at || "",
     });
     activeJobRef.current = visibleExecutionJob(nextActiveJob);
+    startTransition(() => {
+      setProjectDetail((current) => sanitizeProjectDetailForJobState(current, nextJobs));
+    });
     return nextActiveJob;
   }
 
@@ -517,7 +521,10 @@ export function useDesktopController() {
       return false;
     }
     startTransition(() => {
-      setProjectDetail((current) => applyProjectEventDetailState(current, projectLike) || current);
+      setProjectDetail((current) => {
+        const patched = applyProjectEventDetailState(current, projectLike) || current;
+        return sanitizeProjectDetailForJobState(patched, jobsRef.current);
+      });
     });
     return true;
   }

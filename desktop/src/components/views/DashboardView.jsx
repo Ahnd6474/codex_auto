@@ -8,7 +8,7 @@ import {
   normalizeDashboardVisibility,
   parallelLimitDescription,
   parallelWorkerLabel,
-  projectStatusWithJob,
+  projectDetailStatus,
   rateLimitRemainingLabel,
   rateLimitWindowSummary,
   runtimeSummary,
@@ -168,7 +168,7 @@ export const DashboardView = memo(function DashboardView({ detail, planDraft, mo
   const parallelLimitValue = parallelWorkerLabel(parallelInsight.recommended_workers ?? 1, language);
   const parallelLimitDetails = parallelLimitDescription(parallelInsight, language);
   const showEstimatedCost = shouldShowEstimatedCost(detail?.runtime || {}, costEstimate);
-  const activeStatusKey = projectStatusWithJob(projectStatus, executionJob) || "idle";
+  const activeStatusKey = projectDetailStatus(detail, executionJob) || "idle";
   const activeStatus = displayStatus(activeStatusKey, language);
   const tone = statusTone(activeStatusKey);
 
