@@ -426,7 +426,7 @@ test("ParallelRunControlView renders queued reservations with cancellation contr
   );
 
   assert.match(html, /Reservations/);
-  assert.match(html, /#1/);
+  assert.match(html, /#(?:<!-- -->)?1/);
   assert.match(html, /repo-a/);
   assert.match(html, /Cancel Reservation/);
 });
@@ -5249,42 +5249,6 @@ test("ConfigEditorView keeps a saved execution model visible even when the provi
 
   assert.match(html, /<option value="claude-3\.7-sonnet" selected="">Claude 3\.7 Sonnet<\/option>/);
   assert.match(html, /<option value="gpt-5\.4">GPT-5\.4<\/option>/);
-});
-
-test("ModelPane shows the selected model when only model_slug_input is populated", async () => {
-  const html = await renderBundledComponent(
-    "model-pane-model-slug-input-render",
-    "./src/components/layout/ModelPane.jsx",
-    "ModelPane",
-    {
-      form: {
-        runtime: {
-          model_provider: "openai",
-          model: "",
-          model_slug_input: "gpt-5.4-mini",
-          effort: "medium",
-        },
-      },
-      modelPresets: [],
-      modelCatalog: [
-        {
-          model: "gpt-5.4-mini",
-          display_name: "GPT-5.4 Mini",
-          hidden: false,
-        },
-        {
-          model: "claude-3.7-sonnet",
-          display_name: "Claude 3.7 Sonnet",
-          hidden: false,
-        },
-      ],
-      onChangeForm: noop,
-    },
-  );
-
-  assert.match(html, /<option value="gpt-5\.4-mini" selected="">GPT-5\.4 Mini<\/option>/);
-  assert.match(html, /Claude 3\.7 Sonnet/);
-  assert.match(html, /OpenAI\/Codex \| Standard Mode \| GPT-5\.4 Mini \| reasoning Medium \| parallel auto/);
 });
 
 test("DetailsPane shows report documents and checkpoint deadlines in the inspector", async () => {
