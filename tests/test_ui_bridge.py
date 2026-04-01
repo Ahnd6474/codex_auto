@@ -2880,6 +2880,14 @@ class UIBridgeTests(unittest.TestCase):
                 side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
             ):
                 detail = run_command("save-project-setup", workspace_root, payload)
+            stopped_at = "2026-03-27T09:59:00+00:00"
+            orchestrator = orchestrator_module.Orchestrator(workspace_root)
+            project = orchestrator.local_project(repo_dir)
+            self.assertIsNotNone(project)
+            assert project is not None
+            project.metadata.current_status = "running:generate-plan"
+            project.metadata.last_run_at = stopped_at
+            orchestrator.workspace.save_project(project)
 
             with mock.patch.object(
                 ui_bridge.EXECUTION_STOP_REGISTRY,
@@ -2910,6 +2918,12 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(stopped["run_control"]["stop_after_current_step"], False)
             self.assertEqual(clear_mock.call_count, 2)
             self.assertTrue(any("plan-stopped" in item for item in stopped["activity"]))
+            reloaded = orchestrator.workspace.load_project_by_id(stopped["project"]["repo_id"])
+            self.assertEqual(reloaded.metadata.current_status, "setup_ready")
+            self.assertNotEqual(reloaded.metadata.last_run_at, stopped_at)
+            listing = run_command("list-projects", workspace_root, {})
+            listing_project = next(item for item in listing["projects"] if item["repo_id"] == stopped["project"]["repo_id"])
+            self.assertEqual(listing_project["status"], "setup_ready")
 
     def test_reset_plan_requests_stop_and_clears_planning_state(self) -> None:
         with TemporaryTestDir() as temp_dir:
@@ -5780,6 +5794,79 @@ class UIBridgeTests(unittest.TestCase):
                 [item["status"] for item in planning_progress["stages"]],
                 ["completed", "running", "pending", "pending"],
             )
+
+    def test_load_project_clears_planning_progress_after_stop_event(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Planning Stop Progress Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            ui_event_log_file = Path(detail["files"]["ui_event_log_file"])
+            with ui_event_log_file.open("a", encoding="utf-8") as handle:
+                for event in [
+                    {
+                        "timestamp": "2026-03-27T10:00:00Z",
+                        "event_type": "planner-agent-started",
+                        "message": "Planner Agent A is decomposing the work into implementation blocks.",
+                        "details": {
+                            "flow": "planning",
+                            "stage_key": "planner_a",
+                            "stage_index": 2,
+                            "stage_count": 4,
+                            "status": "running",
+                            "agent_label": "Planner Agent A",
+                        },
+                    },
+                    {
+                        "timestamp": "2026-03-27T10:00:08Z",
+                        "event_type": "plan-stopped",
+                        "message": "Planning stopped by user.",
+                        "details": {
+                            "flow": "planning",
+                            "status": "stopped",
+                        },
+                    },
+                ]:
+                    handle.write(json.dumps(event) + "\n")
+
+            with mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                loaded = run_command(
+                    "load-project",
+                    workspace_root,
+                    {
+                        "repo_id": detail["project"]["repo_id"],
+                        "refresh_codex_status": False,
+                        "detail_level": "core",
+                    },
+                )
+
+            self.assertEqual(loaded["planning_progress"], {})
+            self.assertEqual(loaded["project"]["current_status"], "setup_ready")
+            self.assertEqual(loaded["snapshot"]["project"]["current_status"], "setup_ready")
+            self.assertEqual(loaded["bottom_panels"]["git_status"]["current_status"], "setup_ready")
 
     def test_load_project_reuses_cached_core_payload_when_state_is_unchanged(self) -> None:
         with TemporaryTestDir() as temp_dir:

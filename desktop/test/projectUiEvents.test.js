@@ -267,6 +267,39 @@ test("applyProjectUiEvent updates planning progress from planning events", () =>
   assert.equal(updated.planning_progress.stages[1].label, "Planner Agent A");
 });
 
+test("applyProjectUiEvent clears planning progress when plan generation stops", () => {
+  const updated = applyProjectUiEvent(
+    {
+      project: { repo_id: "repo-1", current_status: "running:generate-plan" },
+      planning_progress: {
+        stage_count: 4,
+        current_stage_index: 2,
+        current_stage_status: "running",
+        stages: [
+          { key: "context_scan", index: 1, label: "Scan repository context", status: "completed" },
+          { key: "planner_a", index: 2, label: "Planner Agent A", status: "running" },
+          { key: "planner_b", index: 3, label: "Planner Agent B", status: "pending" },
+          { key: "finalize", index: 4, label: "Validate and save plan", status: "pending" },
+        ],
+      },
+    },
+    sampleEvent("plan-stopped", {
+      payload: {
+        project_status: "setup_ready",
+      },
+      event: {
+        details: {
+          flow: "planning",
+          status: "stopped",
+        },
+      },
+    }),
+  );
+
+  assert.equal(updated.project.current_status, "setup_ready");
+  assert.equal(updated.planning_progress, null);
+});
+
 test("applyProjectUiEvent patches running step state from run events", () => {
   const updated = applyProjectUiEvent(
     {

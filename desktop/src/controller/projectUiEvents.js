@@ -41,6 +41,15 @@ function normalizePlanningStatus(value = "") {
   return "running";
 }
 
+function isTerminalPlanningEvent(record = null) {
+  if (!record) {
+    return false;
+  }
+  const eventType = normalizedText(record.eventType).toLowerCase();
+  const status = normalizedText(record.details?.status).toLowerCase();
+  return eventType === "plan-stopped" || ["stopped", "cancelled", "canceled"].includes(status);
+}
+
 function planningStageLabel(stageKey = "", fallbackLabel = "") {
   const explicit = normalizedText(fallbackLabel);
   if (explicit) {
@@ -300,6 +309,9 @@ export function projectUiEventActivityLine(record) {
 function updatePlanningProgress(progress = null, record = null) {
   if (!record || normalizedText(record.details?.flow).toLowerCase() !== "planning") {
     return progress;
+  }
+  if (isTerminalPlanningEvent(record)) {
+    return null;
   }
   const stageIndex = parsePositiveInt(record.details?.stage_index, 0);
   const stageCount = Math.max(parsePositiveInt(record.details?.stage_count, 0), stageIndex);

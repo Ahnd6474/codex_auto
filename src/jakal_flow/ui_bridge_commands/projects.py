@@ -4,6 +4,7 @@ from ..execution_control import ImmediateStopRequested
 from .context import BridgeCommandContext, BridgeCommandHandler
 from ..models import ExecutionPlanState
 from ..ui_bridge_payloads import list_projects_payload
+from ..utils import now_utc_iso
 
 
 def build_project_command_handlers(
@@ -140,6 +141,10 @@ def build_project_command_handlers(
                 raise
             execution_stop_registry.clear(execution_scope_id(latest))
             clear_stop_request(latest)
+            latest_plan_state = ctx.orchestrator.load_execution_plan_state(latest)
+            latest.metadata.current_status = ctx.orchestrator._status_from_plan_state(latest_plan_state)
+            latest.metadata.last_run_at = now_utc_iso()
+            ctx.orchestrator.workspace.save_project(latest)
             append_ui_event(
                 latest,
                 "plan-stopped",

@@ -5,6 +5,7 @@ Traceable multi-repository automation for Codex-style workflows.
 `jakal-flow` keeps each managed repository in its own isolated workspace and persists plans, logs, reports, memory, and rollback state per project. The Python CLI is the primary interface, and the React + Tauri desktop shell uses the same backend instead of replacing it.
 
 - Korean guide: [README.ko.md](README.ko.md)
+- Recent additions: `list-repos`, `history`, `logx --source-repo-dir`, `--set KEY=VALUE`, and `--plan-file`.
 
 ## Requirements
 
@@ -67,12 +68,16 @@ jakal-flow run \
 Useful follow-up commands:
 
 ```bash
+jakal-flow list-repos --workspace-root .jakal-flow-workspace
 jakal-flow resume --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace --config .jakal-flow.runtime.toml
 jakal-flow status --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
+jakal-flow history --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace --limit 10
 jakal-flow report --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
 jakal-flow logx --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace
 jakal-flow logx --workspace-root .jakal-flow-workspace --source-repo-dir D:/GitHub/lit
-``` 
+jakal-flow run --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace --config .jakal-flow.runtime.toml --set max_blocks=3
+jakal-flow run --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace --plan-file PLAN.md
+```
 
 ## Workspace Layout
 

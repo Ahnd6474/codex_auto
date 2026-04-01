@@ -519,6 +519,7 @@ def build_planning_progress(
 ) -> dict[str, Any]:
     event_items = ui_events or []
     planning_events: list[dict[str, Any]] = []
+    planning_stage_events: list[dict[str, Any]] = []
     stage_labels = {item["key"]: item["label"] for item in PLANNING_STAGE_DEFINITIONS}
     agent_labels: dict[str, str] = {}
     for item in event_items:
@@ -529,6 +530,7 @@ def build_planning_progress(
             continue
         if str(details.get("flow", "")).strip().lower() != "planning":
             continue
+        planning_events.append(item)
         stage_key = str(details.get("stage_key", "")).strip().lower()
         if not stage_key:
             continue
@@ -536,11 +538,25 @@ def build_planning_progress(
             stage_labels[stage_key] = str(details.get("stage_label", "")).strip()
         if str(details.get("agent_label", "")).strip():
             agent_labels[stage_key] = str(details.get("agent_label", "")).strip()
-        planning_events.append(item)
     if not planning_events:
         return {}
-
     latest = planning_events[-1]
+    latest_details = latest.get("details", {})
+    if not isinstance(latest_details, dict):
+        latest_details = {}
+    latest_status = str(latest_details.get("status", "")).strip().lower()
+    latest_event_type = str(latest.get("event_type", "")).strip().lower()
+    if latest_event_type == "plan-stopped" or latest_status in {"stopped", "cancelled", "canceled"}:
+        return {}
+    planning_stage_events = [
+        item
+        for item in planning_events
+        if str((item.get("details", {}) or {}).get("stage_key", "")).strip()
+    ]
+    if not planning_stage_events:
+        return {}
+
+    latest = planning_stage_events[-1]
     latest_details = latest.get("details", {})
     if not isinstance(latest_details, dict):
         latest_details = {}
