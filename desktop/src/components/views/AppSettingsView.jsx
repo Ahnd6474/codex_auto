@@ -108,7 +108,7 @@ const SETTINGS_TAB_KEYS = new Set(["app", "execution", "dashboard", "share"]);
 const PROVIDER_CATEGORIES = [
   {
     key: "closed",
-    label_ko: "?대줈利덈뱶",
+    label_ko: "폐쇄형",
     label_en: "Closed",
     providers: [
       { value: "openai", label: "OpenAI" },
@@ -118,7 +118,7 @@ const PROVIDER_CATEGORIES = [
   },
   {
     key: "opensource",
-    label_ko: "?ㅽ뵂?뚯뒪",
+    label_ko: "오픈소스",
     label_en: "OpenSource",
     providers: [
       { value: "qwen_code", label: "Qwen Code" },
@@ -324,7 +324,7 @@ export const AppSettingsView = memo(function AppSettingsView({
               checked={draftSettings.ui_theme === "light"}
               onChange={(event) => updateDraftSettings((current) => ({ ...current, ui_theme: event.target.checked ? "light" : "dark" }))}
               label={t("option.lightMode")}
-              hint={language === "ko" ? "諛앹? 諛곌꼍???쇱씠???뚮쭏濡??꾪솚" : "Switch to light background theme"}
+              hint={language === "ko" ? "밝은 배경 테마로 전환합니다." : "Switch to light background theme"}
             />
 
             <ToggleRow
@@ -344,7 +344,7 @@ export const AppSettingsView = memo(function AppSettingsView({
                 }))
               }
               label={t("option.developerMode")}
-              hint={language === "ko" ? "由ы룷????諛?異붽? ?붾쾭洹??뺣낫 ?쒖떆" : "Show reports tab and extra debug info"}
+              hint={language === "ko" ? "리포트 탭과 추가 디버그 정보를 표시합니다." : "Show reports tab and extra debug info"}
             />
 
             {Boolean(draftSettings.developer_mode) ? (
@@ -366,7 +366,7 @@ export const AppSettingsView = memo(function AppSettingsView({
             <SectionHeader
               icon={<DashboardIcon />}
               title={t("settings.dashboardPreferences")}
-              description={language === "ko" ? "??쒕낫?쒖뿉 ?쒖떆??吏???좏깮" : "Choose which metrics appear on the dashboard"}
+              description={language === "ko" ? "대시보드에 표시할 항목을 선택합니다." : "Choose which metrics appear on the dashboard"}
             />
 
             <div className="toggle-grid" style={{ marginTop: "4px" }}>
@@ -508,7 +508,7 @@ export const AppSettingsView = memo(function AppSettingsView({
                   }))
                 }
                 label={t("preset.auto")}
-                hint={language === "ko" ? "?쒖뒪??由ъ냼?ㅼ뿉 ?곕씪 ?묒뾽?????먮룞 議곗젙" : "Automatically adjust worker count based on resources"}
+                hint={language === "ko" ? "자원에 따라 작업자 수를 자동으로 조정합니다." : "Automatically adjust worker count based on resources"}
                 disabled={runtimeBusy}
               />
 
