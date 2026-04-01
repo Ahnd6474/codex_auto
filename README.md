@@ -1,19 +1,37 @@
 # jakal-flow
 
-Traceable multi-repository automation for Codex-style workflows.
+> Traceable multi-repository automation for Codex-style workflows.
 
-`jakal-flow` keeps each managed repository in its own isolated workspace and persists plans, logs, reports, memory, and rollback state per project. The Python CLI is the primary interface, and the React + Tauri desktop shell uses the same backend instead of replacing it.
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Desktop UI](https://img.shields.io/badge/Desktop-React%20%2B%20Tauri-24C8DB)](#desktop-ui)
+[![GitHub stars](https://img.shields.io/github/stars/Ahnd6474/Jakal-flow?style=flat)](https://github.com/Ahnd6474/Jakal-flow/stargazers)
+
+`jakal-flow` is a production-oriented automation CLI for teams running AI-assisted work across multiple repositories.
+Instead of flattening everything into one workspace, it keeps every managed repository isolated and preserves the artifacts you need to trust the run later: plans, logs, reports, memory, checkpoints, and rollback state.
 
 - Korean guide: [README.ko.md](README.ko.md)
-- Recent additions: `list-repos`, `history`, `logx --source-repo-dir`, `--set KEY=VALUE`, and `--plan-file`.
+- Live CLI surface from this checkout: `$env:PYTHONPATH='src'; python -m jakal_flow --help`
+- Recent additions: `list-repos`, `history`, `logx --source-repo-dir`, `--set KEY=VALUE`, `--plan-file`
 
-## Requirements
+## Why It Stands Out
 
-- Python 3.11+
-- Codex CLI on `PATH`
-- Optional for the desktop shell: Node.js 20+, Rust, and Tauri prerequisites
+Unlike general-purpose agent runners that optimize for a single session, `jakal-flow` is designed around repeatable, traceable operations across many repositories.
 
-## Install
+- `Per-repo isolation first`: each repository gets its own `repo/`, `docs/`, `memory/`, `logs/`, `reports/`, and `state/`.
+- `Traceability by default`: execution logs, planning caches, contract-wave audit data, and reports stay attached to the project that produced them.
+- `Rollback-safe orchestration`: safe revisions and recovery flow are part of the implementation, not an afterthought.
+- `CLI and desktop together`: the React + Tauri app sits on top of the same Python backend instead of forking the product into a separate path.
+- `Operations-friendly`: status, history, reports, and log indexing are built into the normal workflow.
+
+## At A Glance
+
+<p align="center">
+  <img src="assets/readme-flow.svg" alt="jakal-flow architecture overview" width="100%" />
+</p>
+
+## Quick Start
+
+### 1. Install
 
 ```bash
 python -m pip install -e .
@@ -24,15 +42,13 @@ Installed entrypoints:
 - `jakal-flow`
 - `jakal-flow-ui-bridge`
 
-Check the live CLI surface from this checkout:
+Requirements:
 
-```bash
-$env:PYTHONPATH='src'; python -m jakal_flow --help
-```
+- Python 3.11+
+- Codex CLI on `PATH`
+- Optional for desktop: Node.js 20+, Rust, and Tauri prerequisites
 
-## Quick Start
-
-Create a runtime config:
+### 2. Create a runtime config
 
 ```toml
 [runtime]
@@ -45,7 +61,7 @@ test_cmd = "python -m pytest"
 max_blocks = 2
 ```
 
-Initialize a managed repository:
+### 3. Register a repository
 
 ```bash
 jakal-flow init-repo \
@@ -55,7 +71,7 @@ jakal-flow init-repo \
   --config .jakal-flow.runtime.toml
 ```
 
-Run work:
+### 4. Run work
 
 ```bash
 jakal-flow run \
@@ -65,7 +81,7 @@ jakal-flow run \
   --config .jakal-flow.runtime.toml
 ```
 
-Useful follow-up commands:
+## Core Commands
 
 ```bash
 jakal-flow list-repos --workspace-root .jakal-flow-workspace
@@ -79,7 +95,7 @@ jakal-flow run --repo-url https://github.com/Ahnd6474/lit.git --branch main --wo
 jakal-flow run --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace --plan-file PLAN.md
 ```
 
-## Workspace Layout
+## What You Keep Per Project
 
 Each managed repository gets its own isolated subtree:
 
@@ -95,15 +111,32 @@ workspace_root/
       state/
 ```
 
-This keeps multi-repository history and traceability separate by design.
+That separation is the point. `jakal-flow` keeps multi-repository history readable and auditable instead of mixing outputs from unrelated runs.
 
-Contract-wave metadata stays inside each project's `state/` and `docs/` folders, including `SPINE.json`, `COMMON_REQUIREMENTS.json`, `CONTRACT_WAVE_AUDIT.jsonl`, `state/lineage_manifests/`, and `docs/SHARED_CONTRACTS.md`.
-Planning caches and telemetry are persisted alongside the project as `state/PLANNING_INPUTS_CACHE.json`, `state/PLANNING_PROMPT_CACHE.json`, `state/BLOCK_PLAN_CACHE.json`, and `logs/planning_metrics.jsonl`.
+Contract-wave metadata stays inside each project's `state/` and `docs/`, including:
+
+- `SPINE.json`
+- `COMMON_REQUIREMENTS.json`
+- `CONTRACT_WAVE_AUDIT.jsonl`
+- `state/lineage_manifests/`
+- `docs/SHARED_CONTRACTS.md`
+
+Planning caches and telemetry are also persisted per project:
+
+- `state/PLANNING_INPUTS_CACHE.json`
+- `state/PLANNING_PROMPT_CACHE.json`
+- `state/BLOCK_PLAN_CACHE.json`
+- `logs/planning_metrics.jsonl`
 
 ## Desktop UI
 
 The desktop app is a React + Tauri shell over the same Python backend.
-The `Contracts` sidebar surfaces shared-contract state, lets operators resolve/reopen/edit/delete CRRs, records spine checkpoints, and shows the recent contract-wave audit trail.
+It gives operators a visual workflow without sacrificing the CLI's traceability model.
+
+- Project setup and run control
+- Plan editing and checkpoint handling
+- Share actions and bridge-driven refresh
+- `Contracts` sidebar for shared-contract state, CRR resolve/reopen/edit/delete flows, spine checkpoints, and recent contract-wave audit trail
 
 Development:
 
@@ -119,3 +152,7 @@ Production build:
 cd desktop
 npm run tauri:build
 ```
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Ahnd6474/Jakal-flow&type=Date)](https://www.star-history.com/#Ahnd6474/Jakal-flow&Date)

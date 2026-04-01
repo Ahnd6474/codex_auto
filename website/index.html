@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>jakal-flow | AI Repo Operations</title>
+  <title>jakal-flow | Traceable Multi-Repo Automation</title>
   <meta
     id="meta-description"
     name="description"
-    content="jakal-flow는 여러 저장소를 안전하게 관리하고, Codex가 작업을 쪼개고 실행하고 검증하도록 돕는 데스크톱 자동화 앱입니다."
+    content="jakal-flow는 여러 저장소를 한 번에 다루되 각 저장소의 state, logs, reports, memory를 분리해서 남기는 추적 가능한 자동화 워크플로입니다."
   >
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -41,6 +41,7 @@
       <div class="topbar-side">
         <nav class="nav">
           <a href="#product" data-i18n="nav_product">Product</a>
+          <a href="#advantages" data-i18n="nav_advantages">Advantages</a>
           <a href="#workflow" data-i18n="nav_workflow">Workflow</a>
           <a href="#release" data-i18n="nav_release">Release</a>
           <a href="#contact" data-i18n="nav_contact">Contact</a>
@@ -55,22 +56,37 @@
     <main id="top">
       <section class="hero">
         <div class="hero-copy">
-          <div class="hero-badge" data-i18n="hero_badge">Desktop app in progress</div>
-          <p class="eyebrow" data-i18n="hero_eyebrow">AI Repo Operations</p>
-          <h1 data-i18n-html="hero_title">계획부터 검증까지,<br>저장소 개선을<br>실행 가능한 흐름으로.</h1>
+          <div class="hero-badge" data-i18n="hero_badge">CLI + Desktop on the same backend</div>
+          <p class="eyebrow" data-i18n="hero_eyebrow">Traceable Multi-Repo Automation</p>
+          <h1 data-i18n-html="hero_title">한 저장소 자동화가 아니라,<br>여러 저장소 운영을<br>추적 가능하게.</h1>
           <p class="hero-text" data-i18n="hero_text">
-            jakal-flow는 여러 저장소를 하나의 운영 화면에서 다루며, Codex가 일을 쪼개고, 블록 단위로 실행하고, 테스트와 롤백까지 관리하도록 설계된 자동화 앱입니다.
+            jakal-flow는 여러 저장소에서 AI 보조 작업을 반복 실행할 때, 각 프로젝트의 계획, 로그, 리포트, 메모리, 체크포인트, 롤백 상태를 섞지 않고 남기는 운영용 워크플로입니다.
           </p>
 
           <div class="hero-actions">
-            <a class="button button-primary" href="../README.md" data-i18n="hero_docs">Docs</a>
+            <a class="button button-primary" href="../README.md" data-i18n="hero_docs">Read docs</a>
             <a class="button button-secondary" href="mailto:ahnd6474@gmail.com" data-i18n="hero_contact">Contact</a>
           </div>
 
           <div class="hero-meta">
-            <span data-i18n="hero_meta_1">Multi-repo</span>
-            <span data-i18n="hero_meta_2">Strict validation</span>
-            <span data-i18n="hero_meta_3">Codex-planned blocks</span>
+            <span data-i18n="hero_meta_1">Per-repo isolation</span>
+            <span data-i18n="hero_meta_2">Rollback-safe runs</span>
+            <span data-i18n="hero_meta_3">Reports and history built in</span>
+          </div>
+
+          <div class="stat-grid">
+            <article>
+              <span data-i18n="stat_1_label">Keeps</span>
+              <strong data-i18n="stat_1_value">docs, logs, memory, reports, state</strong>
+            </article>
+            <article>
+              <span data-i18n="stat_2_label">Surface</span>
+              <strong data-i18n="stat_2_value">CLI plus React + Tauri desktop</strong>
+            </article>
+            <article>
+              <span data-i18n="stat_3_label">Operators</span>
+              <strong data-i18n="stat_3_value">status, history, report, logx</strong>
+            </article>
           </div>
         </div>
 
@@ -87,64 +103,64 @@
 
             <div class="stage-body">
               <aside class="stage-sidebar">
-                <p class="sidebar-title" data-i18n="sidebar_title">Repositories</p>
-                <div class="sidebar-item active">api-platform</div>
-                <div class="sidebar-item">desktop-client</div>
-                <div class="sidebar-item">landing-site</div>
-                <div class="sidebar-item">internal-tools</div>
+                <p class="sidebar-title" data-i18n="sidebar_title">Projects</p>
+                <div class="sidebar-item active">payments-api</div>
+                <div class="sidebar-item">admin-desktop</div>
+                <div class="sidebar-item">marketing-site</div>
+                <div class="sidebar-item">shared-contracts</div>
               </aside>
 
               <div class="stage-main">
                 <div class="stage-headline">
                   <div>
-                    <p class="panel-label" data-i18n="panel_label">Timeline</p>
-                    <h2 data-i18n-html="panel_title">지금 어디까지 진행됐는지,<br>한 번에 보입니다.</h2>
+                    <p class="panel-label" data-i18n="panel_label">Current run</p>
+                    <h2 data-i18n-html="panel_title">한 화면에서 실행 상태를 보고,<br>프로젝트별 산출물은 분리합니다.</h2>
                   </div>
                   <div class="live-pill" data-i18n="panel_status">Running</div>
                 </div>
 
                 <div class="timeline-bar">
-                  <div class="timeline-step done" data-i18n="timeline_input">입력</div>
-                  <div class="timeline-step done" data-i18n="timeline_breakdown">배분</div>
-                  <div class="timeline-step current" data-i18n="timeline_execute">실행</div>
-                  <div class="timeline-step pending" data-i18n="timeline_validate">검증</div>
-                  <div class="timeline-step pending" data-i18n="timeline_sync">동기화</div>
+                  <div class="timeline-step done" data-i18n="timeline_input">Input</div>
+                  <div class="timeline-step done" data-i18n="timeline_breakdown">Plan</div>
+                  <div class="timeline-step current" data-i18n="timeline_execute">Execute</div>
+                  <div class="timeline-step pending" data-i18n="timeline_validate">Validate</div>
+                  <div class="timeline-step pending" data-i18n="timeline_sync">Closeout</div>
                 </div>
 
                 <div class="block-strip">
                   <article class="block-card feature">
                     <span>B2</span>
-                    <strong data-i18n="block_1_title">테스트 안정화</strong>
-                    <p data-i18n="block_1_text">실패 재현, 회귀 테스트 추가, safe revision 유지</p>
+                    <strong data-i18n="block_1_title">Regression and rollback guard</strong>
+                    <p data-i18n="block_1_text">실패를 재현하고 테스트를 추가한 뒤 safe revision을 지킵니다.</p>
                   </article>
                   <article class="block-card">
                     <span>B3</span>
-                    <strong data-i18n="block_2_title">GUI 단순화</strong>
-                    <p data-i18n="block_2_text">실행 흐름을 줄이고 진행 정보 가시성 강화</p>
+                    <strong data-i18n="block_2_title">Checkpoint-aware desktop flow</strong>
+                    <p data-i18n="block_2_text">체크포인트 승인, 백그라운드 작업 큐, 공유 링크 흐름을 함께 다룹니다.</p>
                   </article>
                   <article class="block-card">
                     <span>B4</span>
-                    <strong data-i18n="block_3_title">문서 반영</strong>
-                    <p data-i18n="block_3_text">검증된 동작만 README와 릴리즈 페이지에 반영</p>
+                    <strong data-i18n="block_3_title">Traceable closeout</strong>
+                    <p data-i18n="block_3_text">마지막 리포트와 시도 이력을 남겨 다음 운영자가 다시 읽을 수 있게 합니다.</p>
                   </article>
                 </div>
 
                 <div class="ops-grid">
                   <article>
-                    <span data-i18n="ops_model">Model</span>
-                    <strong>gpt-5.4</strong>
+                    <span data-i18n="ops_model">Backend</span>
+                    <strong data-i18n="ops_model_value">Python orchestration</strong>
                   </article>
                   <article>
-                    <span data-i18n="ops_reasoning">Reasoning</span>
-                    <strong>high</strong>
+                    <span data-i18n="ops_reasoning">Desktop</span>
+                    <strong data-i18n="ops_reasoning_value">React + Tauri</strong>
                   </article>
                   <article>
-                    <span data-i18n="ops_validation">Validation</span>
-                    <strong data-i18n="ops_validation_value">test after every pass</strong>
+                    <span data-i18n="ops_validation">Control</span>
+                    <strong data-i18n="ops_validation_value">checkpoint and rollback aware</strong>
                   </article>
                   <article>
-                    <span data-i18n="ops_sync">Sync</span>
-                    <strong data-i18n="ops_sync_value">push after block</strong>
+                    <span data-i18n="ops_sync">Artifacts</span>
+                    <strong data-i18n="ops_sync_value">history, report, logx, share</strong>
                   </article>
                 </div>
               </div>
@@ -153,27 +169,27 @@
         </div>
       </section>
 
-      <section class="section callout reveal">
+      <section class="section callout reveal" id="advantages">
         <div class="callout-copy">
-          <p class="eyebrow" data-i18n="callout_eyebrow">Positioning</p>
-          <h2 data-i18n-html="callout_title">자동화 툴이 아니라,<br>릴리즈 가능한 운영 레이어.</h2>
+          <p class="eyebrow" data-i18n="callout_eyebrow">Why It Stands Out</p>
+          <h2 data-i18n-html="callout_title">멀티 리포 운영에서 중요한 것들을<br>기본값으로 둡니다.</h2>
         </div>
         <div class="callout-grid">
           <article>
-            <strong data-i18n="callout_1_title">계획</strong>
-            <p data-i18n="callout_1_text">장기 프롬프트와 저장소 문맥을 바탕으로 작업을 세분화합니다.</p>
+            <strong data-i18n="callout_1_title">Per-repo isolation first</strong>
+            <p data-i18n="callout_1_text">각 저장소마다 repo, docs, memory, logs, reports, state를 따로 유지합니다.</p>
           </article>
           <article>
-            <strong data-i18n="callout_2_title">실행</strong>
-            <p data-i18n="callout_2_text">Codex가 블록 단위로 구현을 진행하고 진행 상황을 남깁니다.</p>
+            <strong data-i18n="callout_2_title">Traceability by default</strong>
+            <p data-i18n="callout_2_text">계획 캐시, 실행 로그, closeout report, contract-wave audit trail이 프로젝트에 붙습니다.</p>
           </article>
           <article>
-            <strong data-i18n="callout_3_title">검증</strong>
-            <p data-i18n="callout_3_text">매 pass 뒤 테스트하고 실패 시 즉시 rollback 합니다.</p>
+            <strong data-i18n="callout_3_title">Rollback-safe orchestration</strong>
+            <p data-i18n="callout_3_text">safe revision과 복구 흐름이 구현 안에 들어 있어 실패를 운영 이슈로 남기지 않습니다.</p>
           </article>
           <article>
-            <strong data-i18n="callout_4_title">기록</strong>
-            <p data-i18n="callout_4_text">docs, logs, memory, state를 남겨 이후 릴리즈 설명이 가능합니다.</p>
+            <strong data-i18n="callout_4_title">CLI and desktop together</strong>
+            <p data-i18n="callout_4_text">React + Tauri 셸이 같은 Python backend를 사용해 제품 경로가 둘로 갈라지지 않습니다.</p>
           </article>
         </div>
       </section>
@@ -181,53 +197,62 @@
       <section class="section workflow reveal" id="workflow">
         <div class="section-header">
           <p class="eyebrow" data-i18n="workflow_eyebrow">Workflow</p>
-          <h2 data-i18n-html="workflow_title">사람은 방향을 주고,<br>Codex는 블록으로 움직입니다.</h2>
+          <h2 data-i18n-html="workflow_title">작업을 던지고 끝내는 도구가 아니라,<br>반복 가능한 운영 루프입니다.</h2>
         </div>
         <div class="workflow-grid">
           <article class="workflow-card">
             <span>01</span>
-            <strong data-i18n="workflow_1_title">Input</strong>
-            <p data-i18n="workflow_1_text">장기 프롬프트 또는 개선할 저장소를 입력으로 받습니다.</p>
+            <strong data-i18n="workflow_1_title">Register</strong>
+            <p data-i18n="workflow_1_text">`init-repo`로 저장소를 작업공간에 등록하고 실행 기준을 정합니다.</p>
           </article>
           <article class="workflow-card">
             <span>02</span>
-            <strong data-i18n="workflow_2_title">Codex Breakdown</strong>
-            <p data-i18n="workflow_2_text">Codex가 실제 구현 가능한 블록 목록과 우선순위를 제안합니다.</p>
+            <strong data-i18n="workflow_2_title">Plan and run</strong>
+            <p data-i18n="workflow_2_text">`run`과 `resume`으로 블록 단위 실행을 이어가고 체크포인트를 관리합니다.</p>
           </article>
           <article class="workflow-card">
             <span>03</span>
-            <strong data-i18n="workflow_3_title">Execution Loop</strong>
-            <p data-i18n="workflow_3_text">블록이 끝날 때까지 구현, 테스트, 기록을 반복합니다.</p>
+            <strong data-i18n="workflow_3_title">Inspect</strong>
+            <p data-i18n="workflow_3_text">`status`, `history`, `report`, `logx`로 현재 상태와 남은 설명 책임을 확인합니다.</p>
           </article>
           <article class="workflow-card">
             <span>04</span>
-            <strong data-i18n="workflow_4_title">Checkpoint</strong>
-            <p data-i18n="workflow_4_text">승인 경계와 GitHub 동기화를 통해 릴리즈 흐름을 유지합니다.</p>
+            <strong data-i18n="workflow_4_title">Operate visually</strong>
+            <p data-i18n="workflow_4_text">데스크톱 셸에서 프로젝트 설정, 런 제어, 체크포인트, 공유 링크를 다룹니다.</p>
           </article>
         </div>
       </section>
 
       <section class="section showcase reveal">
         <div class="section-header">
-          <p class="eyebrow" data-i18n="showcase_eyebrow">Why It Feels Different</p>
-          <h2 data-i18n-html="showcase_title">제품처럼 보이고,<br>운영 도구처럼 작동합니다.</h2>
+          <p class="eyebrow" data-i18n="showcase_eyebrow">Current Surface</p>
+          <h2 data-i18n-html="showcase_title">문서만 좋은 프로젝트가 아니라,<br>지금 바로 돌릴 수 있는 표면이 있습니다.</h2>
         </div>
         <div class="showcase-grid">
           <article class="showcase-card large">
-            <strong data-i18n="showcase_1_title">멀티 저장소 구조</strong>
-            <p data-i18n="showcase_1_text">repo, docs, memory, logs, reports, state를 저장소별로 분리해 섞이지 않게 관리합니다.</p>
+            <strong data-i18n="showcase_1_title">Operator commands already exist</strong>
+            <p data-i18n="showcase_1_text">등록, 재개, 상태 조회, 이력, 리포트, 로그 인덱싱까지 현재 CLI에 연결되어 있습니다.</p>
+            <div class="command-list">
+              <code>jakal-flow init-repo</code>
+              <code>jakal-flow run</code>
+              <code>jakal-flow resume</code>
+              <code>jakal-flow list-repos</code>
+              <code>jakal-flow history</code>
+              <code>jakal-flow report</code>
+              <code>jakal-flow logx</code>
+            </div>
           </article>
           <article class="showcase-card">
-            <strong data-i18n="showcase_2_title">엄격한 검증</strong>
-            <p data-i18n="showcase_2_text">테스트 실패 시 safe revision으로 바로 되돌아갑니다.</p>
+            <strong data-i18n="showcase_2_title">Desktop is not a separate rewrite</strong>
+            <p data-i18n="showcase_2_text">Tauri shell이 `python -m jakal_flow.ui_bridge`를 호출해 같은 백엔드를 그대로 사용합니다.</p>
           </article>
           <article class="showcase-card">
-            <strong data-i18n="showcase_3_title">진행 타임라인</strong>
-            <p data-i18n="showcase_3_text">현재 블록, 남은 흐름, Codex 상태를 직관적으로 보여줍니다.</p>
+            <strong data-i18n="showcase_3_title">Checkpoint and sharing flows are real</strong>
+            <p data-i18n="showcase_3_text">체크포인트 승인, background queue, read-only share link 흐름이 UI와 브리지에 반영돼 있습니다.</p>
           </article>
           <article class="showcase-card">
-            <strong data-i18n="showcase_4_title">앱 확장 전제</strong>
-            <p data-i18n="showcase_4_text">데스크톱 GUI에서 시작해 릴리즈 가능한 제품 경험으로 확장하기 쉽습니다.</p>
+            <strong data-i18n="showcase_4_title">Shared-contract reporting is built in</strong>
+            <p data-i18n="showcase_4_text">SPINE, common requirements, lineage manifest, planning metrics 같은 운영 산출물이 프로젝트 아래에 남습니다.</p>
           </article>
         </div>
       </section>
@@ -235,27 +260,27 @@
       <section class="section release reveal" id="release">
         <div class="section-header">
           <p class="eyebrow" data-i18n="release_eyebrow">Release</p>
-          <h2 data-i18n-html="release_title">앱 릴리즈 페이지에 필요한 정보도<br>지금부터 정리합니다.</h2>
+          <h2 data-i18n-html="release_title">현재 가치는 명확하고,<br>앞으로의 제품화 경로도 자연스럽습니다.</h2>
         </div>
         <div class="release-grid">
           <article class="release-card primary">
-            <span class="release-label" data-i18n="release_card_1_label">Version</span>
-            <strong data-i18n="release_card_1_title">Alpha preview</strong>
-            <p data-i18n="release_card_1_text">현재는 워크스페이스와 실행 흐름을 다듬는 단계이며, 이후 데스크톱 앱 패키징을 목표로 합니다.</p>
+            <span class="release-label" data-i18n="release_card_1_label">Now</span>
+            <strong data-i18n="release_card_1_title">A real operations tool</strong>
+            <p data-i18n="release_card_1_text">여러 저장소를 반복적으로 관리해야 하는 팀이 이미 쓸 수 있는 CLI와 데스크톱 셸이 있습니다.</p>
             <div class="release-actions">
-              <a class="button button-primary" href="mailto:ahnd6474@gmail.com?subject=jakal-flow%20alpha" data-i18n="release_card_1_cta">Alpha access</a>
-              <a class="button button-secondary" href="../README.md" data-i18n="release_card_1_docs">Read docs</a>
+              <a class="button button-primary" href="../README.md" data-i18n="release_card_1_cta">Open docs</a>
+              <a class="button button-secondary" href="mailto:ahnd6474@gmail.com?subject=jakal-flow%20demo" data-i18n="release_card_1_docs">Request demo</a>
             </div>
           </article>
           <article class="release-card">
-            <span class="release-label" data-i18n="release_card_2_label">Platform</span>
-            <strong data-i18n="release_card_2_title">Windows-first desktop</strong>
-            <p data-i18n="release_card_2_text">React + Tauri 데스크톱 앱으로 실제 운영 화면과 배포 경험을 함께 다듬고 있습니다.</p>
+            <span class="release-label" data-i18n="release_card_2_label">Desktop</span>
+            <strong data-i18n="release_card_2_title">React + Tauri shell</strong>
+            <p data-i18n="release_card_2_text">프로젝트 설정, 실행 제어, 체크포인트, 공유 링크, 리포트를 같은 운영 표면에서 다룹니다.</p>
           </article>
           <article class="release-card">
-            <span class="release-label" data-i18n="release_card_3_label">Audience</span>
-            <strong data-i18n="release_card_3_title">반복 개선이 필요한 개발 팀</strong>
-            <p data-i18n="release_card_3_text">한두 개가 아니라 여러 저장소를 안정적으로 돌려야 하는 팀에 맞춘 구조입니다.</p>
+            <span class="release-label" data-i18n="release_card_3_label">Fit</span>
+            <strong data-i18n="release_card_3_title">Teams with recurring repo work</strong>
+            <p data-i18n="release_card_3_text">단발성 AI 세션보다, 저장소별 책임 추적과 운영 이력이 중요한 팀에 맞춰져 있습니다.</p>
           </article>
         </div>
       </section>
@@ -264,14 +289,14 @@
         <div class="contact-card">
           <div>
             <p class="eyebrow" data-i18n="contact_eyebrow">Contact</p>
-            <h2 data-i18n="contact_title">도입 문의, 협업, 제품화 논의</h2>
+            <h2 data-i18n="contact_title">도입, 협업, 데모 문의</h2>
             <p class="contact-text" data-i18n="contact_text">
-              jakal-flow를 내부 자동화 도구나 배포 가능한 앱으로 확장하려면 아래 메일로 연락할 수 있습니다.
+              jakal-flow를 내부 운영 도구로 확장하거나 실제 데스크톱 제품 흐름으로 정리하고 싶다면 메일로 연락해 주세요.
             </p>
           </div>
           <div class="contact-actions">
             <a class="contact-link" href="mailto:ahnd6474@gmail.com">ahnd6474@gmail.com</a>
-            <a class="button button-primary" href="mailto:ahnd6474@gmail.com?subject=jakal-flow%20문의" data-i18n="contact_cta">Send email</a>
+            <a class="button button-primary" href="mailto:ahnd6474@gmail.com?subject=jakal-flow%20inquiry" data-i18n="contact_cta">Send email</a>
           </div>
         </div>
       </section>
@@ -280,7 +305,7 @@
     <footer class="footer">
       <p>jakal-flow</p>
       <div class="footer-links">
-        <button class="footer-button" type="button" data-open-consent data-i18n="footer_cookie">쿠키 설정</button>
+        <button class="footer-button" type="button" data-open-consent data-i18n="footer_cookie">Cookie settings</button>
         <a href="mailto:ahnd6474@gmail.com">ahnd6474@gmail.com</a>
       </div>
     </footer>
@@ -288,12 +313,12 @@
 
   <div class="consent-banner" data-consent-banner hidden>
     <div class="consent-copy">
-      <strong data-i18n="consent_title">분석 도구 사용 안내</strong>
-      <p data-i18n="consent_text">이 페이지는 방문 통계 확인을 위해 Google Analytics 4를 사용할 수 있습니다.</p>
+      <strong data-i18n="consent_title">Analytics notice</strong>
+      <p data-i18n="consent_text">이 페이지는 방문 통계를 보기 위해 Google Analytics 4를 사용할 수 있습니다.</p>
     </div>
     <div class="consent-actions">
-      <button class="button button-secondary" type="button" data-consent-decline data-i18n="consent_decline">거부</button>
-      <button class="button button-primary" type="button" data-consent-accept data-i18n="consent_accept">허용</button>
+      <button class="button button-secondary" type="button" data-consent-decline data-i18n="consent_decline">Decline</button>
+      <button class="button button-primary" type="button" data-consent-accept data-i18n="consent_accept">Allow</button>
     </div>
   </div>
 </body>
