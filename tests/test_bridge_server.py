@@ -319,3 +319,124 @@ class BridgeServerTests(unittest.TestCase):
             last_response = responses[-1]
             self.assertFalse(bool(last_response.get("ok")))
             self.assertEqual(last_response["error"].get("reason_code"), "duplicate_job")
+
+    def test_bridge_request_overlays_active_execution_job_into_listing_payload(self) -> None:
+        with TemporaryTestDir() as workspace_root:
+            workspace_root.mkdir(parents=True, exist_ok=True)
+            repo_dir = workspace_root / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            server = CaptureBridgeServer()
+            server._jobs.create(
+                "run-plan",
+                workspace_root,
+                {"repo_id": "repo-1", "project_dir": str(repo_dir)},
+            )
+
+            with mock.patch(
+                "jakal_flow.bridge_server.run_command",
+                return_value={
+                    "projects": [
+                        {
+                            "repo_id": "repo-1",
+                            "repo_path": str(repo_dir),
+                            "status": "plan_ready",
+                        }
+                    ],
+                    "history": [],
+                    "workspace": {
+                        "project_count": 1,
+                        "ready_like": 1,
+                        "running": 0,
+                        "failed": 0,
+                    },
+                },
+            ):
+                server._handle_request(
+                    "req-listing",
+                    "bridge_request",
+                    {
+                        "command": "list-projects",
+                        "workspace_root": str(workspace_root),
+                        "payload": {},
+                    },
+                )
+
+            responses = [item for item in server.envelopes if item.get("kind") == "response"]
+            self.assertTrue(responses)
+            result = responses[-1]["result"]
+            self.assertEqual(result["projects"][0]["status"], "running:run-plan")
+            self.assertEqual(result["workspace"]["running"], 1)
+
+    def test_bridge_request_overlays_active_execution_job_into_detail_execution_state(self) -> None:
+        with TemporaryTestDir() as workspace_root:
+            workspace_root.mkdir(parents=True, exist_ok=True)
+            repo_dir = workspace_root / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            server = CaptureBridgeServer()
+            server._jobs.create(
+                "run-plan",
+                workspace_root,
+                {"repo_id": "repo-1", "project_dir": str(repo_dir)},
+            )
+
+            with mock.patch(
+                "jakal_flow.bridge_server.run_command",
+                return_value={
+                    "project": {
+                        "repo_id": "repo-1",
+                        "repo_path": str(repo_dir),
+                        "current_status": "plan_ready",
+                    },
+                    "loop_state": {
+                        "pending_checkpoint_approval": False,
+                    },
+                    "checkpoints": {
+                        "items": [],
+                        "pending": None,
+                    },
+                    "execution_processes": [],
+                    "execution_state": {
+                        "display_family": "idle",
+                        "display_status": "plan_ready",
+                        "project_status": "plan_ready",
+                        "consistent": True,
+                        "active_families": [],
+                        "checkpoint_family": "idle",
+                        "flow_family": "idle",
+                        "process_family": "idle",
+                        "toolbar_family": "idle",
+                        "mismatch_summary": "",
+                        "report_lines": [],
+                    },
+                    "snapshot": {
+                        "project": {
+                            "current_status": "plan_ready",
+                        },
+                    },
+                    "bottom_panels": {
+                        "git_status": {
+                            "current_status": "plan_ready",
+                        },
+                    },
+                },
+            ):
+                server._handle_request(
+                    "req-detail",
+                    "bridge_request",
+                    {
+                        "command": "load-project",
+                        "workspace_root": str(workspace_root),
+                        "payload": {
+                            "repo_id": "repo-1",
+                        },
+                    },
+                )
+
+            responses = [item for item in server.envelopes if item.get("kind") == "response"]
+            self.assertTrue(responses)
+            result = responses[-1]["result"]
+            self.assertEqual(result["project"]["current_status"], "running:run-plan")
+            self.assertEqual(result["snapshot"]["project"]["current_status"], "running:run-plan")
+            self.assertEqual(result["bottom_panels"]["git_status"]["current_status"], "running:run-plan")
+            self.assertEqual(result["execution_state"]["project_status"], "running:run-plan")
+            self.assertEqual(result["execution_state"]["display_status"], "running:run-plan")

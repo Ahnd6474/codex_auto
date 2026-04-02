@@ -37,146 +37,36 @@ function formatStepLabel(step, language) {
   return copyFor(language, "No step selected");
 }
 
-function Stat({ label, value, tone = "neutral", icon, sub }) {
+function MetricRow({ label, value, sub = "" }) {
   return (
-    <div className={`metric-card metric-card--${tone} metric-card--dashboard`}>
-      <div className="metric-card__topline">
-        {icon ? <div className="metric-card__icon-sm">{icon}</div> : null}
-        <span className="metric-card__label">{label}</span>
+    <div className="dashboard-metric-row">
+      <div className="dashboard-metric-row__copy">
+        <span className="dashboard-metric-row__label">{label}</span>
+        {sub ? <span className="dashboard-metric-row__sub">{sub}</span> : null}
       </div>
-      <strong>{value}</strong>
-      {sub ? <span className="metric-card__sub">{sub}</span> : null}
+      <strong className="dashboard-metric-row__value">{value}</strong>
     </div>
   );
 }
 
-function SummaryItem({ label, value, tone = "neutral" }) {
+function DashboardMetaPill({ label, value, mono = false }) {
+  if (!value) {
+    return null;
+  }
   return (
-    <div className="dashboard-summary-item">
+    <div className={`dashboard-meta-pill${mono ? " dashboard-meta-pill--mono" : ""}`}>
       <span>{label}</span>
-      <strong className={`dashboard-summary-item__value dashboard-summary-item__value--${tone}`}>{value}</strong>
+      <strong>{value}</strong>
     </div>
   );
 }
 
-function DashboardCallout({ title, body, tone = "neutral" }) {
-  return (
-    <div className={`dashboard-callout dashboard-callout--${tone}`}>
-      <strong>{title}</strong>
-      <span>{body}</span>
-    </div>
-  );
-}
-
-function StepsIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none">
-      <path d="M9 11l3 3L22 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function CheckpointIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function TokenInIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none">
-      <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-      <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function TokenOutIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none">
-      <path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ClockIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function PlanIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-      <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function DashboardHeaderIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
-      <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
-      <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
-      <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  );
-}
-
-function RuntimeIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function UsageIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none">
-      <path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function BranchIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none">
-      <line x1="7" y1="4" x2="7" y2="15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="17" cy="7" r="3" stroke="currentColor" strokeWidth="1.8" />
-      <circle cx="7" cy="18" r="3" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M17 10a8 8 0 0 1-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function SparkIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none">
-      <path d="M13 3L6 14h5l-1 7 8-12h-5l0-6z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function ProgressBar({ completed, total, tone }) {
+function ProgressBar({ completed, total }) {
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
   return (
     <div className="dashboard-progress">
       <div className="dashboard-progress__bar">
-        <div
-          className={`dashboard-progress__fill dashboard-progress__fill--${tone || "info"}`}
-          style={{ width: `${pct}%` }}
-        />
+        <div className="dashboard-progress__fill" style={{ width: `${pct}%` }} />
       </div>
       <span className="dashboard-progress__label">{pct}%</span>
     </div>
@@ -236,45 +126,53 @@ export const DashboardView = memo(function DashboardView({ detail, planDraft, mo
   const headlineStep = runningStep || nextStep || null;
   const planSummary = executionProgressCaptionDisplay(livePlan, language);
   const codexUsageAvailable = (usageBuckets || []).some((bucket) => bucket.window);
+  const showStatus = dashboardVisibility.status !== false;
+  const showRuntimeCard = dashboardVisibility.runtime_card !== false;
+  const showUsageCard = dashboardVisibility.codex_usage_card !== false;
+  const hasSideCards = showRuntimeCard || showUsageCard;
+  const branchValue = detail?.project?.branch || t("common.unknown");
+  const originValue = detail?.project?.origin_url || t("common.localOnly");
+  const checkpointValue = detail?.checkpoints?.pending?.title || copyFor(language, "Pending approval", "승인 대기 중");
+  const remainingValue = formatDurationCompact(executionEstimate.remaining_seconds ?? 0, language);
+  const totalEstimateValue = formatDurationCompact(executionEstimate.estimated_total_seconds ?? 0, language);
+  const completedValue = allSteps.length ? `${stepCounts.completed}/${allSteps.length}` : "0/0";
+  const heroEyebrow = runningStep
+    ? copyFor(language, "Live execution snapshot", "실행 중 스냅샷")
+    : allSteps.length
+      ? copyFor(language, "Plan status snapshot", "계획 상태 스냅샷")
+      : copyFor(language, "Repository workspace", "저장소 작업 공간");
+  const heroLead = headlineStep
+    ? formatStepLabel(headlineStep, language)
+    : copyFor(language, "No active step. Generate or resume a plan to continue.", "활성 단계가 없습니다. 계획을 생성하거나 재개해 계속 진행하세요.");
 
-  const metricItems = useMemo(
+  const telemetryItems = useMemo(
     () => [
       {
         key: "remaining_steps",
         label: t("dashboard.remainingSteps"),
-        value: stepCounts.pending,
-        tone: stepCounts.pending ? "info" : "success",
-        icon: <StepsIcon />,
+        value: String(stepCounts.pending),
         sub: allSteps.length ? `${stepCounts.completed}/${allSteps.length}` : copyFor(language, "No plan yet"),
       },
       {
         key: "checkpoint_pending",
         label: t("dashboard.checkpointPending"),
         value: detail?.checkpoints?.pending ? t("common.yes") : t("common.no"),
-        tone: detail?.checkpoints?.pending ? "warning" : "neutral",
-        icon: <CheckpointIcon />,
         sub: detail?.checkpoints?.pending?.title || "",
       },
       {
         key: "input_tokens",
         label: t("dashboard.inputTokens"),
         value: (usage.input_tokens ?? 0).toLocaleString(),
-        tone: "neutral",
-        icon: <TokenInIcon />,
       },
       {
         key: "output_tokens",
         label: t("dashboard.outputTokens"),
         value: (usage.output_tokens ?? 0).toLocaleString(),
-        tone: "neutral",
-        icon: <TokenOutIcon />,
       },
       {
         key: "estimated_remaining",
         label: t("dashboard.estimatedRemaining"),
         value: formatDurationCompact(executionEstimate.remaining_seconds ?? 0, language),
-        tone: executionEstimate.remaining_seconds ? "info" : "neutral",
-        icon: <ClockIcon />,
       },
       ...(showEstimatedCost
         ? [
@@ -282,13 +180,11 @@ export const DashboardView = memo(function DashboardView({ detail, planDraft, mo
               key: "estimated_cost",
               label: t("dashboard.estimatedCost"),
               value: formatUsd(costEstimate.estimated_total_cost_usd ?? 0, language),
-              tone: "neutral",
             },
             {
               key: "actual_cost",
               label: t("dashboard.actualCost"),
               value: formatUsd(costEstimate?.recent?.estimated_cost_usd ?? 0, language),
-              tone: "neutral",
             },
           ]
         : []),
@@ -296,14 +192,11 @@ export const DashboardView = memo(function DashboardView({ detail, planDraft, mo
         key: "codex_plan",
         label: t("dashboard.codexPlan"),
         value: account.plan_type || t("common.unavailable"),
-        tone: "neutral",
-        icon: <PlanIcon />,
       },
       ...usageBuckets.map((bucket) => ({
         key: `rate_limit_${bucket.key}`,
         label: bucket.label,
         value: rateLimitRemainingLabel(bucket.window, language),
-        tone: bucket.window && (bucket.window.remaining_percent ?? 0) < 25 ? "warning" : "success",
       })),
     ].filter((item) => dashboardVisibility[item.key] !== false),
     [
@@ -325,64 +218,14 @@ export const DashboardView = memo(function DashboardView({ detail, planDraft, mo
     ],
   );
 
-  const summaryItems = useMemo(
-    () => [
-      {
-        key: "branch",
-        label: t("common.branch"),
-        value: detail?.project?.branch || t("common.unknown"),
-        tone: "neutral",
-      },
-      {
-        key: "focus",
-        label: copyFor(language, "Current Focus"),
-        value: headlineStep ? formatStepLabel(headlineStep, language) : copyFor(language, "No plan yet"),
-        tone: runningStep ? "info" : (headlineStep ? "neutral" : "warning"),
-      },
-      {
-        key: "summary",
-        label: copyFor(language, "Plan Summary"),
-        value: planSummary || copyFor(language, "No plan yet"),
-        tone: allSteps.length ? tone : "warning",
-      },
-    ],
-    [allSteps.length, detail?.project?.branch, headlineStep, language, planSummary, runningStep, t, tone],
-  );
-
   if (!hasProject) {
     return (
       <section className="workspace-view dashboard-view">
-        <div className="view-header">
-          <div className="dashboard-header-stack">
-            <div className="view-header-icon">
-              <DashboardHeaderIcon />
-            </div>
-            <div>
-              <span className="eyebrow">{t("dashboard.dashboard")}</span>
-              <h2>{t("dashboard.noProjectSelected")}</h2>
-              <p>{copyFor(language, "Select or create a project to see runtime, plan, and usage telemetry.")}</p>
-            </div>
-          </div>
+        <div className="dashboard-page-header">
+          <h2>{t("dashboard.noProjectSelected")}</h2>
         </div>
-
-        <div className="dashboard-empty-state content-card">
-          <div className="dashboard-empty-state__icon">
-            <DashboardHeaderIcon />
-          </div>
-          <div className="dashboard-empty-state__body">
-            <strong>{copyFor(language, "No project selected")}</strong>
-            <p>{copyFor(language, "The dashboard is ready, but there is no active workspace to summarize yet.")}</p>
-          </div>
-          <div className="dashboard-empty-state__grid">
-            <div className="dashboard-callout dashboard-callout--neutral">
-              <strong>{copyFor(language, "What appears here")}</strong>
-              <span>{copyFor(language, "Project status, plan progress, runtime limits, and Codex account usage.")}</span>
-            </div>
-            <div className="dashboard-callout dashboard-callout--info">
-              <strong>{copyFor(language, "Next step")}</strong>
-              <span>{copyFor(language, "Choose a workspace from the top selector or create a new one to populate the dashboard.")}</span>
-            </div>
-          </div>
+        <div className="content-card dashboard-empty-panel">
+          <p>{copyFor(language, "Select or create a project to see runtime, plan, and usage telemetry.")}</p>
         </div>
       </section>
     );
@@ -390,162 +233,169 @@ export const DashboardView = memo(function DashboardView({ detail, planDraft, mo
 
   return (
     <section className="workspace-view dashboard-view">
-      <div className="view-header">
-        <div className="dashboard-header-stack">
-          <div className="view-header-icon">
-            <DashboardHeaderIcon />
-          </div>
-          <div>
-            <span className="eyebrow">{t("dashboard.dashboard")}</span>
-            <h2>{projectName}</h2>
-            <p>{copyFor(language, "Operational overview for the current workspace.")}</p>
-          </div>
-        </div>
-      </div>
-
-      {dashboardVisibility.status !== false ? (
-        <div className={`dashboard-hero dashboard-hero--${tone}`}>
-          <div className="dashboard-hero__main">
-            <div className="dashboard-hero__identity">
-              <span className={`status-badge status-badge--${tone}`}>{activeStatus}</span>
-              <strong className="dashboard-hero__project-name">{projectName}</strong>
-              <p className="dashboard-hero__summary">{planSummary || copyFor(language, "No plan yet")}</p>
+      <div className={`dashboard-hero dashboard-hero--${tone}`}>
+        <div className="dashboard-hero__left">
+          <span className={`dashboard-hero__dot dashboard-hero__dot--${tone}`} />
+          <div className="dashboard-hero__copy">
+            <span className="dashboard-hero__eyebrow">{heroEyebrow}</span>
+            <div className="dashboard-hero__headline">
+              <h2>{projectName}</h2>
+              {showStatus ? <span className={`status-badge status-badge--${tone}`}>{activeStatus}</span> : null}
             </div>
-            <div className="dashboard-hero__highlights">
-              <span className="dashboard-hero__pill">
-                <BranchIcon />
-                {detail?.project?.branch || t("common.unknown")}
-              </span>
-              <span className="dashboard-hero__pill">
-                <SparkIcon />
-                {headlineStep ? formatStepLabel(headlineStep, language) : copyFor(language, "No active step")}
-              </span>
+            <p className="dashboard-hero__lede">{heroLead}</p>
+            <div className="dashboard-hero__meta">
+              <DashboardMetaPill label={copyFor(language, "Branch", "브랜치")} value={branchValue} mono />
+              <DashboardMetaPill label={copyFor(language, "Origin", "원격 저장소")} value={originValue} mono />
               {detail?.checkpoints?.pending ? (
-                <span className="dashboard-hero__pill dashboard-hero__pill--warning">
-                  <CheckpointIcon />
-                  {copyFor(language, "Checkpoint pending")}
-                </span>
+                <DashboardMetaPill label={copyFor(language, "Checkpoint", "체크포인트")} value={checkpointValue} />
               ) : null}
             </div>
           </div>
-          <div className="dashboard-hero__right">
+        </div>
+        <div className="dashboard-hero__right">
+          <div className="dashboard-hero__summary">
             <span className="dashboard-hero__progress-label">
-              {stepCounts.completed}/{allSteps.length || 0} {copyFor(language, "steps done")}
+              {planSummary || copyFor(language, "No plan has been staged yet", "아직 준비된 계획이 없습니다")}
             </span>
-            <ProgressBar completed={stepCounts.completed} total={allSteps.length} tone={tone} />
-            <div className="dashboard-hero__meta">
-              <span>{copyFor(language, "Remaining")}: {formatDurationCompact(executionEstimate.remaining_seconds ?? 0, language)}</span>
-              {showEstimatedCost ? <span>{copyFor(language, "Estimate")}: {formatUsd(costEstimate.estimated_total_cost_usd ?? 0, language)}</span> : null}
+            <ProgressBar completed={stepCounts.completed} total={allSteps.length} />
+          </div>
+          <div className="dashboard-hero__stats">
+            <div className="dashboard-hero__stat">
+              <span>{copyFor(language, "Completed", "완료")}</span>
+              <strong>{completedValue}</strong>
+            </div>
+            <div className="dashboard-hero__stat">
+              <span>{copyFor(language, "Remaining", "남은 시간")}</span>
+              <strong>{remainingValue}</strong>
+            </div>
+            <div className="dashboard-hero__stat">
+              <span>{copyFor(language, "Workers", "작업자")}</span>
+              <strong>{parallelLimitValue}</strong>
+            </div>
+            <div className="dashboard-hero__stat">
+              <span>{copyFor(language, "Est. total", "예상 총 시간")}</span>
+              <strong>{totalEstimateValue}</strong>
             </div>
           </div>
         </div>
-      ) : null}
-
-      <div className="dashboard-summary-grid">
-        {summaryItems.map((item) => (
-          <SummaryItem key={item.key} label={item.label} value={item.value} tone={item.tone} />
-        ))}
       </div>
 
-      {detail?.checkpoints?.pending ? (
-        <DashboardCallout
-          title={copyFor(language, "Checkpoint approval required")}
-          body={detail.checkpoints.pending.title || copyFor(language, "Review the pending checkpoint before the run can continue.")}
-          tone="warning"
-        />
-      ) : null}
-
-      {dashboardVisibility.codex_usage_card && !codexUsageAvailable && codexStatus.error ? (
-        <DashboardCallout
-          title={copyFor(language, "Codex usage is temporarily unavailable")}
-          body={codexStatus.error}
-          tone="danger"
-        />
-      ) : null}
-
-      {metricItems.length ? (
-        <div className="metrics-grid">
-          {metricItems.map((item) => (
-            <Stat
-              key={item.key}
-              label={item.label}
-              value={item.value}
-              tone={item.tone}
-              icon={item.icon}
-              sub={item.sub}
-            />
-          ))}
-        </div>
-      ) : null}
-
-      <div className="dashboard-secondary-grid">
-        <div className="content-card dashboard-snapshot-card">
-          <div className="content-card__header">
-            <SparkIcon />
-            <strong>{copyFor(language, "Execution Snapshot")}</strong>
-          </div>
-          <div className="dashboard-detail-list">
-            {dashboardVisibility.status !== false ? (
-              <div className="dashboard-detail-row">
-                <span>{copyFor(language, "Status")}</span>
-                <strong>{activeStatus}</strong>
+      <div className={`dashboard-columns${hasSideCards ? "" : " dashboard-columns--single"}`}>
+        <div className="dashboard-column">
+          <div className="content-card dashboard-card">
+            <div className="content-card__header dashboard-card__header">
+              <div>
+                <strong>{copyFor(language, "Execution Brief", "실행 브리프")}</strong>
+                <p>{copyFor(language, "The current operating context for this repository.", "이 저장소의 현재 실행 맥락을 요약합니다.")}</p>
               </div>
-            ) : null}
-            <div className="dashboard-detail-row">
-              <span>{copyFor(language, "Current Focus")}</span>
-              <strong>{headlineStep ? formatStepLabel(headlineStep, language) : copyFor(language, "No active step")}</strong>
-            </div>
-            <div className="dashboard-detail-row">
-              <span>{copyFor(language, "Checkpoint")}</span>
-              <strong>{detail?.checkpoints?.pending?.title || copyFor(language, "None pending")}</strong>
-            </div>
-            <div className="dashboard-detail-row">
-              <span>{copyFor(language, "Origin")}</span>
-              <strong style={{ wordBreak: "break-word" }}>{detail?.project?.origin_url || t("common.localOnly")}</strong>
-            </div>
-          </div>
-        </div>
-
-        {dashboardVisibility.runtime_card ? (
-          <div className="content-card">
-            <div className="content-card__header">
-              <RuntimeIcon />
-              <strong>{t("dashboard.runtime")}</strong>
             </div>
             <div className="dashboard-detail-list">
-              <div className="dashboard-detail-row"><span>Model</span><strong>{runtimeSummary(detail?.runtime || {}, modelPresets, language, modelCatalog)}</strong></div>
-              <div className="dashboard-detail-row"><span>{t("field.parallelWorkers")}</span><strong>{parallelLimitValue}</strong></div>
-              <div className="dashboard-detail-row"><span>{t("run.parallelLimit")}</span><strong>{parallelLimitDetails}</strong></div>
-              <div className="dashboard-detail-row"><span>{t("run.estimatedTotal")}</span><strong>{formatDurationCompact(executionEstimate.estimated_total_seconds ?? 0, language)}</strong></div>
-              <div className="dashboard-detail-row"><span>{t("common.branch")}</span><strong>{detail?.project?.branch || t("common.unknown")}</strong></div>
-              <div className="dashboard-detail-row"><span>{t("dashboard.origin")}</span><strong style={{ wordBreak: "break-all", fontSize: "11px" }}>{detail?.project?.origin_url || t("common.localOnly")}</strong></div>
+              {showStatus ? (
+                <div className="dashboard-detail-row">
+                  <span>Status</span>
+                  <strong>{activeStatus}</strong>
+                </div>
+              ) : null}
+              <div className="dashboard-detail-row">
+                <span>Current Focus</span>
+                <strong>{headlineStep ? formatStepLabel(headlineStep, language) : copyFor(language, "No active step")}</strong>
+              </div>
+              <div className="dashboard-detail-row">
+                <span>Progress</span>
+                <strong>{planSummary || copyFor(language, "No plan yet")}</strong>
+              </div>
+              <div className="dashboard-detail-row">
+                <span>Branch</span>
+                <strong>{branchValue}</strong>
+              </div>
+              <div className="dashboard-detail-row">
+                <span>Origin</span>
+                <strong style={{ wordBreak: "break-word" }}>{originValue}</strong>
+              </div>
+              {detail?.checkpoints?.pending ? (
+                <div className="dashboard-detail-row">
+                  <span>Checkpoint</span>
+                  <strong>{checkpointValue}</strong>
+                </div>
+              ) : null}
             </div>
-          </div>
-        ) : null}
 
-        {dashboardVisibility.codex_usage_card ? (
-          <div className="content-card">
-            <div className="content-card__header">
-              <UsageIcon />
-              <strong>{t("dashboard.codexUsage")}</strong>
-            </div>
-            {codexUsageAvailable ? (
-              <div className="dashboard-detail-list">
-                <div className="dashboard-detail-row"><span>{t("common.auth")}</span><strong>{account.type || t("common.unavailable")}</strong></div>
-                <div className="dashboard-detail-row"><span>{t("common.account")}</span><strong>{account.email || t("common.unavailable")}</strong></div>
-                {usageBuckets.map((bucket) => (
-                  <div key={bucket.key} className="dashboard-detail-row">
-                    <span>{bucket.label}</span>
-                    <strong>{rateLimitWindowSummary(bucket.window, language)}</strong>
-                  </div>
+            {allSteps.length ? (
+              <div className="dashboard-progress-block">
+                <div className="dashboard-progress-summary">
+                  <span>{stepCounts.completed}/{allSteps.length} {copyFor(language, "steps complete")}</span>
+                  <span>{copyFor(language, "Remaining")}: {remainingValue}</span>
+                </div>
+                <ProgressBar completed={stepCounts.completed} total={allSteps.length} />
+              </div>
+            ) : null}
+          </div>
+
+          {telemetryItems.length ? (
+            <div className="content-card dashboard-card">
+              <div className="content-card__header dashboard-card__header">
+                <div>
+                  <strong>{copyFor(language, "Telemetry", "텔레메트리")}</strong>
+                  <p>{copyFor(language, "Usage, checkpoints, and execution estimates in one scan.", "사용량, 체크포인트, 예상 실행 시간을 한 번에 확인합니다.")}</p>
+                </div>
+              </div>
+              <div className={`dashboard-metric-list${telemetryItems.length > 6 ? " dashboard-metric-list--grid" : ""}`}>
+                {telemetryItems.map((item) => (
+                  <MetricRow key={item.key} label={item.label} value={item.value} sub={item.sub} />
                 ))}
               </div>
-            ) : (
-              <div className="dashboard-inline-empty">
-                <strong>{copyFor(language, "Usage data unavailable")}</strong>
-                <span>{codexStatus.error || t("common.unavailable")}</span>
+            </div>
+          ) : null}
+        </div>
+
+        {hasSideCards ? (
+          <div className="dashboard-column">
+            {showRuntimeCard ? (
+              <div className="content-card dashboard-card">
+                <div className="content-card__header dashboard-card__header">
+                  <div>
+                    <strong>{t("dashboard.runtime")}</strong>
+                    <p>{copyFor(language, "Execution capacity and model selection for the current run.", "현재 실행에 사용되는 용량과 모델 선택입니다.")}</p>
+                  </div>
+                </div>
+                <div className="dashboard-detail-list">
+                  <div className="dashboard-detail-row"><span>Model</span><strong>{runtimeSummary(detail?.runtime || {}, modelPresets, language, modelCatalog)}</strong></div>
+                  <div className="dashboard-detail-row"><span>{t("field.parallelWorkers")}</span><strong>{parallelLimitValue}</strong></div>
+                  <div className="dashboard-detail-row"><span>{t("run.parallelLimit")}</span><strong>{parallelLimitDetails}</strong></div>
+                  <div className="dashboard-detail-row"><span>{t("run.estimatedTotal")}</span><strong>{totalEstimateValue}</strong></div>
+                  {showEstimatedCost ? (
+                    <div className="dashboard-detail-row"><span>{t("dashboard.estimatedCost")}</span><strong>{formatUsd(costEstimate.estimated_total_cost_usd ?? 0, language)}</strong></div>
+                  ) : null}
+                </div>
               </div>
-            )}
+            ) : null}
+
+            {showUsageCard ? (
+              <div className="content-card dashboard-card">
+                <div className="content-card__header dashboard-card__header">
+                  <div>
+                    <strong>{t("dashboard.codexUsage")}</strong>
+                    <p>{copyFor(language, "Account and rate-limit windows reported by the active provider.", "활성 공급자가 보고한 계정 정보와 한도 창입니다.")}</p>
+                  </div>
+                </div>
+                {codexUsageAvailable ? (
+                  <div className="dashboard-detail-list">
+                    <div className="dashboard-detail-row"><span>{t("common.auth")}</span><strong>{account.type || t("common.unavailable")}</strong></div>
+                    <div className="dashboard-detail-row"><span>{t("common.account")}</span><strong>{account.email || t("common.unavailable")}</strong></div>
+                    {usageBuckets.map((bucket) => (
+                      <div key={bucket.key} className="dashboard-detail-row">
+                        <span>{bucket.label}</span>
+                        <strong>{rateLimitWindowSummary(bucket.window, language)}</strong>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="dashboard-empty-panel">
+                    <p>{codexStatus.error || t("common.unavailable")}</p>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>

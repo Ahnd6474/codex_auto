@@ -21,6 +21,7 @@ from .job_scheduler import (
     write_scheduler_state,
 )
 from .failure_logs import write_runtime_failure_log
+from .ui_bridge_payloads import build_execution_state_payload, workspace_snapshot
 from .ui_bridge import configure_stdio, default_workspace_root, run_command, runtime_from_payload
 from .utils import now_utc_iso, parse_json_text
 
@@ -256,6 +257,29 @@ class BridgeJobStore:
     def scheduler_snapshot(self, workspace_root: Path) -> dict[str, Any]:
         with self._lock:
             return self._scheduler_snapshot_unlocked(workspace_root)
+
+    def active_execution_job_for_project(
+        self,
+        workspace_root: Path,
+        *,
+        repo_id: str = "",
+        project_dir: str = "",
+    ) -> dict[str, Any] | None:
+        normalized_project_dir = _normalized_project_path(project_dir)
+        workspace_key = str(workspace_root)
+        with self._lock:
+            for snapshot in self._list_jobs_unlocked():
+                if snapshot.workspace_root != workspace_key:
+                    continue
+                if str(snapshot.status).strip().lower() not in {"queued", "running"}:
+                    continue
+                if str(getattr(snapshot, "job_lane", "execution") or "execution").strip().lower() != "execution":
+                    continue
+                if repo_id and snapshot.repo_id and snapshot.repo_id == repo_id:
+                    return snapshot.to_dict()
+                if normalized_project_dir and _normalized_project_path(snapshot.project_dir) == normalized_project_dir:
+                    return snapshot.to_dict()
+        return None
 
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         with self._lock:
@@ -545,6 +569,142 @@ class BridgeServer:
         except OSError:
             pass
 
+    def _job_project_status(self, job: dict[str, Any] | None) -> str:
+        if not isinstance(job, dict):
+            return ""
+        job_status = str(job.get("status", "")).strip().lower()
+        command = str(job.get("command", "")).strip().lower() or "background-job"
+        if job_status == "queued":
+            return f"queued:{command}"
+        if job_status != "running":
+            return ""
+        if command == "run-manual-debugger":
+            return "running:debugging"
+        if command == "run-manual-merger":
+            return "running:merging"
+        if command == "run-closeout":
+            return "running:closeout"
+        return f"running:{command}"
+
+    def _overlay_project_list_item(
+        self,
+        workspace_root: Path,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        repo_id = str(payload.get("repo_id", "")).strip()
+        project_dir = str(payload.get("repo_path", payload.get("project_dir", ""))).strip()
+        active_job = self._jobs.active_execution_job_for_project(
+            workspace_root,
+            repo_id=repo_id,
+            project_dir=project_dir,
+        )
+        next_status = self._job_project_status(active_job)
+        if not next_status:
+            return payload
+        next_payload = dict(payload)
+        next_payload["status"] = next_status
+        return next_payload
+
+    def _overlay_listing_payload(
+        self,
+        workspace_root: Path,
+        listing: dict[str, Any],
+    ) -> dict[str, Any]:
+        projects = listing.get("projects")
+        if not isinstance(projects, list):
+            return listing
+        changed = False
+        next_projects: list[dict[str, Any]] = []
+        for item in projects:
+            if not isinstance(item, dict):
+                next_projects.append(item)
+                continue
+            next_item = self._overlay_project_list_item(workspace_root, item)
+            if next_item is not item:
+                changed = True
+            next_projects.append(next_item)
+        if not changed:
+            return listing
+        next_listing = dict(listing)
+        next_listing["projects"] = next_projects
+        next_listing["workspace"] = workspace_snapshot([str(item.get("status", "")).strip() for item in next_projects if isinstance(item, dict)])
+        return next_listing
+
+    def _overlay_project_detail_payload(
+        self,
+        workspace_root: Path,
+        detail: dict[str, Any],
+    ) -> dict[str, Any]:
+        project = detail.get("project")
+        if not isinstance(project, dict):
+            return detail
+        active_job = self._jobs.active_execution_job_for_project(
+            workspace_root,
+            repo_id=str(project.get("repo_id", "")).strip(),
+            project_dir=str(project.get("repo_path", "")).strip(),
+        )
+        next_status = self._job_project_status(active_job)
+        if not next_status:
+            return detail
+        next_detail = dict(detail)
+        next_project = dict(project)
+        next_project["current_status"] = next_status
+        next_detail["project"] = next_project
+
+        snapshot = detail.get("snapshot")
+        if isinstance(snapshot, dict):
+            next_snapshot = dict(snapshot)
+            snapshot_project = snapshot.get("project")
+            if isinstance(snapshot_project, dict):
+                next_snapshot_project = dict(snapshot_project)
+                next_snapshot_project["current_status"] = next_status
+                next_snapshot["project"] = next_snapshot_project
+            next_detail["snapshot"] = next_snapshot
+
+        bottom_panels = detail.get("bottom_panels")
+        if isinstance(bottom_panels, dict):
+            next_bottom_panels = dict(bottom_panels)
+            git_status = bottom_panels.get("git_status")
+            if isinstance(git_status, dict):
+                next_git_status = dict(git_status)
+                next_git_status["current_status"] = next_status
+                next_bottom_panels["git_status"] = next_git_status
+            next_detail["bottom_panels"] = next_bottom_panels
+
+        next_detail["execution_state"] = build_execution_state_payload(
+            next_status,
+            display_status=next_status,
+            planning_running=str(next_status).strip().lower() == "running:generate-plan",
+            loop_state=detail.get("loop_state") if isinstance(detail.get("loop_state"), dict) else {},
+            checkpoints=detail.get("checkpoints") if isinstance(detail.get("checkpoints"), dict) else {},
+            execution_processes=detail.get("execution_processes") if isinstance(detail.get("execution_processes"), list) else [],
+        )
+        return next_detail
+
+    def _overlay_result_with_job_state(
+        self,
+        command: str,
+        workspace_root: Path,
+        result: Any,
+    ) -> Any:
+        if not isinstance(result, dict):
+            return result
+        normalized_command = str(command or "").strip().lower()
+        if normalized_command == "list-projects":
+            return self._overlay_listing_payload(workspace_root, result)
+        if normalized_command in {"load-project", "load-project-core"}:
+            return self._overlay_project_detail_payload(workspace_root, result)
+        if normalized_command == "load-visible-project-state":
+            next_result = dict(result)
+            listing = result.get("listing")
+            detail = result.get("detail")
+            if isinstance(listing, dict):
+                next_result["listing"] = self._overlay_listing_payload(workspace_root, listing)
+            if isinstance(detail, dict):
+                next_result["detail"] = self._overlay_project_detail_payload(workspace_root, detail)
+            return next_result
+        return result
+
     def _error_response(
         self,
         request_id: str,
@@ -640,6 +800,7 @@ class BridgeServer:
         try:
             with bridge_event_context(self._event_sink):
                 result = run_command(command, workspace_root, payload)
+            result = self._overlay_result_with_job_state(command, workspace_root, result)
             self._jobs.update(job_id, status="completed", error=None, result=result if isinstance(result, dict) else {})
             if self._should_emit_project_changed(command, result):
                 self._send_envelope(
@@ -684,6 +845,7 @@ class BridgeServer:
             if method == "bridge_request":
                 with bridge_event_context(self._event_sink):
                     result = run_command(command, workspace_root, payload)
+                result = self._overlay_result_with_job_state(command, workspace_root, result)
                 self._send_envelope(BridgeEnvelope(kind="response", id=request_id, ok=True, result=result if isinstance(result, dict) else {}))
                 if self._should_emit_project_changed(command, result):
                     self._send_envelope(

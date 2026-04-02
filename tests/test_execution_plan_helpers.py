@@ -28,7 +28,7 @@ from jakal_flow.errors import (
     VerificationTestFailure,
     execution_failure_from_reason,
 )
-from jakal_flow.execution_control import ImmediateStopRequested
+from jakal_flow.execution_control import ImmediateStopRequested, execution_scope_id
 from jakal_flow.git_ops import GitOps
 from jakal_flow.memory import MemoryStore
 from jakal_flow.model_selection import (
@@ -1699,6 +1699,51 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(selected["lineage_id"], "LN2")
         self.assertEqual(selected["test_summary"], "lineage 2")
         self.assertEqual(fallback["lineage_id"], "LN1")
+
+    def test_run_lineage_step_worker_uses_subprocess_bridge(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_lineage_worker_subprocess_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model="gpt-5.4",
+            effort="medium",
+            test_cmd="python -m pytest",
+        )
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            step = ExecutionStep(step_id="ST1", title="Frontend slice", metadata={"lineage_id": "LN1"})
+            completed = subprocess.CompletedProcess(
+                [sys.executable, "-m", "jakal_flow.lineage_worker"],
+                0,
+                stdout=b'{"step_id":"ST1","status":"completed"}',
+                stderr=b"",
+            )
+
+            with mock.patch(
+                "jakal_flow.orchestrator_lineage.run_subprocess_capture",
+                return_value=completed,
+            ) as mocked_run:
+                result = orchestrator._run_lineage_step_worker(context, step)
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(result["status"], "completed")
+        args, kwargs = mocked_run.call_args
+        self.assertEqual(args[0][0], sys.executable)
+        self.assertEqual(args[0][1:], ["-m", "jakal_flow.lineage_worker"])
+        self.assertEqual(kwargs["scope_id"], execution_scope_id(context))
+        payload = json.loads(kwargs["input_bytes"].decode("utf-8"))
+        self.assertEqual(payload["lineage_context"]["metadata"]["repo_id"], context.metadata.repo_id)
+        self.assertEqual(payload["step"]["step_id"], "ST1")
+        self.assertIn(str(Path(__file__).resolve().parents[1] / "src"), kwargs["env"]["PYTHONPATH"])
 
     def test_run_parallel_execution_batch_promotes_single_leaf_lineage_immediately(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_hybrid_lineage_single_promote_test"

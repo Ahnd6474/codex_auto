@@ -229,7 +229,5 @@ export function detailApplySignature(detail = null, runningJob = null) {
     String(detail?.detail_level || "").trim(),
     String(detail?.detail_signature || detail?.content_signature || "").trim(),
     String(detail?.project?.current_status || "").trim(),
-    String(runningJob?.id || "").trim(),
-    String(runningJob?.status || "").trim(),
   ].join("|");
 }

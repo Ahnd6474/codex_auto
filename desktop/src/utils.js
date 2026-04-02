@@ -1485,7 +1485,7 @@ export function resolveCheckpointExecutionState(detail = null, activeJob = null)
   };
 }
 
-export function deriveExecutionUiState(detail = null, planDraft = null, activeJob = null) {
+function deriveLegacyExecutionUiState(detail = null, planDraft = null, activeJob = null) {
   const executionJob = visibleExecutionJob(activeJob);
   const livePlan = resolveExecutionDisplayPlan(detail, planDraft, activeJob);
   const progress = deriveExecutionProgress(detail, planDraft, activeJob);
@@ -1644,6 +1644,109 @@ export function deriveExecutionUiState(detail = null, planDraft = null, activeJo
       formatExecutionConsistencyLine("checkpoint", checkpointFamily, checkpointPending?.status || ""),
       formatExecutionConsistencyLine("process", processFamily, `${String(executionJob?.status || "").trim()} ${String(executionJob?.command || "").trim()}`.trim()),
     ],
+  };
+}
+
+export function deriveExecutionUiState(detail = null, planDraft = null, activeJob = null) {
+  const executionJob = visibleExecutionJob(activeJob);
+  const livePlan = resolveExecutionDisplayPlan(detail, planDraft, activeJob);
+  const progress = deriveExecutionProgress(detail, planDraft, activeJob);
+  const checkpointExecutionState = resolveCheckpointExecutionState(detail, executionJob);
+  const checkpointPending = checkpointExecutionState.pending && typeof checkpointExecutionState.pending === "object"
+    ? checkpointExecutionState.pending
+    : null;
+  const backendExecutionState = detail?.execution_state && typeof detail.execution_state === "object"
+    ? detail.execution_state
+    : null;
+
+  if (!backendExecutionState) {
+    return deriveLegacyExecutionUiState(detail, planDraft, activeJob);
+  }
+
+  const projectStatus = String(
+    backendExecutionState.project_status
+    || detail?.project?.current_status
+    || "",
+  ).trim().toLowerCase();
+  const displayStatusValue = String(
+    backendExecutionState.display_status
+    || projectStatus
+    || progress.status
+    || "idle",
+  ).trim().toLowerCase() || "idle";
+  const checkpointFamily = String(
+    backendExecutionState.checkpoint_family
+    || checkpointFamilyFromDetail(detail, executionJob)
+    || "idle",
+  ).trim().toLowerCase() || "idle";
+  const processFamily = String(
+    backendExecutionState.process_family
+    || normalizeExecutionSurfaceStatus(displayStatusValue)
+    || "idle",
+  ).trim().toLowerCase() || "idle";
+  const flowFamily = String(
+    backendExecutionState.flow_family
+    || normalizeExecutionSurfaceStatus(displayStatusValue)
+    || "idle",
+  ).trim().toLowerCase() || "idle";
+  const toolbarFamily = String(
+    backendExecutionState.toolbar_family
+    || flowFamily
+    || "idle",
+  ).trim().toLowerCase() || "idle";
+  const displayFamily = String(
+    backendExecutionState.display_family
+    || normalizeExecutionSurfaceStatus(displayStatusValue)
+    || "idle",
+  ).trim().toLowerCase() || "idle";
+  const surfaces = {
+    toolbar: toolbarFamily,
+    flow: flowFamily,
+    checkpoint: checkpointFamily,
+    process: processFamily,
+  };
+  const fallbackActiveFamilies = Object.values(surfaces)
+    .map((family) => normalizeExecutionSurfaceStatus(family))
+    .filter((family, index, items) => family !== "idle" && items.indexOf(family) === index);
+  const activeFamilies = Array.isArray(backendExecutionState.active_families)
+    ? backendExecutionState.active_families
+      .map((family) => normalizeExecutionSurfaceStatus(family))
+      .filter((family, index, items) => family !== "idle" && items.indexOf(family) === index)
+    : fallbackActiveFamilies;
+  const consistent = typeof backendExecutionState.consistent === "boolean"
+    ? backendExecutionState.consistent
+    : activeFamilies.length <= 1;
+  const mismatchSummary = String(
+    backendExecutionState.mismatch_summary
+    || "",
+  ).trim();
+  const reportLines = Array.isArray(backendExecutionState.report_lines)
+    ? backendExecutionState.report_lines
+    : [
+        formatExecutionConsistencyLine("toolbar", toolbarFamily, projectStatus),
+        formatExecutionConsistencyLine("flow", flowFamily, displayStatusValue),
+        formatExecutionConsistencyLine("checkpoint", checkpointFamily, checkpointPending?.status || ""),
+        formatExecutionConsistencyLine("process", processFamily, displayStatusValue),
+      ];
+
+  return {
+    executionJob,
+    livePlan,
+    progress,
+    checkpointExecutionState,
+    checkpointPending,
+    checkpointFamily,
+    processFamily,
+    flowFamily,
+    toolbarFamily,
+    projectStatus,
+    displayFamily,
+    displayStatusValue,
+    consistent,
+    activeFamilies,
+    surfaces,
+    mismatchSummary,
+    reportLines,
   };
 }
 
@@ -1940,149 +2043,40 @@ export function projectDetailStatus(detail, activeJob = null, options = {}) {
   if (!detail) {
     return "";
   }
-  return resolveProjectDetailExecution(detail, activeJob, options).nextStatus;
+  return String(
+    detail?.execution_state?.project_status
+    || detail?.project?.current_status
+    || "",
+  ).trim();
 }
 
 export function sanitizeProjectListForJobState(projects = [], activeJob = null, options = {}) {
-  if (
-    activeJob &&
-    !Array.isArray(activeJob) &&
-    ["queued", "running"].includes(String(activeJob?.status || "").trim().toLowerCase()) &&
-    !String(activeJob?.repo_id || "").trim() &&
-    !String(activeJob?.project_dir || "").trim()
-  ) {
-    return projects;
-  }
-  const jobItems = Array.isArray(activeJob) ? activeJob.filter(Boolean) : activeJob ? [activeJob] : [];
-  const nowMs = Number.isFinite(options?.nowMs) ? options.nowMs : Date.now();
-  return (projects || []).map((project) => {
-    const matchedJob = projectJobFromJobs(jobItems, project);
-    if (matchedJob && ["queued", "running"].includes(String(matchedJob?.status || "").trim().toLowerCase())) {
-      return {
-        ...project,
-        status: projectStatusWithJob(project?.status, matchedJob),
-      };
-    }
-    const currentStatus = String(project?.status || "").trim();
-    const normalizedStatus = currentStatus.toLowerCase();
-    if (!normalizedStatus.startsWith("running:") && normalizedStatus !== "queued" && !normalizedStatus.startsWith("queued:")) {
-      return project;
-    }
-    if (
-      shouldPreserveRecentRunningState({
-        plan: {
-          closeout_started_at: null,
-        },
-        nowMs,
-      })
-    ) {
-      return project;
-    }
-    return {
-      ...project,
-      status: deriveIdleProjectStatus(null, { ...(project?.stats || {}), closeout_status: project?.closeout_status }, currentStatus),
-    };
-  });
+  return Array.isArray(projects) ? projects : [];
 }
 
 export function sanitizeProjectDetailForJobState(detail, activeJob = null, options = {}) {
   if (!detail) {
     return detail;
   }
-  const {
-    executionState,
-    checkpointState,
-    nextPlan,
-    nextStats,
-    nextProgress,
-    nextPlanningProgress,
-    nextStatus,
-  } = resolveProjectDetailExecution(detail, activeJob, options);
-  const checkpointItems = Array.isArray(checkpointState.items) ? checkpointState.items : [];
-  const nextPendingCheckpoint = checkpointState.waitingForApproval
-    ? (checkpointState.pending ? cloneValue(checkpointState.pending) : null)
-    : null;
-  const nextCurrentCheckpointId = checkpointState.processActive ? checkpointState.currentCheckpointId : null;
-  const nextCurrentCheckpointLineageId = checkpointState.processActive ? checkpointState.currentCheckpointLineageId : null;
-  const nextExecutionState = {
-    display_family: executionState.displayFamily,
-    display_status: executionState.displayStatusValue,
-    project_status: nextStatus,
-    consistent: executionState.consistent,
-    active_families: executionState.activeFamilies,
-    checkpoint_family: executionState.checkpointFamily,
-    flow_family: executionState.flowFamily,
-    process_family: executionState.processFamily,
-    toolbar_family: executionState.toolbarFamily,
-    mismatch_summary: executionState.mismatchSummary,
-    report_lines: executionState.reportLines,
-  };
-
+  if (detail.execution_state && typeof detail.execution_state === "object") {
+    return detail;
+  }
+  const executionState = deriveLegacyExecutionUiState(detail, null, activeJob);
   return {
     ...detail,
-    project: detail.project
-      ? {
-          ...detail.project,
-          current_status: nextStatus,
-        }
-      : detail.project,
-    plan: nextPlan,
-    planning_progress: nextPlanningProgress,
-    stats: nextStats ?? detail.stats,
-    progress: nextProgress ?? detail.progress,
-    checkpoints: detail?.checkpoints
-      ? {
-          ...detail.checkpoints,
-          current_checkpoint_id: nextCurrentCheckpointId,
-          current_checkpoint_lineage_id: nextCurrentCheckpointLineageId,
-          items: checkpointItems,
-          pending: nextPendingCheckpoint,
-          timeline_markdown: checkpointTimelineMarkdown(checkpointItems),
-        }
-      : detail?.checkpoints,
-    loop_state: detail?.loop_state
-      ? {
-          ...detail.loop_state,
-          current_task: checkpointState.processActive ? detail.loop_state.current_task : "",
-          current_checkpoint_id: checkpointState.processActive ? nextCurrentCheckpointId : "",
-          current_checkpoint_lineage_id: checkpointState.processActive ? nextCurrentCheckpointLineageId : "",
-          pending_checkpoint_approval: checkpointState.waitingForApproval,
-        }
-      : detail?.loop_state,
-    snapshot: detail?.snapshot
-      ? {
-          ...detail.snapshot,
-          project: detail.snapshot.project
-            ? {
-                ...detail.snapshot.project,
-                current_status: nextStatus,
-              }
-            : detail.snapshot.project,
-          loop_state: detail.snapshot.loop_state
-            ? {
-                ...detail.snapshot.loop_state,
-                current_task: checkpointState.processActive ? detail.snapshot.loop_state.current_task : "",
-                current_checkpoint_id: checkpointState.processActive ? nextCurrentCheckpointId : "",
-                current_checkpoint_lineage_id: checkpointState.processActive ? nextCurrentCheckpointLineageId : "",
-                pending_checkpoint_approval: checkpointState.waitingForApproval,
-              }
-            : detail.snapshot.loop_state,
-          plan: nextPlan ?? detail.snapshot.plan,
-        }
-      : detail.snapshot,
-    bottom_panels: detail?.bottom_panels
-      ? {
-          ...detail.bottom_panels,
-          git_status: detail.bottom_panels.git_status
-            ? {
-                ...detail.bottom_panels.git_status,
-                current_status: nextStatus,
-                pending_checkpoint_approval: checkpointState.waitingForApproval,
-              }
-            : detail.bottom_panels.git_status,
-        }
-      : detail.bottom_panels,
-    execution_state: nextExecutionState,
+    execution_state: {
+      display_family: executionState.displayFamily,
+      display_status: executionState.displayStatusValue,
+      project_status: executionState.projectStatus,
+      consistent: executionState.consistent,
+      active_families: executionState.activeFamilies,
+      checkpoint_family: executionState.checkpointFamily,
+      flow_family: executionState.flowFamily,
+      process_family: executionState.processFamily,
+      toolbar_family: executionState.toolbarFamily,
+      mismatch_summary: executionState.mismatchSummary,
+      report_lines: executionState.reportLines,
+    },
   };
 }
 

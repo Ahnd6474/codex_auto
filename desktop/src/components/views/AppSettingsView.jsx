@@ -25,42 +25,6 @@ function ToggleRow({ checked, onChange, disabled, label, hint }) {
   );
 }
 
-/* ?? Section icons ?? */
-function AppIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
-      <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
-      <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
-      <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  );
-}
-
-function ExecutionIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none">
-      <polygon points="5 3 19 12 5 21 5 3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" fill="currentColor" fillOpacity="0.12" />
-    </svg>
-  );
-}
-
-function DashboardIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none">
-      <path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ToolingIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none">
-      <path d="M14.5 4.5a4 4 0 0 0-5.63 5.64l-5.37 5.36a1.5 1.5 0 1 0 2.12 2.12l5.36-5.37a4 4 0 0 0 5.64-5.63l-2.42 2.41-2-2 2.3-2.53Z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 function ShareIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none">
@@ -90,17 +54,15 @@ function CopyIcon() {
   );
 }
 
-function SectionHeader({ icon, title, description, badge }) {
+function SectionHeader({ eyebrow = "", title, description = "", badge = null }) {
   return (
-    <div className="section-header">
-      <div className="section-header__icon">{icon}</div>
-      <div className="section-header__text" style={{ flex: 1 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <strong>{title}</strong>
-          {badge}
-        </div>
-        {description ? <small>{description}</small> : null}
+    <div className="settings-section-header">
+      <div className="settings-section-header__title">
+        {eyebrow ? <span className="settings-section-header__eyebrow">{eyebrow}</span> : null}
+        <strong>{title}</strong>
+        {description ? <p>{description}</p> : null}
       </div>
+      {badge ? <div className="settings-section-header__meta">{badge}</div> : null}
     </div>
   );
 }
@@ -159,9 +121,20 @@ function toolingBadge(status = {}, { connectedLabel = "Connected", installedLabe
   return { tone: "neutral", label: missingLabel };
 }
 
+function ToolingMetaRow({ label, value, mono = false }) {
+  if (!value) {
+    return null;
+  }
+  return (
+    <div className="tooling-card__meta-row">
+      <span className="tooling-card__meta-label">{label}</span>
+      <strong className={`tooling-card__meta-value${mono ? " tooling-card__meta-value--mono" : ""}`}>{value}</strong>
+    </div>
+  );
+}
+
 function ToolingCard({
   title,
-  description,
   badge,
   reason,
   version,
@@ -171,55 +144,27 @@ function ToolingCard({
   buttonTone = "accent",
   disabled = false,
   onAction,
-  accentColor = null,
   children = null,
 }) {
   return (
-    <div
-      className="subsection"
-      style={{
-        gap: "10px",
-        borderLeft: accentColor ? `3px solid ${accentColor}` : undefined,
-        paddingLeft: accentColor ? "10px" : undefined,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "10px" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-          <strong style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            {accentColor ? (
-              <span
-                style={{
-                  width: "8px",
-                  height: "8px",
-                  borderRadius: "50%",
-                  background: accentColor,
-                  flexShrink: 0,
-                }}
-              />
-            ) : null}
-            {title}
-          </strong>
-          <small style={{ color: "var(--text-muted)" }}>{description}</small>
+    <div className="subsection tooling-card">
+      <div className="tooling-card__header">
+        <div className="tooling-card__title">
+          <strong>{title}</strong>
         </div>
         <span className={`status-badge status-badge--${badge.tone}`}>{badge.label}</span>
       </div>
-      {reason ? <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>{reason}</div> : null}
-      {version ? (
-        <div className="sidebar-item">
-          <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>Version</span>
-          <strong style={{ fontFamily: "monospace" }}>{version}</strong>
+      {reason ? <p className="tooling-card__note">{reason}</p> : null}
+      {(version || command) ? (
+        <div className="tooling-card__meta">
+          <ToolingMetaRow label="Version" value={version} mono />
+          <ToolingMetaRow label="Command" value={command} mono />
         </div>
       ) : null}
-      {command ? (
-        <div className="sidebar-item">
-          <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>Command</span>
-          <strong style={{ fontFamily: "monospace" }}>{command}</strong>
-        </div>
-      ) : null}
-      {extra ? <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>{extra}</div> : null}
+      {extra ? <p className="tooling-card__note">{extra}</p> : null}
       {children}
       {buttonLabel ? (
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <div className="tooling-card__actions">
           <button
             className={`toolbar-button${buttonTone === "ghost" ? " toolbar-button--ghost" : " toolbar-button--accent"}`}
             onClick={onAction}
@@ -232,6 +177,32 @@ function ToolingCard({
       ) : null}
     </div>
   );
+}
+
+function settingsLeadFor(tabKey, language) {
+  switch (tabKey) {
+    case "tooling":
+      return language === "ko"
+        ? "설치 상태와 연결 경로를 한 화면에서 관리하는 AI 작업 제어면입니다."
+        : "A single control surface for AI tooling installs, connection state, and launch paths.";
+    case "execution":
+      return language === "ko"
+        ? "안전성, 병렬성, 런타임 기본값을 조정해 실행 행동을 고정합니다."
+        : "Tune safety, parallelism, and runtime defaults to shape how runs behave.";
+    case "dashboard":
+      return language === "ko"
+        ? "대시보드에 표시할 신호를 선택해 운영 화면의 밀도를 조절합니다."
+        : "Choose which signals appear on the dashboard so the operations view stays focused.";
+    case "share":
+      return language === "ko"
+        ? "원격 모니터 링크를 발급하고 만료 상태를 추적합니다."
+        : "Issue remote monitor links and keep the active share session under control.";
+    case "app":
+    default:
+      return language === "ko"
+        ? "테마, 언어, 개발자 기능 같은 전역 데스크톱 환경을 다룹니다."
+        : "Adjust the global desktop environment, including theme, language, and developer features.";
+  }
 }
 
 function OllamaModelManagerModal({
@@ -254,62 +225,45 @@ function OllamaModelManagerModal({
 
   return (
     <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9999,
-        background: "rgba(0, 0, 0, 0.55)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
+      className="settings-modal-backdrop"
       onClick={onClose}
     >
       <div
-        style={{
-          background: "var(--bg-panel)",
-          border: "1px solid var(--border)",
-          borderRadius: "10px",
-          padding: "24px",
-          width: "520px",
-          maxWidth: "92vw",
-          maxHeight: "82vh",
-          overflow: "auto",
-          display: "flex",
-          flexDirection: "column",
-          gap: "16px",
-        }}
+        className="settings-modal settings-modal--wide"
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <strong style={{ fontSize: "15px" }}>
-            {language === "ko" ? "Ollama 모델 관리" : "Ollama Model Manager"}
-          </strong>
+        <div className="settings-modal__header">
+          <div className="settings-modal__title">
+            <strong>{language === "ko" ? "Ollama 모델 관리" : "Ollama Model Manager"}</strong>
+            <p>
+              {language === "ko"
+                ? "설치된 모델을 확인하고 새 모델을 바로 내려받을 수 있습니다."
+                : "Review installed models and pull a new model without leaving the settings flow."}
+            </p>
+          </div>
           <button className="toolbar-button toolbar-button--ghost" onClick={onClose} type="button">
             ✕
           </button>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          <span style={{ fontSize: "12px", color: "var(--text-dim)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-            {language === "ko" ? "설치된 모델" : "Installed models"}
-          </span>
-          <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+        <div className="settings-modal__section">
+          <span className="settings-modal__section-title">{language === "ko" ? "설치된 모델" : "Installed models"}</span>
+          <p className="settings-inline-note">
             {language === "ko"
               ? "이 목록은 모델을 새로 내려받거나 다시 연결한 뒤 갱신됩니다."
               : "This list refreshes after you pull a model or reconnect Ollama."}
-          </div>
+          </p>
           {loading ? (
-            <div style={{ fontSize: "12px", color: "var(--text-muted)", padding: "8px 0" }}>
+            <div className="settings-inline-note">
               {language === "ko" ? "설치된 모델 목록을 불러오는 중입니다." : "Loading installed models..."}
             </div>
           ) : installedModels.length ? (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+            <div className="settings-chip-grid">
               {installedModels.map((model) => (
                 <button
                   key={model}
                   type="button"
-                  className={`toolbar-button ${selectedModel === model ? "toolbar-button--accent" : "toolbar-button--ghost"}`}
+                  className={`settings-chip ${selectedModel === model ? "settings-chip--active" : ""}`}
                   onClick={() => setSelectedModel(model)}
                   disabled={loading}
                 >
@@ -318,20 +272,18 @@ function OllamaModelManagerModal({
               ))}
             </div>
           ) : (
-            <div style={{ fontSize: "12px", color: "var(--text-muted)", padding: "8px 0" }}>
+            <div className="settings-inline-note">
               {language === "ko" ? "아직 설치된 Ollama 모델이 없습니다." : "No Ollama models installed yet."}
             </div>
           )}
         </div>
 
-        <div style={{ borderTop: "1px solid var(--border)" }} />
+        <div className="settings-divider" />
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          <span style={{ fontSize: "12px", color: "var(--text-dim)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-            {language === "ko" ? "새 모델 추가" : "Add new model"}
-          </span>
+        <div className="settings-modal__section">
+          <span className="settings-modal__section-title">{language === "ko" ? "새 모델 추가" : "Add new model"}</span>
 
-          <label className="field field--wide" style={{ marginTop: 0 }}>
+          <label className="field field--wide settings-field">
             <span>{language === "ko" ? "모델 검색" : "Search models"}</span>
             <input
               value={ollamaSearch}
@@ -343,16 +295,16 @@ function OllamaModelManagerModal({
           </label>
 
           {loading ? (
-            <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+            <div className="settings-inline-note">
               {language === "ko" ? "추천 모델을 준비하는 중입니다." : "Preparing recommended models..."}
             </div>
           ) : filteredAddable.length ? (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+            <div className="settings-chip-grid">
               {filteredAddable.slice(0, 12).map((model) => (
                 <button
                   key={model}
                   type="button"
-                  className={`toolbar-button ${selectedModel === model ? "toolbar-button--accent" : "toolbar-button--ghost"}`}
+                  className={`settings-chip ${selectedModel === model ? "settings-chip--active" : ""}`}
                   onClick={() => setSelectedModel(model)}
                   disabled={loading || Boolean(ollamaJob)}
                 >
@@ -361,21 +313,19 @@ function OllamaModelManagerModal({
               ))}
             </div>
           ) : (
-            <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+            <div className="settings-inline-note">
               {language === "ko"
                 ? "검색 결과가 없습니다. 입력한 모델 slug를 그대로 설치할 수 있습니다."
                 : "No preset matches. The typed model slug can still be pulled directly."}
             </div>
           )}
 
-          <div className="sidebar-item">
-            <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>
-              {language === "ko" ? "선택된 모델" : "Selected model"}
-            </span>
-            <strong style={{ fontFamily: "monospace" }}>{pendingModel || "-"}</strong>
+          <div className="settings-keyline">
+            <span>{language === "ko" ? "선택된 모델" : "Selected model"}</span>
+            <strong>{pendingModel || "-"}</strong>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", paddingTop: "4px" }}>
+          <div className="settings-modal__footer">
             <button className="toolbar-button toolbar-button--ghost" onClick={onClose} type="button">
               {language === "ko" ? "닫기" : "Close"}
             </button>
@@ -409,6 +359,7 @@ function appSettingsViewPropsEqual(previousProps, nextProps) {
     && previousProps.busy === nextProps.busy
     && previousProps.shareBusy === nextProps.shareBusy
     && previousProps.settingsTab === nextProps.settingsTab
+    && previousProps.initialSettingsTab === nextProps.initialSettingsTab
     && previousProps.projectStatus === nextProps.projectStatus
     && previousProps.ollamaManagerOpen === nextProps.ollamaManagerOpen
     && previousProps.ollamaManagerLoading === nextProps.ollamaManagerLoading
@@ -430,7 +381,8 @@ export const AppSettingsView = memo(function AppSettingsView({
   shareDetail,
   busy,
   shareBusy = false,
-  settingsTab = "app",
+  settingsTab,
+  initialSettingsTab,
   projectStatus = "",
   ollamaManagerOpen = false,
   ollamaManagerLoading = false,
@@ -459,7 +411,7 @@ export const AppSettingsView = memo(function AppSettingsView({
     { key: "dashboard", label: "Dashboard" },
     { key: "share", label: language === "ko" ? "공유" : "Share" },
   ];
-  const activeSettingsTab = normalizeSettingsTabKey(settingsTab);
+  const activeSettingsTab = normalizeSettingsTabKey(settingsTab ?? initialSettingsTab ?? "app");
   const activeShare = shareDetail?.active_session || shareDetail?.project_active_session || null;
   const shareServer = shareDetail?.server || null;
   const dashboardVisibility = normalizeDashboardVisibility(draftSettings?.dashboard_visibility);
@@ -561,18 +513,47 @@ export const AppSettingsView = memo(function AppSettingsView({
     || exactSuggestedOllamaModel
     || (normalizedOllamaSearch && !exactInstalledOllamaModel ? normalizedOllamaSearch : "")
   ).trim();
+  const activeSettingsEntry = settingsTabs.find((tab) => tab.key === activeSettingsTab) || settingsTabs[0];
+  const connectedToolCount = [codexTool, geminiTool, claudeTool, ollamaTool].filter((tool) => (
+    tool?.installed || tool?.running === true
+  )).length;
+  const settingsHeaderStats = [
+    {
+      label: language === "ko" ? "현재 섹션" : "Active section",
+      value: activeSettingsEntry.label,
+    },
+    {
+      label: language === "ko" ? "편집 상태" : "Editing state",
+      value: runtimeBusy
+        ? (language === "ko" ? "읽기 전용" : "Read only")
+        : (language === "ko" ? "편집 가능" : "Editable"),
+    },
+    {
+      label: language === "ko" ? "도구 연결" : "Tooling linked",
+      value: `${connectedToolCount}/4`,
+    },
+  ];
 
   return (
-    <section className="workspace-view">
-      <div className="view-header">
-        <div>
-          <span className="eyebrow">{t("tab.programSettings")}</span>
+    <section className="workspace-view settings-view">
+      <div className="settings-page-header settings-page-header--hero">
+        <div className="settings-page-header__copy">
+          <span className="settings-page-header__eyebrow">
+            {language === "ko" ? "프로그램 제어" : "Program control"}
+          </span>
           <h2>{t("tab.programSettings")}</h2>
-          <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>{t("settings.programSettingsDescription")}</p>
+          <p>{settingsLeadFor(activeSettingsTab, language)}</p>
+        </div>
+        <div className="settings-page-header__stats">
+          {settingsHeaderStats.map((item) => (
+            <div key={item.label} className="settings-page-header__stat">
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* ?? Sub-category tab bar ?? */}
       <div className="settings-subtabs">
         {settingsTabs.map((tab) => (
           <button
@@ -586,19 +567,21 @@ export const AppSettingsView = memo(function AppSettingsView({
         ))}
       </div>
 
-      <div className="form-layout">
+      <div className="form-layout settings-layout">
 
         {/* ?? Application tab ?? */}
         {activeSettingsTab === "app" ? (
-        <div className="form-section" style={{ gridColumn: "1 / -1" }}>
+        <div className="form-section settings-pane" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
-              icon={<AppIcon />}
+              eyebrow={language === "ko" ? "환경" : "Environment"}
               title={t("settings.application")}
-              description={language === "ko" ? "언어, 테마, 개발자 옵션" : "Language, theme and developer options"}
+              description={language === "ko"
+                ? "데스크톱 전역 환경을 바꾸는 설정입니다."
+                : "Controls that change the overall desktop environment."}
             />
 
-            <label className="field" style={{ marginTop: "4px" }}>
+            <label className="field settings-field">
               <span>{t("common.language")}</span>
               <select value={language} onChange={(event) => setLanguage(event.target.value)}>
                 {languageOptions.map((option) => (
@@ -649,16 +632,18 @@ export const AppSettingsView = memo(function AppSettingsView({
         ) : null}
 
         {activeSettingsTab === "tooling" ? (
-        <div className="form-section" style={{ gridColumn: "1 / -1" }}>
+        <div className="form-section settings-pane" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
-              icon={<ToolingIcon />}
+              eyebrow={language === "ko" ? "에이전트 런타임" : "Agent runtime"}
               title={language === "ko" ? "AI 도구 설치" : "AI Tooling"}
-              description={language === "ko" ? "터미널 에이전트와 Ollama 연결을 여기서 관리합니다." : "Install terminal agents and manage the local Ollama connection here."}
+              description={language === "ko"
+                ? "설치 상태, 실행 경로, 모델 저장소를 이곳에서 확인합니다."
+                : "Check install status, launch commands, and model storage from one place."}
             />
 
             {!npmStatus?.installed ? (
-              <div className="info-callout" style={{ marginTop: "10px" }}>
+              <div className="info-callout">
                 <InfoIcon />
                 <span>
                   {language === "ko"
@@ -668,11 +653,9 @@ export const AppSettingsView = memo(function AppSettingsView({
               </div>
             ) : null}
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "12px", marginTop: "12px" }}>
+            <div className="tooling-list">
               <ToolingCard
                 title="Codex CLI"
-                description={language === "ko" ? "OpenAI Codex CLI 설치 상태" : "OpenAI Codex CLI installation status"}
-                accentColor="#10a37f"
                 badge={toolingBadge(codexTool, {
                   installedLabel: language === "ko" ? "설치됨" : "Installed",
                   missingLabel: language === "ko" ? "없음" : "Missing",
@@ -694,8 +677,6 @@ export const AppSettingsView = memo(function AppSettingsView({
 
               <ToolingCard
                 title="Gemini CLI"
-                description={language === "ko" ? "Gemini CLI 설치 상태" : "Gemini CLI installation status"}
-                accentColor="#4285f4"
                 badge={toolingBadge(geminiTool, {
                   installedLabel: language === "ko" ? "설치됨" : "Installed",
                   missingLabel: language === "ko" ? "없음" : "Missing",
@@ -717,8 +698,6 @@ export const AppSettingsView = memo(function AppSettingsView({
 
               <ToolingCard
                 title="Claude Code"
-                description={language === "ko" ? "Claude Code CLI 설치 상태" : "Claude Code CLI installation status"}
-                accentColor="#d97706"
                 badge={toolingBadge(claudeTool, {
                   installedLabel: language === "ko" ? "설치됨" : "Installed",
                   missingLabel: language === "ko" ? "없음" : "Missing",
@@ -740,8 +719,6 @@ export const AppSettingsView = memo(function AppSettingsView({
 
               <ToolingCard
                 title="Ollama"
-                description={language === "ko" ? "로컬 Ollama 연결과 모델 저장소 관리" : "Connect a local Ollama server and manage the model store"}
-                accentColor="#8b5cf6"
                 badge={toolingBadge(ollamaTool, {
                   connectedLabel: language === "ko" ? "연결됨" : "Connected",
                   installedLabel: language === "ko" ? "설치됨" : "Installed",
@@ -767,35 +744,34 @@ export const AppSettingsView = memo(function AppSettingsView({
               >
                 {ollamaTool.installed ? (
                   <>
-                    <div className="sidebar-item">
-                      <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>{language === "ko" ? "모델 저장 경로" : "Model store path"}</span>
-                      <strong style={{ fontFamily: "monospace", wordBreak: "break-all" }}>{ollamaTool.model_store_path || "-"}</strong>
+                    <div className="tooling-card__meta">
+                      <ToolingMetaRow
+                        label={language === "ko" ? "모델 저장 경로" : "Model store path"}
+                        value={ollamaTool.model_store_path || "-"}
+                        mono
+                      />
+                      {ollamaDetailsLoaded && installedOllamaModels.length ? (
+                        <ToolingMetaRow
+                          label={language === "ko" ? "설치된 모델" : "Installed models"}
+                          value={`${installedOllamaModels.length}${language === "ko" ? "개" : " model(s)"}`}
+                        />
+                      ) : null}
                     </div>
-                    {ollamaDetailsLoaded && installedOllamaModels.length ? (
-                      <div className="sidebar-item">
-                        <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>
-                          {language === "ko" ? "설치된 모델" : "Installed models"}
-                        </span>
-                        <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                          {installedOllamaModels.length}{language === "ko" ? "개" : " model(s)"}
-                        </span>
-                      </div>
-                    ) : null}
                     {!ollamaDetailsLoaded ? (
-                      <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                      <p className="tooling-card__note">
                         {language === "ko"
                           ? "설치된 모델 목록은 새 모델을 내려받거나 다시 연결한 뒤 갱신됩니다."
                           : "Installed-model details refresh after you pull a model or reconnect Ollama."}
-                      </div>
+                      </p>
                     ) : null}
-                    <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <div className="tooling-card__actions">
                       <button
                         className="toolbar-button toolbar-button--ghost"
                         onClick={() => onOpenOllamaManager?.()}
                         type="button"
                         disabled={Boolean(ollamaJob)}
                       >
-                        {language === "ko" ? "모델 관리" : "Manage Models"}
+                        {language === "ko" ? "모델 관리" : "Model Manager"}
                       </button>
                     </div>
                   </>
@@ -808,15 +784,17 @@ export const AppSettingsView = memo(function AppSettingsView({
 
         {/* Dashboard tab */}
         {activeSettingsTab === "dashboard" ? (
-        <div className="form-section" style={{ gridColumn: "1 / -1" }}>
+        <div className="form-section settings-pane" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
-              icon={<DashboardIcon />}
+              eyebrow={language === "ko" ? "가시성" : "Visibility"}
               title={t("settings.dashboardPreferences")}
-              description={language === "ko" ? "대시보드에 표시할 항목을 선택합니다." : "Choose which metrics appear on the dashboard"}
+              description={language === "ko"
+                ? "운영 대시보드에 어떤 신호를 표시할지 선택합니다."
+                : "Choose which operational signals are visible on the dashboard."}
             />
 
-            <div className="toggle-grid" style={{ marginTop: "4px" }}>
+            <div className="toggle-grid settings-toggle-grid">
               {dashboardOptions.map(([key, label]) => (
                 <label key={key} className="toggle-row" style={{ padding: "7px 10px" }}>
                   <span className="toggle-row__label">
@@ -847,15 +825,17 @@ export const AppSettingsView = memo(function AppSettingsView({
 
         {/* ?? Execution tab ?? */}
         {activeSettingsTab === "execution" ? (
-        <div className="form-section" style={{ gridColumn: "1 / -1" }}>
+        <div className="form-section settings-pane" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
-              icon={<ExecutionIcon />}
+              eyebrow={language === "ko" ? "런타임 규칙" : "Runtime policy"}
               title={t("settings.executionDefaults")}
-              description={language === "ko" ? "병렬 실행과 체크포인트 설정" : "Parallel execution and checkpoint settings"}
+              description={language === "ko"
+                ? "승인, 샌드박스, 병렬성 기본값을 이 프로젝트 기준으로 맞춥니다."
+                : "Set approval, sandboxing, and parallelism defaults for this project."}
             />
 
-                        <div className="info-callout" style={{ marginTop: "10px" }}>
+            <div className="info-callout">
               <InfoIcon />
               <span>
                 {language === "ko"
@@ -938,8 +918,8 @@ export const AppSettingsView = memo(function AppSettingsView({
             </div>
 
             {/* Parallel workers */}
-            <div style={{ borderTop: "1px solid var(--border)", paddingTop: "12px", marginTop: "4px" }}>
-              <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "0 0 10px" }}>
+            <div className="settings-divider settings-divider--section">
+              <p className="settings-inline-note">
                 {language === "ko" ? "병렬 실행 설정" : "Parallel execution settings"}
               </p>
 
@@ -959,7 +939,7 @@ export const AppSettingsView = memo(function AppSettingsView({
                 disabled={runtimeBusy}
               />
 
-              <div className="choice-grid" style={{ marginTop: "8px" }}>
+              <div className="choice-grid settings-choice-grid">
                 <label className="field">
                   <span>{t("field.parallelWorkers")}</span>
                   <input
@@ -1023,7 +1003,7 @@ export const AppSettingsView = memo(function AppSettingsView({
             </div>
 
             {/* Toggle options */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "4px" }}>
+            <div className="settings-toggle-stack">
               <ToggleRow
                 checked={Boolean(draftSettings.allow_push)}
                 onChange={(event) => updateDraftSettings((current) => ({ ...current, allow_push: event.target.checked }))}
@@ -1048,12 +1028,14 @@ export const AppSettingsView = memo(function AppSettingsView({
 
         {/* ?? Share tab ?? */}
         {activeSettingsTab === "share" ? (
-        <div className="form-section" style={{ gridColumn: "1 / -1" }}>
+        <div className="form-section settings-pane" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
-              icon={<ShareIcon />}
+              eyebrow={language === "ko" ? "원격 가시성" : "Remote visibility"}
               title={t("run.remoteMonitor")}
-              description={language === "ko" ? "어디서든 실행 상태를 모니터링할 수 있는 공유 링크" : "Share a link to monitor your run from anywhere"}
+              description={language === "ko"
+                ? "진행 상황을 외부에서 읽기 전용으로 공유하는 세션입니다."
+                : "Create a read-only monitor session for external visibility."}
               badge={
                 <span className={`status-badge status-badge--${shareServer?.running ? "success" : "neutral"}`}>
                   {shareServer?.running ? t("common.on") : t("common.off")}
@@ -1061,39 +1043,39 @@ export const AppSettingsView = memo(function AppSettingsView({
               }
             />
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "4px" }}>
-              <div>
-                <div className="info-callout" style={{ marginBottom: "10px" }}>
+            <div className="settings-split-grid">
+              <div className="settings-stack">
+                <div className="info-callout">
                   <InfoIcon />
                   <span>{t("run.shareDescription")} {t("run.sharePoll")}</span>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <div className="settings-stack settings-stack--dense">
                   <div className="sidebar-item">
                     <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>{t("run.shareBindHost")}</span>
                     <strong style={{ fontFamily: "monospace" }}>0.0.0.0</strong>
                   </div>
                 </div>
-                <div style={{ marginTop: "10px" }}>
+                <div className="settings-action-row">
                   <button className="toolbar-button" onClick={onGenerateShareLink} type="button" disabled={shareBusy}>
                     {t("action.generateShareLink")}
                   </button>
                 </div>
               </div>
 
-              <div>
+              <div className="settings-share-card">
                 {activeShare?.share_url ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <div className="settings-stack">
                     <label className="field field--wide">
                       <span>{t("run.shareLink")}</span>
-                      <div className="share-url-row">
+                      <div className="share-url-row settings-share-link-row">
                         <input value={activeShare.share_url} readOnly style={{ fontFamily: "monospace", fontSize: "12px" }} />
                         <button className="toolbar-button toolbar-button--accent" onClick={onCopyShareLink} type="button" disabled={shareBusy} title={t("action.copyLink")}>
                           <CopyIcon />
                         </button>
                       </div>
                     </label>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>
+                    <div className="settings-share-meta">
+                      <span className="settings-inline-note">
                         {t("run.shareExpires", { expiresAt: activeShare.expires_at || t("common.unavailable") })}
                       </span>
                       <button className="toolbar-button toolbar-button--ghost" onClick={onRevokeShareLink} type="button" disabled={shareBusy}>

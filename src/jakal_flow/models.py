@@ -175,6 +175,29 @@ class RepoMetadata:
     archived_at: str | None = None
     source_repo_id: str | None = None
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "RepoMetadata":
+        payload = data if isinstance(data, dict) else {}
+        return cls(
+            repo_id=str(payload.get("repo_id", "")).strip(),
+            slug=str(payload.get("slug", "")).strip(),
+            repo_url=str(payload.get("repo_url", "")).strip(),
+            branch=str(payload.get("branch", "")).strip(),
+            project_root=Path(str(payload.get("project_root", "")).strip()),
+            repo_path=Path(str(payload.get("repo_path", "")).strip()),
+            created_at=str(payload.get("created_at", "")).strip(),
+            last_run_at=_optional_str(payload.get("last_run_at")),
+            current_status=str(payload.get("current_status", "initialized")).strip() or "initialized",
+            current_safe_revision=_optional_str(payload.get("current_safe_revision")),
+            repo_kind=str(payload.get("repo_kind", "remote")).strip() or "remote",
+            display_name=_optional_str(payload.get("display_name")),
+            origin_url=_optional_str(payload.get("origin_url")),
+            archived=bool(payload.get("archived", False)),
+            archive_id=_optional_str(payload.get("archive_id")),
+            archived_at=_optional_str(payload.get("archived_at")),
+            source_repo_id=_optional_str(payload.get("source_repo_id")),
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return _normalize(self)
 
@@ -184,6 +207,15 @@ class LoopCounters:
     no_progress_blocks: int = 0
     regression_failures: int = 0
     empty_cycles: int = 0
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "LoopCounters":
+        payload = data if isinstance(data, dict) else {}
+        return cls(
+            no_progress_blocks=_int_or_default(payload.get("no_progress_blocks", 0), 0, minimum=0),
+            regression_failures=_int_or_default(payload.get("regression_failures", 0), 0, minimum=0),
+            empty_cycles=_int_or_default(payload.get("empty_cycles", 0), 0, minimum=0),
+        )
 
 
 @dataclass(slots=True)
@@ -203,6 +235,27 @@ class LoopState:
     current_checkpoint_lineage_id: str | None = None
     pending_checkpoint_approval: bool = False
     counters: LoopCounters = field(default_factory=LoopCounters)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "LoopState":
+        payload = data if isinstance(data, dict) else {}
+        return cls(
+            repo_id=str(payload.get("repo_id", "")).strip(),
+            repo_slug=str(payload.get("repo_slug", "")).strip(),
+            block_index=_int_or_default(payload.get("block_index", 0), 0, minimum=0),
+            last_block_completed_at=_optional_str(payload.get("last_block_completed_at")),
+            current_task=_optional_str(payload.get("current_task")),
+            last_candidates=payload.get("last_candidates", []) if isinstance(payload.get("last_candidates", []), list) else [],
+            last_commit_hash=_optional_str(payload.get("last_commit_hash")),
+            current_safe_revision=_optional_str(payload.get("current_safe_revision")),
+            plan_locked=bool(payload.get("plan_locked", True)),
+            stop_reason=_optional_str(payload.get("stop_reason")),
+            stop_requested=bool(payload.get("stop_requested", False)),
+            current_checkpoint_id=_optional_str(payload.get("current_checkpoint_id")),
+            current_checkpoint_lineage_id=_optional_str(payload.get("current_checkpoint_lineage_id")),
+            pending_checkpoint_approval=bool(payload.get("pending_checkpoint_approval", False)),
+            counters=LoopCounters.from_dict(payload.get("counters")),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return _normalize(self)
@@ -259,6 +312,11 @@ class ProjectPaths:
     ml_experiment_results_svg_file: Path
     shared_contracts_file: Path
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "ProjectPaths":
+        payload = data if isinstance(data, dict) else {}
+        return cls(**{item.name: Path(str(payload.get(item.name, "")).strip()) for item in fields(cls)})
+
     def to_dict(self) -> dict[str, Any]:
         return _normalize(self)
 
@@ -269,6 +327,19 @@ class ProjectContext:
     runtime: RuntimeOptions
     paths: ProjectPaths
     loop_state: LoopState
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "ProjectContext":
+        payload = data if isinstance(data, dict) else {}
+        return cls(
+            metadata=RepoMetadata.from_dict(payload.get("metadata")),
+            runtime=RuntimeOptions.from_dict(payload.get("runtime")),
+            paths=ProjectPaths.from_dict(payload.get("paths")),
+            loop_state=LoopState.from_dict(payload.get("loop_state")),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return _normalize(self)
 
 
 @dataclass(slots=True)

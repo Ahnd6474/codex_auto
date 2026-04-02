@@ -31,7 +31,7 @@ from .utils import append_jsonl, compact_text, normalize_workflow_mode, now_utc_
 from .workspace import LOCAL_PROJECT_LOG_DIRNAME
 
 
-DETAIL_CACHE_VERSION = 17
+DETAIL_CACHE_VERSION = 18
 LIST_ITEM_CACHE_VERSION = 1
 WORKSPACE_LISTING_CACHE_VERSION = 1
 PROJECT_TREE_EXCLUDED_NAMES = frozenset({".git", LOCAL_PROJECT_LOG_DIRNAME, "ui_bridge_perf.jsonl"})
@@ -73,6 +73,182 @@ def _path_signature(path: Path) -> str:
         return f"{path.name}:unavailable"
     kind = "dir" if path.is_dir() else "file"
     return f"{path.name}:{kind}:{stat.st_size}:{stat.st_mtime_ns}"
+
+
+def _normalize_execution_family_token(value: str) -> str:
+    normalized = str(value or "").strip().lower()
+    if not normalized:
+        return "idle"
+    if normalized in {"syncing", "inconsistent", "stale"}:
+        return "syncing"
+    if normalized in {"debugging", "running:debugging", "running:parallel-debugging"}:
+        return "debugging"
+    if normalized == "running:merging":
+        return "merging"
+    if normalized == "running:closeout":
+        return "closeout"
+    if normalized == "running:generate-plan":
+        return "planning"
+    if normalized == "queued" or normalized.startswith("queued:"):
+        return "queued"
+    if normalized in {"awaiting_review", "awaiting_checkpoint_approval", "checkpoint"}:
+        return "checkpoint"
+    if normalized in {"completed", "closed_out", "plan_completed"}:
+        return "completed"
+    if "failed" in normalized:
+        return "failed"
+    if normalized == "running" or normalized.startswith("running:"):
+        return "running"
+    if normalized in {"ready", "plan_ready", "setup_ready", "idle"}:
+        return "idle"
+    return normalized
+
+
+def _format_execution_consistency_line(name: str, family: str, raw: str = "") -> str:
+    normalized_family = _normalize_execution_family_token(family)
+    raw_text = str(raw or "").strip()
+    if raw_text and raw_text != normalized_family:
+        return f"{name}: {normalized_family} ({raw_text})"
+    return f"{name}: {normalized_family}"
+
+
+def build_execution_state_payload(
+    project_status: str,
+    *,
+    display_status: str | None = None,
+    planning_running: bool = False,
+    loop_state: dict[str, Any] | None = None,
+    checkpoints: dict[str, Any] | None = None,
+    execution_processes: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    loop_state_payload = loop_state if isinstance(loop_state, dict) else {}
+    checkpoints_payload = checkpoints if isinstance(checkpoints, dict) else {}
+    processes = execution_processes if isinstance(execution_processes, list) else []
+    normalized_project_status = str(project_status or "").strip().lower()
+    normalized_display_status = str(display_status or project_status or "idle").strip().lower() or "idle"
+    raw_project_family = _normalize_execution_family_token(normalized_project_status)
+    display_family = _normalize_execution_family_token(normalized_display_status)
+    pending_checkpoint = checkpoints_payload.get("pending") if isinstance(checkpoints_payload.get("pending"), dict) else None
+    current_checkpoint_id = str(
+        loop_state_payload.get("current_checkpoint_id")
+        or checkpoints_payload.get("current_checkpoint_id")
+        or (pending_checkpoint or {}).get("checkpoint_id")
+        or ""
+    ).strip()
+    current_checkpoint_lineage_id = str(
+        loop_state_payload.get("current_checkpoint_lineage_id")
+        or checkpoints_payload.get("current_checkpoint_lineage_id")
+        or (pending_checkpoint or {}).get("lineage_id")
+        or ""
+    ).strip()
+    pending_checkpoint_approval = bool(loop_state_payload.get("pending_checkpoint_approval")) or normalized_display_status in {
+        "awaiting_checkpoint_approval",
+        "awaiting_review",
+    }
+
+    if pending_checkpoint_approval:
+        checkpoint_family = "checkpoint"
+        checkpoint_raw = str((pending_checkpoint or {}).get("status") or "awaiting_checkpoint_approval").strip().lower()
+    elif processes and (current_checkpoint_id or current_checkpoint_lineage_id):
+        checkpoint_family = "running"
+        checkpoint_raw = current_checkpoint_id or current_checkpoint_lineage_id
+    else:
+        checkpoint_items = [
+            item
+            for item in (checkpoints_payload.get("items", []) if isinstance(checkpoints_payload.get("items"), list) else [])
+            if isinstance(item, dict)
+        ]
+        checkpoint_statuses = [str(item.get("status", "")).strip().lower() for item in checkpoint_items]
+        checkpoint_raw = ""
+        if checkpoint_items and checkpoint_statuses and all(status in {"approved", "completed"} for status in checkpoint_statuses):
+            checkpoint_family = "completed"
+        elif any("failed" in status for status in checkpoint_statuses):
+            checkpoint_family = "failed"
+        else:
+            checkpoint_family = "idle"
+
+    if normalized_display_status.startswith("queued:"):
+        process_family = "queued"
+    elif normalized_display_status in {"running:generate-plan", "running:closeout", "running:debugging", "running:parallel-debugging", "running:merging"}:
+        process_family = display_family
+    elif normalized_display_status == "running" or normalized_display_status.startswith("running:"):
+        process_family = "running"
+    elif processes:
+        process_family = "running"
+    else:
+        process_family = "idle"
+
+    flow_family = "idle"
+    if checkpoint_family == "checkpoint":
+        flow_family = "checkpoint"
+    elif planning_running or normalized_display_status == "running:generate-plan":
+        flow_family = "planning"
+    elif normalized_display_status == "running:closeout":
+        flow_family = "closeout"
+    elif normalized_display_status in {"running:debugging", "running:parallel-debugging"}:
+        flow_family = "debugging"
+    elif normalized_display_status == "running:merging":
+        flow_family = "merging"
+    elif normalized_display_status.startswith("queued:"):
+        flow_family = "queued"
+    elif normalized_display_status == "running" or normalized_display_status.startswith("running:"):
+        flow_family = "running"
+    elif raw_project_family != "idle":
+        flow_family = raw_project_family
+
+    toolbar_family = raw_project_family
+    if checkpoint_family == "checkpoint":
+        toolbar_family = "checkpoint"
+    elif planning_running or normalized_display_status == "running:generate-plan":
+        toolbar_family = "planning"
+    elif normalized_display_status == "running:closeout":
+        toolbar_family = "closeout"
+    elif normalized_display_status in {"running:debugging", "running:parallel-debugging"}:
+        toolbar_family = "debugging"
+    elif normalized_display_status == "running:merging":
+        toolbar_family = "merging"
+    elif process_family != "idle":
+        toolbar_family = process_family
+    elif flow_family != "idle":
+        toolbar_family = flow_family
+
+    surfaces = {
+        "toolbar": toolbar_family,
+        "flow": flow_family,
+        "checkpoint": checkpoint_family,
+        "process": process_family,
+    }
+    active_families: list[str] = []
+    for family in (_normalize_execution_family_token(value) for value in surfaces.values()):
+        if family == "idle" or family in active_families:
+            continue
+        active_families.append(family)
+    terminal_failure = raw_project_family == "failed" or display_family == "failed"
+    consistent = True if terminal_failure else len(active_families) <= 1
+    resolved_display_family = "failed" if terminal_failure else (display_family if consistent else "syncing")
+    mismatch_entries = [
+        _format_execution_consistency_line(name, family)
+        for name, family in surfaces.items()
+        if _normalize_execution_family_token(family) != "idle"
+    ]
+    return {
+        "display_family": resolved_display_family,
+        "display_status": normalized_display_status,
+        "project_status": normalized_project_status or normalized_display_status,
+        "consistent": consistent,
+        "active_families": active_families,
+        "checkpoint_family": _normalize_execution_family_token(checkpoint_family),
+        "flow_family": _normalize_execution_family_token(flow_family),
+        "process_family": _normalize_execution_family_token(process_family),
+        "toolbar_family": _normalize_execution_family_token(toolbar_family),
+        "mismatch_summary": "" if consistent else " | ".join(mismatch_entries),
+        "report_lines": [
+            _format_execution_consistency_line("toolbar", toolbar_family, normalized_project_status),
+            _format_execution_consistency_line("flow", flow_family, normalized_display_status),
+            _format_execution_consistency_line("checkpoint", checkpoint_family, checkpoint_raw),
+            _format_execution_consistency_line("process", process_family, normalized_display_status),
+        ],
+    }
 
 
 def _json_or_text_signature(path: Path) -> str:
@@ -1832,6 +2008,15 @@ def _build_project_detail_base_payload(
         planning_progress=planning_progress,
     )
     current_status = execution_snapshot.current_status
+    loop_state_payload = project.loop_state.to_dict()
+    execution_state = build_execution_state_payload(
+        current_status,
+        display_status=execution_snapshot.display_status,
+        planning_running=execution_snapshot.planning_running,
+        loop_state=loop_state_payload,
+        checkpoints=checkpoints,
+        execution_processes=normalized_execution_processes,
+    )
     bottom_panels = bottom_panel_payload(
         project,
         plan_state,
@@ -1860,7 +2045,7 @@ def _build_project_detail_base_payload(
     project_payload["current_status"] = current_status
     snapshot = {
         "project": deepcopy(project_payload),
-        "loop_state": project.loop_state.to_dict(),
+        "loop_state": deepcopy(loop_state_payload),
         "snapshot_kind": "cache_view",
         "snapshot_epoch": _snapshot_epoch_ms(),
         "snapshot_id": _snapshot_metadata(
@@ -1889,9 +2074,10 @@ def _build_project_detail_base_payload(
         "detail_level": normalized_detail_level,
         "project": project_payload,
         "runtime": project.runtime.to_dict(),
-        "loop_state": project.loop_state.to_dict(),
+        "loop_state": loop_state_payload,
         "plan": plan_state.to_dict(),
         "execution_processes": normalized_execution_processes,
+        "execution_state": execution_state,
         "summary": project_summary(
             orchestrator,
             project,

@@ -754,12 +754,12 @@ test("projectFormFromDetail still falls back to program defaults for missing run
   assert.equal(form.runtime.planning_effort, "high");
 });
 
-test("projectDetailStatus and sanitizeProjectDetailForJobState share the queued execution status", () => {
+test("projectDetailStatus prefers backend execution_state and sanitizeProjectDetailForJobState preserves mirrored surfaces", () => {
   const detail = {
     project: {
       repo_id: "repo-1",
       repo_path: "C:/repo",
-      current_status: "plan_ready",
+      current_status: "queued:generate-plan",
     },
     plan: {
       steps: [{ step_id: "ST1", title: "Plan", status: "pending" }],
@@ -778,7 +778,7 @@ test("projectDetailStatus and sanitizeProjectDetailForJobState share the queued 
     },
     snapshot: {
       project: {
-        current_status: "plan_ready",
+        current_status: "queued:generate-plan",
       },
       loop_state: {
         current_task: "",
@@ -793,9 +793,22 @@ test("projectDetailStatus and sanitizeProjectDetailForJobState share the queued 
     },
     bottom_panels: {
       git_status: {
-        current_status: "plan_ready",
+        current_status: "queued:generate-plan",
         pending_checkpoint_approval: false,
       },
+    },
+    execution_state: {
+      display_family: "queued",
+      display_status: "queued:generate-plan",
+      project_status: "queued:generate-plan",
+      consistent: true,
+      active_families: ["queued"],
+      checkpoint_family: "idle",
+      flow_family: "queued",
+      process_family: "queued",
+      toolbar_family: "queued",
+      mismatch_summary: "",
+      report_lines: [],
     },
   };
   const queuedJob = {
@@ -814,7 +827,7 @@ test("projectDetailStatus and sanitizeProjectDetailForJobState share the queued 
   assert.equal(normalized.execution_state.project_status, "queued:generate-plan");
 });
 
-test("sanitizeProjectDetailForJobState clears stale running state across mirrored detail surfaces", () => {
+test("sanitizeProjectDetailForJobState no longer rewrites backend detail mirrors when execution_state is missing", () => {
   const detail = {
     project: {
       repo_id: "repo-1",
@@ -864,14 +877,13 @@ test("sanitizeProjectDetailForJobState clears stale running state across mirrore
     nowMs: Date.parse("2026-04-01T00:00:00Z"),
   });
 
-  assert.equal(normalized.project.current_status, "plan_ready");
-  assert.equal(normalized.plan.steps[0].status, "pending");
-  assert.equal(normalized.loop_state.current_task, "");
-  assert.equal(normalized.loop_state.current_checkpoint_id, "");
-  assert.equal(normalized.loop_state.current_checkpoint_lineage_id, "");
-  assert.equal(normalized.checkpoints.items[0].status, "pending");
-  assert.equal(normalized.checkpoints.pending, null);
-  assert.equal(normalized.snapshot.project.current_status, "plan_ready");
-  assert.equal(normalized.bottom_panels.git_status.current_status, "plan_ready");
-  assert.equal(normalized.execution_state.project_status, "plan_ready");
+  assert.equal(normalized.project.current_status, "running:st1");
+  assert.equal(normalized.plan.steps[0].status, "running");
+  assert.equal(normalized.loop_state.current_task, "Build");
+  assert.equal(normalized.loop_state.current_checkpoint_id, "CP-1");
+  assert.equal(normalized.loop_state.current_checkpoint_lineage_id, "LN-1");
+  assert.equal(normalized.checkpoints.items[0].status, "running");
+  assert.equal(normalized.snapshot.project.current_status, "running:st1");
+  assert.equal(normalized.bottom_panels.git_status.current_status, "running:st1");
+  assert.equal(normalized.execution_state.project_status, "running:st1");
 });

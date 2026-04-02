@@ -9,7 +9,7 @@ function buildQueuedProjectFixture() {
     project: {
       repo_id: "repo-1",
       repo_path: "C:/repo",
-      current_status: "plan_ready",
+      current_status: "queued:run-plan",
     },
     plan: {
       steps: [{ step_id: "ST1", title: "Plan", status: "pending" }],
@@ -36,7 +36,7 @@ function buildQueuedProjectFixture() {
     },
     snapshot: {
       project: {
-        current_status: "plan_ready",
+        current_status: "queued:run-plan",
       },
       loop_state: {
         current_task: "",
@@ -51,15 +51,28 @@ function buildQueuedProjectFixture() {
     },
     bottom_panels: {
       git_status: {
-        current_status: "plan_ready",
+        current_status: "queued:run-plan",
       },
+    },
+    execution_state: {
+      display_family: "queued",
+      display_status: "queued:run-plan",
+      project_status: "queued:run-plan",
+      consistent: true,
+      active_families: ["queued"],
+      checkpoint_family: "idle",
+      flow_family: "queued",
+      process_family: "queued",
+      toolbar_family: "queued",
+      mismatch_summary: "",
+      report_lines: [],
     },
   };
   const projects = [
     {
       repo_id: "repo-1",
       repo_path: "C:/repo",
-      status: "plan_ready",
+      status: "queued:run-plan",
       stats: {
         total_steps: 1,
         completed_steps: 0,

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import json
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import shutil
 from pathlib import Path
+import sys
 from uuid import uuid4
 
 from .commit_naming import build_commit_descriptor, build_initial_commit_descriptor
@@ -27,7 +29,7 @@ from .environment import ensure_gitignore, ensure_virtualenv
 from . import execution_plan_support
 from .codex_runner import CodexRunner
 from .errors import HANDLED_OPERATION_EXCEPTIONS, PromotionRollbackError, failure_log_fields
-from .execution_control import ImmediateStopRequested
+from .execution_control import ImmediateStopRequested, execution_scope_id, run_subprocess_capture
 from .git_ops import GitCommandError, GitOps
 from .memory import MemoryStore
 from .model_providers import normalize_billing_mode, provider_preset, provider_supports_auto_model
@@ -84,11 +86,23 @@ from .planning import (
 from .reporting import Reporter
 from .status_views import status_from_plan_state
 from .step_models import normalize_step_model, normalize_step_model_provider, provider_execution_preflight_error, resolve_step_model_choice
-from .utils import compact_text, ensure_dir, normalize_workflow_mode, now_utc_iso, read_json, read_jsonl_tail, read_last_jsonl, read_text, remove_tree, svg_text_element, wrap_svg_text, write_json, write_text
+from .utils import compact_text, decode_process_output, ensure_dir, normalize_workflow_mode, now_utc_iso, read_json, read_jsonl_tail, read_last_jsonl, read_text, remove_tree, sanitized_subprocess_env, svg_text_element, wrap_svg_text, write_json, write_text
 from .verification import VerificationRunner
 from .workspace import WorkspaceManager
 
 UTC = getattr(datetime, "UTC", timezone.utc)
+
+
+def _lineage_worker_repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _lineage_worker_pythonpath(root: Path) -> str:
+    items = [str(root / "src")]
+    existing = os.environ.get("PYTHONPATH", "").strip()
+    if existing:
+        items.append(existing)
+    return os.pathsep.join(items)
 
 
 class OrchestratorLineageMixin:
@@ -442,7 +456,7 @@ class OrchestratorLineageMixin:
         metadata["lineage_id"] = lineage.lineage_id
         step.metadata = metadata
         return lineage
-    def _run_lineage_step_worker(
+    def _run_lineage_step_worker_local(
         self,
         lineage_context: ProjectContext,
         step: ExecutionStep,
@@ -533,6 +547,51 @@ class OrchestratorLineageMixin:
         finally:
             self._persist_context_files(lineage_context)
         return lineage_result
+    def _run_lineage_step_worker(
+        self,
+        lineage_context: ProjectContext,
+        step: ExecutionStep,
+    ) -> dict[str, object]:
+        payload = {
+            "workspace_root": str(lineage_context.paths.workspace_root),
+            "lineage_context": lineage_context.to_dict(),
+            "step": step.to_dict(),
+        }
+        repo_root = _lineage_worker_repo_root()
+        env = sanitized_subprocess_env(
+            {
+                "PYTHONPATH": _lineage_worker_pythonpath(repo_root),
+                "PYTHONIOENCODING": "utf-8",
+                "PYTHONUTF8": "1",
+            }
+        )
+        completed = run_subprocess_capture(
+            [
+                sys.executable,
+                "-m",
+                "jakal_flow.lineage_worker",
+            ],
+            scope_id=execution_scope_id(lineage_context),
+            label=f"lineage worker {step.step_id}",
+            cwd=lineage_context.paths.repo_dir,
+            env=env,
+            input_bytes=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        )
+        stdout = decode_process_output(completed.stdout).strip()
+        stderr = decode_process_output(completed.stderr).strip()
+        if completed.returncode != 0:
+            failure_detail = stderr or stdout or f"exit {completed.returncode}"
+            raise RuntimeError(f"Lineage worker subprocess failed for {step.step_id}: {failure_detail}")
+        if not stdout:
+            raise RuntimeError(f"Lineage worker subprocess returned no payload for {step.step_id}.")
+        try:
+            worker_result = json.loads(stdout)
+        except json.JSONDecodeError as exc:
+            detail = stderr or stdout
+            raise RuntimeError(f"Lineage worker subprocess returned invalid JSON for {step.step_id}: {detail}") from exc
+        if not isinstance(worker_result, dict):
+            raise RuntimeError(f"Lineage worker subprocess returned an invalid payload type for {step.step_id}.")
+        return worker_result
     def _lineage_worker_failure_result(
         self,
         *,
