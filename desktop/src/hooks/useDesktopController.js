@@ -778,7 +778,14 @@ export function useDesktopController() {
         const nextProgramSettings = programSettingsFromRuntime(storedProgramSettings || bootstrap.default_runtime);
         setStoredProgramSettings(nextProgramSettings);
         setProgramSettings(nextProgramSettings);
-        setProjectForm(blankProjectForm(applyProgramSettings(bootstrap.default_runtime, nextProgramSettings)));
+        setProjectForm((current) => {
+          const hasSelectedProject = Boolean(String(selectedProjectIdRef.current || "").trim());
+          const hasLoadedProject = Boolean(String(projectDetailRef.current?.project?.repo_id || "").trim());
+          if (hasSelectedProject || hasLoadedProject) {
+            return current;
+          }
+          return blankProjectForm(applyProgramSettings(bootstrap.default_runtime, nextProgramSettings));
+        });
         applyCurrentJobSnapshot(jobSnapshot);
         if (cancelled) {
           return;
@@ -878,7 +885,7 @@ export function useDesktopController() {
       }
     }
 
-    if (!selectedProjectId || pendingAction || loadingProjectId) {
+    if (!selectedProjectId || !workspaceRoot || pendingAction || loadingProjectId) {
       return undefined;
     }
     if (
