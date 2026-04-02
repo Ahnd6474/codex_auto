@@ -23,6 +23,7 @@ import {
   projectFormFromDetail,
   resolveChatRuntimeSelection,
   resolveRuntimeModelSelectionState,
+  sanitizeProjectListForJobState,
   sanitizeProjectDetailForJobState,
   sameQueuedJobs,
   selectedConfigReasoning,
@@ -72,6 +73,74 @@ test("jobHasNewerActiveReplacement ignores terminal jobs when no newer active re
   ];
 
   assert.equal(jobHasNewerActiveReplacement(jobs[0], jobs), false);
+});
+
+test("sanitizeProjectListForJobState overlays queue snapshots onto project cards", () => {
+  const projects = [
+    {
+      repo_id: "repo-1",
+      repo_path: "C:/repo",
+      status: "setup_ready",
+      current_step_label: "ST2 Implement API",
+      progress: {
+        caption: "Completed 1/3 steps, running: ST2",
+        percent: 33,
+        currentStep: "ST2 Implement API",
+      },
+      stats: {
+        total_steps: 3,
+        completed_steps: 1,
+        running_steps: 1,
+      },
+      queue_priority: 2,
+    },
+  ];
+  const jobs = [
+    {
+      id: "job-run",
+      repo_id: "repo-1",
+      project_dir: "C:/repo",
+      status: "queued",
+      command: "run-plan",
+      queue_position: 2,
+      queue_priority: 4,
+      updated_at_ms: 100,
+    },
+  ];
+
+  const sanitized = sanitizeProjectListForJobState(projects, jobs);
+
+  assert.equal(sanitized[0].status, "queued:run-plan");
+  assert.equal(sanitized[0].display_status, "queued:run-plan");
+  assert.equal(sanitized[0].queue_position, 2);
+  assert.equal(sanitized[0].queue_priority, 2);
+  assert.equal(sanitized[0].queue_command, "run-plan");
+  assert.equal(sanitized[0].current_step_label, "ST2 Implement API");
+  assert.equal(sanitized[0].progress.currentStep, "ST2 Implement API");
+  assert.equal(sanitized[0].progress.percent, 33);
+});
+
+test("sanitizeProjectListForJobState rebuilds structured progress when legacy captions are still present", () => {
+  const sanitized = sanitizeProjectListForJobState([
+    {
+      repo_id: "repo-1",
+      repo_path: "C:/repo",
+      status: "running:run-plan",
+      progress: "Completed 2/4 steps, running: ST3",
+      current_step_label: "ST3 Build UI",
+      stats: {
+        total_steps: 4,
+        completed_steps: 2,
+        running_steps: 1,
+      },
+    },
+  ]);
+
+  assert.equal(sanitized[0].progress.caption, "Completed 2/4 steps, running: ST3");
+  assert.equal(sanitized[0].progress.percent, 50);
+  assert.equal(sanitized[0].progress.total, 4);
+  assert.equal(sanitized[0].progress.completed, 2);
+  assert.equal(sanitized[0].progress.currentStep, "ST3 Build UI");
 });
 
 test("canEditStep allows editing failed steps when the run is idle", () => {

@@ -5353,6 +5353,63 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(listing["workspace"]["ready_like"], 1)
             self.assertEqual(listing["workspace"]["running"], 0)
 
+    def test_list_projects_exposes_structured_progress_and_queue_priority(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Structured Progress Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "allow_background_queue": True,
+                    "background_queue_priority": 3,
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            project_root = Path(detail["project"]["project_root"])
+            execution_plan_path = project_root / "state" / "EXECUTION_PLAN.json"
+            plan_state = json.loads(execution_plan_path.read_text(encoding="utf-8"))
+            plan_state["steps"] = [
+                {"step_id": "ST1", "title": "Plan", "status": "completed"},
+                {"step_id": "ST2", "title": "Implement API", "status": "running", "deadline_at": "2026-04-05"},
+                {"step_id": "ST3", "title": "Polish UI", "status": "pending", "deadline_at": "2026-04-06"},
+            ]
+            plan_state["closeout_deadline_at"] = "2026-04-10"
+            execution_plan_path.write_text(json.dumps(plan_state), encoding="utf-8")
+
+            metadata_path = project_root / "metadata.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["current_status"] = "running:run-plan"
+            metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+            listing = run_command("list-projects", workspace_root)
+            project = listing["projects"][0]
+
+            self.assertIsInstance(project["progress"], dict)
+            self.assertEqual(project["progress"]["caption"], "Completed 1/3 steps, next: ST2")
+            self.assertEqual(project["progress"]["percent"], 33)
+            self.assertEqual(project["progress"]["currentStep"], "ST2 Implement API")
+            self.assertEqual(project["current_step_label"], "ST2 Implement API")
+            self.assertEqual(project["current_step_deadline_at"], "2026-04-05")
+            self.assertEqual(project["queue_priority"], 3)
+            self.assertTrue(project["allow_background_queue"])
+            self.assertEqual(project["closeout_deadline_at"], "2026-04-10")
+
     def test_cli_list_repos_skips_unreadable_execution_plan_state(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace_root = temp_dir / "workspace"

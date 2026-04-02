@@ -31,9 +31,9 @@ from .utils import append_jsonl, compact_text, normalize_workflow_mode, now_utc_
 from .workspace import LOCAL_PROJECT_LOG_DIRNAME
 
 
-DETAIL_CACHE_VERSION = 18
-LIST_ITEM_CACHE_VERSION = 1
-WORKSPACE_LISTING_CACHE_VERSION = 1
+DETAIL_CACHE_VERSION = 19
+LIST_ITEM_CACHE_VERSION = 2
+WORKSPACE_LISTING_CACHE_VERSION = 2
 PROJECT_TREE_EXCLUDED_NAMES = frozenset({".git", LOCAL_PROJECT_LOG_DIRNAME, "ui_bridge_perf.jsonl"})
 _DETAIL_BASE_PAYLOAD_MEMORY_CACHE = LruTtlCache[str, tuple[int, str, dict[str, Any]]](max_entries=48)
 _LIST_ITEM_PAYLOAD_MEMORY_CACHE = LruTtlCache[str, tuple[int, str, dict[str, Any]]](max_entries=256)
@@ -839,6 +839,47 @@ def progress_caption(plan_state: ExecutionPlanState) -> str:
         return f"Completed {completed}/{total} steps, pending: {', '.join(ready) if ready else 'blocked'}"
     next_step = next((step.step_id for step in plan_state.steps if step.status != "completed"), "done")
     return f"Completed {completed}/{total} steps, next: {next_step}"
+
+
+def _execution_step_label(step: Any) -> str:
+    if step is None:
+        return ""
+    step_id = str(getattr(step, "step_id", "")).strip()
+    title = str(getattr(step, "title", "")).strip()
+    return " ".join(part for part in (step_id, title) if part).strip()
+
+
+def project_progress_payload(plan_state: ExecutionPlanState) -> dict[str, Any]:
+    steps = list(plan_state.steps)
+    total = len(steps)
+    completed = len([step for step in steps if step.status == "completed"])
+    failed_steps = [step for step in steps if step.status == "failed"]
+    running_steps = [step for step in steps if step.status in {"running", "integrating"}]
+    pending_steps = [step for step in steps if step.status != "completed"]
+    closeout_status = str(plan_state.closeout_status or "").strip().lower()
+    current_step = running_steps[0] if running_steps else failed_steps[0] if failed_steps else pending_steps[0] if pending_steps else None
+    current_step_id = str(getattr(current_step, "step_id", "")).strip()
+    current_step_label = _execution_step_label(current_step)
+    current_step_deadline = str(getattr(current_step, "deadline_at", "")).strip()
+    if closeout_status == "running" or (completed == total and total > 0 and closeout_status not in {"completed", "failed"}):
+        current_step_id = "CLOSEOUT"
+        current_step_label = str(plan_state.closeout_title or "Closeout").strip() or "Closeout"
+        current_step_deadline = str(plan_state.closeout_deadline_at or "").strip()
+    percent = int(round((completed / total) * 100)) if total else (100 if closeout_status == "completed" else 0)
+    return {
+        "caption": progress_caption(plan_state),
+        "percent": percent if total or closeout_status == "completed" else None,
+        "completed": completed,
+        "total": total,
+        "running": len(running_steps),
+        "failed": len(failed_steps),
+        "currentStep": current_step_label,
+        "current_step": current_step_label,
+        "current_step_id": current_step_id,
+        "deadline_at": current_step_deadline,
+        "estimatedRemaining": None,
+        "estimated_remaining": None,
+    }
 
 
 def project_summary(
@@ -1814,6 +1855,8 @@ def _build_project_list_item_payload(
     execution_snapshot = context_execution_snapshot(project, plan_state)
     current_status = execution_snapshot.current_status
     detail = project.metadata.origin_url or f"Branch {project.metadata.branch}"
+    progress_payload = project_progress_payload(plan_state)
+    queue_priority = int(getattr(project.runtime, "background_queue_priority", 0) or 0)
     payload = {
         "repo_id": project.metadata.repo_id,
         "slug": project.metadata.slug,
@@ -1826,8 +1869,16 @@ def _build_project_list_item_payload(
         "created_at": project.metadata.created_at,
         "last_run_at": project.metadata.last_run_at,
         "summary": project_summary(orchestrator, project, plan_state, current_status=current_status),
-        "progress": progress_caption(plan_state),
+        "progress": progress_payload,
+        "progress_caption": progress_payload["caption"],
         "stats": project_stats(plan_state),
+        "current_step_label": progress_payload["currentStep"],
+        "current_step_id": progress_payload["current_step_id"],
+        "current_step_deadline_at": progress_payload["deadline_at"],
+        "closeout_deadline_at": plan_state.closeout_deadline_at,
+        "allow_background_queue": bool(getattr(project.runtime, "allow_background_queue", False)),
+        "background_queue_priority": queue_priority,
+        "queue_priority": queue_priority,
         "closeout_status": plan_state.closeout_status,
         "archived": bool(project.metadata.archived),
         "archive_id": project.metadata.archive_id or "",
@@ -2008,6 +2059,7 @@ def _build_project_detail_base_payload(
         planning_progress=planning_progress,
     )
     current_status = execution_snapshot.current_status
+    progress_payload = project_progress_payload(plan_state)
     loop_state_payload = project.loop_state.to_dict()
     execution_state = build_execution_state_payload(
         current_status,
@@ -2085,8 +2137,14 @@ def _build_project_detail_base_payload(
             current_status=current_status,
             recent_blocks=_tail_slice(log_snapshot.blocks, 5) if normalized_detail_level == "full" else None,
         ),
-        "progress": progress_caption(plan_state),
+        "progress": progress_payload,
+        "progress_caption": progress_payload["caption"],
         "stats": project_stats(plan_state),
+        "current_step_label": progress_payload["currentStep"],
+        "current_step_id": progress_payload["current_step_id"],
+        "current_step_deadline_at": progress_payload["deadline_at"],
+        "closeout_deadline_at": plan_state.closeout_deadline_at,
+        "queue_priority": int(getattr(project.runtime, "background_queue_priority", 0) or 0),
         "codex_status": {},
         "activity": activity,
         "planning_progress": planning_progress,

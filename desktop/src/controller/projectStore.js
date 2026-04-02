@@ -851,7 +851,18 @@ function projectListItemFromDetail(detail, fallbackProject = null) {
     last_run_at: project.last_run_at || fallbackProject?.last_run_at || "",
     summary: detail?.summary || fallbackProject?.summary || "",
     progress: detail?.progress || fallbackProject?.progress || "",
+    progress_caption: detail?.progress_caption || fallbackProject?.progress_caption || "",
     stats: cloneValue(detail?.stats || fallbackProject?.stats || {}),
+    current_step_label: detail?.current_step_label || fallbackProject?.current_step_label || "",
+    current_step_id: detail?.current_step_id || fallbackProject?.current_step_id || "",
+    current_step_deadline_at: detail?.current_step_deadline_at || fallbackProject?.current_step_deadline_at || "",
+    closeout_deadline_at: detail?.closeout_deadline_at || fallbackProject?.closeout_deadline_at || "",
+    queue_priority: detail?.queue_priority ?? fallbackProject?.queue_priority ?? 0,
+    background_queue_priority: detail?.runtime?.background_queue_priority ?? fallbackProject?.background_queue_priority ?? 0,
+    allow_background_queue:
+      typeof detail?.runtime?.allow_background_queue === "boolean"
+        ? detail.runtime.allow_background_queue
+        : Boolean(fallbackProject?.allow_background_queue),
     closeout_status: detail?.plan?.closeout_status || fallbackProject?.closeout_status || "",
   };
 }

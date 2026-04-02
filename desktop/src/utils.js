@@ -2050,8 +2050,66 @@ export function projectDetailStatus(detail, activeJob = null, options = {}) {
   ).trim();
 }
 
+function normalizeProjectListProgress(project = {}) {
+  const rawProgress = project?.progress;
+  const progress = rawProgress && typeof rawProgress === "object" && !Array.isArray(rawProgress) ? rawProgress : {};
+  const stats = project?.stats && typeof project.stats === "object" ? project.stats : {};
+  const total = Number.parseInt(String(progress.total ?? stats.total_steps ?? stats.totalSteps ?? 0), 10) || 0;
+  const completed = Number.parseInt(String(progress.completed ?? stats.completed_steps ?? stats.completedSteps ?? 0), 10) || 0;
+  const running = Number.parseInt(String(progress.running ?? stats.running_steps ?? stats.runningSteps ?? 0), 10) || 0;
+  const failed = Number.parseInt(String(progress.failed ?? stats.failed_steps ?? stats.failedSteps ?? 0), 10) || 0;
+  const percentValue = Number(progress.percent);
+  const percent = Number.isFinite(percentValue)
+    ? Math.max(0, Math.min(100, Math.round(percentValue)))
+    : (total > 0 ? Math.round((completed / total) * 100) : null);
+  const currentStep = String(progress.currentStep || progress.current_step || project?.current_step_label || "").trim();
+  const estimatedRemaining = progress.estimatedRemaining ?? progress.estimated_remaining ?? null;
+  return {
+    ...(progress && typeof progress === "object" && !Array.isArray(progress) ? progress : {}),
+    caption: String(progress.caption || project?.progress_caption || (typeof rawProgress === "string" ? rawProgress : "")).trim(),
+    percent,
+    completed,
+    total,
+    running,
+    failed,
+    currentStep,
+    current_step: currentStep,
+    estimatedRemaining,
+    estimated_remaining: estimatedRemaining,
+  };
+}
+
 export function sanitizeProjectListForJobState(projects = [], activeJob = null, options = {}) {
-  return Array.isArray(projects) ? projects : [];
+  const items = Array.isArray(projects) ? projects : [];
+  const jobs = Array.isArray(activeJob) ? activeJob.filter(Boolean) : activeJob ? [activeJob] : [];
+  return items.map((project) => {
+    const executionJob = projectJobFromJobs(jobs, project || {});
+    const jobStatus = String(executionJob?.status || "").trim().toLowerCase();
+    const progress = normalizeProjectListProgress(project);
+    const currentStepLabel = String(project?.current_step_label || progress.currentStep || "").trim();
+    const normalizedStatus = projectStatusWithJob(project?.status || project?.project_status || "", executionJob);
+    const queuePriorityValue = Number.parseInt(
+      String(project?.queue_priority ?? project?.background_queue_priority ?? executionJob?.queue_priority ?? 0),
+      10,
+    );
+    const queuePositionValue = Number.parseInt(
+      String(jobStatus === "queued" ? executionJob?.queue_position : project?.queue_position ?? 0),
+      10,
+    );
+    return {
+      ...project,
+      status: normalizedStatus || String(project?.status || project?.project_status || "").trim(),
+      display_status: normalizedStatus || String(project?.display_status || project?.status || project?.project_status || "").trim(),
+      progress,
+      progress_caption: progress.caption,
+      current_step_label: currentStepLabel,
+      current_step_id: String(project?.current_step_id || progress.current_step_id || "").trim(),
+      queue_position: Number.isFinite(queuePositionValue) ? queuePositionValue : 0,
+      queue_priority: Number.isFinite(queuePriorityValue) ? queuePriorityValue : 0,
+      background_queue_priority: Number.isFinite(queuePriorityValue) ? queuePriorityValue : 0,
+      queue_command: String(project?.queue_command || executionJob?.command || "").trim(),
+    };
+  });
 }
 
 export function sanitizeProjectDetailForJobState(detail, activeJob = null, options = {}) {

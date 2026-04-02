@@ -10,6 +10,7 @@ import {
   formatChatSessionTitle,
   formatDurationCompact,
   isActiveExecutionStatus,
+  normalizeProjectPath,
   planStepsWithCloseout,
   statusTone,
 } from "../../utils";
@@ -482,6 +483,231 @@ function queuedPosition(value) {
 function reservationLabel(job, fallback) {
   return String(job?.display_name || "").trim() || String(job?.repo_id || "").trim() || fallback;
 }
+
+function compactDeadlineLabel(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "";
+  }
+  return normalized.length > 16 ? normalized.slice(0, 16) : normalized;
+}
+
+function projectQueuePriority(project = {}, detail = null) {
+  const rawValue =
+    project?.queue_priority
+    ?? project?.background_queue_priority
+    ?? detail?.queue_priority
+    ?? detail?.runtime?.background_queue_priority;
+  if (rawValue == null || rawValue === "") {
+    return null;
+  }
+  const parsed = Number.parseInt(String(rawValue), 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function projectProgressSnapshot(project = {}, detail = null) {
+  const rawProjectProgress = project?.progress;
+  const projectProgress =
+    rawProjectProgress && typeof rawProjectProgress === "object" && !Array.isArray(rawProjectProgress)
+      ? rawProjectProgress
+      : {};
+  const detailProgress =
+    detail?.progress && typeof detail.progress === "object" && !Array.isArray(detail.progress)
+      ? detail.progress
+      : {};
+  const stats = project?.stats || detail?.stats || {};
+  const totalSteps = Number.parseInt(
+    String(projectProgress.total ?? detailProgress.total ?? stats.total_steps ?? stats.totalSteps ?? 0),
+    10,
+  ) || 0;
+  const completedSteps = Number.parseInt(
+    String(projectProgress.completed ?? detailProgress.completed ?? stats.completed_steps ?? stats.completedSteps ?? 0),
+    10,
+  ) || 0;
+  const percentCandidate =
+    projectProgress.percent
+    ?? detailProgress.percent
+    ?? (totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : null);
+  const percentValue = Number(percentCandidate);
+  const percent = Number.isFinite(percentValue)
+    ? Math.max(0, Math.min(100, Math.round(percentValue)))
+    : null;
+  const currentStep = String(
+    project?.current_step_label
+    || projectProgress.currentStep
+    || projectProgress.current_step
+    || detail?.current_step_label
+    || detailProgress.currentStep
+    || detailProgress.current_step
+    || "",
+  ).trim();
+  const estimatedRemaining =
+    projectProgress.estimatedRemaining
+    ?? projectProgress.estimated_remaining
+    ?? detailProgress.estimatedRemaining
+    ?? detailProgress.estimated_remaining
+    ?? null;
+  return {
+    caption: String(
+      projectProgress.caption
+      || detailProgress.caption
+      || project?.progress_caption
+      || detail?.progress_caption
+      || (typeof rawProjectProgress === "string" ? rawProjectProgress : ""),
+    ).trim(),
+    percent,
+    totalSteps,
+    completedSteps,
+    currentStep,
+    estimatedRemaining,
+  };
+}
+
+function projectLookupKeys(project = {}) {
+  const keys = [];
+  const repoId = String(project?.repo_id || "").trim();
+  if (repoId) {
+    keys.push(`repo:${repoId}`);
+  }
+  const projectPath = normalizeProjectPath(project?.repo_path || project?.project_dir || "");
+  if (projectPath) {
+    keys.push(`path:${projectPath}`);
+  }
+  return keys;
+}
+
+function queuedJobsLookup(queuedJobs = []) {
+  const map = new Map();
+  (Array.isArray(queuedJobs) ? queuedJobs : []).forEach((job) => {
+    const repoId = String(job?.repo_id || "").trim();
+    if (repoId && !map.has(`repo:${repoId}`)) {
+      map.set(`repo:${repoId}`, job);
+    }
+    const projectPath = normalizeProjectPath(job?.project_dir || "");
+    if (projectPath && !map.has(`path:${projectPath}`)) {
+      map.set(`path:${projectPath}`, job);
+    }
+  });
+  return map;
+}
+
+function queuedJobForProject(project = {}, queuedJobsByProject = new Map()) {
+  const lookupKeys = projectLookupKeys(project);
+  for (const key of lookupKeys) {
+    const match = queuedJobsByProject.get(key);
+    if (match) {
+      return match;
+    }
+  }
+  return null;
+}
+
+const ProjectCard = memo(function ProjectCard({
+  project,
+  isSelected = false,
+  onSelectProject = () => {},
+  projectDetail = null,
+  queuedJob = null,
+  language = "en",
+  t,
+}) {
+  const tone = statusTone(project?.status);
+  const isActive = isActiveExecutionStatus(project?.status);
+  const branchName = project?.branch || "main";
+  const progress = projectProgressSnapshot(project, projectDetail);
+  const queuePositionRaw = Number.parseInt(String(project?.queue_position ?? queueJob?.queue_position ?? 0), 10) || 0;
+  const queuePriority = projectQueuePriority(project, projectDetail);
+  const backgroundQueueEnabled =
+    typeof project?.allow_background_queue === "boolean"
+      ? project.allow_background_queue
+      : Boolean(projectDetail?.runtime?.allow_background_queue);
+  const deadlineValue = String(
+    project?.current_step_deadline_at
+    || project?.closeout_deadline_at
+    || projectDetail?.current_step_deadline_at
+    || projectDetail?.closeout_deadline_at
+    || projectDetail?.plan?.closeout_deadline_at
+    || "",
+  ).trim();
+  const progressDescription = progress.currentStep || progress.caption;
+  const showProgress = progress.totalSteps > 0 || Boolean(progressDescription);
+
+  return (
+    <button
+      key={project.repo_id || project.display_name}
+      className={`sidebar-project sidebar-project--${tone} ${isSelected ? "selected" : ""}${isActive ? " sidebar-project--active" : ""}${queuePositionRaw > 0 ? " sidebar-project--queued" : ""}`.trim()}
+      onClick={() => onSelectProject(project.repo_id)}
+      type="button"
+    >
+      <div className="sidebar-project__fill" />
+      <div className="sidebar-project__header">
+        <div className="sidebar-project__title">
+          <strong>{project.display_name || project.slug || t("common.unknown")}</strong>
+          <span className={`status-badge status-badge--${tone} sidebar-project__status`}>
+            {isActive ? <span className="chip-dot chip-dot--pulse" style={{ width: 6, height: 6 }} /> : null}
+            {displayStatus(project.status, language)}
+          </span>
+        </div>
+      </div>
+      {project.detail ? <span className="sidebar-project__detail" title={project.detail}>{project.detail}</span> : null}
+      <div className="sidebar-project__meta-row">
+        <span className="sidebar-project__branch">{branchName}</span>
+        {queuePositionRaw > 0 ? (
+          <span className="sidebar-project__meta-chip sidebar-project__meta-chip--queued">
+            #{queuedPosition(queuePositionRaw)} {language === "ko" ? "대기" : "Queued"}
+          </span>
+        ) : null}
+        {queuePriority != null && (backgroundQueueEnabled || queuePositionRaw > 0 || queuePriority > 0) ? (
+          <span className="sidebar-project__meta-chip">
+            {t("run.queuePriority", { priority: queuePriority })}
+          </span>
+        ) : null}
+        {deadlineValue ? (
+          <span className="sidebar-project__meta-chip sidebar-project__meta-chip--deadline" title={deadlineValue}>
+            {language === "ko" ? `마감 ${compactDeadlineLabel(deadlineValue)}` : `Deadline ${compactDeadlineLabel(deadlineValue)}`}
+          </span>
+        ) : null}
+      </div>
+
+      {showProgress ? (
+        <div className="sidebar-project__progress">
+          {progress.totalSteps > 0 ? (
+            <div className="sidebar-project__progress-bar">
+              <div
+                className={`sidebar-project__progress-fill sidebar-project__progress-fill--${tone}`}
+                style={progress.percent != null ? { width: `${progress.percent}%` } : undefined}
+              />
+            </div>
+          ) : null}
+          <div className="sidebar-project__progress-meta">
+            {progress.totalSteps > 0 && progress.percent != null ? (
+              <span className="sidebar-project__progress-percent">{progress.percent}%</span>
+            ) : null}
+            {progressDescription ? (
+              <span className="sidebar-project__progress-step" title={progressDescription}>
+                {progressDescription}
+              </span>
+            ) : null}
+            {progress.estimatedRemaining != null ? (
+              <span className="sidebar-project__progress-eta">
+                {formatDurationCompact(progress.estimatedRemaining, language)}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </button>
+  );
+}, (previousProps, nextProps) => (
+  previousProps.project === nextProps.project
+  && previousProps.isSelected === nextProps.isSelected
+  && previousProps.projectDetail === nextProps.projectDetail
+  && previousProps.language === nextProps.language
+  && previousProps.queuedJob?.id === nextProps.queuedJob?.id
+  && previousProps.queuedJob?.status === nextProps.queuedJob?.status
+  && previousProps.queuedJob?.queue_position === nextProps.queuedJob?.queue_position
+  && previousProps.queuedJob?.queue_priority === nextProps.queuedJob?.queue_priority
+));
 
 function ReservationsPanel({ queuedJobs, onCancelQueuedJob, onAddReservationRun, canAddReservationRun, language, t }) {
   return (
@@ -1008,6 +1234,7 @@ export const SidebarPane = memo(function SidebarPane({
 }) {
   const { language, t } = useI18n();
   const workspaceTabActive = activeTab === "workspace";
+  const plansTabActive = activeTab === "plans";
   const deferredWorkspaceFilter = useDeferredValue(workspaceFilter);
   const workspaceFilterCacheRef = useRef(new Map());
   const workspaceRowsCacheRef = useRef(new Map());
@@ -1024,9 +1251,21 @@ export const SidebarPane = memo(function SidebarPane({
     () => (workspaceTabActive ? collectTreePaths(normalizedWorkspaceTree) : []),
     [normalizedWorkspaceTree, workspaceTabActive],
   );
+  const selectedProjectDetail = useMemo(() => {
+    const selectedId = String(selectedProjectId || "").trim();
+    const detailId = String(detail?.project?.repo_id || "").trim();
+    if (!selectedId || !detailId || selectedId !== detailId) {
+      return null;
+    }
+    return detail;
+  }, [detail, selectedProjectId]);
+  const queuedJobsByProject = useMemo(
+    () => queuedJobsLookup(queuedJobs),
+    [queuedJobs],
+  );
 
   const visibleCheckpoints = useMemo(() => {
-    if (activeTab !== "plans") {
+    if (!plansTabActive) {
       return [];
     }
     const items = Array.isArray(checkpoints?.items) ? checkpoints.items.filter(Boolean) : [];
@@ -1034,21 +1273,21 @@ export const SidebarPane = memo(function SidebarPane({
     if (!pending) return items;
     if (items.some((item) => item?.checkpoint_id === pending.checkpoint_id)) return items;
     return [pending, ...items];
-  }, [activeTab, checkpoints]);
+  }, [checkpoints, plansTabActive]);
   const executionState = useMemo(
-    () => deriveExecutionUiState(detail, planDraft, activeJob),
-    [detail, planDraft, activeJob],
+    () => (plansTabActive ? deriveExecutionUiState(detail, planDraft, activeJob) : null),
+    [activeJob, detail, planDraft, plansTabActive],
   );
-  const executionPlan = executionState.livePlan;
+  const executionPlan = executionState?.livePlan || null;
   const flowSteps = useMemo(
-    () => planStepsWithCloseout(executionPlan, {
+    () => (plansTabActive ? planStepsWithCloseout(executionPlan, {
       title: t("run.closeout"),
       description: t("reports.closeoutReport"),
       successCriteria: t("reports.closeoutReport"),
-    }),
-    [executionPlan, t],
+    }) : []),
+    [executionPlan, plansTabActive, t],
   );
-  const projectStatus = executionState.displayStatusValue;
+  const projectStatus = executionState?.displayStatusValue || "";
 
   useEffect(() => {
     workspaceFilterCacheRef.current.clear();
@@ -1150,60 +1389,18 @@ export const SidebarPane = memo(function SidebarPane({
 
               <div className="sidebar-list">
                 {projects.length ? (
-                  projects.map((project) => {
-                    const tone = statusTone(project?.status);
-                    const progressPercent = project?.progress?.percent ?? null;
-                    const currentStep = project?.progress?.currentStep ?? null;
-                    const estimatedRemaining = project?.progress?.estimatedRemaining ?? null;
-                    const isActive = isActiveExecutionStatus(project?.status);
-                    const branchName = project?.branch || "main";
-                    return (
-                      <button
-                        key={project.repo_id || project.display_name}
-                        className={`sidebar-project sidebar-project--${tone} ${project.repo_id === selectedProjectId ? "selected" : ""}`.trim()}
-                        onClick={() => onSelectProject(project.repo_id)}
-                        type="button"
-                      >
-                        <div className="sidebar-project__fill" />
-                        <div className="sidebar-project__header">
-                          <div className="sidebar-project__title">
-                            <strong>{project.display_name || project.slug || t("common.unknown")}</strong>
-                            <span className={`status-badge status-badge--${tone} sidebar-project__status`}>
-                              {isActive ? <span className="chip-dot chip-dot--pulse" style={{ width: 6, height: 6 }} /> : null}
-                              {displayStatus(project.status, language)}
-                            </span>
-                          </div>
-                        </div>
-                        {project.detail ? <span className="sidebar-project__detail" title={project.detail}>{project.detail}</span> : null}
-                        <span className="sidebar-project__branch">{branchName}</span>
-
-                        {/* P1-1: Mini progress bar for active projects */}
-                        {isActive && progressPercent != null ? (
-                          <div className="sidebar-project__progress">
-                            <div className="sidebar-project__progress-bar">
-                              <div
-                                className={`sidebar-project__progress-fill sidebar-project__progress-fill--${tone}`}
-                                style={{ width: `${progressPercent}%` }}
-                              />
-                            </div>
-                            <div className="sidebar-project__progress-meta">
-                              <span className="sidebar-project__progress-percent">{progressPercent}%</span>
-                              {currentStep ? (
-                                <span className="sidebar-project__progress-step" title={currentStep}>
-                                  {currentStep.length > 30 ? `${currentStep.slice(0, 30)}...` : currentStep}
-                                </span>
-                              ) : null}
-                              {estimatedRemaining != null ? (
-                                <span className="sidebar-project__progress-eta">
-                                  {formatDurationCompact(estimatedRemaining, language)}
-                                </span>
-                              ) : null}
-                            </div>
-                          </div>
-                        ) : null}
-                      </button>
-                    );
-                  })
+                  projects.map((project) => (
+                    <ProjectCard
+                      key={project.repo_id || project.display_name}
+                      project={project}
+                      isSelected={project.repo_id === selectedProjectId}
+                      onSelectProject={onSelectProject}
+                      projectDetail={project.repo_id === selectedProjectId ? selectedProjectDetail : null}
+                      queuedJob={queuedJobForProject(project, queuedJobsByProject)}
+                      language={language}
+                      t={t}
+                    />
+                  ))
                 ) : (
                   <div className="empty-block">
                     <EmptyProjectsIcon />
@@ -1293,26 +1490,18 @@ export const SidebarPane = memo(function SidebarPane({
 
               <div className="sidebar-list" style={{ marginBottom: "12px" }}>
                 {projects.length ? (
-                  projects.map((project) => {
-                    const tone = statusTone(project?.status);
-                    return (
-                      <button
-                        key={project.repo_id || project.display_name}
-                        className={`sidebar-project sidebar-project--${tone} ${project.repo_id === selectedProjectId ? "selected" : ""}`.trim()}
-                        onClick={() => onSelectProject(project.repo_id)}
-                        type="button"
-                      >
-                        <div className="sidebar-project__fill" />
-                        <div className="sidebar-project__title">
-                          <strong>{project.display_name || project.slug || t("common.unknown")}</strong>
-                          <span className={`status-badge status-badge--${tone} sidebar-project__status`}>
-                            {displayStatus(project.status, language)}
-                          </span>
-                        </div>
-                        {project.detail ? <span className="sidebar-project__detail" title={project.detail}>{project.detail}</span> : null}
-                      </button>
-                    );
-                  })
+                  projects.map((project) => (
+                    <ProjectCard
+                      key={project.repo_id || project.display_name}
+                      project={project}
+                      isSelected={project.repo_id === selectedProjectId}
+                      onSelectProject={onSelectProject}
+                      projectDetail={project.repo_id === selectedProjectId ? selectedProjectDetail : null}
+                      queuedJob={queuedJobForProject(project, queuedJobsByProject)}
+                      language={language}
+                      t={t}
+                    />
+                  ))
                 ) : (
                   <div className="empty-block">
                     <EmptyProjectsIcon />

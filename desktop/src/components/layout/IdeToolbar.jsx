@@ -303,6 +303,7 @@ const MemoProjectSelector = memo(ProjectSelector, (prevProps, nextProps) => {
       prevProject?.repo_id !== nextProject?.repo_id
       || prevProject?.display_name !== nextProject?.display_name
       || prevProject?.status !== nextProject?.status
+      || prevProject?.current_step_label !== nextProject?.current_step_label
     ) {
       return false;
     }
@@ -324,6 +325,7 @@ function sameToolbarProjects(previousProjects = [], nextProjects = []) {
       previousProject?.repo_id !== nextProject?.repo_id
       || previousProject?.display_name !== nextProject?.display_name
       || previousProject?.status !== nextProject?.status
+      || previousProject?.current_step_label !== nextProject?.current_step_label
     ) {
       return false;
     }
@@ -451,16 +453,56 @@ export const IdeToolbar = memo(function IdeToolbar({
   const runningStepLabel = runningStep
     ? [runningStep.step_id, runningStep.title].filter(Boolean).join(" – ")
     : "";
+  const executionProjects = Array.isArray(projects)
+    ? projects.filter((project) => isActiveExecutionStatus(project?.status))
+    : [];
+  const runningProjectCount = executionProjects.filter((project) =>
+    String(project?.status || "").trim().toLowerCase().startsWith("running")
+  ).length;
+  const queuedProjectCount = executionProjects.filter((project) =>
+    String(project?.status || "").trim().toLowerCase().startsWith("queued")
+  ).length;
+  const otherExecutionProjects = executionProjects.filter((project) =>
+    String(project?.repo_id || "").trim() !== String(selectedProjectId || "").trim()
+  );
+  const workspaceExecutionLead = otherExecutionProjects
+    .slice(0, 2)
+    .map((project) => project?.display_name || project?.slug || project?.repo_id)
+    .filter(Boolean);
+  const workspaceExecutionOverflow = Math.max(0, otherExecutionProjects.length - workspaceExecutionLead.length);
   const liveStripBadgeClass = liveDisplayStatus.includes("fail")
     ? "live-run-strip__badge--failed"
     : liveDisplayStatus.includes("pause")
       ? "live-run-strip__badge--paused"
       : "";
-  const liveStripBadgeText = liveDisplayStatus.includes("fail")
-    ? "FAILED"
-    : liveDisplayStatus.includes("pause")
-      ? "PAUSED"
-      : "LIVE RUN";
+  const showWorkspaceRunStrip = isLive || executionProjects.length > 0;
+  const liveStripBadgeText = !isLive
+    ? (runningProjectCount > 0 ? "WORKSPACE" : "QUEUE")
+    : liveDisplayStatus.includes("fail")
+      ? "FAILED"
+      : liveDisplayStatus.includes("pause")
+        ? "PAUSED"
+        : "LIVE RUN";
+  const liveStripTitle = isLive
+    ? (
+      runningStepLabel
+        ? (language === "ko"
+          ? `${runningStepLabel} 작업 중`
+          : `Working on ${runningStepLabel}`)
+        : planStatusLabel || statusLabel
+    )
+    : workspaceExecutionLead.length
+      ? (
+        language === "ko"
+          ? `${workspaceExecutionLead.join(", ")}${workspaceExecutionOverflow > 0 ? ` 외 ${workspaceExecutionOverflow}` : ""} 진행 중`
+          : `Active: ${workspaceExecutionLead.join(", ")}${workspaceExecutionOverflow > 0 ? ` +${workspaceExecutionOverflow}` : ""}`
+      )
+      : (
+        language === "ko"
+          ? (queuedProjectCount > 0 ? `${queuedProjectCount}개 예약 실행 대기 중` : "실행 중인 작업이 있습니다")
+          : (queuedProjectCount > 0 ? `${queuedProjectCount} queued project${queuedProjectCount === 1 ? "" : "s"}` : "Background work in progress")
+      );
+  const showFleetSummary = showWorkspaceRunStrip && (!isLive ? executionProjects.length > 0 : otherExecutionProjects.length > 0);
 
   return (
     <>
@@ -470,7 +512,7 @@ export const IdeToolbar = memo(function IdeToolbar({
           <span className="chip-dot chip-dot--info chip-dot--pulse" style={{ width: 6, height: 6 }} />
           {liveStripBadgeText}
         </span>
-        <span className="live-run-strip__title">
+        <span className="live-run-strip__title" title={liveStripTitle}>
           {runningStepLabel
             ? (language === "ko"
               ? `${runningStepLabel} 작업 중`
@@ -483,6 +525,20 @@ export const IdeToolbar = memo(function IdeToolbar({
           </span>
           {progressPercent > 0 ? (
             <span className="live-run-strip__percent">{progressPercent}%</span>
+          ) : null}
+          {showFleetSummary ? (
+            <span className="live-run-strip__fleet">
+              {runningProjectCount > 0 ? (
+                <span className="live-run-strip__fleet-chip">
+                  {language === "ko" ? `실행 ${runningProjectCount}` : `${runningProjectCount} running`}
+                </span>
+              ) : null}
+              {queuedProjectCount > 0 ? (
+                <span className="live-run-strip__fleet-chip">
+                  {language === "ko" ? `대기 ${queuedProjectCount}` : `${queuedProjectCount} queued`}
+                </span>
+              ) : null}
+            </span>
           ) : null}
         </span>
       </div>

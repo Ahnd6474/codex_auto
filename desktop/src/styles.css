@@ -3753,6 +3753,16 @@ select:focus {
   background: rgba(224, 90, 95, 0.1);
 }
 
+.sidebar-project--active:not(.selected) {
+  border-color: rgba(94, 168, 240, 0.52);
+  background: linear-gradient(160deg, rgba(94, 168, 240, 0.14), rgba(94, 168, 240, 0.04) 72%);
+  box-shadow: 0 0 0 1px rgba(94, 168, 240, 0.16), 0 8px 24px rgba(17, 24, 39, 0.16);
+}
+
+.sidebar-project--queued:not(.selected):not(.sidebar-project--active) {
+  border-color: rgba(94, 168, 240, 0.3);
+}
+
 /* shimmer on leading edge when running */
 .sidebar-project--info .sidebar-project__fill::after {
   content: "";
@@ -3806,7 +3816,6 @@ select:focus {
   color: var(--text-dim);
   font-size: 10px;
   font-weight: 500;
-  margin-top: 4px;
   align-self: flex-start;
 }
 
@@ -3816,6 +3825,40 @@ select:focus {
   height: 6px;
   border-radius: 50%;
   background: var(--text-dim);
+}
+
+.sidebar-project__meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.sidebar-project__meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  background: color-mix(in srgb, var(--bg-panel-alt) 86%, transparent);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.sidebar-project__meta-chip--queued {
+  color: var(--info);
+  border-color: rgba(94, 168, 240, 0.28);
+  background: rgba(94, 168, 240, 0.1);
+}
+
+.sidebar-project__meta-chip--deadline {
+  color: var(--warning);
+  border-color: rgba(232, 182, 68, 0.28);
+  background: rgba(232, 182, 68, 0.08);
 }
 
 /* mini step counter bar at bottom of card */
@@ -7034,6 +7077,27 @@ body {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+.live-run-strip__fleet {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.live-run-strip__fleet-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(94, 168, 240, 0.24);
+  background: rgba(94, 168, 240, 0.08);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .live-run-strip__progress-text {
