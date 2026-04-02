@@ -17,6 +17,7 @@ from .contract_wave import (
     load_spine_state,
 )
 from .errors import ARTIFACT_READ_EXCEPTIONS
+from .lru_ttl_cache import LruTtlCache
 from .model_constants import DEFAULT_LOCAL_MODEL_PROVIDER
 from .model_providers import normalize_local_model_provider, normalize_model_provider, provider_preset
 from .models import Checkpoint, ExecutionPlanState, ProjectContext
@@ -34,14 +35,14 @@ DETAIL_CACHE_VERSION = 17
 LIST_ITEM_CACHE_VERSION = 1
 WORKSPACE_LISTING_CACHE_VERSION = 1
 PROJECT_TREE_EXCLUDED_NAMES = frozenset({".git", LOCAL_PROJECT_LOG_DIRNAME, "ui_bridge_perf.jsonl"})
-_DETAIL_BASE_PAYLOAD_MEMORY_CACHE: dict[str, tuple[int, str, dict[str, Any]]] = {}
-_LIST_ITEM_PAYLOAD_MEMORY_CACHE: dict[str, tuple[int, str, dict[str, Any]]] = {}
-_WORKSPACE_LISTING_MEMORY_CACHE: dict[str, tuple[int, str, dict[str, Any]]] = {}
+_DETAIL_BASE_PAYLOAD_MEMORY_CACHE = LruTtlCache[str, tuple[int, str, dict[str, Any]]](max_entries=48)
+_LIST_ITEM_PAYLOAD_MEMORY_CACHE = LruTtlCache[str, tuple[int, str, dict[str, Any]]](max_entries=256)
+_WORKSPACE_LISTING_MEMORY_CACHE = LruTtlCache[str, tuple[int, str, dict[str, Any]]](max_entries=16)
 _PROVIDER_STATUSES_FETCH_CACHE: tuple[float, dict[str, dict[str, Any]]] | None = None
 _PROVIDER_STATUSES_FETCH_CACHE_TTL_SECONDS = 10.0
 _DETAIL_CONTENT_SIGNATURE_MEMORY_CACHE: dict[str, tuple[str, str, str, float]] = {}
 _DETAIL_CONTENT_SIGNATURE_RECENT_WINDOW_SECONDS = 1.0
-_SECTION_PAYLOAD_MEMORY_CACHE: dict[str, tuple[str, dict[str, Any]]] = {}
+_SECTION_PAYLOAD_MEMORY_CACHE = LruTtlCache[str, tuple[str, dict[str, Any]]](max_entries=64)
 
 PLANNING_STAGE_DEFINITIONS = (
     {"key": "context_scan", "label": "Scan repository context"},
@@ -220,7 +221,7 @@ def _section_payload_from_cache(cache_key: str, signature: str) -> dict[str, Any
 
 
 def _store_section_payload(cache_key: str, signature: str, payload: dict[str, Any]) -> dict[str, Any]:
-    _SECTION_PAYLOAD_MEMORY_CACHE[cache_key] = (signature, _clone_section_payload(payload))
+    _SECTION_PAYLOAD_MEMORY_CACHE.set(cache_key, (signature, _clone_section_payload(payload)))
     return payload
 
 
@@ -1700,18 +1701,18 @@ def _cached_project_list_item_payload(
                 and cached_signature == content_signature
                 and isinstance(cached_payload, dict)
             ):
-                _LIST_ITEM_PAYLOAD_MEMORY_CACHE[memory_cache_key] = (
+                _LIST_ITEM_PAYLOAD_MEMORY_CACHE.set(memory_cache_key, (
                     LIST_ITEM_CACHE_VERSION,
                     content_signature,
                     deepcopy(cached_payload),
-                )
+                ))
                 return _clone_cached_list_item_payload(cached_payload)
     payload = _build_project_list_item_payload(orchestrator, project, archived=archived)
-    _LIST_ITEM_PAYLOAD_MEMORY_CACHE[memory_cache_key] = (
+    _LIST_ITEM_PAYLOAD_MEMORY_CACHE.set(memory_cache_key, (
         LIST_ITEM_CACHE_VERSION,
         content_signature,
         deepcopy(payload),
-    )
+    ))
     write_json(
         cache_file,
         {
@@ -1992,11 +1993,11 @@ def _cached_project_detail_base_payload(
             and cached_signature == content_signature
             and isinstance(cached_payload, dict)
         ):
-            _DETAIL_BASE_PAYLOAD_MEMORY_CACHE[memory_cache_key] = (
+            _DETAIL_BASE_PAYLOAD_MEMORY_CACHE.set(memory_cache_key, (
                 DETAIL_CACHE_VERSION,
                 content_signature,
                 deepcopy(cached_payload),
-            )
+            ))
             payload = cached_payload
             payload["content_signature"] = content_signature
             payload["payload_cache_hit"] = True
@@ -2018,11 +2019,11 @@ def _cached_project_detail_base_payload(
     timings["base_build_ms"] = round((perf_counter() - base_build_started_at) * 1000.0, 3)
     payload["content_signature"] = content_signature
     payload["payload_cache_hit"] = False
-    _DETAIL_BASE_PAYLOAD_MEMORY_CACHE[memory_cache_key] = (
+    _DETAIL_BASE_PAYLOAD_MEMORY_CACHE.set(memory_cache_key, (
         DETAIL_CACHE_VERSION,
         content_signature,
         deepcopy(payload),
-    )
+    ))
     cache_write_started_at = perf_counter()
     write_json(
         cache_file,
@@ -2101,7 +2102,6 @@ def _provider_statuses_for_detail(
             return deepcopy(cached_statuses)
     statuses = provider_statuses_payload(
         fetch_snapshot=fetch_codex_status,
-        force_refresh=True,
     )
     _PROVIDER_STATUSES_FETCH_CACHE = (monotonic(), deepcopy(statuses))
     return statuses
@@ -2178,11 +2178,11 @@ def list_projects_payload(orchestrator: Orchestrator, *, bypass_cache: bool = Fa
                 and cached_signature == content_signature
                 and isinstance(cached_payload, dict)
             ):
-                _WORKSPACE_LISTING_MEMORY_CACHE[memory_cache_key] = (
+                _WORKSPACE_LISTING_MEMORY_CACHE.set(memory_cache_key, (
                     WORKSPACE_LISTING_CACHE_VERSION,
                     content_signature,
                     deepcopy(cached_payload),
-                )
+                ))
                 return _clone_workspace_listing_payload(cached_payload)
     projects = sorted(orchestrator.list_projects(), key=lambda item: item.metadata.created_at, reverse=True)
     project_payloads = [project_list_item_payload(orchestrator, project, bypass_cache=bypass_cache) for project in projects]
@@ -2193,11 +2193,11 @@ def list_projects_payload(orchestrator: Orchestrator, *, bypass_cache: bool = Fa
         "history": history_payloads,
         "workspace": workspace_snapshot([str(item.get("status", "")).strip() for item in project_payloads]),
     }
-    _WORKSPACE_LISTING_MEMORY_CACHE[memory_cache_key] = (
+    _WORKSPACE_LISTING_MEMORY_CACHE.set(memory_cache_key, (
         WORKSPACE_LISTING_CACHE_VERSION,
         content_signature,
         deepcopy(payload),
-    )
+    ))
     write_json(
         cache_file,
         {

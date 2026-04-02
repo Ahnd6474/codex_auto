@@ -1,4 +1,4 @@
-import { Suspense, memo, useEffect } from "react";
+import { Suspense, memo, useEffect, useRef } from "react";
 import { useI18n } from "../../i18n";
 import { createPreloadableNamedExport, scheduleIdleTask } from "../../lazyLoad";
 import { projectDetailStatus, sameQueuedJobs } from "../../utils";
@@ -318,6 +318,7 @@ export const CenterWorkspace = memo(function CenterWorkspace({
   onChangeChatReasoningEffort,
 }) {
   const { t } = useI18n();
+  const hasCompletedInitialTabPreloadRef = useRef(false);
   const developerMode = Boolean(programSettings?.developer_mode);
   const visibleHistoryDetail = selectedHistoryId ? historyDetail : detail;
   const normalizedActiveTab = normalizeWorkspaceTab(activeTab);
@@ -344,6 +345,10 @@ export const CenterWorkspace = memo(function CenterWorkspace({
 
   useEffect(() => {
     preloadTab(hasFlowTab ? normalizedActiveTab : (normalizedActiveTab === "flow" ? "ai-chat" : normalizedActiveTab));
+    if (!hasCompletedInitialTabPreloadRef.current) {
+      hasCompletedInitialTabPreloadRef.current = true;
+      return undefined;
+    }
     const likelyNextTabs =
       normalizedActiveTab === "ai-chat"
         ? [hasFlowTab ? "flow" : "config", "dashboard"]

@@ -2,6 +2,13 @@ import { useRef } from "react";
 
 export function Splitter({ axis = "vertical", onResize, onDragEnd, className = "", title }) {
   const draggingRef = useRef(false);
+  const frameRef = useRef(null);
+  const pendingDeltaRef = useRef(0);
+
+  function flushResize() {
+    frameRef.current = null;
+    onResize?.(pendingDeltaRef.current);
+  }
 
   function startDrag(event) {
     event.preventDefault();
@@ -11,11 +18,19 @@ export function Splitter({ axis = "vertical", onResize, onDragEnd, className = "
     function handleMove(moveEvent) {
       if (!draggingRef.current) return;
       const currentPos = axis === "vertical" ? moveEvent.clientX : moveEvent.clientY;
-      onResize(currentPos - startPos);
+      pendingDeltaRef.current = currentPos - startPos;
+      if (frameRef.current === null) {
+        frameRef.current = window.requestAnimationFrame(flushResize);
+      }
     }
 
     function handleUp() {
       draggingRef.current = false;
+      if (frameRef.current !== null) {
+        window.cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+        onResize?.(pendingDeltaRef.current);
+      }
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
       document.body.style.cursor = "";

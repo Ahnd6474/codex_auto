@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import heapq
+
 from .models import MemoryEntry, ProjectPaths
 from .utils import append_jsonl, now_utc_iso, read_jsonl, similarity_score
 
@@ -63,7 +65,9 @@ class MemoryStore:
         append_jsonl(self.paths.task_summaries_file, entry.to_dict())
 
     def retrieve(self, query: str, limit: int = 5) -> list[dict]:
-        corpus = []
+        if limit <= 0:
+            return []
+        top_matches: list[tuple[float, str, str, dict]] = []
         for file_path, label in [
             (self.paths.success_patterns_file, "success"),
             (self.paths.failure_patterns_file, "failure"),
@@ -73,9 +77,13 @@ class MemoryStore:
                 text = f"{item.get('task', '')} {item.get('summary', '')} {' '.join(item.get('tags', []))}"
                 score = similarity_score(query, text)
                 if score > 0:
-                    corpus.append((score, item.get("timestamp", ""), label, item))
-        corpus.sort(key=lambda row: (row[0], row[1]), reverse=True)
-        return [{**item, "memory_type": label, "similarity": score} for score, _, label, item in corpus[:limit]]
+                    candidate = (score, item.get("timestamp", ""), label, item)
+                    if len(top_matches) < limit:
+                        heapq.heappush(top_matches, candidate)
+                    else:
+                        heapq.heappushpop(top_matches, candidate)
+        top_matches.sort(key=lambda row: (row[0], row[1]), reverse=True)
+        return [{**item, "memory_type": label, "similarity": score} for score, _, label, item in top_matches]
 
     def render_context(self, query: str, limit: int = 5) -> str:
         entries = self.retrieve(query, limit=limit)

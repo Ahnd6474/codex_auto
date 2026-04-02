@@ -1,4 +1,4 @@
-import { lazy } from "react";
+import { createElement, lazy } from "react";
 
 export function lazyNamedExport(loader, exportName) {
   return lazy(() => loader().then((module) => ({ default: module[exportName] })));
@@ -23,9 +23,9 @@ export function createPreloadableNamedExport(loader, exportName) {
   function PreloadableComponent(props) {
     if (loadedComponent) {
       const Component = loadedComponent;
-      return <Component {...props} />;
+      return createElement(Component, props);
     }
-    return <LazyComponent {...props} />;
+    return createElement(LazyComponent, props);
   }
 
   PreloadableComponent.preload = load;

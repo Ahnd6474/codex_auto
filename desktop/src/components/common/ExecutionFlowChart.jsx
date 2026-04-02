@@ -550,6 +550,57 @@ function buildChartData(steps = [], projectStatus = "", language = "en", activeL
   };
 }
 
+function chartStepRenderSignature(steps = []) {
+  return (steps || []).map((step) => [
+    step?.step_id || "",
+    step?.title || "",
+    step?.display_description || "",
+    step?.success_criteria || "",
+    step?.status || "",
+    Array.isArray(step?.depends_on) ? step.depends_on.join(",") : "",
+    Array.isArray(step?.owned_paths) ? step.owned_paths.join(",") : "",
+  ].join("|")).join("::");
+}
+
+function chartDetailStatusSignature(detail = null, activeJob = null) {
+  const liveSteps = Array.isArray(detail?.plan?.steps) ? detail.plan.steps : [];
+  const checkpointPending = detail?.checkpoints?.pending || null;
+  const checkpointItems = Array.isArray(detail?.checkpoints?.items) ? detail.checkpoints.items : [];
+  return [
+    detail?.project?.current_status || "",
+    activeJob?.id || "",
+    activeJob?.status || "",
+    activeJob?.started_at || "",
+    liveSteps.map((step) => [
+      step?.step_id || "",
+      step?.status || "",
+      step?.metadata?.lineage_id || "",
+    ].join(":")).join("|"),
+    checkpointItems.map((item) => [
+      item?.lineage_id || "",
+      item?.status || "",
+      Array.isArray(item?.plan_refs) ? item.plan_refs.join(",") : "",
+    ].join(":")).join("|"),
+    checkpointPending
+      ? [
+        checkpointPending?.lineage_id || "",
+        checkpointPending?.status || "",
+        Array.isArray(checkpointPending?.plan_refs) ? checkpointPending.plan_refs.join(",") : "",
+      ].join(":")
+      : "",
+  ].join("||");
+}
+
+function executionFlowChartPropsEqual(previousProps, nextProps) {
+  return (
+    previousProps.language === nextProps.language
+    && previousProps.selectedStepId === nextProps.selectedStepId
+    && previousProps.onSelectStep === nextProps.onSelectStep
+    && chartStepRenderSignature(previousProps.steps) === chartStepRenderSignature(nextProps.steps)
+    && chartDetailStatusSignature(previousProps.detail, previousProps.activeJob) === chartDetailStatusSignature(nextProps.detail, nextProps.activeJob)
+  );
+}
+
 function ExecutionFlowChartComponent({ steps = [], detail = null, activeJob = null, language = "en", selectedStepId = "", onSelectStep = null }) {
   const arrowId = useId().replace(/:/g, "-");
   const executionState = useMemo(() => deriveExecutionUiState(detail, null, activeJob), [detail, activeJob]);
@@ -666,7 +717,7 @@ function ExecutionFlowChartComponent({ steps = [], detail = null, activeJob = nu
   );
 }
 
-export const ExecutionFlowChart = memo(ExecutionFlowChartComponent);
+export const ExecutionFlowChart = memo(ExecutionFlowChartComponent, executionFlowChartPropsEqual);
 export const __executionFlowChartTestables = {
   buildChartLevels,
   orderChartLevels,

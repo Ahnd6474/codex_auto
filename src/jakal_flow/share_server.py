@@ -17,6 +17,7 @@ from ._version import __version__
 from .errors import HANDLED_OPERATION_EXCEPTIONS
 from .orchestrator import Orchestrator
 from .project_snapshot import context_execution_snapshot
+from .rate_limiter import TokenBucketRateLimiter, TokenBucketRule
 from .run_control import request_stop_after_current_step
 from .share import (
     DEFAULT_SHARE_HOST,
@@ -40,6 +41,14 @@ from .utils import append_jsonl, now_utc_iso, parse_json_text, write_json
 
 
 WEBSITE_ROOT = Path(__file__).resolve().parents[2] / "website"
+_DEFAULT_SHARE_API_RATE_LIMIT_RULE = TokenBucketRule(capacity=24.0, refill_tokens_per_second=12.0)
+_SHARE_API_RATE_LIMIT_RULES: dict[str, TokenBucketRule] = {
+    "/share/api/status": TokenBucketRule(capacity=12.0, refill_tokens_per_second=6.0),
+    "/share/api/logs": TokenBucketRule(capacity=10.0, refill_tokens_per_second=4.0),
+    "/share/api/flow.svg": TokenBucketRule(capacity=6.0, refill_tokens_per_second=2.0),
+    "/share/api/events": TokenBucketRule(capacity=2.0, refill_tokens_per_second=0.25),
+    "/share/api/control": TokenBucketRule(capacity=4.0, refill_tokens_per_second=1.0),
+}
 
 
 class ShareRemoteControlManager:
@@ -229,6 +238,31 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             return ""
         return str(values[0]).strip()
 
+    def _rate_limit_identity(self, query: str) -> str:
+        access_token = self._query_arg(query, "access")
+        if access_token:
+            return f"access:{access_token}"
+        session_id = self._query_arg(query, "session")
+        if session_id:
+            return f"session:{session_id}"
+        return "anonymous"
+
+    def _enforce_api_rate_limit(self, path: str, query: str) -> bool:
+        client_host = self.client_address[0] if self.client_address else ""
+        decision = self.server.consume_api_request(  # type: ignore[attr-defined]
+            path=path,
+            client_host=client_host,
+            identity=self._rate_limit_identity(query),
+        )
+        if decision.allowed:
+            return True
+        self._write_json(
+            HTTPStatus.TOO_MANY_REQUESTS,
+            {"error": "Too many requests. Retry later."},
+            headers={"Retry-After": str(decision.retry_after_seconds)},
+        )
+        return False
+
     def _validated_session(self, query: str):
         access_token = self._query_arg(query, "access")
         if access_token:
@@ -261,6 +295,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         return payload
 
     def _serve_status(self, query: str) -> None:
+        if not self._enforce_api_rate_limit("/share/api/status", query):
+            return
         try:
             _owner_project, session = self._validated_session(query)
             orchestrator = Orchestrator(self.server.workspace_root)  # type: ignore[attr-defined]
@@ -273,6 +309,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             self._write_json(HTTPStatus.FORBIDDEN, {"error": str(exc)})
 
     def _serve_logs(self, query: str) -> None:
+        if not self._enforce_api_rate_limit("/share/api/logs", query):
+            return
         try:
             owner_project, _session = self._validated_session(query)
             limit = min(50, max(1, int(self._query_arg(query, "limit") or "20")))
@@ -304,6 +342,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             self._write_json(HTTPStatus.FORBIDDEN, {"error": str(exc)})
 
     def _serve_events(self, query: str) -> None:
+        if not self._enforce_api_rate_limit("/share/api/events", query):
+            return
         try:
             _owner_project, session = self._validated_session(query)
         except ValueError as exc:
@@ -348,6 +388,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             self._write_sse_event("error", {"error": str(exc)})
 
     def _serve_control(self, query: str) -> None:
+        if not self._enforce_api_rate_limit("/share/api/control", query):
+            return
         try:
             owner_project, session = self._validated_session(query)
             body = self._read_json_body()
@@ -392,6 +434,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             self._write_json(HTTPStatus.FORBIDDEN, {"error": str(exc)})
 
     def _serve_flow_svg(self, query: str) -> None:
+        if not self._enforce_api_rate_limit("/share/api/flow.svg", query):
+            return
         try:
             owner_project, _session = self._validated_session(query)
             repo_id = self._query_arg(query, "repo_id")
@@ -456,11 +500,19 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"\n")
         self.wfile.flush()
 
-    def _write_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
+    def _write_json(
+        self,
+        status: HTTPStatus,
+        payload: dict[str, Any],
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
+        for key, value in (headers or {}).items():
+            self.send_header(key, value)
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
         self.wfile.write(raw)
@@ -471,6 +523,13 @@ class ShareHTTPServer(ThreadingHTTPServer):
         super().__init__(server_address, handler_cls)
         self.workspace_root = workspace_root
         self.remote_control_manager = ShareRemoteControlManager(workspace_root)
+        self.request_rate_limiter = TokenBucketRateLimiter(max_buckets=512, bucket_ttl_seconds=300.0)
+        self.request_rate_limit_rules = dict(_SHARE_API_RATE_LIMIT_RULES)
+
+    def consume_api_request(self, *, path: str, client_host: str, identity: str):
+        rule = self.request_rate_limit_rules.get(path, _DEFAULT_SHARE_API_RATE_LIMIT_RULE)
+        bucket_id = "|".join((path, client_host or "unknown", identity or "anonymous"))
+        return self.request_rate_limiter.consume(bucket_id, rule=rule)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

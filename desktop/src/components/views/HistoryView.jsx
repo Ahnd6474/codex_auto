@@ -1,17 +1,44 @@
+import { useRef } from "react";
+import { useVirtualWindow } from "../../hooks/useVirtualWindow";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
 import { failureReasonLabel, statusTone } from "../../utils";
 
 function HistoryRow({ title, tone, lines }) {
   const { t } = useI18n();
+  const listRef = useRef(null);
+  const safeLines = Array.isArray(lines) ? lines : [];
+  const shouldVirtualize = safeLines.length > 36;
+  const {
+    visibleItems,
+    topSpacerHeight,
+    bottomSpacerHeight,
+  } = useVirtualWindow(safeLines, {
+    containerRef: listRef,
+    itemHeight: 72,
+    overscan: 4,
+    enabled: shouldVirtualize,
+    defaultViewportHeight: 360,
+  });
+
   return (
     <div className="content-card">
       <div className="content-card__header">
         <strong>{title}</strong>
-        <span className={`status-badge status-badge--${tone}`}>{lines.length}</span>
+        <span className={`status-badge status-badge--${tone}`}>{safeLines.length}</span>
       </div>
-      <div className="dense-list">
-        {lines.length ? lines : <div className="empty-block">{t("history.noEntries")}</div>}
+      <div
+        className="dense-list"
+        ref={listRef}
+        style={shouldVirtualize ? { maxHeight: "360px", overflowY: "auto" } : undefined}
+      >
+        {safeLines.length ? (
+          <>
+            {topSpacerHeight > 0 ? <div aria-hidden="true" style={{ height: `${topSpacerHeight}px` }} /> : null}
+            {(shouldVirtualize ? visibleItems : safeLines)}
+            {bottomSpacerHeight > 0 ? <div aria-hidden="true" style={{ height: `${bottomSpacerHeight}px` }} /> : null}
+          </>
+        ) : <div className="empty-block">{t("history.noEntries")}</div>}
       </div>
     </div>
   );

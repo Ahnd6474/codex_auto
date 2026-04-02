@@ -442,6 +442,311 @@ function reservationProjectLabel(job, fallbackLabel) {
   return String(job?.display_name || "").trim() || basename(job?.project_dir || "") || String(job?.repo_id || "").trim() || fallbackLabel;
 }
 
+function sameStringArrayValues(left = [], right = []) {
+  if (left === right) {
+    return true;
+  }
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    if (String(left[index] || "") !== String(right[index] || "")) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function createStepTextDraft(step = null) {
+  return {
+    title: String(step?.title || ""),
+    deadline_at: String(step?.deadline_at || ""),
+    depends_on_text: Array.isArray(step?.depends_on) ? step.depends_on.join(", ") : "",
+    owned_paths_text: Array.isArray(step?.owned_paths) ? step.owned_paths.join("\n") : "",
+    display_description: String(step?.display_description || ""),
+    codex_description: String(step?.codex_description || ""),
+    success_criteria: String(step?.success_criteria || ""),
+  };
+}
+
+const StepEditorPanel = memo(function StepEditorPanel({
+  selectedStep,
+  selectedStepIndex,
+  stepsLength,
+  selectedStepStatus,
+  selectedStepFailureReason,
+  selectedStepFailureCode,
+  selectedSystemStep,
+  selectedStepEstimate,
+  editableStep,
+  editableStepModel,
+  stepNoteLabel,
+  language,
+  t,
+  detail,
+  codexStatus,
+  providerOptions,
+  modelCatalog,
+  selectedStepModelValue,
+  selectedStepExecutionModelLabel,
+  selectedStepModelVisible,
+  selectedStepModel,
+  selectedStepModelGroups,
+  busy,
+  onSelectStep,
+  onUpdateStepField,
+  onSaveStepLocal,
+  onAddStep,
+  onDeleteStep,
+}) {
+  const [textDraft, setTextDraft] = useState(() => createStepTextDraft(selectedStep));
+
+  useEffect(() => {
+    setTextDraft(createStepTextDraft(selectedStep));
+  }, [
+    selectedStep?.step_id,
+    selectedStep?.title,
+    selectedStep?.deadline_at,
+    Array.isArray(selectedStep?.depends_on) ? selectedStep.depends_on.join("|") : "",
+    Array.isArray(selectedStep?.owned_paths) ? selectedStep.owned_paths.join("|") : "",
+    selectedStep?.display_description,
+    selectedStep?.codex_description,
+    selectedStep?.success_criteria,
+  ]);
+
+  function updateDraft(field, value) {
+    setTextDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function commitPatch(patch) {
+    if (!patch || !Object.keys(patch).length) {
+      return;
+    }
+    onUpdateStepField?.(patch);
+  }
+
+  function commitTextDraftField(field) {
+    if (!selectedStep) {
+      return;
+    }
+    switch (field) {
+      case "title":
+        if (textDraft.title !== String(selectedStep.title || "")) {
+          commitPatch({ title: textDraft.title });
+        }
+        break;
+      case "deadline_at":
+        if (textDraft.deadline_at !== String(selectedStep.deadline_at || "")) {
+          commitPatch({ deadline_at: textDraft.deadline_at });
+        }
+        break;
+      case "depends_on_text": {
+        const nextValue = normalizeListText(textDraft.depends_on_text);
+        if (!sameStringArrayValues(nextValue, selectedStep.depends_on || [])) {
+          commitPatch({ depends_on: nextValue });
+        }
+        break;
+      }
+      case "owned_paths_text": {
+        const nextValue = normalizeListText(textDraft.owned_paths_text);
+        if (!sameStringArrayValues(nextValue, selectedStep.owned_paths || [])) {
+          commitPatch({ owned_paths: nextValue });
+        }
+        break;
+      }
+      case "display_description":
+        if (textDraft.display_description !== String(selectedStep.display_description || "")) {
+          commitPatch({ display_description: textDraft.display_description });
+        }
+        break;
+      case "codex_description":
+        if (textDraft.codex_description !== String(selectedStep.codex_description || "")) {
+          commitPatch({ codex_description: textDraft.codex_description });
+        }
+        break;
+      case "success_criteria":
+        if (textDraft.success_criteria !== String(selectedStep.success_criteria || "")) {
+          commitPatch({ success_criteria: textDraft.success_criteria });
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  function commitAllTextDraftFields() {
+    if (!selectedStep) {
+      return;
+    }
+    const patch = {};
+    if (textDraft.title !== String(selectedStep.title || "")) {
+      patch.title = textDraft.title;
+    }
+    if (textDraft.deadline_at !== String(selectedStep.deadline_at || "")) {
+      patch.deadline_at = textDraft.deadline_at;
+    }
+    const dependsOn = normalizeListText(textDraft.depends_on_text);
+    if (!sameStringArrayValues(dependsOn, selectedStep.depends_on || [])) {
+      patch.depends_on = dependsOn;
+    }
+    const ownedPaths = normalizeListText(textDraft.owned_paths_text);
+    if (!sameStringArrayValues(ownedPaths, selectedStep.owned_paths || [])) {
+      patch.owned_paths = ownedPaths;
+    }
+    if (textDraft.display_description !== String(selectedStep.display_description || "")) {
+      patch.display_description = textDraft.display_description;
+    }
+    if (textDraft.codex_description !== String(selectedStep.codex_description || "")) {
+      patch.codex_description = textDraft.codex_description;
+    }
+    if (textDraft.success_criteria !== String(selectedStep.success_criteria || "")) {
+      patch.success_criteria = textDraft.success_criteria;
+    }
+    commitPatch(patch);
+  }
+
+  if (!selectedStep) {
+    return null;
+  }
+
+  return (
+    <div className="run-step-editor">
+      <div className="run-step-editor__header">
+        <strong>{selectedStep.step_id}: {textDraft.title || selectedStep.title || t("run.selectedStep")}</strong>
+        {selectedStepIndex >= 0 ? (
+          <span className="step-position-badge">{selectedStepIndex + 1}/{stepsLength}</span>
+        ) : null}
+        <span className={`status-badge status-badge--${statusTone(selectedStepStatus)}`}>
+          {displayStatus(selectedStepStatus, language)}
+        </span>
+        <button className="step-editor-close" onClick={() => onSelectStep?.(null)} type="button" title="Close (Esc)" aria-label="Close">x</button>
+      </div>
+
+      {selectedSystemStep ? (
+        <div className="step-editor-grid">
+          <div className="field field--wide"><span>{t("field.description")}</span><p>{selectedStep.display_description || t("run.noSummary")}</p></div>
+          {selectedStep.deadline_at ? <div className="field field--wide"><span>{language === "ko" ? "Deadline" : "Deadline"}</span><p>{selectedStep.deadline_at}</p></div> : null}
+          <div className="field field--wide"><span>{t("field.dependsOn")}</span><p>{(selectedStep.depends_on || []).join(", ") || t("common.none")}</p></div>
+          {String(selectedStepStatus || "").trim().toLowerCase().includes("failed") && selectedStepFailureReason ? (
+            <div className="field field--wide">
+              <span>{language === "ko" ? "Failure Reason" : "Failure Reason"}</span>
+              <p>{selectedStepFailureReason}</p>
+              {selectedStepFailureCode ? <small className="field-hint"><code>{selectedStepFailureCode}</code></small> : null}
+            </div>
+          ) : null}
+          {selectedStep.notes ? <div className="field field--wide"><span>{stepNoteLabel}</span><p>{selectedStep.notes}</p></div> : null}
+          {selectedStep.step_id === CLOSEOUT_STEP_ID ? (
+            <div className="field field--wide">
+              <span>{language === "ko" ? "Report Formats" : "Report Formats"}</span>
+              <div className="report-format-row">
+                <span className="report-format-chip report-format-chip--word"><WordIcon />Word</span>
+                <span className="report-format-chip report-format-chip--ppt"><PptIcon />PowerPoint</span>
+                <span className="report-format-chip report-format-chip--web"><WebpageIcon />Webpage</span>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="step-fields-2col">
+          {selectedStepEstimate ? (
+            <div className="field field--wide">
+              <div style={{ display: "flex", gap: "16px", padding: "6px 10px", background: "var(--bg-panel-alt)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: "11px" }}>
+                <div><span style={{ color: "var(--text-dim)" }}>{language === "ko" ? "Est." : "Est."}</span> <strong>{formatDurationCompact(selectedStepEstimate?.estimated_duration_seconds ?? 0, language)}</strong></div>
+                <div><span style={{ color: "var(--text-dim)" }}>{t("run.currentRemaining")}</span> <strong>{formatDurationCompact(selectedStepEstimate?.remaining_seconds ?? 0, language)}</strong></div>
+              </div>
+            </div>
+          ) : null}
+
+          <label className="field field--wide"><span>{t("field.title")}</span><input value={textDraft.title} onChange={(event) => updateDraft("title", event.target.value)} onBlur={() => commitTextDraftField("title")} disabled={!editableStep} /></label>
+
+          <label className="field">
+            <span>{language === "ko" ? "Deadline" : "Deadline"}</span>
+            <input
+              value={textDraft.deadline_at}
+              onChange={(event) => updateDraft("deadline_at", event.target.value)}
+              onBlur={() => commitTextDraftField("deadline_at")}
+              disabled={!editableStep}
+              placeholder={language === "ko" ? "Example: 2026-04-05 18:00" : "Example: 2026-04-05 18:00"}
+            />
+          </label>
+
+          <label className="field"><span>{t("field.gptReasoning")}</span>
+            <select value={selectedStep.reasoning_effort || detail?.runtime?.effort || "high"} onChange={(event) => onUpdateStepField?.("reasoning_effort", event.target.value)} disabled={!editableStepModel}>
+              {REASONING_OPTIONS.map((effort) => (<option key={effort} value={effort}>{reasoningEffortLabel(effort, language)}</option>))}
+            </select>
+          </label>
+
+          <label className="field"><span>{t("field.modelProvider")}</span>
+            <select value={selectedStep.model_provider || ""} onChange={(event) => onUpdateStepField?.("model_provider", event.target.value)} disabled={!editableStepModel}>
+              <option value="">{autoProviderLabel(language)}</option>
+              {providerOptions.map(([value, label]) => (<option key={value} value={value} disabled={!providerAvailable(value, codexStatus)} title={providerStatusReason(value, codexStatus)}>{label}</option>))}
+            </select>
+            {selectedStep.model_provider && !providerUsable(selectedStep.model_provider, codexStatus) && providerStatusReason(selectedStep.model_provider, codexStatus) ? (
+              <small className="field-hint" style={{ color: "var(--warning)" }}>{providerStatusReason(selectedStep.model_provider, codexStatus)}</small>
+            ) : null}
+          </label>
+
+          <label className="field field--wide"><span>{t("field.model")}</span>
+            <select
+              value={selectedStepModelValue}
+              onChange={(event) => {
+                const nextModel = String(event.target.value || "").trim();
+                onUpdateStepField?.(stepModelSelectionPatch(modelCatalog, detail?.runtime || {}, nextModel));
+              }}
+              disabled={!editableStepModel}
+            >
+              <option value="">{language === "ko" ? `Use execution model (${selectedStepExecutionModelLabel})` : `Use execution model (${selectedStepExecutionModelLabel})`}</option>
+              {!selectedStepModelVisible && selectedStepModel ? (
+                <option value={selectedStepModelValue}>
+                  {modelDisplayName(modelCatalog, selectedStepModel) || selectedStepModel}
+                </option>
+              ) : null}
+              {selectedStepModelGroups.map((group) => (
+                <optgroup key={group.key} label={group.label}>
+                  {group.options.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {`${item.label} / ${item.provider_label}`}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <small className="field-hint">
+              {language === "ko"
+                ? "Leave this synced with the execution model, or pick another model to override this block."
+                : "Leave this synced with the execution model, or pick another model to override this block."}
+            </small>
+          </label>
+
+          <label className="field field--wide"><span>{t("field.dependsOn")}</span><input value={textDraft.depends_on_text} onChange={(event) => updateDraft("depends_on_text", event.target.value)} onBlur={() => commitTextDraftField("depends_on_text")} disabled={!editableStep} placeholder="step_id1, step_id2" /></label>
+          <label className="field field--wide"><span>{t("field.ownedPaths")}</span><textarea value={textDraft.owned_paths_text} onChange={(event) => updateDraft("owned_paths_text", event.target.value)} onBlur={() => commitTextDraftField("owned_paths_text")} disabled={!editableStep} placeholder={language === "ko" ? "One file path per line" : "One file path per line"} style={{ minHeight: "48px" }} /></label>
+          <label className="field field--wide"><span>{t("field.description")}</span><textarea value={textDraft.display_description} onChange={(event) => updateDraft("display_description", event.target.value)} onBlur={() => commitTextDraftField("display_description")} disabled={!editableStep} style={{ minHeight: "56px" }} /></label>
+          <label className="field field--wide"><span>{t("field.codexInstruction")}</span><textarea value={textDraft.codex_description} onChange={(event) => updateDraft("codex_description", event.target.value)} onBlur={() => commitTextDraftField("codex_description")} disabled={!editableStep} style={{ minHeight: "56px" }} /></label>
+          <label className="field field--wide"><span>{t("field.successCriteria")}</span><textarea value={textDraft.success_criteria} onChange={(event) => updateDraft("success_criteria", event.target.value)} onBlur={() => commitTextDraftField("success_criteria")} disabled={!editableStep} style={{ minHeight: "48px" }} /></label>
+
+          {String(selectedStepStatus || "").trim().toLowerCase().includes("failed") && selectedStepFailureReason ? (
+            <div className="field field--wide">
+              <span>{language === "ko" ? "Failure Reason" : "Failure Reason"}</span>
+              <p>{selectedStepFailureReason}</p>
+              {selectedStepFailureCode ? <small className="field-hint"><code>{selectedStepFailureCode}</code></small> : null}
+            </div>
+          ) : null}
+          {selectedStep.notes ? <div className="field field--wide"><span>{stepNoteLabel}</span><p>{selectedStep.notes}</p></div> : null}
+
+          <div className="action-row field--wide" style={{ paddingTop: "6px", borderTop: "1px solid var(--border)" }}>
+            <button className="toolbar-btn toolbar-btn--accent" onClick={() => { commitAllTextDraftFields(); onSaveStepLocal?.(); }} type="button" disabled={busy}><SaveIcon /><span>{t("action.saveLocal")}</span></button>
+            <button className="toolbar-btn" onClick={onAddStep} type="button" disabled={busy || selectedStep?.step_id === CLOSEOUT_STEP_ID}><span>{t("action.add")}</span></button>
+            <button className="toolbar-btn" onClick={onDeleteStep} type="button" disabled={!editableStep || selectedStep?.step_id === CLOSEOUT_STEP_ID} style={editableStep && selectedStep?.step_id !== CLOSEOUT_STEP_ID ? { color: "var(--danger)" } : {}}><span>{t("action.delete")}</span></button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
 /* ?? Main view ?? */
 export const ParallelRunControlView = memo(function ParallelRunControlView({
   detail,
@@ -737,136 +1042,36 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
 
       {/* ?? Step editor (below flow) ?? */}
       {selectedStep ? (
-        <div className="run-step-editor">
-          <div className="run-step-editor__header">
-            <strong>{selectedStep.step_id}: {selectedStep.title || t("run.selectedStep")}</strong>
-            {selectedStepIndex >= 0 ? (
-              <span className="step-position-badge">{selectedStepIndex + 1}/{steps.length}</span>
-            ) : null}
-            <span className={`status-badge status-badge--${statusTone(selectedStepStatus)}`}>
-              {displayStatus(selectedStepStatus, language)}
-            </span>
-            <button className="step-editor-close" onClick={() => onSelectStep?.(null)} type="button" title="Close (Esc)" aria-label="Close">x</button>
-          </div>
-
-          {selectedSystemStep ? (
-            <div className="step-editor-grid">
-              <div className="field field--wide"><span>{t("field.description")}</span><p>{selectedStep.display_description || t("run.noSummary")}</p></div>
-              {selectedStep.deadline_at ? <div className="field field--wide"><span>{language === "ko" ? "Deadline" : "Deadline"}</span><p>{selectedStep.deadline_at}</p></div> : null}
-              <div className="field field--wide"><span>{t("field.dependsOn")}</span><p>{(selectedStep.depends_on || []).join(", ") || t("common.none")}</p></div>
-              {String(selectedStepStatus || "").trim().toLowerCase().includes("failed") && selectedStepFailureReason ? (
-                <div className="field field--wide">
-                  <span>{language === "ko" ? "Failure Reason" : "Failure Reason"}</span>
-                  <p>{selectedStepFailureReason}</p>
-                  {selectedStepFailureCode ? <small className="field-hint"><code>{selectedStepFailureCode}</code></small> : null}
-                </div>
-              ) : null}
-              {selectedStep.notes ? <div className="field field--wide"><span>{stepNoteLabel}</span><p>{selectedStep.notes}</p></div> : null}
-              {selectedStep.step_id === CLOSEOUT_STEP_ID ? (
-                <div className="field field--wide">
-                  <span>{language === "ko" ? "Report Formats" : "Report Formats"}</span>
-                  <div className="report-format-row">
-                    <span className="report-format-chip report-format-chip--word"><WordIcon />Word</span>
-                    <span className="report-format-chip report-format-chip--ppt"><PptIcon />PowerPoint</span>
-                    <span className="report-format-chip report-format-chip--web"><WebpageIcon />Webpage</span>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="step-fields-2col">
-              {selectedStepEstimate ? (
-                <div className="field field--wide">
-                  <div style={{ display: "flex", gap: "16px", padding: "6px 10px", background: "var(--bg-panel-alt)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: "11px" }}>
-                    <div><span style={{ color: "var(--text-dim)" }}>{language === "ko" ? "Est." : "Est."}</span> <strong>{formatDurationCompact(selectedStepEstimate?.estimated_duration_seconds ?? 0, language)}</strong></div>
-                    <div><span style={{ color: "var(--text-dim)" }}>{t("run.currentRemaining")}</span> <strong>{formatDurationCompact(selectedStepEstimate?.remaining_seconds ?? 0, language)}</strong></div>
-                  </div>
-                </div>
-              ) : null}
-
-              <label className="field field--wide"><span>{t("field.title")}</span><input value={selectedStep.title || ""} onChange={(event) => onUpdateStepField("title", event.target.value)} disabled={!editableStep} /></label>
-
-              <label className="field">
-                <span>{language === "ko" ? "Deadline" : "Deadline"}</span>
-                <input
-                  value={selectedStep.deadline_at || ""}
-                  onChange={(event) => onUpdateStepField("deadline_at", event.target.value)}
-                  disabled={!editableStep}
-                  placeholder={language === "ko" ? "Example: 2026-04-05 18:00" : "Example: 2026-04-05 18:00"}
-                />
-              </label>
-
-              <label className="field"><span>{t("field.gptReasoning")}</span>
-                <select value={selectedStep.reasoning_effort || detail?.runtime?.effort || "high"} onChange={(event) => onUpdateStepField("reasoning_effort", event.target.value)} disabled={!editableStepModel}>
-                  {REASONING_OPTIONS.map((effort) => (<option key={effort} value={effort}>{reasoningEffortLabel(effort, language)}</option>))}
-                </select>
-              </label>
-
-              <label className="field"><span>{t("field.modelProvider")}</span>
-                  <select value={selectedStep.model_provider || ""} onChange={(event) => onUpdateStepField("model_provider", event.target.value)} disabled={!editableStepModel}>
-                  <option value="">{autoProviderLabel(language)}</option>
-                  {providerOptions.map(([value, label]) => (<option key={value} value={value} disabled={!providerAvailable(value, codexStatus)} title={providerStatusReason(value, codexStatus)}>{label}</option>))}
-                </select>
-                {selectedStep.model_provider && !providerUsable(selectedStep.model_provider, codexStatus) && providerStatusReason(selectedStep.model_provider, codexStatus) ? (
-                  <small className="field-hint" style={{ color: "var(--warning)" }}>{providerStatusReason(selectedStep.model_provider, codexStatus)}</small>
-                ) : null}
-              </label>
-
-              <label className="field field--wide"><span>{t("field.model")}</span>
-                <select
-                  value={selectedStepModelValue}
-                  onChange={(event) => {
-                    const nextModel = String(event.target.value || "").trim();
-                    onUpdateStepField(stepModelSelectionPatch(modelCatalog, detail?.runtime || {}, nextModel));
-                  }}
-                  disabled={!editableStepModel}
-                >
-                  <option value="">{language === "ko" ? `Use execution model (${selectedStepExecutionModelLabel})` : `Use execution model (${selectedStepExecutionModelLabel})`}</option>
-                  {!selectedStepModelVisible && selectedStepModel ? (
-                    <option value={selectedStepModelValue}>
-                      {modelDisplayName(modelCatalog, selectedStepModel) || selectedStepModel}
-                    </option>
-                  ) : null}
-                  {selectedStepModelGroups.map((group) => (
-                    <optgroup key={group.key} label={group.label}>
-                      {group.options.map((item) => (
-                        <option key={item.value} value={item.value}>
-                          {`${item.label} / ${item.provider_label}`}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-                <small className="field-hint">
-                  {language === "ko"
-                    ? "Leave this synced with the execution model, or pick another model to override this block."
-                    : "Leave this synced with the execution model, or pick another model to override this block."}
-                </small>
-              </label>
-
-              <label className="field field--wide"><span>{t("field.dependsOn")}</span><input value={(selectedStep.depends_on || []).join(", ")} onChange={(event) => onUpdateStepField("depends_on", normalizeListText(event.target.value))} disabled={!editableStep} placeholder="step_id1, step_id2" /></label>
-              <label className="field field--wide"><span>{t("field.ownedPaths")}</span><textarea value={(selectedStep.owned_paths || []).join("\n")} onChange={(event) => onUpdateStepField("owned_paths", normalizeListText(event.target.value))} disabled={!editableStep} placeholder={language === "ko" ? "One file path per line" : "One file path per line"} style={{ minHeight: "48px" }} /></label>
-              <label className="field field--wide"><span>{t("field.description")}</span><textarea value={selectedStep.display_description || ""} onChange={(event) => onUpdateStepField("display_description", event.target.value)} disabled={!editableStep} style={{ minHeight: "56px" }} /></label>
-              <label className="field field--wide"><span>{t("field.codexInstruction")}</span><textarea value={selectedStep.codex_description || ""} onChange={(event) => onUpdateStepField("codex_description", event.target.value)} disabled={!editableStep} style={{ minHeight: "56px" }} /></label>
-              <label className="field field--wide"><span>{t("field.successCriteria")}</span><textarea value={selectedStep.success_criteria || ""} onChange={(event) => onUpdateStepField("success_criteria", event.target.value)} disabled={!editableStep} style={{ minHeight: "48px" }} /></label>
-
-              {String(selectedStepStatus || "").trim().toLowerCase().includes("failed") && selectedStepFailureReason ? (
-                <div className="field field--wide">
-                  <span>{language === "ko" ? "Failure Reason" : "Failure Reason"}</span>
-                  <p>{selectedStepFailureReason}</p>
-                  {selectedStepFailureCode ? <small className="field-hint"><code>{selectedStepFailureCode}</code></small> : null}
-                </div>
-              ) : null}
-              {selectedStep.notes ? <div className="field field--wide"><span>{stepNoteLabel}</span><p>{selectedStep.notes}</p></div> : null}
-
-              <div className="action-row field--wide" style={{ paddingTop: "6px", borderTop: "1px solid var(--border)" }}>
-                <button className="toolbar-btn toolbar-btn--accent" onClick={onSaveStepLocal} type="button" disabled={busy}><SaveIcon /><span>{t("action.saveLocal")}</span></button>
-                <button className="toolbar-btn" onClick={onAddStep} type="button" disabled={busy || selectedStep?.step_id === CLOSEOUT_STEP_ID}><span>{t("action.add")}</span></button>
-                <button className="toolbar-btn" onClick={onDeleteStep} type="button" disabled={!editableStep || selectedStep?.step_id === CLOSEOUT_STEP_ID} style={editableStep && selectedStep?.step_id !== CLOSEOUT_STEP_ID ? { color: "var(--danger)" } : {}}><span>{t("action.delete")}</span></button>
-              </div>
-            </div>
-          )}
-        </div>
+        <StepEditorPanel
+          selectedStep={selectedStep}
+          selectedStepIndex={selectedStepIndex}
+          stepsLength={steps.length}
+          selectedStepStatus={selectedStepStatus}
+          selectedStepFailureReason={selectedStepFailureReason}
+          selectedStepFailureCode={selectedStepFailureCode}
+          selectedSystemStep={selectedSystemStep}
+          selectedStepEstimate={selectedStepEstimate}
+          editableStep={editableStep}
+          editableStepModel={editableStepModel}
+          stepNoteLabel={stepNoteLabel}
+          language={language}
+          t={t}
+          detail={detail}
+          codexStatus={codexStatus}
+          providerOptions={providerOptions}
+          modelCatalog={modelCatalog}
+          selectedStepModelValue={selectedStepModelValue}
+          selectedStepExecutionModelLabel={selectedStepExecutionModelLabel}
+          selectedStepModelVisible={selectedStepModelVisible}
+          selectedStepModel={selectedStepModel}
+          selectedStepModelGroups={selectedStepModelGroups}
+          busy={busy}
+          onSelectStep={onSelectStep}
+          onUpdateStepField={onUpdateStepField}
+          onSaveStepLocal={onSaveStepLocal}
+          onAddStep={onAddStep}
+          onDeleteStep={onDeleteStep}
+        />
       ) : null}
       {/* ?? Prompt strip (bottom) ??hidden when prompt lives in chat pane ?? */}
       {hidePromptStrip ? null : (

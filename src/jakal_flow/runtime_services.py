@@ -1,49 +1,38 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from threading import Lock
-import time
 from typing import Any, Callable
 
+from .lru_ttl_cache import LruTtlCache
 from .platform_defaults import default_codex_path
-
-
-@dataclass(slots=True)
-class _SnapshotCacheEntry:
-    checked_at_monotonic: float
-    snapshot: Any
 
 
 @dataclass(slots=True)
 class CodexBackendSnapshotService:
     fetcher: Callable[[str], Any]
     ttl_seconds: float = 10.0
-    _entries: dict[str, _SnapshotCacheEntry] = field(default_factory=dict)
-    _lock: Lock = field(default_factory=Lock)
+    _cache: LruTtlCache[str, Any] = field(init=False)
+
+    def __post_init__(self) -> None:
+        self._cache = LruTtlCache(
+            max_entries=16,
+            ttl_seconds=self.ttl_seconds,
+        )
 
     def peek_snapshot(self, codex_path: str = "") -> Any | None:
         cache_key = str(codex_path or "").strip() or default_codex_path()
-        with self._lock:
-            cached = self._entries.get(cache_key)
-            return None if cached is None else cached.snapshot
+        return self._cache.peek(cache_key)
 
     def get_snapshot(self, codex_path: str = "", *, force_refresh: bool = False) -> Any:
         cache_key = str(codex_path or "").strip() or default_codex_path()
-        now = time.monotonic()
-        with self._lock:
-            cached = self._entries.get(cache_key)
-            if (
-                not force_refresh
-                and cached is not None
-                and (now - cached.checked_at_monotonic) <= max(0.0, float(self.ttl_seconds))
-            ):
-                return cached.snapshot
+        if not force_refresh:
+            cached = self._cache.get(cache_key)
+            if cached is not None:
+                return cached
         snapshot = self.fetcher(cache_key)
-        with self._lock:
-            self._entries[cache_key] = _SnapshotCacheEntry(checked_at_monotonic=time.monotonic(), snapshot=snapshot)
+        self._cache.set(cache_key, snapshot, ttl_seconds=self.ttl_seconds)
         return snapshot
 
     def invalidate(self, codex_path: str = "") -> None:
         cache_key = str(codex_path or "").strip() or default_codex_path()
-        with self._lock:
-            self._entries.pop(cache_key, None)
+        self._cache.pop(cache_key)

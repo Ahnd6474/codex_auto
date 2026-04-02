@@ -171,7 +171,6 @@ export function useDesktopController() {
   const workspaceShareRequestDeduperRef = useRef(createRequestDeduper());
   const selectedProjectLoadSequenceRef = useRef(0);
   const toolingSummaryRequestedRef = useRef(false);
-  const ollamaManagerLoadInFlightRef = useRef(false);
 
   const [centerTab, setCenterTab] = usePersistentState("jakal-flow:center-tab", "ai-chat");
   const [bottomTab, setBottomTab] = usePersistentState("jakal-flow:bottom-tab", "json");
@@ -340,7 +339,6 @@ export function useDesktopController() {
 
   useEffect(() => {
     toolingSummaryRequestedRef.current = false;
-    ollamaManagerLoadInFlightRef.current = false;
     setOllamaManagerOpen(false);
     setOllamaManagerLoading(false);
   }, [workspaceRoot]);
@@ -359,6 +357,10 @@ export function useDesktopController() {
       forceRefresh: true,
       includeOllamaDetails: false,
       quiet: true,
+    }).then((snapshot) => {
+      if (!snapshot) {
+        toolingSummaryRequestedRef.current = false;
+      }
     });
   }, [appSettingsTab, centerTab, workspaceRoot]);
 
@@ -574,15 +576,6 @@ export function useDesktopController() {
         return mergedStatuses;
       });
     }
-  }
-
-  function ollamaDetailsLoaded(statuses = toolingStatusRef.current) {
-    const ollamaStatus = statuses?.ollama;
-    return Boolean(
-      ollamaStatus
-      && ollamaStatus.running !== null
-      && ollamaStatus.running !== undefined,
-    );
   }
 
   function applyProjectDetail(detail, options = {}) {
@@ -1437,25 +1430,7 @@ export function useDesktopController() {
 
   async function openOllamaManager() {
     setOllamaManagerOpen(true);
-    if (
-      ollamaManagerLoadInFlightRef.current
-      || !toolingStatusRef.current?.ollama?.installed
-      || ollamaDetailsLoaded()
-    ) {
-      return;
-    }
-    ollamaManagerLoadInFlightRef.current = true;
-    setOllamaManagerLoading(true);
-    try {
-      await refreshToolingStatus({
-        forceRefresh: true,
-        includeOllamaDetails: true,
-        quiet: true,
-      });
-    } finally {
-      ollamaManagerLoadInFlightRef.current = false;
-      setOllamaManagerLoading(false);
-    }
+    setOllamaManagerLoading(false);
   }
 
   function closeOllamaManager() {

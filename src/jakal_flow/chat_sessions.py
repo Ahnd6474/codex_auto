@@ -13,6 +13,7 @@ from uuid import uuid4
 from .codex_runner import CodexRunner
 from .errors import JSON_PARSE_EXCEPTIONS
 from .execution_control import ImmediateStopRequested, chat_execution_scope_id, run_subprocess_capture
+from .lru_ttl_cache import LruTtlCache
 from .models import ExecutionPlanState, ProjectContext
 from .model_providers import normalize_model_provider
 from .platform_defaults import default_codex_path
@@ -34,11 +35,11 @@ CHAT_MESSAGE_LOG_SUFFIX = ".messages.txt"
 CHAT_SUMMARY_SUFFIX = ".summary.txt"
 CHAT_TRANSCRIPT_SUFFIX = ".transcript.txt"
 CHAT_INTERRUPTED_MESSAGE = "Response stopped."
-_CHAT_REGISTRY_MEMORY_CACHE: dict[str, tuple[str, list[dict[str, Any]]]] = {}
-_CHAT_ACTIVE_SESSION_MEMORY_CACHE: dict[str, tuple[str, str]] = {}
-_CHAT_MESSAGES_MEMORY_CACHE: dict[str, tuple[str, list[dict[str, Any]]]] = {}
-_CHAT_TEXT_MEMORY_CACHE: dict[str, tuple[str, str]] = {}
-_CHAT_PAYLOAD_MEMORY_CACHE: dict[str, tuple[str, dict[str, Any]]] = {}
+_CHAT_REGISTRY_MEMORY_CACHE = LruTtlCache[str, tuple[str, list[dict[str, Any]]]](max_entries=128)
+_CHAT_ACTIVE_SESSION_MEMORY_CACHE = LruTtlCache[str, tuple[str, str]](max_entries=128)
+_CHAT_MESSAGES_MEMORY_CACHE = LruTtlCache[str, tuple[str, list[dict[str, Any]]]](max_entries=256)
+_CHAT_TEXT_MEMORY_CACHE = LruTtlCache[str, tuple[str, str]](max_entries=256)
+_CHAT_PAYLOAD_MEMORY_CACHE = LruTtlCache[str, tuple[str, dict[str, Any]]](max_entries=128)
 _WINDOWS_RESERVED_NAMES = {
     "CON",
     "PRN",
@@ -160,20 +161,16 @@ def _invalidate_chat_caches(
 ) -> None:
     root = chat_storage_root(context)
     if include_registry:
-        _CHAT_REGISTRY_MEMORY_CACHE.pop(str(chat_sessions_registry_file(context).resolve()), None)
+        _CHAT_REGISTRY_MEMORY_CACHE.pop(str(chat_sessions_registry_file(context).resolve()))
     if include_active:
-        _CHAT_ACTIVE_SESSION_MEMORY_CACHE.pop(str(chat_active_session_file(context).resolve()), None)
+        _CHAT_ACTIVE_SESSION_MEMORY_CACHE.pop(str(chat_active_session_file(context).resolve()))
     session_key = str(session_id or "").strip()
     if session_key:
-        _CHAT_MESSAGES_MEMORY_CACHE.pop(str(chat_message_log_file(context, session_key).resolve()), None)
-    stale_payload_keys = [
-        key
-        for key in _CHAT_PAYLOAD_MEMORY_CACHE
-        if key.startswith(f"{root.resolve()}|{context.metadata.repo_id}|")
+        _CHAT_MESSAGES_MEMORY_CACHE.pop(str(chat_message_log_file(context, session_key).resolve()))
+    _CHAT_PAYLOAD_MEMORY_CACHE.remove_if(
+        lambda key: key.startswith(f"{root.resolve()}|{context.metadata.repo_id}|")
         and (not session_key or f"|{session_key}|" in key or key.endswith(f"|{session_key}"))
-    ]
-    for key in stale_payload_keys:
-        _CHAT_PAYLOAD_MEMORY_CACHE.pop(key, None)
+    )
 
 
 def _cached_text(path: Path) -> str:
@@ -183,7 +180,7 @@ def _cached_text(path: Path) -> str:
     if cached is not None and cached[0] == signature:
         return cached[1]
     value = read_text(path)
-    _CHAT_TEXT_MEMORY_CACHE[cache_key] = (signature, value)
+    _CHAT_TEXT_MEMORY_CACHE.set(cache_key, (signature, value))
     return value
 
 
@@ -381,7 +378,7 @@ def _read_registry_sessions(path: Path) -> list[ChatSessionMeta]:
         if str(item.get("session_id", "")).strip()
     ]
     sessions.sort(key=lambda item: (item.updated_at, item.created_at, item.session_id), reverse=True)
-    _CHAT_REGISTRY_MEMORY_CACHE[cache_key] = (signature, [item.to_dict() for item in sessions])
+    _CHAT_REGISTRY_MEMORY_CACHE.set(cache_key, (signature, [item.to_dict() for item in sessions]))
     return sessions
 
 
@@ -390,10 +387,10 @@ def _save_registry_sessions(path: Path, sessions: list[ChatSessionMeta]) -> None
     deduped: dict[str, ChatSessionMeta] = {session.session_id: session for session in sessions if session.session_id}
     ordered = sorted(deduped.values(), key=lambda item: (item.updated_at, item.created_at, item.session_id), reverse=True)
     _write_jsonl_txt(path, [item.to_dict() for item in ordered])
-    _CHAT_REGISTRY_MEMORY_CACHE[str(path.resolve())] = (
+    _CHAT_REGISTRY_MEMORY_CACHE.set(str(path.resolve()), (
         _path_signature(path),
         [item.to_dict() for item in ordered],
-    )
+    ))
 
 
 def _relocate_session_memory_files(context: ProjectContext, session: ChatSessionMeta) -> ChatSessionMeta:
@@ -509,7 +506,7 @@ def load_active_chat_session_id(context: ProjectContext) -> str:
     if cached is not None and cached[0] == signature:
         return cached[1]
     session_id = read_text(path).strip()
-    _CHAT_ACTIVE_SESSION_MEMORY_CACHE[cache_key] = (signature, session_id)
+    _CHAT_ACTIVE_SESSION_MEMORY_CACHE.set(cache_key, (signature, session_id))
     return session_id
 
 
@@ -520,7 +517,7 @@ def save_active_chat_session_id(context: ProjectContext, session_id: str) -> Non
     if current_value == normalized and path.exists():
         return
     write_text(path, f"{normalized}\n")
-    _CHAT_ACTIVE_SESSION_MEMORY_CACHE[str(path.resolve())] = (_path_signature(path), normalized)
+    _CHAT_ACTIVE_SESSION_MEMORY_CACHE.set(str(path.resolve()), (_path_signature(path), normalized))
     _invalidate_chat_caches(context, session_id=normalized, include_active=False)
 
 
@@ -600,7 +597,7 @@ def load_chat_messages(
     else:
         raw_items = _read_jsonl_txt(log_file)
     messages = [ChatMessageEntry.from_dict(item) for item in raw_items]
-    _CHAT_MESSAGES_MEMORY_CACHE[cache_key] = (signature, [item.to_dict() for item in messages])
+    _CHAT_MESSAGES_MEMORY_CACHE.set(cache_key, (signature, [item.to_dict() for item in messages]))
     return messages
 
 
@@ -745,7 +742,7 @@ def rebuild_chat_session_files(context: ProjectContext, session_id: str) -> None
         summary_lines.append("- No messages yet.")
     summary_lines.extend(["", f"Transcript File: {transcript_path}"])
     write_text(summary_path, "\n".join(summary_lines).rstrip() + "\n")
-    _CHAT_TEXT_MEMORY_CACHE[str(summary_path.resolve())] = (_path_signature(summary_path), read_text(summary_path))
+    _CHAT_TEXT_MEMORY_CACHE.set(str(summary_path.resolve()), (_path_signature(summary_path), read_text(summary_path)))
     _invalidate_chat_caches(context, session_id=session.session_id)
 
 
@@ -811,7 +808,7 @@ def chat_payload(
         "transcript_file": transcript_file,
         "draft_session": not bool(active_session_id),
     }
-    _CHAT_PAYLOAD_MEMORY_CACHE[payload_cache_key] = (payload_signature, _clone_chat_payload(payload))
+    _CHAT_PAYLOAD_MEMORY_CACHE.set(payload_cache_key, (payload_signature, _clone_chat_payload(payload)))
     return payload
 
 

@@ -1,5 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useI18n } from "../../i18n";
+import { useVirtualWindow } from "../../hooks/useVirtualWindow";
 import { displayStatus } from "../../locale";
 import { deriveExecutionUiState, formatCheckpointDisplayId, isActiveExecutionStatus, isPlanningProgressRunning, statusTone, toolbarProgressCaptionDisplay } from "../../utils";
 
@@ -95,11 +97,29 @@ function ProjectSelector({
   const [filter, setFilter] = useState("");
   const containerRef = useRef(null);
   const inputRef = useRef(null);
+  const listRef = useRef(null);
+  const debouncedFilter = useDebouncedValue(filter, 140);
 
   const selectedProject = (projects || []).find((project) => project.repo_id === selectedProjectId);
-  const filtered = filter.trim()
-    ? (projects || []).filter((project) => (project.display_name || "").toLowerCase().includes(filter.toLowerCase()))
-    : (projects || []);
+  const filtered = useMemo(() => {
+    const query = String(debouncedFilter || "").trim().toLowerCase();
+    if (!query) {
+      return projects || [];
+    }
+    return (projects || []).filter((project) => (project.display_name || "").toLowerCase().includes(query));
+  }, [debouncedFilter, projects]);
+  const shouldVirtualizeProjects = filtered.length > 40;
+  const {
+    visibleItems: visibleProjects,
+    topSpacerHeight,
+    bottomSpacerHeight,
+  } = useVirtualWindow(filtered, {
+    containerRef: listRef,
+    itemHeight: 36,
+    overscan: 6,
+    enabled: open && shouldVirtualizeProjects,
+    defaultViewportHeight: 220,
+  });
 
   useEffect(() => {
     if (!open) {
@@ -210,8 +230,11 @@ function ProjectSelector({
           <button className="project-selector__new" onClick={handleNewProject} type="button">
             <PlusSmIcon /> {t("action.new")}
           </button>
-          <div className="project-selector__list">
-            {filtered.length ? filtered.map((project) => (
+          <div className="project-selector__list" ref={listRef}>
+            {filtered.length ? (
+              <>
+                {topSpacerHeight > 0 ? <div aria-hidden="true" style={{ height: `${topSpacerHeight}px` }} /> : null}
+                {(shouldVirtualizeProjects ? visibleProjects : filtered).map((project) => (
               <div
                 key={project.repo_id}
                 className={`project-selector__item${project.repo_id === selectedProjectId ? " active" : ""}`}
@@ -239,7 +262,10 @@ function ProjectSelector({
                   <TrashIcon />
                 </button>
               </div>
-            )) : (
+                ))}
+                {bottomSpacerHeight > 0 ? <div aria-hidden="true" style={{ height: `${bottomSpacerHeight}px` }} /> : null}
+              </>
+            ) : (
               <div className="project-selector__empty">{noProjectsLabel}</div>
             )}
           </div>

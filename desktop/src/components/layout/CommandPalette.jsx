@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useI18n } from "../../i18n";
 
 function SearchIcon() {
@@ -51,6 +52,7 @@ export const CommandPalette = memo(function CommandPalette({
   const [query, setQuery] = useState("");
   const inputRef = useRef(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const debouncedQuery = useDebouncedValue(query, 100);
   const indexedActions = useMemo(
     () => (actions || []).map((action) => ({
       ...action,
@@ -61,13 +63,13 @@ export const CommandPalette = memo(function CommandPalette({
   );
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return indexedActions;
-    const q = query.trim();
+    if (!debouncedQuery.trim()) return indexedActions;
+    const q = debouncedQuery.trim();
     return indexedActions
       .map((action) => ({ ...action, score: Math.max(matchScore(action.labelText, q), matchScore(action.keywordsText, q)) }))
       .filter((action) => action.score > 0)
       .sort((a, b) => b.score - a.score);
-  }, [indexedActions, query]);
+  }, [debouncedQuery, indexedActions]);
 
   useEffect(() => {
     if (open) {

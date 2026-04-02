@@ -7,12 +7,12 @@ import secrets
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from time import monotonic
 from typing import Any
 from urllib.parse import quote
 
 from .models import ExecutionPlanState, ProjectContext
 from .errors import SubprocessTimeoutError
+from .lru_ttl_cache import LruTtlCache
 from .planning import execution_plan_svg, resolve_execution_flow_steps
 from .project_snapshot import context_execution_snapshot
 from .run_control import load_run_control
@@ -42,8 +42,13 @@ DEFAULT_VIEWER_PATH = "/share/view"
 DEFAULT_SHARE_PUBLIC_BASE_URL = ""
 _UNSET = object()
 _SHARE_STATUS_CACHE_TTL_SECONDS = 1.0
-_SHARE_STATUS_MEMORY_CACHE: dict[str, tuple[str, float, dict[str, Any]]] = {}
-_WORKSPACE_SHARE_PAYLOAD_MEMORY_CACHE: dict[str, tuple[str, dict[str, Any]]] = {}
+_SHARE_STATUS_MEMORY_CACHE = LruTtlCache[str, tuple[str, dict[str, Any]]](
+    max_entries=32,
+    ttl_seconds=_SHARE_STATUS_CACHE_TTL_SECONDS,
+)
+_WORKSPACE_SHARE_PAYLOAD_MEMORY_CACHE = LruTtlCache[str, tuple[str, dict[str, Any]]](
+    max_entries=64,
+)
 
 TOKEN_PATTERNS = [
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),
@@ -127,14 +132,8 @@ def _clone_workspace_share_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _invalidate_share_caches(workspace_root: Path) -> None:
     root_key = str(workspace_root.resolve())
-    _SHARE_STATUS_MEMORY_CACHE.pop(root_key, None)
-    stale_payload_keys = [
-        key
-        for key in _WORKSPACE_SHARE_PAYLOAD_MEMORY_CACHE
-        if key.startswith(f"{root_key}|")
-    ]
-    for key in stale_payload_keys:
-        _WORKSPACE_SHARE_PAYLOAD_MEMORY_CACHE.pop(key, None)
+    _SHARE_STATUS_MEMORY_CACHE.pop(root_key)
+    _WORKSPACE_SHARE_PAYLOAD_MEMORY_CACHE.remove_if(lambda key: key.startswith(f"{root_key}|"))
 
 
 def _share_status_signature(workspace_root: Path) -> str:
@@ -395,8 +394,8 @@ def share_server_status_payload(workspace_root: Path) -> dict[str, Any]:
     cache_key = str(workspace_root.resolve())
     signature = _share_status_signature(workspace_root)
     cached = _SHARE_STATUS_MEMORY_CACHE.get(cache_key)
-    if cached is not None and cached[0] == signature and (monotonic() - cached[1]) <= _SHARE_STATUS_CACHE_TTL_SECONDS:
-        return _clone_share_server_payload(cached[2])
+    if cached is not None and cached[0] == signature:
+        return _clone_share_server_payload(cached[1])
 
     config = load_share_server_config(workspace_root)
     tunnel = public_tunnel_status_payload(workspace_root)
@@ -415,7 +414,7 @@ def share_server_status_payload(workspace_root: Path) -> dict[str, Any]:
             "share_base_url_source": "config" if config.public_base_url else None,
             "public_tunnel": tunnel,
         }
-        _SHARE_STATUS_MEMORY_CACHE[cache_key] = (signature, monotonic(), _clone_share_server_payload(payload))
+        _SHARE_STATUS_MEMORY_CACHE.set(cache_key, (signature, _clone_share_server_payload(payload)))
         return payload
     running = process_is_running(state.pid)
     local_tunnel_target = normalize_tunnel_target_url(state.base_url if running else "")
@@ -448,7 +447,7 @@ def share_server_status_payload(workspace_root: Path) -> dict[str, Any]:
         "share_base_url_source": share_base_url_source,
         "public_tunnel": tunnel,
     }
-    _SHARE_STATUS_MEMORY_CACHE[cache_key] = (signature, monotonic(), _clone_share_server_payload(payload))
+    _SHARE_STATUS_MEMORY_CACHE.set(cache_key, (signature, _clone_share_server_payload(payload)))
     return payload
 
 
@@ -1196,7 +1195,7 @@ def workspace_share_payload(workspace_root: Path, context: ProjectContext | None
         "project_active_session": project_active,
         "active_session": active,
     }
-    _WORKSPACE_SHARE_PAYLOAD_MEMORY_CACHE[cache_key] = (signature, _clone_workspace_share_payload(payload))
+    _WORKSPACE_SHARE_PAYLOAD_MEMORY_CACHE.set(cache_key, (signature, _clone_workspace_share_payload(payload)))
     return payload
 
 

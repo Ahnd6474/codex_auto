@@ -294,6 +294,11 @@ function OllamaModelManagerModal({
           <span style={{ fontSize: "12px", color: "var(--text-dim)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
             {language === "ko" ? "설치된 모델" : "Installed models"}
           </span>
+          <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+            {language === "ko"
+              ? "이 목록은 모델을 새로 내려받거나 다시 연결한 뒤 갱신됩니다."
+              : "This list refreshes after you pull a model or reconnect Ollama."}
+          </div>
           {loading ? (
             <div style={{ fontSize: "12px", color: "var(--text-muted)", padding: "8px 0" }}>
               {language === "ko" ? "설치된 모델 목록을 불러오는 중입니다." : "Loading installed models..."}
@@ -779,8 +784,8 @@ export const AppSettingsView = memo(function AppSettingsView({
                     {!ollamaDetailsLoaded ? (
                       <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
                         {language === "ko"
-                          ? "모델 세부 정보는 모델 관리자에서 불러옵니다."
-                          : "Model details load when the manager opens."}
+                          ? "설치된 모델 목록은 새 모델을 내려받거나 다시 연결한 뒤 갱신됩니다."
+                          : "Installed-model details refresh after you pull a model or reconnect Ollama."}
                       </div>
                     ) : null}
                     <div style={{ display: "flex", justifyContent: "flex-end" }}>

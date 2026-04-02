@@ -8,13 +8,13 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-from threading import Lock
 import time
 from typing import Any
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 
 from .codex_app_server import resolve_codex_path
+from .lru_ttl_cache import LruTtlCache
 from .model_providers import default_local_model
 from .platform_defaults import default_codex_path
 from .subprocess_utils import run_subprocess
@@ -49,8 +49,10 @@ _OLLAMA_SUGGESTED_MODELS: tuple[str, ...] = (
     "gemma3:4b",
     "mistral-small:24b",
 )
-_TOOLING_STATUS_CACHE: dict[str, tuple[float, dict[str, dict[str, Any]]]] = {}
-_TOOLING_STATUS_CACHE_LOCK = Lock()
+_TOOLING_STATUS_CACHE = LruTtlCache[str, dict[str, dict[str, Any]]](
+    max_entries=8,
+    ttl_seconds=_TOOLING_STATUS_CACHE_TTL_SECONDS,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,21 +93,19 @@ def get_tooling_statuses(
     startup_safe: bool = False,
     include_ollama_details: bool = True,
 ) -> dict[str, dict[str, Any]]:
-    now = time.monotonic()
     cache_key = (
         f"{'startup' if startup_safe else 'full'}:"
         f"{'ollama-details' if include_ollama_details else 'ollama-summary'}"
     )
-    with _TOOLING_STATUS_CACHE_LOCK:
+    if not force_refresh:
         cached = _TOOLING_STATUS_CACHE.get(cache_key)
-        if not force_refresh and cached is not None and (now - cached[0]) <= _TOOLING_STATUS_CACHE_TTL_SECONDS:
-            return deepcopy(cached[1])
+        if cached is not None:
+            return deepcopy(cached)
     statuses = _collect_tooling_statuses(
         startup_safe=startup_safe,
         include_ollama_details=include_ollama_details,
     )
-    with _TOOLING_STATUS_CACHE_LOCK:
-        _TOOLING_STATUS_CACHE[cache_key] = (time.monotonic(), deepcopy(statuses))
+    _TOOLING_STATUS_CACHE.set(cache_key, deepcopy(statuses))
     return statuses
 
 
@@ -132,8 +132,7 @@ def _collect_tooling_statuses(
 
 
 def _invalidate_tooling_status_cache() -> None:
-    with _TOOLING_STATUS_CACHE_LOCK:
-        _TOOLING_STATUS_CACHE.clear()
+    _TOOLING_STATUS_CACHE.clear()
 
 
 def run_tooling_action(

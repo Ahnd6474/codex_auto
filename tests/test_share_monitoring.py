@@ -47,6 +47,7 @@ from jakal_flow.public_tunnel import (
     normalize_tunnel_target_url,
     process_is_running as tunnel_process_is_running,
 )
+from jakal_flow.rate_limiter import TokenBucketRule
 from jakal_flow.share_server import ShareHTTPServer, ShareRequestHandler
 from jakal_flow.ui_bridge import run_command
 from jakal_flow.ui_bridge_commands.share import verify_local_share_session_access
@@ -1064,6 +1065,39 @@ class ShareMonitoringTests(unittest.TestCase):
                 self.assertTrue(monitored["remote_control"]["resume_starting"])
             finally:
                 release.set()
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
+    def test_share_status_api_returns_429_when_rate_limited(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            _orchestrator, project = create_project(workspace_root, repo_dir)
+            session = create_share_session(project, expires_in_minutes=60, created_by="test")
+
+            server = ShareHTTPServer(("127.0.0.1", 0), ShareRequestHandler, workspace_root=workspace_root)
+            server.request_rate_limit_rules["/share/api/status"] = TokenBucketRule(
+                capacity=1.0,
+                refill_tokens_per_second=0.0,
+            )
+            thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True)
+            thread.start()
+            try:
+                base_url = f"http://127.0.0.1:{server.server_address[1]}"
+                status_url = f"{base_url}/share/api/status?session={session.session_id}&token={session.viewer_token}"
+
+                first = urllib.request.urlopen(status_url)
+                self.assertEqual(first.status, 200)
+
+                with self.assertRaises(urllib.error.HTTPError) as limited:
+                    urllib.request.urlopen(status_url)
+
+                self.assertEqual(limited.exception.code, 429)
+                self.assertEqual(limited.exception.headers.get("Retry-After"), "1")
+                self.assertIn("Too many requests", limited.exception.read().decode("utf-8"))
+            finally:
                 server.shutdown()
                 server.server_close()
                 thread.join(timeout=2)
