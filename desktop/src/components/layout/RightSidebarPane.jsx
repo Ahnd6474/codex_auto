@@ -2,18 +2,22 @@
 import { ChatMessageContent } from "../../chatMarkdown";
 import { useI18n } from "../../i18n";
 import { usePersistentState } from "../../hooks/usePersistentState";
+import { displayStatus } from "../../locale";
 import { lazyNamedExport } from "../../lazyLoad";
 import {
   MODEL_REASONING_OPTIONS,
+  deriveExecutionUiState,
   formatChatSessionTitle,
   formatDurationCompact,
   groupedModelCatalogOptions,
   modelCatalogOptionValue,
   parseModelCatalogOptionValue,
+  planStepsWithCloseout,
   reasoningEffortLabel,
   resolveModelCatalogEntry,
   resolveExecutionDisplayPlan,
   sameQueuedJobs,
+  statusTone,
   visibleExecutionJob,
 } from "../../utils";
 
@@ -414,6 +418,7 @@ const ProjectChatPane = memo(function ProjectChatPane({
   onGeneratePlan,
   onRequestChatStop,
 }) {
+  const { t } = useI18n();
   const sessions = Array.isArray(chat?.sessions) ? chat.sessions : [];
   const remoteMessages = Array.isArray(chat?.messages) ? chat.messages : [];
   const deferredSessions = useDeferredValue(sessions);
@@ -426,6 +431,29 @@ const ProjectChatPane = memo(function ProjectChatPane({
   const selectedChatEffort = String(chatSettings?.chat_effort || "").trim().toLowerCase();
   const chatJobStatus = String(chatJob?.status || "").trim().toLowerCase();
   void onGeneratePlan;
+  
+  // P1-4: Compute execution state for empty state context
+  const executionJob = useMemo(
+    () => visibleExecutionJob(detail?.active_job || null),
+    [detail?.active_job],
+  );
+  const executionState = useMemo(
+    () => deriveExecutionUiState(detail, null, detail?.active_job || null),
+    [detail, detail?.active_job],
+  );
+  const steps = useMemo(
+    () => planStepsWithCloseout(executionState.livePlan, {
+      title: language === "ko" ? "Closeout" : "Closeout",
+      description: language === "ko" ? "Closeout 보고서" : "Closeout report",
+      successCriteria: language === "ko" ? "Closeout 완료" : "Closeout completed",
+    }),
+    [executionState.livePlan, language],
+  );
+  const completedCount = useMemo(
+    () => steps.filter((step) => step.status === "completed").length,
+    [steps],
+  );
+  
   const [input, setInput] = useState("");
   const [storedPendingMode, setStoredPendingMode] = usePersistentState(RIGHT_SIDEBAR_CHAT_MODE_KEY, DEFAULT_CHAT_MODE);
   const pendingMode = normalizeChatMode(storedPendingMode);
@@ -859,9 +887,39 @@ const ProjectChatPane = memo(function ProjectChatPane({
             <RailChatIcon />
             <span>
               {language === "ko"
-                ? "Send a message to continue the session from the saved txt history."
+                ? "메시지를 보내면 대화 기록 txt 를 만들고 이어서 응답합니다."
                 : "Send a message to continue the session from the saved txt history."}
             </span>
+            
+            {/* P1-4: Empty state with context info */}
+            <div className="sidebar-chat-empty__context">
+              {detail?.project?.repo_id ? (
+                <div className="sidebar-chat-empty__context-row">
+                  <span className="sidebar-chat-empty__label">{language === "ko" ? "현재 프로젝트" : "Current Project"}</span>
+                  <span className="sidebar-chat-empty__value">{detail.project.repo_id}</span>
+                </div>
+              ) : null}
+              {detail?.project?.status ? (
+                <div className="sidebar-chat-empty__context-row">
+                  <span className="sidebar-chat-empty__label">{language === "ko" ? "상태" : "Status"}</span>
+                  <span className={`status-badge status-badge--${statusTone(detail.project.status)}`}>
+                    {displayStatus(detail.project.status, language)}
+                  </span>
+                </div>
+              ) : null}
+              {executionJob?.status === "running" && executionJob?.started_at ? (
+                <div className="sidebar-chat-empty__context-row">
+                  <span className="sidebar-chat-empty__label">{language === "ko" ? "실행 시간" : "Running For"}</span>
+                  <span className="sidebar-chat-empty__value">{formatDurationCompact(chatElapsedSeconds, language)}</span>
+                </div>
+              ) : null}
+              {steps?.length > 0 ? (
+                <div className="sidebar-chat-empty__context-row">
+                  <span className="sidebar-chat-empty__label">{language === "ko" ? "진행 상황" : "Progress"}</span>
+                  <span className="sidebar-chat-empty__value">{completedCount}/{steps.length} {t("run.done")}</span>
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : (
           <>
@@ -1243,7 +1301,7 @@ export const RightSidebarPane = memo(function RightSidebarPane({
 
         {effectiveActiveTab === "output" ? (
           <Suspense fallback={<div className="rsb-panel__loading" aria-hidden="true" />}>
-            <LazyOutputPanel processOutput={processOutput} language={language} />
+            <LazyOutputPanel processOutput={processOutput} language={language} detail={detail} activeJob={activeJob} />
           </Suspense>
         ) : null}
 

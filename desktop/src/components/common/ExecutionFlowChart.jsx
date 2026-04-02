@@ -1,6 +1,6 @@
-import { memo, useId, useMemo } from "react";
+import { memo, useId, useMemo, useState } from "react";
 import { displayStatus } from "../../locale";
-import { deriveExecutionUiState, effectiveStepStatus, failureReasonLabel, statusTone } from "../../utils";
+import { deriveExecutionUiState, effectiveStepStatus, failureReasonLabel, isDebuggingStatus, statusTone } from "../../utils";
 
 const FONT_FAMILY = '"Segoe UI", "Malgun Gothic", sans-serif';
 const BOX_WIDTH = 220;
@@ -601,7 +601,106 @@ function executionFlowChartPropsEqual(previousProps, nextProps) {
   );
 }
 
+/* ── Stepper icons ── */
+function StepperCheckIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none">
+      <polyline points="3 8 6.5 11.5 13 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function StepperXIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none">
+      <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function StepperViewIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none">
+      <rect x="1" y="6" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="6" y="6" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="11" y="6" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M5 8h1M10 8h1" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function GraphViewIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none">
+      <rect x="1" y="5" width="4" height="3" rx="0.8" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="9" y="2" width="4" height="3" rx="0.8" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="9" y="11" width="4" height="3" rx="0.8" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M5 6.5h2m0 0V3.5h2M7 6.5v6h2" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function stepStatusCategory(status) {
+  const s = String(status || "").trim().toLowerCase();
+  if (s === "completed" || s === "merged") return "completed";
+  if (s.startsWith("running") || s === "integrating") return "running";
+  if (s.includes("fail") || s === "error") return "failed";
+  if (s === "queued") return "queued";
+  return "pending";
+}
+
+function HorizontalStepper({ steps = [], projectStatus = "", language = "en", selectedStepId = "", onSelectStep = null, detail = null, activeJob = null }) {
+  const executionState = useMemo(() => deriveExecutionUiState(detail, null, activeJob), [detail, activeJob]);
+  const completedCount = steps.filter((s) => stepStatusCategory(effectiveStepStatus(s, projectStatus)) === "completed").length;
+  const progressPercent = steps.length > 0 ? Math.round((completedCount / steps.length) * 100) : 0;
+
+  return (
+    <div>
+      <div className="execution-stepper__summary">
+        <span>{completedCount}/{steps.length} {language === "ko" ? "완료" : "Done"}</span>
+        <div className="execution-stepper__summary-progress">
+          <div className="execution-stepper__summary-fill" style={{ width: `${progressPercent}%` }} />
+        </div>
+        <span>{progressPercent}%</span>
+      </div>
+      <div className="execution-stepper">
+        {steps.map((step, index) => {
+          const resolvedStatus = effectiveStepStatus(step, projectStatus);
+          const category = stepStatusCategory(resolvedStatus);
+          const selected = step.step_id === selectedStepId;
+          return (
+            <div key={step.step_id} style={{ display: "flex", alignItems: "flex-start" }}>
+              {index > 0 ? (
+                <div className="execution-stepper__connector">
+                  <div className={`execution-stepper__connector-line${category === "completed" || stepStatusCategory(effectiveStepStatus(steps[index - 1], projectStatus)) === "completed" ? " execution-stepper__connector-line--done" : ""}`} />
+                  <div className={`execution-stepper__connector-arrow${stepStatusCategory(effectiveStepStatus(steps[index - 1], projectStatus)) === "completed" ? " execution-stepper__connector-arrow--done" : ""}`} />
+                </div>
+              ) : null}
+              <div className="execution-stepper__step">
+                <div
+                  className={`execution-stepper__node execution-stepper__node--${category}${selected ? " execution-stepper__node--selected" : ""}`}
+                  onClick={() => onSelectStep?.(step.step_id)}
+                  title={`${step.step_id}: ${step.title || ""}\n${displayStatus(resolvedStatus, language)}`}
+                >
+                  <div className={`execution-stepper__icon execution-stepper__icon--${category}`}>
+                    {category === "completed" ? <StepperCheckIcon /> : null}
+                    {category === "failed" ? <StepperXIcon /> : null}
+                    {category === "running" ? <span className="stepper-dot" /> : null}
+                  </div>
+                  <span className="execution-stepper__id">{step.step_id}</span>
+                  <span className="execution-stepper__title">{step.title || ""}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ExecutionFlowChartComponent({ steps = [], detail = null, activeJob = null, language = "en", selectedStepId = "", onSelectStep = null }) {
+  const [viewMode, setViewMode] = useState("stepper");
   const arrowId = useId().replace(/:/g, "-");
   const executionState = useMemo(() => deriveExecutionUiState(detail, null, activeJob), [detail, activeJob]);
   const chart = useMemo(
@@ -623,6 +722,39 @@ function ExecutionFlowChartComponent({ steps = [], detail = null, activeJob = nu
 
   return (
     <div className="history-flow">
+      {/* View toggle */}
+      <div style={{ display: "flex", justifyContent: "flex-end", padding: "4px 8px 0" }}>
+        <div className="flow-view-toggle">
+          <button
+            className={`flow-view-toggle__btn${viewMode === "stepper" ? " flow-view-toggle__btn--active" : ""}`}
+            onClick={() => setViewMode("stepper")}
+            type="button"
+            title={language === "ko" ? "스텝퍼 뷰" : "Stepper view"}
+          >
+            <StepperViewIcon />
+          </button>
+          <button
+            className={`flow-view-toggle__btn${viewMode === "graph" ? " flow-view-toggle__btn--active" : ""}`}
+            onClick={() => setViewMode("graph")}
+            type="button"
+            title={language === "ko" ? "그래프 뷰" : "Graph view"}
+          >
+            <GraphViewIcon />
+          </button>
+        </div>
+      </div>
+
+      {viewMode === "stepper" ? (
+        <HorizontalStepper
+          steps={steps}
+          projectStatus={executionState.displayStatusValue}
+          language={language}
+          selectedStepId={selectedStepId}
+          onSelectStep={onSelectStep}
+          detail={detail}
+          activeJob={activeJob}
+        />
+      ) : (
       <div className="history-flow__canvas">
         <svg
           aria-label="Execution flow chart"
@@ -713,6 +845,7 @@ function ExecutionFlowChartComponent({ steps = [], detail = null, activeJob = nu
           })}
         </svg>
       </div>
+      )}
     </div>
   );
 }

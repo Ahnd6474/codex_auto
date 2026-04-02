@@ -5,6 +5,7 @@ import {
   commandLabel,
   deriveExecutionUiState,
   formatUsd,
+  isActiveExecutionStatus,
   runtimeSummary,
   sameQueuedJobs,
   shouldShowEstimatedCost,
@@ -104,15 +105,19 @@ export const StatusBar = memo(function StatusBar({
           <span>{project.branch || "main"}</span>
         </button>
 
-        <div className={`status-bar__widget status-bar__widget--${tone}`}>
-          <span className={`chip-dot chip-dot--${tone}`} />
-          <span>{displayStatus(executionState.displayStatusValue || project.current_status || "idle", language)}</span>
+        <div className={`status-bar__widget status-bar__widget--${tone}${isActiveExecutionStatus(executionState.displayStatusValue) ? " status-bar__widget--running" : ""}`}>
+          <span className={`status-bar__mini-badge status-bar__mini-badge--${tone}`}>
+            <span className={`chip-dot chip-dot--${tone}${isActiveExecutionStatus(executionState.displayStatusValue) ? " chip-dot--pulse" : ""}`} />
+            {displayStatus(executionState.displayStatusValue || project.current_status || "idle", language)}
+          </span>
         </div>
 
         {jobLabel ? (
-          <div className="status-bar__widget status-bar__widget--info">
-            <span className="chip-dot chip-dot--info" style={{ animation: "live-dot-pulse 1.4s ease-in-out infinite" }} />
-            <span>{jobLabel}</span>
+          <div className="status-bar__widget status-bar__widget--info status-bar__widget--running">
+            <span className="status-bar__mini-badge status-bar__mini-badge--info">
+              <span className="chip-dot chip-dot--info chip-dot--pulse" />
+              {jobLabel}
+            </span>
           </div>
         ) : null}
 

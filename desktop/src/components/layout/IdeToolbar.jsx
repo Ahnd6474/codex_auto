@@ -3,7 +3,7 @@ import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useI18n } from "../../i18n";
 import { useVirtualWindow } from "../../hooks/useVirtualWindow";
 import { displayStatus } from "../../locale";
-import { deriveExecutionUiState, formatCheckpointDisplayId, isActiveExecutionStatus, isPlanningProgressRunning, statusTone, toolbarProgressCaptionDisplay } from "../../utils";
+import { deriveExecutionUiState, executionProgressCaptionDisplay, formatCheckpointDisplayId, isActiveExecutionStatus, isPlanningProgressRunning, statusTone, toolbarProgressCaptionDisplay } from "../../utils";
 
 function RefreshIcon() {
   return (
@@ -237,15 +237,23 @@ function ProjectSelector({
                 {(shouldVirtualizeProjects ? visibleProjects : filtered).map((project) => (
               <div
                 key={project.repo_id}
-                className={`project-selector__item${project.repo_id === selectedProjectId ? " active" : ""}`}
+                className={`project-selector__item${project.repo_id === selectedProjectId ? " active" : ""}${isActiveExecutionStatus(project.status) ? " project-selector__item--running" : ""}${String(project.status || "").includes("fail") ? " project-selector__item--failed" : ""}`}
               >
                 <button
                   className="project-selector__item-main"
                   onClick={() => handleSelectProject(project.repo_id)}
                   type="button"
                 >
-                  <span className="project-selector__item-name">{project.display_name}</span>
-                  <span className={`chip-dot chip-dot--${statusTone(project.status)}`} />
+                  <span className="project-selector__item-top">
+                    <span className="project-selector__item-name">{project.display_name}</span>
+                    <span className={`project-selector__item-status-badge project-selector__item-status-badge--${statusTone(project.status)}`}>
+                      {isActiveExecutionStatus(project.status) ? <span className="chip-dot chip-dot--info chip-dot--pulse" style={{ width: 5, height: 5 }} /> : null}
+                      {displayStatus(project.status || "idle", language)}
+                    </span>
+                  </span>
+                  {project.current_step_label ? (
+                    <span className="project-selector__item-sub">{project.current_step_label}</span>
+                  ) : null}
                 </button>
                 <button
                   className="project-selector__item-delete"
@@ -431,7 +439,55 @@ export const IdeToolbar = memo(function IdeToolbar({
   const repoPath = String(projectPath || "").trim();
   const remoteUrl = String(githubUrl || "").trim();
 
+  const isLive = isActiveExecutionStatus(executionState.displayStatusValue);
+  const liveDisplayStatus = String(executionState.displayStatusValue || "").trim().toLowerCase();
+  const livePlanSteps = Array.isArray(livePlan?.steps) ? livePlan.steps : [];
+  const completedSteps = livePlanSteps.filter((s) => s.status === "completed").length;
+  const totalSteps = livePlanSteps.length;
+  const progressPercent = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+  const runningStep = livePlanSteps.find((s) =>
+    ["running", "integrating"].includes(String(s.status || "").trim().toLowerCase()),
+  );
+  const runningStepLabel = runningStep
+    ? [runningStep.step_id, runningStep.title].filter(Boolean).join(" – ")
+    : "";
+  const liveStripBadgeClass = liveDisplayStatus.includes("fail")
+    ? "live-run-strip__badge--failed"
+    : liveDisplayStatus.includes("pause")
+      ? "live-run-strip__badge--paused"
+      : "";
+  const liveStripBadgeText = liveDisplayStatus.includes("fail")
+    ? "FAILED"
+    : liveDisplayStatus.includes("pause")
+      ? "PAUSED"
+      : "LIVE RUN";
+
   return (
+    <>
+    {isLive && totalSteps > 0 ? (
+      <div className="live-run-strip">
+        <span className={`live-run-strip__badge ${liveStripBadgeClass}`}>
+          <span className="chip-dot chip-dot--info chip-dot--pulse" style={{ width: 6, height: 6 }} />
+          {liveStripBadgeText}
+        </span>
+        <span className="live-run-strip__title">
+          {runningStepLabel
+            ? (language === "ko"
+              ? `${runningStepLabel} 작업 중`
+              : `Working on ${runningStepLabel}`)
+            : planStatusLabel || statusLabel}
+        </span>
+        <span className="live-run-strip__meta">
+          <span className="live-run-strip__progress-text">
+            {completedSteps}/{totalSteps} {t("run.done")}
+          </span>
+          {progressPercent > 0 ? (
+            <span className="live-run-strip__percent">{progressPercent}%</span>
+          ) : null}
+        </span>
+      </div>
+    ) : null}
+
     <header className="ide-toolbar">
       <div className="ide-toolbar__group ide-toolbar__group--utility">
         <button
@@ -455,14 +511,14 @@ export const IdeToolbar = memo(function IdeToolbar({
       />
 
       <nav className="ide-toolbar__breadcrumb" aria-label="Navigation">
-        <span className={`breadcrumb-segment breadcrumb-segment--${tone}`}>
-          <span className={`chip-dot chip-dot--${tone}`} />
+        <span className={`breadcrumb-segment breadcrumb-segment--${tone}${isLive ? " breadcrumb-segment--live" : ""}`}>
+          <span className={`chip-dot chip-dot--${tone}${isLive ? " chip-dot--pulse" : ""}`} />
           {statusLabel}
         </span>
         {planStatusLabel ? (
           <>
             <ChevronRight />
-            <span className="breadcrumb-segment breadcrumb-segment--dim">{planStatusLabel}</span>
+            <span className={`breadcrumb-segment breadcrumb-segment--progress${isLive ? " breadcrumb-segment--active" : " breadcrumb-segment--dim"}`}>{planStatusLabel}</span>
           </>
         ) : null}
         {pendingCheckpoint ? (
@@ -557,7 +613,18 @@ export const IdeToolbar = memo(function IdeToolbar({
           </button>
         ) : null}
       </div>
+
+      {/* Thin progress bar at bottom of toolbar */}
+      {isLive && totalSteps > 0 ? (
+        <div className="ide-toolbar__progress">
+          <div
+            className={`ide-toolbar__progress-fill${progressPercent === 0 ? " ide-toolbar__progress-fill--indeterminate" : ""}`}
+            style={progressPercent > 0 ? { width: `${progressPercent}%` } : undefined}
+          />
+        </div>
+      ) : null}
     </header>
+    </>
   );
 }, (previousProps, nextProps) => {
   if (!sameToolbarProjects(previousProps.projects, nextProps.projects)) {
