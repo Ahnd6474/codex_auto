@@ -513,14 +513,47 @@ export const AppSettingsView = memo(function AppSettingsView({
     || exactSuggestedOllamaModel
     || (normalizedOllamaSearch && !exactInstalledOllamaModel ? normalizedOllamaSearch : "")
   ).trim();
+  const activeSettingsEntry = settingsTabs.find((tab) => tab.key === activeSettingsTab) || settingsTabs[0];
+  const connectedToolCount = [codexTool, geminiTool, claudeTool, ollamaTool].filter((tool) => (
+    tool?.installed || tool?.running === true
+  )).length;
+  const settingsHeaderStats = [
+    {
+      label: language === "ko" ? "현재 섹션" : "Active section",
+      value: activeSettingsEntry.label,
+    },
+    {
+      label: language === "ko" ? "편집 상태" : "Editing state",
+      value: runtimeBusy
+        ? (language === "ko" ? "읽기 전용" : "Read only")
+        : (language === "ko" ? "편집 가능" : "Editable"),
+    },
+    {
+      label: language === "ko" ? "도구 연결" : "Tooling linked",
+      value: `${connectedToolCount}/4`,
+    },
+  ];
 
   return (
-    <section className="workspace-view">
-      <div className="settings-page-header">
-        <h2>{t("tab.programSettings")}</h2>
+    <section className="workspace-view settings-view">
+      <div className="settings-page-header settings-page-header--hero">
+        <div className="settings-page-header__copy">
+          <span className="settings-page-header__eyebrow">
+            {language === "ko" ? "프로그램 제어" : "Program control"}
+          </span>
+          <h2>{t("tab.programSettings")}</h2>
+          <p>{settingsLeadFor(activeSettingsTab, language)}</p>
+        </div>
+        <div className="settings-page-header__stats">
+          {settingsHeaderStats.map((item) => (
+            <div key={item.label} className="settings-page-header__stat">
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* ?? Sub-category tab bar ?? */}
       <div className="settings-subtabs">
         {settingsTabs.map((tab) => (
           <button
@@ -534,17 +567,21 @@ export const AppSettingsView = memo(function AppSettingsView({
         ))}
       </div>
 
-      <div className="form-layout">
+      <div className="form-layout settings-layout">
 
         {/* ?? Application tab ?? */}
         {activeSettingsTab === "app" ? (
-        <div className="form-section" style={{ gridColumn: "1 / -1" }}>
+        <div className="form-section settings-pane" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
+              eyebrow={language === "ko" ? "환경" : "Environment"}
               title={t("settings.application")}
+              description={language === "ko"
+                ? "데스크톱 전역 환경을 바꾸는 설정입니다."
+                : "Controls that change the overall desktop environment."}
             />
 
-            <label className="field" style={{ marginTop: "4px" }}>
+            <label className="field settings-field">
               <span>{t("common.language")}</span>
               <select value={language} onChange={(event) => setLanguage(event.target.value)}>
                 {languageOptions.map((option) => (
@@ -595,14 +632,18 @@ export const AppSettingsView = memo(function AppSettingsView({
         ) : null}
 
         {activeSettingsTab === "tooling" ? (
-        <div className="form-section" style={{ gridColumn: "1 / -1" }}>
+        <div className="form-section settings-pane" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
+              eyebrow={language === "ko" ? "에이전트 런타임" : "Agent runtime"}
               title={language === "ko" ? "AI 도구 설치" : "AI Tooling"}
+              description={language === "ko"
+                ? "설치 상태, 실행 경로, 모델 저장소를 이곳에서 확인합니다."
+                : "Check install status, launch commands, and model storage from one place."}
             />
 
             {!npmStatus?.installed ? (
-              <div className="info-callout" style={{ marginTop: "10px" }}>
+              <div className="info-callout">
                 <InfoIcon />
                 <span>
                   {language === "ko"
@@ -743,13 +784,17 @@ export const AppSettingsView = memo(function AppSettingsView({
 
         {/* Dashboard tab */}
         {activeSettingsTab === "dashboard" ? (
-        <div className="form-section" style={{ gridColumn: "1 / -1" }}>
+        <div className="form-section settings-pane" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
+              eyebrow={language === "ko" ? "가시성" : "Visibility"}
               title={t("settings.dashboardPreferences")}
+              description={language === "ko"
+                ? "운영 대시보드에 어떤 신호를 표시할지 선택합니다."
+                : "Choose which operational signals are visible on the dashboard."}
             />
 
-            <div className="toggle-grid" style={{ marginTop: "4px" }}>
+            <div className="toggle-grid settings-toggle-grid">
               {dashboardOptions.map(([key, label]) => (
                 <label key={key} className="toggle-row" style={{ padding: "7px 10px" }}>
                   <span className="toggle-row__label">
@@ -780,13 +825,17 @@ export const AppSettingsView = memo(function AppSettingsView({
 
         {/* ?? Execution tab ?? */}
         {activeSettingsTab === "execution" ? (
-        <div className="form-section" style={{ gridColumn: "1 / -1" }}>
+        <div className="form-section settings-pane" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
+              eyebrow={language === "ko" ? "런타임 규칙" : "Runtime policy"}
               title={t("settings.executionDefaults")}
+              description={language === "ko"
+                ? "승인, 샌드박스, 병렬성 기본값을 이 프로젝트 기준으로 맞춥니다."
+                : "Set approval, sandboxing, and parallelism defaults for this project."}
             />
 
-                        <div className="info-callout" style={{ marginTop: "10px" }}>
+            <div className="info-callout">
               <InfoIcon />
               <span>
                 {language === "ko"
@@ -869,8 +918,8 @@ export const AppSettingsView = memo(function AppSettingsView({
             </div>
 
             {/* Parallel workers */}
-            <div style={{ borderTop: "1px solid var(--border)", paddingTop: "12px", marginTop: "4px" }}>
-              <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "0 0 10px" }}>
+            <div className="settings-divider settings-divider--section">
+              <p className="settings-inline-note">
                 {language === "ko" ? "병렬 실행 설정" : "Parallel execution settings"}
               </p>
 
@@ -890,7 +939,7 @@ export const AppSettingsView = memo(function AppSettingsView({
                 disabled={runtimeBusy}
               />
 
-              <div className="choice-grid" style={{ marginTop: "8px" }}>
+              <div className="choice-grid settings-choice-grid">
                 <label className="field">
                   <span>{t("field.parallelWorkers")}</span>
                   <input
@@ -954,7 +1003,7 @@ export const AppSettingsView = memo(function AppSettingsView({
             </div>
 
             {/* Toggle options */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "4px" }}>
+            <div className="settings-toggle-stack">
               <ToggleRow
                 checked={Boolean(draftSettings.allow_push)}
                 onChange={(event) => updateDraftSettings((current) => ({ ...current, allow_push: event.target.checked }))}
@@ -979,10 +1028,14 @@ export const AppSettingsView = memo(function AppSettingsView({
 
         {/* ?? Share tab ?? */}
         {activeSettingsTab === "share" ? (
-        <div className="form-section" style={{ gridColumn: "1 / -1" }}>
+        <div className="form-section settings-pane" style={{ gridColumn: "1 / -1" }}>
           <div className="subsection">
             <SectionHeader
+              eyebrow={language === "ko" ? "원격 가시성" : "Remote visibility"}
               title={t("run.remoteMonitor")}
+              description={language === "ko"
+                ? "진행 상황을 외부에서 읽기 전용으로 공유하는 세션입니다."
+                : "Create a read-only monitor session for external visibility."}
               badge={
                 <span className={`status-badge status-badge--${shareServer?.running ? "success" : "neutral"}`}>
                   {shareServer?.running ? t("common.on") : t("common.off")}
@@ -990,39 +1043,39 @@ export const AppSettingsView = memo(function AppSettingsView({
               }
             />
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "4px" }}>
-              <div>
-                <div className="info-callout" style={{ marginBottom: "10px" }}>
+            <div className="settings-split-grid">
+              <div className="settings-stack">
+                <div className="info-callout">
                   <InfoIcon />
                   <span>{t("run.shareDescription")} {t("run.sharePoll")}</span>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <div className="settings-stack settings-stack--dense">
                   <div className="sidebar-item">
                     <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>{t("run.shareBindHost")}</span>
                     <strong style={{ fontFamily: "monospace" }}>0.0.0.0</strong>
                   </div>
                 </div>
-                <div style={{ marginTop: "10px" }}>
+                <div className="settings-action-row">
                   <button className="toolbar-button" onClick={onGenerateShareLink} type="button" disabled={shareBusy}>
                     {t("action.generateShareLink")}
                   </button>
                 </div>
               </div>
 
-              <div>
+              <div className="settings-share-card">
                 {activeShare?.share_url ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <div className="settings-stack">
                     <label className="field field--wide">
                       <span>{t("run.shareLink")}</span>
-                      <div className="share-url-row">
+                      <div className="share-url-row settings-share-link-row">
                         <input value={activeShare.share_url} readOnly style={{ fontFamily: "monospace", fontSize: "12px" }} />
                         <button className="toolbar-button toolbar-button--accent" onClick={onCopyShareLink} type="button" disabled={shareBusy} title={t("action.copyLink")}>
                           <CopyIcon />
                         </button>
                       </div>
                     </label>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>
+                    <div className="settings-share-meta">
+                      <span className="settings-inline-note">
                         {t("run.shareExpires", { expiresAt: activeShare.expires_at || t("common.unavailable") })}
                       </span>
                       <button className="toolbar-button toolbar-button--ghost" onClick={onRevokeShareLink} type="button" disabled={shareBusy}>
