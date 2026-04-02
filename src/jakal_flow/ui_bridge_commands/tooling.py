@@ -2,16 +2,80 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..model_providers import builtin_model_catalog, discover_local_model_catalog
 from ..step_models import provider_statuses_payload
 from ..tooling_manager import get_tooling_statuses, run_tooling_action
 from .context import BridgeCommandContext, BridgeCommandHandler
+
+
+def _merge_model_catalogs(*catalogs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for catalog in catalogs:
+        for item in catalog:
+            if not isinstance(item, dict):
+                continue
+            provider = str(item.get("provider", "openai")).strip().lower() or "openai"
+            local_provider = str(item.get("local_provider", "")).strip().lower()
+            model = str(item.get("model", "")).strip().lower()
+            if not model:
+                continue
+            key = (provider, local_provider, model)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(item)
+    return merged
+
+
+def _fallback_tooling_snapshot() -> dict[str, Any]:
+    provider_statuses = provider_statuses_payload(force_refresh=False)
+    model_catalog = _merge_model_catalogs(
+        builtin_model_catalog(),
+        discover_local_model_catalog(force_refresh=False),
+    )
+    codex_status = {
+        "available": any(bool(item.get("available")) for item in provider_statuses.values()),
+        "account": {
+            "authenticated": False,
+            "requires_openai_auth": True,
+            "type": "",
+            "email": "",
+            "plan_type": "unknown",
+        },
+        "rate_limits": {
+            "default_limit_id": "",
+            "items": [],
+        },
+        "model_catalog": model_catalog,
+        "provider_statuses": provider_statuses,
+        "error": "",
+    }
+    return {
+        "codex_status": codex_status,
+        "model_catalog": model_catalog,
+        "tooling_statuses": get_tooling_statuses(force_refresh=False),
+    }
 
 
 def tooling_snapshot_payload(
     *,
     codex_snapshot_service,
     force_refresh: bool = False,
+    prefer_cached: bool = False,
 ) -> dict[str, Any]:
+    if prefer_cached and not force_refresh:
+        cached_snapshot = codex_snapshot_service.peek_snapshot()
+        if cached_snapshot is None:
+            return _fallback_tooling_snapshot()
+        codex_status = cached_snapshot.to_dict()
+        codex_status["provider_statuses"] = provider_statuses_payload(force_refresh=False)
+        return {
+            "codex_status": codex_status,
+            "model_catalog": codex_status.get("model_catalog", []),
+            "tooling_statuses": get_tooling_statuses(force_refresh=False),
+        }
+
     fetch_snapshot = lambda codex_path="": codex_snapshot_service.get_snapshot(  # noqa: E731
         codex_path,
         force_refresh=force_refresh,

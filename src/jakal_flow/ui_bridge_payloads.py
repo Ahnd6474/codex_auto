@@ -1859,17 +1859,7 @@ def _build_project_detail_base_payload(
     project_payload["current_status"] = current_status
     snapshot = {
         "project": deepcopy(project_payload),
-        "runtime": project.runtime.to_dict(),
         "loop_state": project.loop_state.to_dict(),
-        "plan": plan_state.to_dict(),
-        "recent_blocks": recent_blocks,
-        "recent_passes": recent_passes,
-        "recent_usage": recent_usage_payload,
-        "runtime_insights": runtime_insights,
-        "codex_status": {},
-        "run_control": control,
-        "latest_block": latest_block,
-        "latest_pass": latest_pass,
         "snapshot_kind": "cache_view",
         "snapshot_epoch": _snapshot_epoch_ms(),
         "snapshot_id": _snapshot_metadata(
@@ -2080,7 +2070,6 @@ def _finalize_project_detail_payload(
     payload["snapshot_sources"] = snapshot_sources
     snapshot = payload.get("snapshot")
     if isinstance(snapshot, dict):
-        snapshot["codex_status"] = codex_status
         snapshot["snapshot_kind"] = "cache_view"
         snapshot["snapshot_id"] = _snapshot_metadata(
             "cache_view",
@@ -2092,8 +2081,6 @@ def _finalize_project_detail_payload(
             detail_signature=payload["detail_signature"],
         )["snapshot_id"]
         snapshot["detail_signature"] = payload["detail_signature"]
-        snapshot["snapshot_sources"] = snapshot_sources
-        snapshot["live_runtime_snapshot"] = snapshot_sources["live_runtime"]
     bottom_panels = payload.get("bottom_panels")
     if isinstance(bottom_panels, dict):
         bottom_panels["codex_status"] = codex_status

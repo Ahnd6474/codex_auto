@@ -130,11 +130,11 @@ export async function syncRunningJobSnapshot(preferredJobId = "") {
 }
 
 export async function loadInitialDesktopState(bridgeRequest, preferredJobId = "") {
-  const [bootstrap, jobSnapshot] = await Promise.all([
+  const [bootstrap, listing, jobSnapshot] = await Promise.all([
     loadBootstrap(bridgeRequest),
+    loadProjectListing(bridgeRequest, null),
     syncRunningJobSnapshot(preferredJobId),
   ]);
-  const listing = await loadProjectListing(bridgeRequest, bootstrap.workspace_root);
   return {
     bootstrap,
     listing,

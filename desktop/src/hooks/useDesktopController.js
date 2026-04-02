@@ -96,6 +96,10 @@ const LISTING_RELOAD_COMMANDS = new Set([
   BRIDGE_COMMANDS.DELETE_ALL_PROJECTS,
   BRIDGE_COMMANDS.DELETE_HISTORY_ENTRY,
 ]);
+const ACTIVE_SYNC_WATCHDOG_INTERVAL_MS = 15000;
+const ACTIVE_SYNC_EVENT_STALE_MS = 30000;
+const ACTIVE_SYNC_WATCHDOG_COOLDOWN_MS = 30000;
+const STARTUP_TOOLING_REFRESH_DELAY_MS = 1500;
 
 export function useDesktopController() {
   const { language } = useI18n();
@@ -138,6 +142,8 @@ export function useDesktopController() {
   const pendingBridgeEventsRef = useRef([]);
   const bridgeEventFlushScheduledRef = useRef(false);
   const bridgeEventFlushInFlightRef = useRef(false);
+  const lastBridgeActivityAtRef = useRef(0);
+  const lastWatchdogRefreshAtRef = useRef(0);
   const startingProjectJobsRef = useRef(new Set());
   const activeJobRef = useRef(null);
   const blockingJobRef = useRef(null);
@@ -164,6 +170,7 @@ export function useDesktopController() {
   const projectSupplementRequestDeduperRef = useRef(createRequestDeduper());
   const workspaceShareRequestDeduperRef = useRef(createRequestDeduper());
   const selectedProjectLoadSequenceRef = useRef(0);
+  const bootstrapToolingRefreshStartedRef = useRef(false);
 
   const [centerTab, setCenterTab] = usePersistentState("jakal-flow:center-tab", "ai-chat");
   const [bottomTab, setBottomTab] = usePersistentState("jakal-flow:bottom-tab", "json");
@@ -215,6 +222,8 @@ export function useDesktopController() {
   const runActionDisabled = selectedProjectState.runActionDisabled;
   const runActionRunning = selectedProjectState.runActionRunning;
   const canRunPlan = selectedProjectState.canRunPlan;
+  const hasActiveSyncWork = Boolean(activeJob && ["queued", "running"].includes(String(activeJob.status || "").trim().toLowerCase()))
+    || startingJobCount > 0;
 
   selectedProjectIdRef.current = selectedProjectId;
   projectFormRef.current = projectForm;
@@ -325,7 +334,16 @@ export function useDesktopController() {
   }, [forceRefresh]);
 
   useEffect(() => {
-    if (!workspaceRoot) {
+    if (!hasActiveSyncWork) {
+      lastWatchdogRefreshAtRef.current = 0;
+      return;
+    }
+    lastBridgeActivityAtRef.current = Date.now();
+    lastWatchdogRefreshAtRef.current = 0;
+  }, [hasActiveSyncWork]);
+
+  useEffect(() => {
+    if (!workspaceRoot || !hasActiveSyncWork) {
       return undefined;
     }
 
@@ -333,13 +351,23 @@ export function useDesktopController() {
       if (pendingAction || bridgeRefreshInFlightRef.current) {
         return;
       }
+      const now = Date.now();
+      const lastBridgeActivityAt = Number(lastBridgeActivityAtRef.current || 0);
+      const lastWatchdogRefreshAt = Number(lastWatchdogRefreshAtRef.current || 0);
+      if (lastBridgeActivityAt > 0 && (now - lastBridgeActivityAt) < ACTIVE_SYNC_EVENT_STALE_MS) {
+        return;
+      }
+      if (lastWatchdogRefreshAt > 0 && (now - lastWatchdogRefreshAt) < ACTIVE_SYNC_WATCHDOG_COOLDOWN_MS) {
+        return;
+      }
+      lastWatchdogRefreshAtRef.current = now;
       void forceRefreshRef.current?.({ silent: true });
-    }, 5000);
+    }, ACTIVE_SYNC_WATCHDOG_INTERVAL_MS);
 
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [pendingAction, workspaceRoot]);
+  }, [hasActiveSyncWork, pendingAction, workspaceRoot]);
 
   useEffect(() => {
     let cancelled = false;
@@ -674,6 +702,7 @@ export function useDesktopController() {
         if (cancelled) {
           return;
         }
+        lastBridgeActivityAtRef.current = Date.now();
         setWorkspaceRoot(bootstrap.workspace_root);
         setBaseRuntime(bootstrap.default_runtime);
         setModelPresets(bootstrap.model_presets || []);
@@ -718,6 +747,55 @@ export function useDesktopController() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!workspaceRoot || bootstrapToolingRefreshStartedRef.current) {
+      return undefined;
+    }
+    bootstrapToolingRefreshStartedRef.current = true;
+
+    let timerId = null;
+    let idleId = null;
+    const refreshTooling = () => {
+      void bridgeRequest(
+        BRIDGE_COMMANDS.GET_TOOLING_STATUS,
+        { force_refresh: true },
+        workspaceRoot || null,
+      )
+        .then((snapshot) => {
+          if (!cancelled) {
+            lastBridgeActivityAtRef.current = Date.now();
+            applyToolingSnapshot(snapshot);
+          }
+        })
+        .catch(() => {
+          // Startup tooling refresh is opportunistic; keep the boot path quiet.
+        });
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      idleId = window.requestIdleCallback(
+        () => {
+          refreshTooling();
+        },
+        { timeout: STARTUP_TOOLING_REFRESH_DELAY_MS * 2 },
+      );
+    } else {
+      timerId = window.setTimeout(() => {
+        refreshTooling();
+      }, STARTUP_TOOLING_REFRESH_DELAY_MS);
+    }
+
+    return () => {
+      cancelled = true;
+      if (idleId !== null && typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+      }
+    };
+  }, [workspaceRoot]);
 
   useEffect(() => {
     let cancelled = false;
@@ -969,6 +1047,7 @@ export function useDesktopController() {
         if (cancelled) {
           return;
         }
+        lastBridgeActivityAtRef.current = Date.now();
         if (listing) {
           const nextProjects = applyListingState({
             listing,
@@ -1252,6 +1331,7 @@ export function useDesktopController() {
 
     let unlisten = null;
     const subscription = subscribeBridgeEvents((eventPayload) => {
+      lastBridgeActivityAtRef.current = Date.now();
       pendingBridgeEventsRef.current.push(eventPayload);
       scheduleBridgeEventFlush();
     }).then((dispose) => {
@@ -1300,9 +1380,10 @@ export function useDesktopController() {
 
   async function forceRefresh(options = {}) {
     try {
-      const refreshCodexStatus = shouldForceCodexRefreshForManualRefresh(centerTab);
-      const refreshListing = shouldRefreshListingForManualRefresh(selectedProjectId);
       const silent = options.silent === true;
+      const refreshCodexStatus = silent ? false : shouldForceCodexRefreshForManualRefresh(centerTab);
+      const refreshListing = shouldRefreshListingForManualRefresh(selectedProjectId);
+      const forceDiskRefresh = options.forceDiskRefresh ?? !silent;
       const jobSnapshotPromise = syncRunningJobSnapshot(activeJobId);
       const toolingStatePromise = !selectedProjectId && refreshCodexStatus
         ? bridgeRequest(
@@ -1319,8 +1400,8 @@ export function useDesktopController() {
           refreshCodexStatus,
           detailLevel: wantsExpandedDetail ? "full" : "core",
           refreshListing,
-          bypassDetailCache: true,
-          bypassListingCache: true,
+          bypassDetailCache: forceDiskRefresh,
+          bypassListingCache: forceDiskRefresh,
         },
       );
       const [jobSnapshot, refreshedState, refreshedToolingState] = await Promise.all([
@@ -1328,6 +1409,7 @@ export function useDesktopController() {
         projectStatePromise,
         toolingStatePromise,
       ]);
+      lastBridgeActivityAtRef.current = Date.now();
       applyCurrentJobSnapshot(jobSnapshot);
       if (refreshedToolingState) {
         applyToolingSnapshot(refreshedToolingState);

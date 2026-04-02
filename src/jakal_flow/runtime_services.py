@@ -21,6 +21,12 @@ class CodexBackendSnapshotService:
     _entries: dict[str, _SnapshotCacheEntry] = field(default_factory=dict)
     _lock: Lock = field(default_factory=Lock)
 
+    def peek_snapshot(self, codex_path: str = "") -> Any | None:
+        cache_key = str(codex_path or "").strip() or default_codex_path()
+        with self._lock:
+            cached = self._entries.get(cache_key)
+            return None if cached is None else cached.snapshot
+
     def get_snapshot(self, codex_path: str = "", *, force_refresh: bool = False) -> Any:
         cache_key = str(codex_path or "").strip() or default_codex_path()
         now = time.monotonic()

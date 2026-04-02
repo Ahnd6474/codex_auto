@@ -460,43 +460,48 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
     : detail.bottom_panels;
 
   const nextSnapshot = detail.snapshot && typeof detail.snapshot === "object"
-    ? {
-        ...detail.snapshot,
-        project: detail.snapshot.project && typeof detail.snapshot.project === "object"
-          ? {
-              ...detail.snapshot.project,
-              current_status: record.projectStatus || detail.snapshot.project.current_status,
-              last_run_at:
-                record.eventType === "project-state-synced"
-                  ? normalizedText(record.details?.last_run_at) || detail.snapshot.project.last_run_at
-                  : detail.snapshot.project.last_run_at,
-            }
-          : detail.snapshot.project,
-        loop_state: detail.snapshot.loop_state && typeof detail.snapshot.loop_state === "object"
-          ? {
-              ...detail.snapshot.loop_state,
-              current_task:
-                record.eventType === "project-state-synced"
-                  ? (processActive ? normalizedText(record.details?.current_task) : "")
-                  : detail.snapshot.loop_state.current_task,
-              current_checkpoint_id:
-                record.eventType === "project-state-synced"
-                  ? (processActive ? normalizedText(record.details?.current_checkpoint_id) : "")
-                  : detail.snapshot.loop_state.current_checkpoint_id,
-              current_checkpoint_lineage_id:
-                record.eventType === "project-state-synced"
-                  ? (processActive ? normalizedText(record.details?.current_checkpoint_lineage_id) : "")
-                  : detail.snapshot.loop_state.current_checkpoint_lineage_id,
-              pending_checkpoint_approval:
-                record.eventType === "project-state-synced"
-                  ? (processActive && record.details?.pending_checkpoint_approval !== undefined
-                    ? Boolean(record.details.pending_checkpoint_approval)
-                    : false)
-                  : detail.snapshot.loop_state.pending_checkpoint_approval,
-            }
-          : detail.snapshot.loop_state,
-        plan: patchPlanFromRunEvent(detail.snapshot.plan, record),
-      }
+    ? (() => {
+        const snapshot = {
+          ...detail.snapshot,
+          project: detail.snapshot.project && typeof detail.snapshot.project === "object"
+            ? {
+                ...detail.snapshot.project,
+                current_status: record.projectStatus || detail.snapshot.project.current_status,
+                last_run_at:
+                  record.eventType === "project-state-synced"
+                    ? normalizedText(record.details?.last_run_at) || detail.snapshot.project.last_run_at
+                    : detail.snapshot.project.last_run_at,
+              }
+            : detail.snapshot.project,
+          loop_state: detail.snapshot.loop_state && typeof detail.snapshot.loop_state === "object"
+            ? {
+                ...detail.snapshot.loop_state,
+                current_task:
+                  record.eventType === "project-state-synced"
+                    ? (processActive ? normalizedText(record.details?.current_task) : "")
+                    : detail.snapshot.loop_state.current_task,
+                current_checkpoint_id:
+                  record.eventType === "project-state-synced"
+                    ? (processActive ? normalizedText(record.details?.current_checkpoint_id) : "")
+                    : detail.snapshot.loop_state.current_checkpoint_id,
+                current_checkpoint_lineage_id:
+                  record.eventType === "project-state-synced"
+                    ? (processActive ? normalizedText(record.details?.current_checkpoint_lineage_id) : "")
+                    : detail.snapshot.loop_state.current_checkpoint_lineage_id,
+                pending_checkpoint_approval:
+                  record.eventType === "project-state-synced"
+                    ? (processActive && record.details?.pending_checkpoint_approval !== undefined
+                      ? Boolean(record.details.pending_checkpoint_approval)
+                      : false)
+                    : detail.snapshot.loop_state.pending_checkpoint_approval,
+              }
+            : detail.snapshot.loop_state,
+        };
+        if (detail.snapshot.plan && typeof detail.snapshot.plan === "object") {
+          snapshot.plan = nextPlan;
+        }
+        return snapshot;
+      })()
     : detail.snapshot;
 
   return reduceProjectDetailState({

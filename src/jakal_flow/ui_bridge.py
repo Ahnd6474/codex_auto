@@ -121,7 +121,8 @@ def default_workspace_root() -> Path:
 def bootstrap_payload(workspace_root: Path) -> dict[str, Any]:
     tooling_snapshot = tooling_snapshot_payload(
         codex_snapshot_service=_codex_snapshot_service,
-        force_refresh=True,
+        force_refresh=False,
+        prefer_cached=True,
     )
     return {
         "workspace_root": str(workspace_root),
