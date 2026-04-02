@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
@@ -54,21 +55,22 @@ class WorkspaceManager:
         loop_state_data = read_json(paths.loop_state_file, default=None)
         return bool(metadata_data and runtime_data and loop_state_data)
 
+    @staticmethod
+    def _normalized_path(value: str | Path | None) -> Path | None:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            return Path(text).expanduser().resolve()
+        except OSError:
+            return Path(text)
+
     def _resolve_registry_item_project_root(self, item: dict[str, str], base_dir: Path) -> Path | None:
         project_root_text = str(item.get("project_root", "")).strip()
         slug = str(item.get("slug", "")).strip()
         repo_id = str(item.get("repo_id", "")).strip() or str(item.get("source_repo_id", "")).strip()
         repo_path_text = str(item.get("repo_path", "")).strip()
-
-        def _normalized_path(value: str) -> Path | None:
-            if not value:
-                return None
-            try:
-                return Path(value).expanduser().resolve()
-            except OSError:
-                return Path(value)
-
-        repo_path = _normalized_path(repo_path_text)
+        repo_path = self._normalized_path(repo_path_text)
         best_match: Path | None = None
         best_score = -1
 
@@ -81,7 +83,7 @@ class WorkspaceManager:
                 return
             child_repo_id = str(metadata_data.get("repo_id", "")).strip()
             child_slug = str(metadata_data.get("slug", "")).strip()
-            child_repo_path = _normalized_path(str(metadata_data.get("repo_path", "")).strip())
+            child_repo_path = self._normalized_path(str(metadata_data.get("repo_path", "")).strip())
 
             score = 0
             if repo_path and child_repo_path and child_repo_path == repo_path:
@@ -573,52 +575,81 @@ class WorkspaceManager:
             self._write_registry(registry)
         self._emit_project_state_sync(context)
 
-    def load_project_by_id(self, repo_id: str) -> ProjectContext:
-        registry = self._read_registry()
-        item = registry["projects"].get(repo_id)
-        if not item:
-            raise KeyError(f"Unknown repository id: {repo_id}")
-        registry_root_text = str(item.get("project_root", "")).strip()
-        if registry_root_text:
-            registry_root = Path(registry_root_text)
-            cache_key = self._project_cache_key(registry_root)
-            cached = self._project_context_cache.get(cache_key)
-            if cached is not None and cached[0] == self._project_context_signature(self.build_paths_from_root(registry_root)):
-                return self._copy_project_context(cached[1])
-        resolved_root = self._resolve_registry_item_project_root(item, self.projects_root)
-        if resolved_root is None:
-            resolved_root = Path(registry_root_text)
-        context = self.load_project_from_root(resolved_root)
-        self._sync_registry_project_root(repo_id, context)
-        return context
+    def _cached_registered_context(self, registry_root_text: str) -> ProjectContext | None:
+        registry_root = self._normalized_path(registry_root_text)
+        if registry_root is None:
+            return None
+        cache_key = self._project_cache_key(registry_root)
+        cached = self._project_context_cache.get(cache_key)
+        if cached is None:
+            return None
+        if cached[0] != self._project_context_signature(self.build_paths_from_root(registry_root)):
+            return None
+        return self._copy_project_context(cached[1])
 
-    def load_history_by_id(self, archive_id: str) -> ProjectContext:
-        registry = self._read_registry()
-        item = registry["history"].get(archive_id)
-        if not item:
-            raise KeyError(f"Unknown archive id: {archive_id}")
-        registry_root_text = str(item.get("project_root", "")).strip()
-        if registry_root_text:
-            registry_root = Path(registry_root_text)
-            cache_key = self._project_cache_key(registry_root)
-            cached = self._project_context_cache.get(cache_key)
-            if cached is not None and cached[0] == self._project_context_signature(self.build_paths_from_root(registry_root)):
-                context = self._copy_project_context(cached[1])
-                context.metadata.archived = True
-                context.metadata.archive_id = archive_id
-                context.metadata.archived_at = str(item.get("archived_at", "")).strip() or context.metadata.archived_at
-                context.metadata.source_repo_id = str(item.get("source_repo_id", "")).strip() or context.metadata.source_repo_id
-                return context
-        resolved_root = self._resolve_registry_item_project_root(item, self.history_root)
-        if resolved_root is None:
-            resolved_root = Path(registry_root_text)
-        context = self.load_project_from_root(resolved_root)
+    def _apply_history_registry_metadata(
+        self,
+        context: ProjectContext,
+        *,
+        archive_id: str,
+        item: dict[str, str],
+    ) -> ProjectContext:
         context.metadata.archived = True
         context.metadata.archive_id = archive_id
         context.metadata.archived_at = str(item.get("archived_at", "")).strip() or context.metadata.archived_at
         context.metadata.source_repo_id = str(item.get("source_repo_id", "")).strip() or context.metadata.source_repo_id
-        self._sync_registry_history_root(archive_id, context)
         return context
+
+    def _load_registered_context(
+        self,
+        entry_id: str,
+        *,
+        registry_section: str,
+        base_dir: Path,
+        missing_error_label: str,
+        transform_context: Callable[[ProjectContext, dict[str, str]], ProjectContext] | None = None,
+        sync_registry_root: Callable[[str, ProjectContext], None] | None = None,
+    ) -> ProjectContext:
+        registry = self._read_registry()
+        item = registry[registry_section].get(entry_id)
+        if not item:
+            raise KeyError(f"Unknown {missing_error_label}: {entry_id}")
+        registry_root_text = str(item.get("project_root", "")).strip()
+        cached = self._cached_registered_context(registry_root_text)
+        if cached is not None:
+            return transform_context(cached, item) if transform_context is not None else cached
+        resolved_root = self._resolve_registry_item_project_root(item, base_dir)
+        if resolved_root is None:
+            resolved_root = Path(registry_root_text)
+        context = self.load_project_from_root(resolved_root)
+        if transform_context is not None:
+            context = transform_context(context, item)
+        if sync_registry_root is not None:
+            sync_registry_root(entry_id, context)
+        return context
+
+    def load_project_by_id(self, repo_id: str) -> ProjectContext:
+        return self._load_registered_context(
+            repo_id,
+            registry_section="projects",
+            base_dir=self.projects_root,
+            missing_error_label="repository id",
+            sync_registry_root=self._sync_registry_project_root,
+        )
+
+    def load_history_by_id(self, archive_id: str) -> ProjectContext:
+        return self._load_registered_context(
+            archive_id,
+            registry_section="history",
+            base_dir=self.history_root,
+            missing_error_label="archive id",
+            transform_context=lambda context, item: self._apply_history_registry_metadata(
+                context,
+                archive_id=archive_id,
+                item=item,
+            ),
+            sync_registry_root=self._sync_registry_history_root,
+        )
 
     def load_project_by_slug(self, slug: str) -> ProjectContext:
         return self.load_project_from_root(self.projects_root / slug)
@@ -702,27 +733,30 @@ class WorkspaceManager:
             return None
         return self.load_project_by_id(repo_id)
 
-    def list_projects(self) -> list[ProjectContext]:
+    def _list_registered_contexts(
+        self,
+        registry_section: str,
+        *,
+        load_context: Callable[[str], ProjectContext],
+    ) -> list[ProjectContext]:
         self.ensure_workspace()
         registry = self._read_registry()
-        projects: list[ProjectContext] = []
-        for repo_id in registry["projects"].keys():
+        contexts: list[ProjectContext] = []
+        for entry_id in registry.get(registry_section, {}).keys():
             try:
-                projects.append(self.load_project_by_id(repo_id))
+                contexts.append(load_context(entry_id))
             except (FileNotFoundError, KeyError):
                 continue
-        return sorted(projects, key=lambda ctx: ctx.metadata.created_at)
+        return contexts
+
+    def list_projects(self) -> list[ProjectContext]:
+        return sorted(
+            self._list_registered_contexts("projects", load_context=self.load_project_by_id),
+            key=lambda ctx: ctx.metadata.created_at,
+        )
 
     def list_history_projects(self) -> list[ProjectContext]:
-        self.ensure_workspace()
-        registry = self._read_registry()
-        history_projects: list[ProjectContext] = []
-        for archive_id in registry["history"].keys():
-            try:
-                context = self.load_history_by_id(archive_id)
-            except (FileNotFoundError, KeyError):
-                continue
-            history_projects.append(context)
+        history_projects = self._list_registered_contexts("history", load_context=self.load_history_by_id)
         return sorted(
             history_projects,
             key=lambda ctx: ctx.metadata.archived_at or ctx.metadata.created_at,
@@ -730,8 +764,20 @@ class WorkspaceManager:
         )
 
     def find_project_by_repo_path(self, repo_path: Path) -> ProjectContext | None:
+        self.ensure_workspace()
         resolved_target = repo_path.resolve()
-        for project in self.list_projects():
+        registry = self._read_registry()
+        for repo_id, item in registry["projects"].items():
+            if self._normalized_path(item.get("repo_path", "")) == resolved_target:
+                try:
+                    return self.load_project_by_id(repo_id)
+                except (FileNotFoundError, KeyError):
+                    break
+        for repo_id in registry["projects"].keys():
+            try:
+                project = self.load_project_by_id(repo_id)
+            except (FileNotFoundError, KeyError):
+                continue
             if project.metadata.repo_path.resolve() == resolved_target:
                 return project
         return None

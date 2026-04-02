@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 import json
 import os
@@ -7,6 +8,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from threading import Lock
 import time
 from typing import Any
 from urllib import error as urllib_error
@@ -37,6 +39,7 @@ _CLI_VERSION_TIMEOUT_SECONDS = 12.0
 _INSTALL_TIMEOUT_SECONDS = 900.0
 _OLLAMA_CONNECT_TIMEOUT_SECONDS = 20.0
 _DEFAULT_OLLAMA_MODEL = "qwen2.5-coder:0.5b"
+_TOOLING_STATUS_CACHE_TTL_SECONDS = 10.0
 _OLLAMA_SUGGESTED_MODELS: tuple[str, ...] = (
     "qwen2.5-coder:0.5b",
     "qwen2.5-coder:7b",
@@ -46,6 +49,8 @@ _OLLAMA_SUGGESTED_MODELS: tuple[str, ...] = (
     "gemma3:4b",
     "mistral-small:24b",
 )
+_TOOLING_STATUS_CACHE: tuple[float, dict[str, dict[str, Any]]] | None = None
+_TOOLING_STATUS_CACHE_LOCK = Lock()
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,7 +86,22 @@ class ToolingStatus:
 
 
 def get_tooling_statuses(*, force_refresh: bool = False) -> dict[str, dict[str, Any]]:
-    del force_refresh
+    global _TOOLING_STATUS_CACHE
+    now = time.monotonic()
+    with _TOOLING_STATUS_CACHE_LOCK:
+        if (
+            not force_refresh
+            and _TOOLING_STATUS_CACHE is not None
+            and (now - _TOOLING_STATUS_CACHE[0]) <= _TOOLING_STATUS_CACHE_TTL_SECONDS
+        ):
+            return deepcopy(_TOOLING_STATUS_CACHE[1])
+    statuses = _collect_tooling_statuses()
+    with _TOOLING_STATUS_CACHE_LOCK:
+        _TOOLING_STATUS_CACHE = (time.monotonic(), deepcopy(statuses))
+    return statuses
+
+
+def _collect_tooling_statuses() -> dict[str, dict[str, Any]]:
     npm_status = _npm_status()
     codex_status = _cli_status("codex")
     gemini_status = _cli_status("gemini")
@@ -94,6 +114,12 @@ def get_tooling_statuses(*, force_refresh: bool = False) -> dict[str, dict[str, 
         "claude": claude_status.to_dict(),
         "ollama": ollama_status.to_dict(),
     }
+
+
+def _invalidate_tooling_status_cache() -> None:
+    global _TOOLING_STATUS_CACHE
+    with _TOOLING_STATUS_CACHE_LOCK:
+        _TOOLING_STATUS_CACHE = None
 
 
 def run_tooling_action(
@@ -113,6 +139,7 @@ def run_tooling_action(
     if normalized_action == "connect" and normalized_tool != "ollama":
         raise ValueError("Only Ollama supports the connect action.")
 
+    _invalidate_tooling_status_cache()
     _append_tooling_event(
         workspace_root,
         {
@@ -153,6 +180,8 @@ def run_tooling_action(
             },
         )
         raise
+    finally:
+        _invalidate_tooling_status_cache()
 
 
 def _append_tooling_event(workspace_root: Path, payload: dict[str, Any]) -> None:

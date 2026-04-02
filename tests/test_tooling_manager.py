@@ -46,6 +46,12 @@ def fake_codex_snapshot() -> mock.Mock:
 
 
 class ToolingManagerTests(unittest.TestCase):
+    def setUp(self) -> None:
+        tooling_manager._invalidate_tooling_status_cache()
+
+    def tearDown(self) -> None:
+        tooling_manager._invalidate_tooling_status_cache()
+
     def test_get_tooling_statuses_reports_detected_tools(self) -> None:
         with mock.patch.object(tooling_manager, "_npm_status", return_value=tooling_manager.ToolingStatus(
             tool="npm",
@@ -81,6 +87,24 @@ class ToolingManagerTests(unittest.TestCase):
         self.assertEqual(statuses["ollama"]["models"], ["qwen2.5-coder:0.5b"])
         self.assertEqual(statuses["ollama"]["recommended_models"], ["qwen2.5-coder:0.5b", "qwen2.5-coder:7b"])
         self.assertEqual(statuses["ollama"]["model_store_path"], "C:/repo/third_party/ollama/models")
+
+    def test_get_tooling_statuses_reuses_cached_snapshot_until_force_refresh(self) -> None:
+        with mock.patch.object(
+            tooling_manager,
+            "_collect_tooling_statuses",
+            side_effect=[
+                {"codex": {"installed": False}},
+                {"codex": {"installed": True}},
+            ],
+        ) as collect_statuses:
+            first = tooling_manager.get_tooling_statuses()
+            first["codex"]["installed"] = "mutated"
+            second = tooling_manager.get_tooling_statuses()
+            refreshed = tooling_manager.get_tooling_statuses(force_refresh=True)
+
+        self.assertEqual(collect_statuses.call_count, 2)
+        self.assertEqual(second["codex"]["installed"], False)
+        self.assertEqual(refreshed["codex"]["installed"], True)
 
     def test_run_tooling_action_logs_existing_install_without_changes(self) -> None:
         with TemporaryTestDir() as temp_dir, mock.patch.object(
