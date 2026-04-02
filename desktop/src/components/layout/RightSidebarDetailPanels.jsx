@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { openInSystem } from "../../api";
 import { useI18n } from "../../i18n";
 import { displayStatus } from "../../locale";
-import { effectiveStepStatus, formatCheckpointDisplayId, projectDetailStatus, reasoningEffortLabel, runtimeSummary, statusTone, visibleExecutionJob } from "../../utils";
+import { effectiveStepStatus, formatCheckpointDisplayId, formatDurationCompact, projectDetailStatus, reasoningEffortLabel, runtimeSummary, statusTone, visibleExecutionJob } from "../../utils";
 
 function RailTerminalIcon() {
   return (
@@ -122,8 +122,11 @@ function openInSystemSafe(path) {
   }
 }
 
-export const OutputPanel = memo(function OutputPanel({ processOutput = "", language = "en" }) {
+export const OutputPanel = memo(function OutputPanel({ processOutput = "", language = "en", detail = null, activeJob = null }) {
   const outputRef = useRef(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const jobStatus = String(activeJob?.status || "").trim().toLowerCase();
+  const isRunning = jobStatus === "running";
 
   useEffect(() => {
     if (outputRef.current) {
@@ -131,14 +134,45 @@ export const OutputPanel = memo(function OutputPanel({ processOutput = "", langu
     }
   }, [processOutput]);
 
+  useEffect(() => {
+    if (!isRunning) {
+      setElapsedSeconds(0);
+      return undefined;
+    }
+    const parsedStartedAt = Date.parse(String(activeJob?.started_at || "").trim());
+    const startedAtMs = Number.isFinite(parsedStartedAt) ? parsedStartedAt : Date.now();
+    const syncElapsed = () => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)));
+    };
+    syncElapsed();
+    const intervalId = window.setInterval(syncElapsed, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [activeJob?.started_at, isRunning]);
+
   return (
     <div className="details-output-panel rsb-output">
+      {/* P1-8: Real-time log header */}
+      {isRunning ? (
+        <div className="rsb-output__live-header">
+          <span className="rsb-output__live-dot">
+            <span className="chip-dot chip-dot--info chip-dot--pulse" />
+          </span>
+          <span className="rsb-output__live-label">{language === "ko" ? "실시간 출력" : "Live Output"}</span>
+          <span className="rsb-output__live-time">{formatDurationCompact(elapsedSeconds, language)}</span>
+        </div>
+      ) : null}
+      
       {processOutput ? (
         <pre ref={outputRef} className="details-output-pre">{processOutput}</pre>
       ) : (
         <div className="details-output-empty">
           <RailTerminalIcon />
           <span>{language === "ko" ? "아직 출력이 없습니다." : "No output yet."}</span>
+          {isRunning ? (
+            <span className="details-output-empty__hint">
+              {language === "ko" ? "실행 중인 작업의 출력이 여기에 표시됩니다." : "Output from the running job will appear here."}
+            </span>
+          ) : null}
         </div>
       )}
     </div>

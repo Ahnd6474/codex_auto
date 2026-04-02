@@ -938,38 +938,51 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
       {/* ?? Compact metric ribbon ?? */}
       <div className="run-ribbon">
         <div className="run-ribbon__metrics">
-          <span className={`run-ribbon__chip run-ribbon__chip--${statusTone(projectStatus)}`}>{displayStatus(projectStatus || "idle", language)}</span>
-          <span className="run-ribbon__chip">{completedCount}/{steps.length || 0} {t("run.done")}</span>
+          <span className={`run-ribbon__chip run-ribbon__chip--${statusTone(projectStatus)} run-ribbon__chip--primary`}>
+            {isActiveExecutionStatus(projectStatus) ? <span className="chip-dot chip-dot--info chip-dot--pulse" style={{ width: 6, height: 6 }} /> : null}
+            {displayStatus(projectStatus || "idle", language)}
+          </span>
+          <span className="run-ribbon__chip run-ribbon__chip--primary">{completedCount}/{steps.length || 0} {t("run.done")}</span>
           <span className="run-ribbon__chip">{readyNodes.length} {t("run.parallelReady")}</span>
           {queuedJobs.length ? <span className="run-ribbon__chip">{queuedJobs.length} {t("run.reservations")}</span> : null}
-          {executionEstimate.remaining_seconds ? <span className="run-ribbon__chip">{formatDurationCompact(executionEstimate.remaining_seconds, language)} {t("run.estimatedRemaining")}</span> : null}
+          {executionEstimate.remaining_seconds ? (
+            <span className="run-ribbon__timer">
+              <ClockMetricIcon />
+              <span>{formatDurationCompact(executionEstimate.remaining_seconds, language)} {t("run.estimatedRemaining")}</span>
+            </span>
+          ) : null}
           {showEstimatedCost ? <span className="run-ribbon__chip">{formatUsd(costEstimate.estimated_total_cost_usd ?? 0, language)}</span> : null}
           <span className="run-ribbon__chip">{parallelLimitValue} {t("run.parallelLimit")}</span>
           {showCloseoutStatus ? <span className={`run-ribbon__chip run-ribbon__chip--${statusTone(livePlan?.closeout_status)}`}>{t("run.closeout")}: {displayStatus(livePlan?.closeout_status || "not_started", language)}</span> : null}
           {detail?.run_control?.stop_immediately ? <span className="run-ribbon__chip run-ribbon__chip--warning">{t("run.stopAfterStep")}</span> : null}
         </div>
         <div className="run-ribbon__actions">
-          <label className="auto-run-badge">
-            <input type="checkbox" checked={Boolean(autoRunAfterPlan)} onChange={(event) => onAutoRunAfterPlanChange?.(event.target.checked)} disabled={busy} />
-            <span>{t("run.autoRunAfterPlan")}</span>
-          </label>
-          <button className="toolbar-btn" onClick={onGeneratePlan} type="button" disabled={busy}><GenerateIcon /><span>{t("action.generate")}</span></button>
-          <button className="toolbar-btn" onClick={onSavePlan} type="button" disabled={busy}><SaveIcon /><span>{t("action.save")}</span></button>
-          <button className="toolbar-btn" onClick={onResetPlan} type="button"><ResetIcon /><span>{t("action.reset")}</span></button>
-          <div className="toolbar-divider" />
-          <button className="toolbar-btn toolbar-btn--accent" onClick={onRunPlan} type="button" disabled={resolvedRunActionDisabled}><RunIcon /><span>{t("action.run")}</span></button>
-          {canCancelReservation ? (
-            <button className="toolbar-btn" onClick={() => onCancelQueuedJob?.(activeJob?.id)} type="button">{t("action.cancelReservation")}</button>
-          ) : null}
-          <button
-            className="toolbar-btn"
-            onClick={onRequestStop}
-            type="button"
-            disabled={!canRequestStop}
-            style={canRequestStop ? { color: "var(--danger)" } : {}}
-          >
-            <StopIcon /><span>{t("action.stop")}</span>
-          </button>
+          <div className="run-ribbon__auto-run-row">
+            <label className="auto-run-badge">
+              <input type="checkbox" checked={Boolean(autoRunAfterPlan)} onChange={(event) => onAutoRunAfterPlanChange?.(event.target.checked)} disabled={busy} />
+              <span>{t("run.autoRunAfterPlan")}</span>
+            </label>
+          </div>
+          <div className="run-ribbon__actions-secondary">
+            <button className="toolbar-btn" onClick={onGeneratePlan} type="button" disabled={busy}><GenerateIcon /><span>{t("action.generate")}</span></button>
+            <button className="toolbar-btn" onClick={onSavePlan} type="button" disabled={busy}><SaveIcon /><span>{t("action.save")}</span></button>
+            <button className="toolbar-btn" onClick={onResetPlan} type="button"><ResetIcon /><span>{t("action.reset")}</span></button>
+            {canCancelReservation ? (
+              <button className="toolbar-btn" onClick={() => onCancelQueuedJob?.(activeJob?.id)} type="button" style={{ fontSize: "10px" }}>{t("action.cancelReservation")}</button>
+            ) : null}
+          </div>
+          <div className="run-ribbon__actions-primary">
+            {canRequestStop ? (
+              <button
+                className="toolbar-btn toolbar-btn--danger"
+                onClick={onRequestStop}
+                type="button"
+              >
+                <StopIcon /><span>{t("action.stop")}</span>
+              </button>
+            ) : null}
+            <button className="toolbar-btn toolbar-btn--accent" onClick={onRunPlan} type="button" disabled={resolvedRunActionDisabled}><RunIcon /><span>{t("action.run")}</span></button>
+          </div>
         </div>
       </div>
 
@@ -1036,6 +1049,133 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
                 <button className="toolbar-btn" onClick={() => onCancelQueuedJob?.(job.id)} type="button" style={{ fontSize: "10px", padding: "2px 4px" }}>{t("action.cancelReservation")}</button>
               </div>
             ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* P1-5: Execution model info card */}
+      {steps.length > 0 ? (
+        <div className="execution-model-card">
+          <div className="execution-model-card__row">
+            <span className="execution-model-card__label">{language === "ko" ? "실행 모델" : "Execution Model"}</span>
+            <span className="execution-model-card__value"><strong>{executionModelLabel(modelCatalog, detail?.runtime || {})}</strong></span>
+          </div>
+          <div className="execution-model-card__row">
+            <span className="execution-model-card__label">{language === "ko" ? "Reasoning" : "Reasoning"}</span>
+            <span className="execution-model-card__value">{reasoningEffortLabel(detail?.runtime?.effort || "medium", language)}</span>
+          </div>
+          {executionEstimate?.estimated_total_seconds ? (
+            <div className="execution-model-card__row">
+              <span className="execution-model-card__label">{language === "ko" ? "예상 소요시간" : "Est. Duration"}</span>
+              <span className="execution-model-card__value">{formatDurationCompact(executionEstimate.estimated_total_seconds, language)}</span>
+            </div>
+          ) : null}
+          {executionEstimate?.remaining_seconds ? (
+            <div className="execution-model-card__row">
+              <span className="execution-model-card__label">{language === "ko" ? "남은 시간" : "Remaining"}</span>
+              <span className="execution-model-card__value">{formatDurationCompact(executionEstimate.remaining_seconds, language)}</span>
+            </div>
+          ) : null}
+          {parallelInsight?.recommended_workers ? (
+            <div className="execution-model-card__row">
+              <span className="execution-model-card__label">{language === "ko" ? "Parallel Workers" : "Parallel Workers"}</span>
+              <span className="execution-model-card__value">{parallelInsight.recommended_workers} {language === "ko" ? "개" : ""}</span>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* P1-7: Current step detail card */}
+      {selectedStep && !selectedSystemStep ? (
+        <div className="current-step-card">
+          <div className="current-step-card__header">
+            <strong>{selectedStep.step_id}</strong>
+            <span className={`status-badge status-badge--${statusTone(selectedStepStatus)}`}>
+              {displayStatus(selectedStepStatus, language)}
+            </span>
+            {selectedStepIndex >= 0 ? (
+              <span className="run-ribbon__chip">{selectedStepIndex + 1}/{steps.length}</span>
+            ) : null}
+          </div>
+          
+          <div className="current-step-card__row">
+            <span className="current-step-card__label">{language === "ko" ? "제목" : "Title"}</span>
+            <span className="current-step-card__value">{selectedStep.title || t("run.noSummary")}</span>
+          </div>
+
+          {selectedStep.display_description ? (
+            <div className="current-step-card__row">
+              <span className="current-step-card__label">{language === "ko" ? "설명" : "Description"}</span>
+              <div className="current-step-card__value">
+                <p>{selectedStep.display_description}</p>
+              </div>
+            </div>
+          ) : null}
+
+          {selectedStepEstimate ? (
+            <div className="current-step-card__metrics">
+              <div className="current-step-card__metric">
+                <span className="current-step-card__metric-value">{formatDurationCompact(selectedStepEstimate.estimated_duration_seconds ?? 0, language)}</span>
+                <span className="current-step-card__metric-label">{language === "ko" ? "예상" : "Est."}</span>
+              </div>
+              <div className="current-step-card__metric">
+                <span className="current-step-card__metric-value">{formatDurationCompact(selectedStepEstimate.remaining_seconds ?? 0, language)}</span>
+                <span className="current-step-card__metric-label">{language === "ko" ? "남음" : "Remaining"}</span>
+              </div>
+            </div>
+          ) : null}
+
+          {(selectedStep.depends_on || []).length > 0 ? (
+            <div className="current-step-card__row">
+              <span className="current-step-card__label">{language === "ko" ? "선행 단계" : "Dependencies"}</span>
+              <span className="current-step-card__value">{(selectedStep.depends_on || []).join(", ")}</span>
+            </div>
+          ) : null}
+
+          {selectedStep.deadline_at ? (
+            <div className="current-step-card__row">
+              <span className="current-step-card__label">{language === "ko" ? "Deadline" : "Deadline"}</span>
+              <span className="current-step-card__value">{selectedStep.deadline_at}</span>
+            </div>
+          ) : null}
+
+          {String(selectedStepStatus || "").trim().toLowerCase().includes("failed") && selectedStepFailureReason ? (
+            <div className="current-step-card__row">
+              <span className="current-step-card__label">{language === "ko" ? "실패 사유" : "Failure Reason"}</span>
+              <div className="current-step-card__value">
+                <p>{selectedStepFailureReason}</p>
+                {selectedStepFailureCode ? <small style={{ color: "var(--text-dim)" }}><code>{selectedStepFailureCode}</code></small> : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+            {/* Closeout detail card */}
+      {showCloseoutStatus ? (
+        <div className="closeout-card">
+          <div className="closeout-card__header">
+            <CloseoutMetricIcon />
+            <strong>{t("run.closeout")}</strong>
+            <span className={`status-badge status-badge--${statusTone(livePlan?.closeout_status)}`} style={{ fontSize: "10px", padding: "1px 6px" }}>
+              {displayStatus(livePlan?.closeout_status || "not_started", language)}
+            </span>
+          </div>
+          {livePlan?.closeout_title ? (
+            <div className="closeout-card__row">
+              <span className="closeout-card__label">TITLE</span>
+              <span className="closeout-card__value">{livePlan.closeout_title}</span>
+            </div>
+          ) : null}
+          {livePlan?.closeout_deadline ? (
+            <div className="closeout-card__row">
+              <span className="closeout-card__label">DEADLINE</span>
+              <span className="closeout-card__value">{livePlan.closeout_deadline}</span>
+            </div>
+          ) : null}
+          <div className="closeout-card__row">
+            <span className="closeout-card__label">MODEL</span>
+            <span className="closeout-card__value">{executionModelLabel(modelCatalog, detail?.runtime || {})}</span>
           </div>
         </div>
       ) : null}
