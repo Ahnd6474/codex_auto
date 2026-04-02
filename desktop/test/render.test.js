@@ -5511,6 +5511,117 @@ test("AppSettingsView keeps provider availability warnings out of program settin
   assert.match(html, /Execution Defaults/);
 });
 
+test("AppSettingsView exposes tooling install cards in the AI tooling tab", async () => {
+  const html = await renderBundledComponent(
+    "app-settings-tooling-render",
+    "./src/components/views/AppSettingsView.jsx",
+    "AppSettingsView",
+    {
+      settings: {
+        approval_mode: "never",
+        sandbox_mode: "danger-full-access",
+        checkpoint_interval_blocks: 1,
+        workflow_mode: "standard",
+        ml_max_cycles: 3,
+        parallel_worker_mode: "manual",
+        parallel_workers: 4,
+        parallel_memory_per_worker_gib: 3,
+        background_concurrency_limit: 2,
+        dashboard_visibility: {},
+        codex_path: "codex.cmd",
+      },
+      codexStatus: {
+        provider_statuses: {
+          openai: { reason: "Codex CLI is installed but OpenAI authentication is not configured." },
+          claude: { reason: "Claude Code is ready for frontend or UI-oriented steps." },
+          gemini: { reason: "Gemini CLI is installed but Gemini authentication is not configured." },
+          ollama: { reason: "Ollama is ready with 1 detected model(s)." },
+        },
+      },
+      toolingStatus: {
+        npm: { installed: true },
+        codex: { installed: false, command: "codex.cmd", reason: "Codex CLI is not installed." },
+        gemini: { installed: true, version: "gemini 1.0.0", resolved_command: "C:/npm/gemini.cmd", reason: "Gemini CLI is installed." },
+        claude: { installed: true, version: "claude 1.0.0", resolved_command: "C:/npm/claude.cmd", reason: "Claude Code is installed." },
+        ollama: {
+          installed: true,
+          running: true,
+          version: "0.6.0",
+          resolved_command: "C:/Ollama/ollama.exe",
+          models: ["qwen2.5-coder:0.5b"],
+          reason: "Ollama is connected with 1 installed model(s).",
+        },
+      },
+      toolingJobs: [],
+      shareSettings: {},
+      shareDetail: {},
+      busy: false,
+      shareBusy: false,
+      initialSettingsTab: "tooling",
+      onChangeSettings: noop,
+      onInstallTooling: noop,
+      onConnectOllama: noop,
+      onGenerateShareLink: noop,
+      onCopyShareLink: noop,
+      onRevokeShareLink: noop,
+      onChangeShareSettings: noop,
+    },
+  );
+
+  assert.match(html, /AI Tooling/);
+  assert.match(html, /Codex CLI/);
+  assert.match(html, />Install<\/button>/);
+  assert.match(html, /Gemini CLI/);
+  assert.match(html, /Claude Code/);
+  assert.match(html, /Connect &amp; Pull|Connect & Pull/);
+  assert.match(html, /qwen2\.5-coder:0\.5b/);
+});
+
+test("AppSettingsView shows the npm prerequisite note when CLI installers cannot run yet", async () => {
+  const html = await renderBundledComponent(
+    "app-settings-tooling-prereq-render",
+    "./src/components/views/AppSettingsView.jsx",
+    "AppSettingsView",
+    {
+      settings: {
+        approval_mode: "never",
+        sandbox_mode: "danger-full-access",
+        checkpoint_interval_blocks: 1,
+        workflow_mode: "standard",
+        ml_max_cycles: 3,
+        parallel_worker_mode: "manual",
+        parallel_workers: 4,
+        parallel_memory_per_worker_gib: 3,
+        background_concurrency_limit: 2,
+        dashboard_visibility: {},
+        codex_path: "codex.cmd",
+      },
+      toolingStatus: {
+        npm: { installed: false, reason: "Node.js/npm is required to install Codex, Gemini, and Claude Code." },
+        codex: { installed: false, command: "codex.cmd", reason: "Codex CLI is not installed." },
+        gemini: { installed: false, command: "gemini.cmd", reason: "Gemini CLI is not installed." },
+        claude: { installed: false, command: "claude.cmd", reason: "Claude Code is not installed." },
+        ollama: { installed: false, command: "ollama", reason: "Ollama is not installed." },
+      },
+      toolingJobs: [],
+      shareSettings: {},
+      shareDetail: {},
+      busy: false,
+      shareBusy: false,
+      initialSettingsTab: "tooling",
+      onChangeSettings: noop,
+      onInstallTooling: noop,
+      onConnectOllama: noop,
+      onGenerateShareLink: noop,
+      onCopyShareLink: noop,
+      onRevokeShareLink: noop,
+      onChangeShareSettings: noop,
+    },
+  );
+
+  assert.match(html, /Node\.js\/npm is required before installing Codex, Gemini, or Claude Code\./);
+});
+
 test("ReportsView shows the saved Word report path next to the closeout report", async () => {
   const html = await renderBundledComponent(
     "reports-view-word-path-render",

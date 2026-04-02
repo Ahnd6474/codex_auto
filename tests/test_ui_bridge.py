@@ -1285,16 +1285,21 @@ class UIBridgeTests(unittest.TestCase):
 
     def test_bootstrap_payload_includes_provider_statuses(self) -> None:
         with TemporaryTestDir() as temp_dir, mock.patch(
-            "jakal_flow.ui_bridge._codex_snapshot_service",
-            new=mock.Mock(get_snapshot=mock.Mock(return_value=fake_codex_snapshot())),
-        ), mock.patch(
-            "jakal_flow.ui_bridge.provider_statuses_payload",
-            return_value={"openai": {"available": True}},
+            "jakal_flow.ui_bridge.tooling_snapshot_payload",
+            return_value={
+                "codex_status": {
+                    **fake_codex_snapshot().to_dict(),
+                    "provider_statuses": {"openai": {"available": True}},
+                },
+                "model_catalog": fake_codex_snapshot().model_catalog,
+                "tooling_statuses": {"codex": {"installed": True}},
+            },
         ):
             payload = ui_bridge.bootstrap_payload(temp_dir / "workspace")
 
         self.assertIn("provider_statuses", payload["codex_status"])
         self.assertEqual(payload["codex_status"]["provider_statuses"]["openai"]["available"], True)
+        self.assertIn("tooling_statuses", payload)
 
     def test_runtime_from_payload_normalizes_legacy_auto_model_presets(self) -> None:
         runtime = runtime_from_payload(
