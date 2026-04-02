@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
@@ -8,6 +9,10 @@ const devUrl = "http://127.0.0.1:1420";
 const prepareRuntimeScript = join(scriptDir, "prepare-runtime.mjs");
 const cleanViteCacheScript = join(scriptDir, "clean-vite-cache.mjs");
 const viteBin = join(desktopRoot, "node_modules", "vite", "bin", "vite.js");
+const repoRoot = resolve(desktopRoot, "..");
+const runtimeManifestPath = join(repoRoot, "rt", "manifest.json");
+const runtimeRoot = join(repoRoot, "rt");
+const devRuntimePlaceholder = join(runtimeRoot, ".dev-placeholder");
 
 function runBlocking(command, args) {
   const completed = spawnSync(command, args, {
@@ -45,7 +50,18 @@ async function isViteServerReady(url) {
 }
 
 async function main() {
-  runBlocking(process.execPath, [prepareRuntimeScript]);
+  if (String(process.env.JAKAL_FLOW_FORCE_PREPARE_RUNTIME || "").trim() === "1") {
+    console.log(`Forced runtime rebuild for dev: ${runtimeManifestPath}.`);
+    runBlocking(process.execPath, [prepareRuntimeScript]);
+  } else if (!existsSync(runtimeRoot)) {
+    mkdirSync(runtimeRoot, { recursive: true });
+    writeFileSync(devRuntimePlaceholder, "Dev placeholder for Tauri bundle resources.\n", "utf-8");
+    console.log(`Created dev runtime placeholder at ${runtimeRoot}.`);
+  } else if (existsSync(runtimeManifestPath)) {
+    console.log(`Reusing existing runtime bundle at ${runtimeManifestPath}.`);
+  } else {
+    console.log(`Reusing existing runtime directory at ${runtimeRoot} without rebuilding the bundle.`);
+  }
 
   if (await isViteServerReady(devUrl)) {
     console.log(`Reusing existing Vite dev server at ${devUrl}.`);
