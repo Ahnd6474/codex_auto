@@ -54,13 +54,15 @@ function CopyIcon() {
   );
 }
 
-function SectionHeader({ title, badge }) {
+function SectionHeader({ eyebrow = "", title, description = "", badge = null }) {
   return (
     <div className="settings-section-header">
       <div className="settings-section-header__title">
+        {eyebrow ? <span className="settings-section-header__eyebrow">{eyebrow}</span> : null}
         <strong>{title}</strong>
-        {badge}
+        {description ? <p>{description}</p> : null}
       </div>
+      {badge ? <div className="settings-section-header__meta">{badge}</div> : null}
     </div>
   );
 }
@@ -177,6 +179,32 @@ function ToolingCard({
   );
 }
 
+function settingsLeadFor(tabKey, language) {
+  switch (tabKey) {
+    case "tooling":
+      return language === "ko"
+        ? "설치 상태와 연결 경로를 한 화면에서 관리하는 AI 작업 제어면입니다."
+        : "A single control surface for AI tooling installs, connection state, and launch paths.";
+    case "execution":
+      return language === "ko"
+        ? "안전성, 병렬성, 런타임 기본값을 조정해 실행 행동을 고정합니다."
+        : "Tune safety, parallelism, and runtime defaults to shape how runs behave.";
+    case "dashboard":
+      return language === "ko"
+        ? "대시보드에 표시할 신호를 선택해 운영 화면의 밀도를 조절합니다."
+        : "Choose which signals appear on the dashboard so the operations view stays focused.";
+    case "share":
+      return language === "ko"
+        ? "원격 모니터 링크를 발급하고 만료 상태를 추적합니다."
+        : "Issue remote monitor links and keep the active share session under control.";
+    case "app":
+    default:
+      return language === "ko"
+        ? "테마, 언어, 개발자 기능 같은 전역 데스크톱 환경을 다룹니다."
+        : "Adjust the global desktop environment, including theme, language, and developer features.";
+  }
+}
+
 function OllamaModelManagerModal({
   onClose,
   installedModels,
@@ -197,60 +225,45 @@ function OllamaModelManagerModal({
 
   return (
     <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9999,
-        background: "rgba(0, 0, 0, 0.55)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
+      className="settings-modal-backdrop"
       onClick={onClose}
     >
       <div
-        style={{
-          background: "var(--bg-panel)",
-          border: "1px solid var(--border)",
-          borderRadius: "10px",
-          padding: "24px",
-          width: "520px",
-          maxWidth: "92vw",
-          maxHeight: "82vh",
-          overflow: "auto",
-          display: "flex",
-          flexDirection: "column",
-          gap: "16px",
-        }}
+        className="settings-modal settings-modal--wide"
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <strong style={{ fontSize: "15px" }}>
-            {language === "ko" ? "Ollama 모델 관리" : "Ollama Model Manager"}
-          </strong>
+        <div className="settings-modal__header">
+          <div className="settings-modal__title">
+            <strong>{language === "ko" ? "Ollama 모델 관리" : "Ollama Model Manager"}</strong>
+            <p>
+              {language === "ko"
+                ? "설치된 모델을 확인하고 새 모델을 바로 내려받을 수 있습니다."
+                : "Review installed models and pull a new model without leaving the settings flow."}
+            </p>
+          </div>
           <button className="toolbar-button toolbar-button--ghost" onClick={onClose} type="button">
             ✕
           </button>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          <strong style={{ fontSize: "13px" }}>{language === "ko" ? "설치된 모델" : "Installed models"}</strong>
-          <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+        <div className="settings-modal__section">
+          <span className="settings-modal__section-title">{language === "ko" ? "설치된 모델" : "Installed models"}</span>
+          <p className="settings-inline-note">
             {language === "ko"
               ? "이 목록은 모델을 새로 내려받거나 다시 연결한 뒤 갱신됩니다."
               : "This list refreshes after you pull a model or reconnect Ollama."}
-          </div>
+          </p>
           {loading ? (
-            <div style={{ fontSize: "12px", color: "var(--text-muted)", padding: "8px 0" }}>
+            <div className="settings-inline-note">
               {language === "ko" ? "설치된 모델 목록을 불러오는 중입니다." : "Loading installed models..."}
             </div>
           ) : installedModels.length ? (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+            <div className="settings-chip-grid">
               {installedModels.map((model) => (
                 <button
                   key={model}
                   type="button"
-                  className={`toolbar-button ${selectedModel === model ? "toolbar-button--accent" : "toolbar-button--ghost"}`}
+                  className={`settings-chip ${selectedModel === model ? "settings-chip--active" : ""}`}
                   onClick={() => setSelectedModel(model)}
                   disabled={loading}
                 >
@@ -259,18 +272,18 @@ function OllamaModelManagerModal({
               ))}
             </div>
           ) : (
-            <div style={{ fontSize: "12px", color: "var(--text-muted)", padding: "8px 0" }}>
+            <div className="settings-inline-note">
               {language === "ko" ? "아직 설치된 Ollama 모델이 없습니다." : "No Ollama models installed yet."}
             </div>
           )}
         </div>
 
-        <div style={{ borderTop: "1px solid var(--border)" }} />
+        <div className="settings-divider" />
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          <strong style={{ fontSize: "13px" }}>{language === "ko" ? "새 모델 추가" : "Add new model"}</strong>
+        <div className="settings-modal__section">
+          <span className="settings-modal__section-title">{language === "ko" ? "새 모델 추가" : "Add new model"}</span>
 
-          <label className="field field--wide" style={{ marginTop: 0 }}>
+          <label className="field field--wide settings-field">
             <span>{language === "ko" ? "모델 검색" : "Search models"}</span>
             <input
               value={ollamaSearch}
@@ -282,16 +295,16 @@ function OllamaModelManagerModal({
           </label>
 
           {loading ? (
-            <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+            <div className="settings-inline-note">
               {language === "ko" ? "추천 모델을 준비하는 중입니다." : "Preparing recommended models..."}
             </div>
           ) : filteredAddable.length ? (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+            <div className="settings-chip-grid">
               {filteredAddable.slice(0, 12).map((model) => (
                 <button
                   key={model}
                   type="button"
-                  className={`toolbar-button ${selectedModel === model ? "toolbar-button--accent" : "toolbar-button--ghost"}`}
+                  className={`settings-chip ${selectedModel === model ? "settings-chip--active" : ""}`}
                   onClick={() => setSelectedModel(model)}
                   disabled={loading || Boolean(ollamaJob)}
                 >
@@ -300,21 +313,19 @@ function OllamaModelManagerModal({
               ))}
             </div>
           ) : (
-            <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+            <div className="settings-inline-note">
               {language === "ko"
                 ? "검색 결과가 없습니다. 입력한 모델 slug를 그대로 설치할 수 있습니다."
                 : "No preset matches. The typed model slug can still be pulled directly."}
             </div>
           )}
 
-          <div className="sidebar-item">
-            <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>
-              {language === "ko" ? "선택된 모델" : "Selected model"}
-            </span>
-            <strong style={{ fontFamily: "monospace" }}>{pendingModel || "-"}</strong>
+          <div className="settings-keyline">
+            <span>{language === "ko" ? "선택된 모델" : "Selected model"}</span>
+            <strong>{pendingModel || "-"}</strong>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", paddingTop: "4px" }}>
+          <div className="settings-modal__footer">
             <button className="toolbar-button toolbar-button--ghost" onClick={onClose} type="button">
               {language === "ko" ? "닫기" : "Close"}
             </button>

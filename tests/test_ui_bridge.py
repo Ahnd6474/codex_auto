@@ -1761,6 +1761,7 @@ class UIBridgeTests(unittest.TestCase):
                     "effort": "medium",
                     "test_cmd": "python -m unittest",
                     "max_blocks": 5,
+                    "generate_word_report": True,
                 },
             }
 
