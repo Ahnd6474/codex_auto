@@ -508,6 +508,34 @@ pre {
   flex-shrink: 0;
 }
 
+/* UI 2 style live run strip enhancement */
+.run-progress-banner__header {
+  position: relative;
+}
+
+.run-progress-banner__identity {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex: 1;
+}
+
+.run-progress-banner__status-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.run-progress-banner__percent {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--info);
+  min-width: 42px;
+  text-align: right;
+}
+
 .run-progress-banner__header,
 .run-progress-banner__meta,
 .run-progress-banner__activity {
@@ -542,14 +570,6 @@ pre {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12.5px;
-}
-
-.run-progress-banner__identity {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  flex: 1;
 }
 
 .run-progress-banner__track {
@@ -3752,6 +3772,50 @@ select:focus {
 .sidebar-project > *:not(.sidebar-project__fill) {
   position: relative;
   z-index: 1;
+}
+
+/* ── Improved project card header (UI 2 style) ── */
+.sidebar-project__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.sidebar-project__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sidebar-project__title strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sidebar-project__branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--border);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 500;
+  margin-top: 4px;
+  align-self: flex-start;
+}
+
+.sidebar-project__branch::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-dim);
 }
 
 /* mini step counter bar at bottom of card */
@@ -7140,12 +7204,12 @@ body {
   margin-bottom: 2px;
 }
 
-/* ── Horizontal Stepper ── */
+/* ── Horizontal Stepper (UI 2 style step cards) ── */
 .execution-stepper {
   display: flex;
   align-items: flex-start;
   gap: 0;
-  padding: 12px 8px;
+  padding: 8px 4px;
   overflow-x: auto;
   flex-shrink: 0;
 }
@@ -7154,8 +7218,8 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 90px;
-  max-width: 140px;
+  min-width: 85px;
+  max-width: 130px;
   position: relative;
   flex-shrink: 0;
 }
@@ -7164,43 +7228,46 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 6px 8px;
-  border-radius: 6px;
+  gap: 5px;
+  padding: 8px 10px;
+  border-radius: 8px;
   border: 1.5px solid var(--border);
   background: var(--bg-panel);
   width: 100%;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
 }
 
 .execution-stepper__node:hover {
   border-color: var(--border-strong);
   background: var(--bg-panel-hover);
+  transform: translateY(-1px);
 }
 
 .execution-stepper__node--running {
   border-color: var(--bg-accent);
-  background: rgba(59, 116, 176, 0.10);
+  background: rgba(59, 116, 176, 0.12);
+  box-shadow: 0 2px 8px rgba(59, 116, 176, 0.15);
 }
 
 .execution-stepper__node--completed {
-  border-color: rgba(61, 204, 110, 0.4);
+  border-color: rgba(61, 204, 110, 0.45);
+  background: rgba(61, 204, 110, 0.06);
 }
 
 .execution-stepper__node--failed {
-  border-color: rgba(224, 90, 95, 0.5);
-  background: rgba(224, 90, 95, 0.06);
+  border-color: rgba(224, 90, 95, 0.55);
+  background: rgba(224, 90, 95, 0.08);
 }
 
 .execution-stepper__node--selected {
   border-color: var(--text);
-  box-shadow: 0 0 0 1px var(--text);
+  box-shadow: 0 0 0 1px var(--text), 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .execution-stepper__icon {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -7247,20 +7314,22 @@ body {
 }
 
 .execution-stepper__id {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
-  color: var(--text);
+  color: var(--text-primary);
   white-space: nowrap;
+  letter-spacing: 0.3px;
 }
 
 .execution-stepper__title {
-  font-size: 9.5px;
+  font-size: 10px;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
   text-align: center;
+  line-height: 1.3;
 }
 
 .execution-stepper__connector {
@@ -7293,21 +7362,34 @@ body {
   border-left-color: var(--success);
 }
 
-/* ── Stepper progress summary ── */
+/* ── Stepper progress summary (UI 2 style) ── */
 .execution-stepper__summary {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  font-size: 11px;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 11.5px;
   color: var(--text-muted);
   border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
+  background: var(--bg-panel-alt);
+}
+
+.execution-stepper__summary > span:first-child {
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 55px;
+}
+
+.execution-stepper__summary > span:last-child {
+  font-weight: 700;
+  color: var(--info);
+  min-width: 40px;
+  text-align: right;
 }
 
 .execution-stepper__summary-progress {
   flex: 1;
-  height: 3px;
+  height: 4px;
   background: var(--border);
   border-radius: 2px;
   overflow: hidden;
@@ -7315,7 +7397,7 @@ body {
 
 .execution-stepper__summary-fill {
   height: 100%;
-  background: var(--success);
+  background: linear-gradient(90deg, var(--success), #4ade80);
   transition: width 0.4s ease;
   border-radius: 2px;
 }
