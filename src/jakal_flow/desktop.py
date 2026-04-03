@@ -10,6 +10,10 @@ import subprocess
 _ACTION_TO_SCRIPT = {
     "dev": "tauri:dev",
     "build": "tauri:build",
+    "build-full": "tauri:build:full",
+    "build-python": "tauri:build:python",
+    "build-lean": "tauri:build:lean",
+    "build-all": "tauri:build:all",
     "test": "test",
     "web-dev": "dev",
     "web-build": "build",
@@ -68,3 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     command = command_for_action(args.action, args.extra_args)
     completed = subprocess.run(command, cwd=desktop_dir, check=False)
     return int(completed.returncode)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

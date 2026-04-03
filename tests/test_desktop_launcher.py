@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import runpy
 import subprocess
 import sys
 import unittest
@@ -17,6 +18,12 @@ class DesktopLauncherTests(unittest.TestCase):
             command = desktop.command_for_action("dev", ["--", "--verbose"])
 
         self.assertEqual(command, ["npm", "run", "tauri:dev", "--verbose"])
+
+    def test_command_for_action_supports_explicit_release_profiles(self) -> None:
+        with mock.patch("jakal_flow.desktop.npm_executable", return_value="npm"):
+            command = desktop.command_for_action("build-python", [])
+
+        self.assertEqual(command, ["npm", "run", "tauri:build:python"])
 
     def test_command_for_action_rejects_unknown_action(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unsupported desktop action"):
@@ -37,3 +44,21 @@ class DesktopLauncherTests(unittest.TestCase):
         self.assertEqual(code, 0)
         command_mock.assert_called_once_with("test", [])
         run_mock.assert_called_once_with(["npm", "run", "test"], cwd=Path("D:/repo/desktop"), check=False)
+
+    def test_module_entrypoint_invokes_main(self) -> None:
+        completed = subprocess.CompletedProcess(["npm", "run", "test"], 0)
+        original_module = sys.modules.pop("jakal_flow.desktop", None)
+
+        try:
+            with mock.patch.object(sys, "argv", ["jakal_flow.desktop", "test"]), mock.patch(
+                "subprocess.run",
+                return_value=completed,
+            ) as run_mock:
+                with self.assertRaises(SystemExit) as raised:
+                    runpy.run_module("jakal_flow.desktop", run_name="__main__")
+        finally:
+            if original_module is not None:
+                sys.modules["jakal_flow.desktop"] = original_module
+
+        self.assertEqual(raised.exception.code, 0)
+        run_mock.assert_called_once()

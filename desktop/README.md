@@ -28,6 +28,13 @@ Or use the root launcher after `python -m pip install -e .`:
 jakal-flow-desktop dev
 jakal-flow-desktop test
 jakal-flow-desktop build
+jakal-flow-desktop build-python
+```
+
+On Windows you can also build the installer directly from the repository root:
+
+```powershell
+.\build-desktop-release.ps1 -Profile python
 ```
 
 Build the desktop app:

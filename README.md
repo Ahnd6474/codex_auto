@@ -212,6 +212,13 @@ Or from the repository root:
 
 ```bash
 jakal-flow-desktop build
+jakal-flow-desktop build-python
+```
+
+Windows one-shot release script from the repository root:
+
+```powershell
+.\build-desktop-release.ps1 -Profile python
 ```
 
 ## Release packaging
@@ -237,6 +244,8 @@ What each variant means:
 Useful details:
 
 - `jakal-flow-desktop build` maps to the default desktop build path. Use the `desktop/` npm scripts when you want a specific release profile.
+- `jakal-flow-desktop build-python`, `build-full`, `build-lean`, and `build-all` expose those release profiles from the repository root.
+- `build-desktop-release.ps1` is the direct Windows entrypoint for producing `.exe` and `.msi` files into `release/`.
 - `desktop/scripts/build-release.mjs` copies the generated Tauri `.msi` and `.exe` bundle artifacts into the repository-level `release/` directory.
 - If you want a public GitHub release page, build locally first, then upload the packaged files from `release/` as release assets.
 
