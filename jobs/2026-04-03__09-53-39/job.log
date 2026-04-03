@@ -1,0 +1,2 @@
+Trial fix-git__aEzezWV failed: 'JakalFlowInstalledAgent' object has no attribute 'setup'
+Not retrying trial because the maximum number of retries has been reached

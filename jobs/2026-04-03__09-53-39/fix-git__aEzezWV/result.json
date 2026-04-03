@@ -1,0 +1,104 @@
+{
+    "id": "0e9f27c3-d7dd-47dc-b698-7f76c208b5b6",
+    "task_name": "fix-git",
+    "trial_name": "fix-git__aEzezWV",
+    "trial_uri": "file:///C:/Users/alber/GitHub/Jakal-flow/jobs/2026-04-03__09-53-39/fix-git__aEzezWV",
+    "task_id": {
+        "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+        "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+        "path": "fix-git"
+    },
+    "source": "terminal-bench",
+    "task_checksum": "485519dd203d247a047ab4f911ae0e11df1210397b2fa7df62a3b0edc3f9eaba",
+    "config": {
+        "task": {
+            "path": "fix-git",
+            "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+            "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+            "name": null,
+            "ref": null,
+            "overwrite": false,
+            "download_dir": null,
+            "source": "terminal-bench"
+        },
+        "trial_name": "fix-git__aEzezWV",
+        "trials_dir": "jobs\\2026-04-03__09-53-39",
+        "timeout_multiplier": 1.0,
+        "agent_timeout_multiplier": null,
+        "verifier_timeout_multiplier": null,
+        "agent_setup_timeout_multiplier": null,
+        "environment_build_timeout_multiplier": null,
+        "agent": {
+            "name": null,
+            "import_path": "jakal_flow.terminal_bench_agent:JakalFlowInstalledAgent",
+            "model_name": null,
+            "override_timeout_sec": null,
+            "override_setup_timeout_sec": null,
+            "max_timeout_sec": null,
+            "kwargs": {},
+            "env": {}
+        },
+        "environment": {
+            "type": "docker",
+            "import_path": null,
+            "force_build": false,
+            "delete": true,
+            "override_cpus": null,
+            "override_memory_mb": null,
+            "override_storage_mb": null,
+            "override_gpus": null,
+            "suppress_override_warnings": false,
+            "mounts_json": [
+                {
+                    "type": "bind",
+                    "source": "C:\\Users\\alber\\.codex",
+                    "target": "/root/.codex",
+                    "read_only": true
+                },
+                {
+                    "type": "bind",
+                    "source": "C:\\Users\\alber\\GitHub\\Jakal-flow",
+                    "target": "/opt/jakal-flow-src",
+                    "read_only": true
+                }
+            ],
+            "env": {},
+            "kwargs": {}
+        },
+        "verifier": {
+            "override_timeout_sec": null,
+            "max_timeout_sec": null,
+            "disable": false
+        },
+        "artifacts": [],
+        "job_id": "3a491af2-1e5d-4f33-9e7c-cfe01f9e379b"
+    },
+    "agent_info": {
+        "name": "Jakal Flow",
+        "version": "unknown",
+        "model_info": {
+            "name": "gpt-5.4",
+            "provider": "openai"
+        }
+    },
+    "agent_result": null,
+    "verifier_result": null,
+    "exception_info": {
+        "exception_type": "AttributeError",
+        "exception_message": "'JakalFlowInstalledAgent' object has no attribute 'setup'",
+        "exception_traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\alber\\AppData\\Local\\uv\\cache\\archive-v0\\jVl0-B2nL75zgKW6RZsK2\\Lib\\site-packages\\harbor\\trial\\trial.py\", line 533, in run\n    await self._setup_agent()\n  File \"C:\\Users\\alber\\AppData\\Local\\uv\\cache\\archive-v0\\jVl0-B2nL75zgKW6RZsK2\\Lib\\site-packages\\harbor\\trial\\trial.py\", line 267, in _setup_agent\n    self._agent.setup(environment=self._environment),\n    ^^^^^^^^^^^^^^^^^\nAttributeError: 'JakalFlowInstalledAgent' object has no attribute 'setup'\n",
+        "occurred_at": "2026-04-03T09:54:04.357779"
+    },
+    "started_at": "2026-04-03T00:53:51.962598Z",
+    "finished_at": "2026-04-03T00:54:06.268718Z",
+    "environment_setup": {
+        "started_at": "2026-04-03T00:53:51.972597Z",
+        "finished_at": "2026-04-03T00:54:04.355795Z"
+    },
+    "agent_setup": {
+        "started_at": "2026-04-03T00:54:04.355795Z",
+        "finished_at": "2026-04-03T00:54:04.355795Z"
+    },
+    "agent_execution": null,
+    "verifier": null
+}

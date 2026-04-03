@@ -5,11 +5,13 @@ import os
 import shlex
 from pathlib import Path
 
-from terminal_bench.agents.installed_agents.abstract_installed_agent import AbstractInstalledAgent
-from terminal_bench.terminal.models import TerminalCommand
+from harbor.agents.installed.base import BaseInstalledAgent, with_prompt_template
+from harbor.environments.base import BaseEnvironment
+from harbor.models.agent.context import AgentContext
 
 
 _FORWARDED_ENV_VARS = (
+    "CODEX_HOME",
     "OPENAI_API_KEY",
     "OPENAI_BASE_URL",
     "JAKAL_FLOW_MODEL",
@@ -25,13 +27,12 @@ _FORWARDED_ENV_VARS = (
 )
 
 
-class JakalFlowInstalledAgent(AbstractInstalledAgent):
+class JakalFlowInstalledAgent(BaseInstalledAgent):
     @staticmethod
     def name() -> str:
         return os.environ.get("JAKAL_FLOW_AGENT_NAME", "Jakal Flow").strip() or "Jakal Flow"
 
-    @property
-    def _env(self) -> dict[str, str]:
+    def _container_env(self) -> dict[str, str]:
         env: dict[str, str] = {}
         for key in _FORWARDED_ENV_VARS:
             value = os.environ.get(key)
@@ -39,20 +40,31 @@ class JakalFlowInstalledAgent(AbstractInstalledAgent):
                 env[key] = value
         return env
 
-    @property
-    def _install_agent_script_path(self) -> os.PathLike:
-        return Path(__file__).resolve().with_name("terminal_bench_setup.sh")
+    def populate_context_post_run(self, context: AgentContext) -> None:
+        if context.metadata is None:
+            context.metadata = {}
+        context.metadata.setdefault("runner", "jakal-flow")
 
-    def _run_agent_commands(self, task_description: str) -> list[TerminalCommand]:
-        encoded_description = base64.b64encode(task_description.encode("utf-8")).decode("ascii")
-        command = (
-            "python -m jakal_flow.terminal_bench_worker "
-            f"--task-description-base64 {shlex.quote(encoded_description)}"
+    async def install(self, environment: BaseEnvironment) -> None:
+        setup_script_path = Path(__file__).resolve().with_name("terminal_bench_setup.sh")
+        await environment.upload_file(setup_script_path, "/installed-agent/install-agent.sh")
+        await self.exec_as_root(
+            environment,
+            command="chmod +x /installed-agent/install-agent.sh && /installed-agent/install-agent.sh",
+            env=self._container_env(),
         )
-        return [
-            TerminalCommand(
-                command=command,
-                max_timeout_sec=float("inf"),
-                block=True,
-            )
-        ]
+
+    @with_prompt_template
+    async def run(
+        self, instruction: str, environment: BaseEnvironment, context: AgentContext
+    ) -> None:
+        encoded_instruction = base64.b64encode(instruction.encode("utf-8")).decode("ascii")
+        worker_command = (
+            "python -m jakal_flow.terminal_bench_worker "
+            f"--task-description-base64 {shlex.quote(encoded_instruction)}"
+        )
+        await self.exec_as_agent(
+            environment,
+            command=worker_command,
+            env=self._container_env(),
+        )

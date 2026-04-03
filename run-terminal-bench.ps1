@@ -12,10 +12,6 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if (-not (Get-Command harbor -ErrorAction SilentlyContinue)) {
-    throw "harbor is not installed or not on PATH."
-}
-
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     $dockerPath = "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
     if (Test-Path $dockerPath) {
@@ -42,6 +38,17 @@ if (-not (Test-Path (Join-Path $codexHome "auth.json"))) {
     throw "Codex CLI auth was not found at $codexHome\auth.json. Run 'codex login' first."
 }
 
+$runner = @()
+if (Get-Command uv -ErrorAction SilentlyContinue) {
+    $runner = @("uv", "tool", "run", "--from", "harbor", "--with", "terminal-bench", "harbor")
+}
+elseif (Get-Command harbor -ErrorAction SilentlyContinue) {
+    $runner = @("harbor")
+}
+else {
+    throw "Either uv or harbor must be installed and available on PATH."
+}
+
 $harborArgs = @(
     "run",
     "--yes"
@@ -51,7 +58,7 @@ $mounts = @(
     @{
         type = "bind"
         source = $codexHome
-        target = "/root/.codex"
+        target = "/opt/codex-home"
         read_only = $true
     }
 )
@@ -81,6 +88,9 @@ if (-not $env:JAKAL_FLOW_EFFORT) {
 if (-not $env:JAKAL_FLOW_MAX_BLOCKS) {
     $env:JAKAL_FLOW_MAX_BLOCKS = "12"
 }
+if (-not $env:CODEX_HOME) {
+    $env:CODEX_HOME = "/opt/codex-home"
+}
 $env:PYTHONUTF8 = "1"
 $env:PYTHONIOENCODING = "utf-8"
 if ($env:PYTHONPATH) {
@@ -107,6 +117,7 @@ $jobConfig = @{
     agents = @(
         @{
             import_path = $AgentImportPath
+            model_name = "$($env:JAKAL_FLOW_MODEL_PROVIDER)/$($env:JAKAL_FLOW_MODEL)"
         }
     )
     environment = @{
@@ -123,10 +134,15 @@ $jsonText = ConvertTo-Json -InputObject $jobConfig -Depth 8
 $harborArgs += @("--config", $tempConfigPath)
 
 Write-Host "Running Harbor with args:" -ForegroundColor Cyan
-Write-Host ("harbor " + ($harborArgs -join " ")) -ForegroundColor Yellow
+Write-Host (($runner -join " ") + " " + ($harborArgs -join " ")) -ForegroundColor Yellow
 
 try {
-    & harbor @harborArgs
+    $runnerExecutable = $runner[0]
+    $runnerArgs = @()
+    if ($runner.Length -gt 1) {
+        $runnerArgs = $runner[1..($runner.Length - 1)]
+    }
+    & $runnerExecutable @runnerArgs @harborArgs
     exit $LASTEXITCODE
 }
 finally {

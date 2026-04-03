@@ -21,7 +21,8 @@ install_root="/opt/jakal-flow"
 
 rm -rf "${install_root}"
 if [ -d "${repo_url}" ] && [ -f "${repo_url}/pyproject.toml" ]; then
-  python3 -m pip install --break-system-packages -e "${repo_url}"
+  cp -a "${repo_url}" "${install_root}"
+  python3 -m pip install --break-system-packages -e "${install_root}"
 else
   git clone --depth 1 --branch "${repo_ref}" "${repo_url}" "${install_root}"
   python3 -m pip install --break-system-packages -e "${install_root}"

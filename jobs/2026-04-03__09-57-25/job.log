@@ -1,0 +1,22 @@
+Running command: chmod +x /installed-agent/install-agent.sh && /installed-agent/install-agent.sh
+Command failed
+Trial fix-git__K6RK2Km failed: Command failed (exit 1): chmod +x /installed-agent/install-agent.sh && /installed-agent/install-agent.sh
+stdout: Get:1 http://deb.debian.org/debian bookworm InRelease [151 kB]
+Get:2 http://deb.debian.org/debian bookworm-updates InRelease [55.4 kB]
+Get:3 http://deb.debian.org/debian-security bookworm-security InRelease [48.0 kB]
+Get:4 http://deb.debian.org/debian bookworm/main amd64 Packages [8792 kB]
+Get:5 http://deb.debian.org/debian-security bookworm-security/main amd64 Packages [294 kB]
+Fetched 9340 kB in 3s (3373 kB/s)
+Reading package lists...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+The following additional packages will be installed:
+  binutils binutils-common binutils-x86-64-linux-gnu build-essential bzip2 cpp
+  cpp-12 dirmngr dpkg-dev fakeroot fontconfig-config fonts-dejavu-core g++
+  g++-12 gcc gcc-12 git-man gnupg gnupg-l10n gnupg-utils gpg gpg-agent
+  gpg-wks-client gpg-wks-server gpgconf gpgsm gpgv javascript-common
+  libabsl20220623 libalgorithm-diff-perl libalgorithm-diff-xs-perl
+  libalgorithm-merge-perl libaom3 libasan8 libassuan0 libatomic ... [truncated]
+stderr: None
+Not retrying trial because the maximum number of retries has been reached
