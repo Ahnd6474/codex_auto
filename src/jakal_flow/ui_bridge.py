@@ -324,17 +324,6 @@ def stop_share_server_process(workspace_root: Path) -> dict[str, Any]:
     return share_server_status_payload(workspace_root)
 
 
-def optional_text(value: Any) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        text = value.strip()
-        return text or None
-    if isinstance(value, (int, float)):
-        return str(value)
-    return None
-
-
 def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
     defaults = desktop_runtime_defaults()
     defaults["codex_path"] = default_codex_path()

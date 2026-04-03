@@ -330,10 +330,6 @@ def provider_supports_auto_model(value: str) -> bool:
     return provider_preset(value).supports_auto_model
 
 
-def provider_supports_catalog(value: str) -> bool:
-    return provider_preset(value).supports_catalog
-
-
 def provider_uses_oss_mode(value: str) -> bool:
     normalized = normalize_model_provider(value)
     return normalized in {"oss", "ollama"}
@@ -367,10 +363,6 @@ def provider_uses_openai_compatible_api(value: str) -> bool:
         "opencdk",
         "local_openai",
     }
-
-
-def provider_uses_claude_compatible_api(value: str) -> bool:
-    return provider_backend_kind(value) == "claude"
 
 
 def normalize_billing_mode(value: str, provider: str, fallback: str | None = None) -> str:
