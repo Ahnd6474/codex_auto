@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accelint AC to Playwright"
+  short_description: "Turn acceptance criteria into Playwright tests."
+  default_prompt: "Use $accelint-ac-to-playwright to review these acceptance criteria and turn them into Playwright-ready tests."

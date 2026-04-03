@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accelint README Writer"
+  short_description: "Create and update README files."
+  default_prompt: "Use $accelint-readme-writer to create or revise this README based on the current codebase."

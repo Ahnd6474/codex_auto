@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accelint Persona Review"
+  short_description: "Review designs through operator personas."
+  default_prompt: "Use $accelint-persona-review to review this design from the target operator personas' perspective."

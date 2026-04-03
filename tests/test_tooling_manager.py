@@ -316,6 +316,27 @@ class ToolingBridgeTests(unittest.TestCase):
 
         self.assertFalse(tooling_snapshot_payload_mock.call_args.kwargs["include_ollama_details"])
 
+    def test_get_tooling_status_command_can_skip_codex_refresh(self) -> None:
+        fake_service = mock.Mock(get_snapshot=mock.Mock(return_value=fake_codex_snapshot()))
+        with TemporaryTestDir() as temp_dir, mock.patch(
+            "jakal_flow.ui_bridge._codex_snapshot_service",
+            new=fake_service,
+        ), mock.patch(
+            "jakal_flow.ui_bridge_commands.tooling.tooling_snapshot_payload",
+            return_value={
+                "codex_status": fake_codex_snapshot_payload(),
+                "model_catalog": [{"model": "auto", "provider": "openai"}],
+                "tooling_statuses": {"ollama": {"installed": True}},
+            },
+        ) as tooling_snapshot_payload_mock:
+            ui_bridge.run_command(
+                "get-tooling-status",
+                temp_dir,
+                {"force_refresh": True, "refresh_codex_status": False},
+            )
+
+        self.assertFalse(tooling_snapshot_payload_mock.call_args.kwargs["refresh_codex_status"])
+
     def test_manage_tooling_connect_includes_ollama_details(self) -> None:
         fake_service = mock.Mock(get_snapshot=mock.Mock(return_value=fake_codex_snapshot()))
         with TemporaryTestDir() as temp_dir, mock.patch(
@@ -364,6 +385,32 @@ class ToolingBridgeTests(unittest.TestCase):
 
         get_tooling_statuses_mock.assert_called_once_with(force_refresh=False, startup_safe=True)
         self.assertTrue(snapshot["tooling_statuses"]["codex"]["installed"])
+
+    def test_tooling_snapshot_payload_refreshes_tooling_without_refreshing_codex(self) -> None:
+        fake_service = mock.Mock(
+            peek_snapshot=mock.Mock(return_value=fake_codex_snapshot()),
+            get_snapshot=mock.Mock(side_effect=AssertionError("codex refresh should be skipped")),
+        )
+        with mock.patch(
+            "jakal_flow.ui_bridge_commands.tooling.provider_statuses_payload",
+            return_value={"openai": {"available": True}},
+        ), mock.patch(
+            "jakal_flow.ui_bridge_commands.tooling.get_tooling_statuses",
+            return_value={"ollama": {"installed": True, "version": "0.6.0"}},
+        ) as get_tooling_statuses_mock:
+            snapshot = ui_bridge.tooling_snapshot_payload(
+                codex_snapshot_service=fake_service,
+                force_refresh=True,
+                refresh_codex_status=False,
+            )
+
+        fake_service.get_snapshot.assert_not_called()
+        get_tooling_statuses_mock.assert_called_once_with(
+            force_refresh=True,
+            include_ollama_details=False,
+        )
+        self.assertTrue(snapshot["codex_status"]["available"])
+        self.assertTrue(snapshot["tooling_statuses"]["ollama"]["installed"])
 
 
 if __name__ == "__main__":

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accelint Design Foundation"
+  short_description: "Style UI with Accelint design foundation patterns."
+  default_prompt: "Use $accelint-design-foundation to style this UI with the Accelint design foundation patterns."

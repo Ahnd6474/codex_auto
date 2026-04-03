@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accelint TypeScript Testing"
+  short_description: "Vitest guidance for TypeScript projects."
+  default_prompt: "Use $accelint-ts-testing to write or review these Vitest tests in a TypeScript project."

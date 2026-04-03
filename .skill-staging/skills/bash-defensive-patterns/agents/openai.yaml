@@ -1,0 +1,4 @@
+interface:
+  display_name: "Bash Defensive Patterns"
+  short_description: "Defensive Bash scripting guidance."
+  default_prompt: "Use $bash-defensive-patterns to write or harden this Bash script with defensive patterns."

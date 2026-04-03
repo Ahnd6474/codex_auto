@@ -15,6 +15,7 @@
     "tauri:dev": "node scripts/clean-vite-cache.mjs && tauri dev",
     "tauri:build": "node scripts/build-release.mjs full",
     "tauri:build:full": "node scripts/build-release.mjs full",
+    "tauri:build:python": "node scripts/build-release.mjs python",
     "tauri:build:lean": "node scripts/build-release.mjs lean",
     "tauri:build:all": "node scripts/build-release.mjs all"
   },

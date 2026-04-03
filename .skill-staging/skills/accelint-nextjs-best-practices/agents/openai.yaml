@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accelint Next.js Best Practices"
+  short_description: "Next.js performance and app architecture guidance."
+  default_prompt: "Use $accelint-nextjs-best-practices to implement or review this Next.js change for performance and correctness."

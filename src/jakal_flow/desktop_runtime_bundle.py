@@ -346,6 +346,7 @@ def bundle_runtime(
     target_dir: Path | None = None,
     required_commands: Iterable[str] = _DEFAULT_REQUIRED_COMMANDS,
     optional_commands: Iterable[str] = _DEFAULT_OPTIONAL_COMMANDS,
+    bundle_tools: bool = True,
 ) -> RuntimeBundleManifest:
     required = [str(command).strip() for command in required_commands if str(command).strip()]
     optional = [str(command).strip() for command in optional_commands if str(command).strip()]
@@ -356,13 +357,14 @@ def bundle_runtime(
 
     python_manifest = _bundle_python_runtime(destination)
     tools: list[BundledToolManifest] = []
-    for command_name in [*required, *optional]:
-        tools.append(_bundle_tool_command(destination, command_name))
+    if bundle_tools:
+        for command_name in [*required, *optional]:
+            tools.append(_bundle_tool_command(destination, command_name))
 
-    missing_required = [tool.command for tool in tools if tool.command in set(required) and not tool.available]
-    if missing_required:
-        missing_text = ", ".join(sorted(missing_required))
-        raise RuntimeError(f"Failed to bundle required CLI command(s): {missing_text}")
+        missing_required = [tool.command for tool in tools if tool.command in set(required) and not tool.available]
+        if missing_required:
+            missing_text = ", ".join(sorted(missing_required))
+            raise RuntimeError(f"Failed to bundle required CLI command(s): {missing_text}")
 
     manifest = RuntimeBundleManifest(
         built_at=_now_utc_iso(),
@@ -384,12 +386,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=str(default_target_dir()),
         help="Target directory that will receive the bundled runtime resources",
     )
+    parser.add_argument(
+        "--profile",
+        choices=("full", "python"),
+        default="full",
+        help="Bundle profile: 'full' includes Python and detected CLI tooling, 'python' bundles only Python.",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    manifest = bundle_runtime(target_dir=Path(args.target))
+    manifest = bundle_runtime(
+        target_dir=Path(args.target),
+        bundle_tools=args.profile != "python",
+    )
     print(json.dumps(asdict(manifest), ensure_ascii=False, indent=2))
     return 0
 

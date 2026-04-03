@@ -356,6 +356,7 @@ export function useDesktopController() {
     void refreshToolingStatus({
       forceRefresh: true,
       includeOllamaDetails: false,
+      refreshCodexStatus: false,
       quiet: true,
     }).then((snapshot) => {
       if (!snapshot) {
@@ -1413,6 +1414,7 @@ export function useDesktopController() {
       {
         force_refresh: options.forceRefresh === true,
         include_ollama_details: options.includeOllamaDetails === true,
+        refresh_codex_status: options.refreshCodexStatus !== false,
       },
       workspaceRoot || null,
     );

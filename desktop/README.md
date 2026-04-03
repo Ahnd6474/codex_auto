@@ -37,6 +37,13 @@ cd desktop
 npm run tauri:build
 ```
 
+Build the recommended Windows app profile with only the Python runtime bundled:
+
+```bash
+cd desktop
+npm run tauri:build:python
+```
+
 Build the lean installer without bundled runtimes:
 
 ```bash
@@ -51,6 +58,8 @@ npm run tauri:build:lean
 - a bundled Node runtime plus any detected global npm provider CLIs
 
 On this machine that means Codex CLI and Gemini CLI are embedded. Claude Code and Qwen Code remain optional because they were not installed at build time.
+
+`npm run tauri:build:python` also prepares `rt/`, but it bundles only the Python runtime used by the bridge. Provider CLIs are not embedded, so the installed app can stay lightweight and install Codex/Gemini/Ollama later from the AI Tools tab.
 
 `npm run tauri:build:lean` skips the bundled runtime and only packages the desktop shell plus `src/jakal_flow`. The target machine must already have Python 3.11+ and any required provider CLIs on `PATH`.
 

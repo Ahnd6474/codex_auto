@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accelint TypeScript Best Practices"
+  short_description: "TypeScript correctness and safety guidance."
+  default_prompt: "Use $accelint-ts-best-practices to implement or review this TypeScript code for correctness and safety."

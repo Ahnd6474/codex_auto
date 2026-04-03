@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skill Creator"
+  short_description: "Create, test, and optimize agent skills."
+  default_prompt: "Use $skill-creator to create or iterate on this skill package."

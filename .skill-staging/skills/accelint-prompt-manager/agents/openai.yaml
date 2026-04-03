@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accelint Prompt Manager"
+  short_description: "Clarify vague requests before execution."
+  default_prompt: "Use $accelint-prompt-manager to clarify this request and turn it into an executable plan."

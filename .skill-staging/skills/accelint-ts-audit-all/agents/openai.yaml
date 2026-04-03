@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accelint TypeScript Audit All"
+  short_description: "Run coordinated TypeScript audits."
+  default_prompt: "Use $accelint-ts-audit-all to run a coordinated audit across this TypeScript file or directory."

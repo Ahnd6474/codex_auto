@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accelint TanStack Query Best Practices"
+  short_description: "TanStack Query guidance for Next.js apps."
+  default_prompt: "Use $accelint-tanstack-query-best-practices to implement or review this TanStack Query code in Next.js."

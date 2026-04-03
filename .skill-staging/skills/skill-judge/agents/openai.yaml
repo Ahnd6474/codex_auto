@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skill Judge"
+  short_description: "Review agent skill quality and coverage."
+  default_prompt: "Use $skill-judge to review this skill for quality, trigger clarity, and packaging issues."

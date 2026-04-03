@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accelint React Testing"
+  short_description: "React Testing Library guidance."
+  default_prompt: "Use $accelint-react-testing to write or review these React Testing Library tests."

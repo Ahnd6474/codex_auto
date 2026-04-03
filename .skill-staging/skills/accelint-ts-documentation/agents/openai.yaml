@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accelint TypeScript Documentation"
+  short_description: "Improve TypeScript JSDoc and comments."
+  default_prompt: "Use $accelint-ts-documentation to improve this TypeScript code's JSDoc and comments."

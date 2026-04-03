@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ask Questions If Underspecified"
+  short_description: "Clarify unclear requests before implementation."
+  default_prompt: "Use $ask-questions-if-underspecified to identify the minimum clarifications needed before implementation."

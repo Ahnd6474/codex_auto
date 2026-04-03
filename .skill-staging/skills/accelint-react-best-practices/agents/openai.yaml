@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accelint React Best Practices"
+  short_description: "React performance and correctness guidance."
+  default_prompt: "Use $accelint-react-best-practices to implement or review this React change with strong runtime patterns."

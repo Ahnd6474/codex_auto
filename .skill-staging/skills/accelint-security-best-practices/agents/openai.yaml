@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accelint Security Best Practices"
+  short_description: "Security review for JavaScript and TypeScript apps."
+  default_prompt: "Use $accelint-security-best-practices to audit this JS/TS code for security risks."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accelint TypeScript Performance"
+  short_description: "Optimize JavaScript and TypeScript performance."
+  default_prompt: "Use $accelint-ts-performance to review this TypeScript or JavaScript code for performance issues."

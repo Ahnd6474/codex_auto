@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accelint Skill Manager"
+  short_description: "Create, audit, and improve agent skills."
+  default_prompt: "Use $accelint-skill-manager to create, audit, or improve this agent skill."

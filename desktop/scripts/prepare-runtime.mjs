@@ -11,6 +11,14 @@ const targetDir = join(repoRoot, "rt");
 const lockFile = join(repoRoot, ".prepare-runtime.lock");
 const lockTimeoutMs = 5 * 60 * 1000;
 const lockPollIntervalMs = 1000;
+const runtimeProfile = (() => {
+  const profileIndex = process.argv.findIndex((value) => value === "--profile");
+  if (profileIndex >= 0) {
+    return String(process.argv[profileIndex + 1] || "").trim().toLowerCase() || "full";
+  }
+  const positional = process.argv[2];
+  return String(positional || "").trim().toLowerCase() || "full";
+})();
 
 const env = {
   ...process.env,
@@ -86,7 +94,7 @@ const lockHandle = await acquireLock();
 try {
   const completed = spawnSync(
     process.env.JAKAL_FLOW_PYTHON || "python",
-    ["-m", "jakal_flow.desktop_runtime_bundle", "--target", targetDir],
+    ["-m", "jakal_flow.desktop_runtime_bundle", "--target", targetDir, "--profile", runtimeProfile],
     {
       cwd: repoRoot,
       env,

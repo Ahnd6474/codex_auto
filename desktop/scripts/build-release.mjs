@@ -18,24 +18,24 @@ export function normalizeVariant(value) {
   if (!variant) {
     return "full";
   }
-  if (!["full", "lean", "all"].includes(variant)) {
+  if (!["full", "python", "lean", "all"].includes(variant)) {
     throw new Error(`Unsupported desktop release variant: ${value}`);
   }
   return variant;
 }
 
 export function releaseNameForVariant(fileName, variant) {
-  if (variant !== "lean") {
+  if (variant === "full") {
     return fileName;
   }
   const extension = extname(fileName);
   const stem = basename(fileName, extension);
-  return `${stem}_lean${extension}`;
+  return `${stem}_${variant}${extension}`;
 }
 
 export function tauriBuildArgs(variant) {
   const normalized = normalizeVariant(variant);
-  if (normalized === "full") {
+  if (normalized === "full" || normalized === "python") {
     return ["build"];
   }
   if (normalized === "lean") {
@@ -114,8 +114,8 @@ function copyReleaseArtifacts(variant) {
 }
 
 function buildVariant(variant) {
-  if (variant === "full") {
-    runCommand(npmExecutable(), ["run", "prepare:runtime"], desktopRoot);
+  if (variant === "full" || variant === "python") {
+    runCommand(npmExecutable(), ["run", "prepare:runtime", "--", "--profile", variant], desktopRoot);
   }
   runCommand(tauriExecutable(), tauriBuildArgs(variant), desktopRoot);
   copyReleaseArtifacts(variant);
@@ -125,8 +125,9 @@ function main(argv = process.argv.slice(2)) {
   const variant = normalizeVariant(argv[0] || "full");
   if (variant === "all") {
     buildVariant("full");
+    buildVariant("python");
     buildVariant("lean");
-    console.log(`Built desktop release variants for ${packageVersion()}: full, lean`);
+    console.log(`Built desktop release variants for ${packageVersion()}: full, python, lean`);
     return 0;
   }
   buildVariant(variant);

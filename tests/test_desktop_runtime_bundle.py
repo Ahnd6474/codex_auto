@@ -90,6 +90,53 @@ class DesktopRuntimeBundleTests(unittest.TestCase):
             self.assertEqual(attempt_state["count"], 4)
             self.assertFalse(target.exists())
 
+    def test_bundle_runtime_can_skip_tool_bundling(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target_dir = Path(temp_dir) / "bundle"
+            original_bundle_python_runtime = desktop_runtime_bundle._bundle_python_runtime
+            original_bundle_tool_command = desktop_runtime_bundle._bundle_tool_command
+            tool_calls: list[str] = []
+
+            def fake_bundle_python_runtime(target: Path):
+                python_home = target / "py"
+                python_home.mkdir(parents=True, exist_ok=True)
+                executable = python_home / "python.exe"
+                executable.write_text("", encoding="utf-8")
+                return desktop_runtime_bundle.BundledPythonManifest(
+                    executable=str(executable),
+                    home=str(python_home),
+                    version="3.12.0",
+                )
+
+            def fake_bundle_tool_command(target: Path, command_name: str):
+                tool_calls.append(command_name)
+                return desktop_runtime_bundle.BundledToolManifest(
+                    command=command_name,
+                    available=True,
+                    bundled_command="",
+                    package_name="",
+                    package_version="",
+                    source_command="",
+                    reason="",
+                )
+
+            try:
+                desktop_runtime_bundle._bundle_python_runtime = fake_bundle_python_runtime
+                desktop_runtime_bundle._bundle_tool_command = fake_bundle_tool_command
+                manifest = desktop_runtime_bundle.bundle_runtime(
+                    target_dir=target_dir,
+                    bundle_tools=False,
+                    required_commands=("codex.cmd",),
+                    optional_commands=("gemini.cmd",),
+                )
+            finally:
+                desktop_runtime_bundle._bundle_python_runtime = original_bundle_python_runtime
+                desktop_runtime_bundle._bundle_tool_command = original_bundle_tool_command
+
+            self.assertEqual(tool_calls, [])
+            self.assertEqual(manifest.tools, [])
+            self.assertTrue((target_dir / "manifest.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
