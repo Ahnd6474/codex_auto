@@ -1,0 +1,20 @@
+{
+  "services": {
+    "main": {
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "C:\\Users\\alber\\.codex",
+          "target": "/opt/codex-home",
+          "read_only": true
+        },
+        {
+          "type": "bind",
+          "source": "C:\\Users\\alber\\AppData\\Local\\Temp\\jakal-flow-terminal-bench-src-2a93ce687e2547a38751e8539ab244a2",
+          "target": "/opt/jakal-flow-src",
+          "read_only": true
+        }
+      ]
+    }
+  }
+}
