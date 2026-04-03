@@ -45,6 +45,16 @@ export JAKAL_FLOW_AGENT_NAME="Jakal Flow"
 
 `JAKAL_FLOW_RUNTIME_OVERRIDES` may also be set to a JSON object to override runtime options inside the task container.
 
+## Local smoke test
+
+When you want to test the current local checkout before pushing a branch, use the repository root script:
+
+```powershell
+.\run-terminal-bench.ps1 -Mode smoke
+```
+
+That script mounts the current checkout into the task container and sets `JAKAL_FLOW_GIT_URL=/opt/jakal-flow-src` so the installed agent uses the working tree you are editing now.
+
 ## Notes
 
 - The benchmark worker uses the task description as the planning prompt.
