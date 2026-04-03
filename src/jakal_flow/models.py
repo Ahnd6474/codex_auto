@@ -170,6 +170,7 @@ class RepoMetadata:
     repo_kind: str = "remote"
     display_name: str | None = None
     origin_url: str | None = None
+    local_logs_mode: str = "repo"
     archived: bool = False
     archive_id: str | None = None
     archived_at: str | None = None
@@ -192,6 +193,7 @@ class RepoMetadata:
             repo_kind=str(payload.get("repo_kind", "remote")).strip() or "remote",
             display_name=_optional_str(payload.get("display_name")),
             origin_url=_optional_str(payload.get("origin_url")),
+            local_logs_mode=str(payload.get("local_logs_mode", "repo")).strip() or "repo",
             archived=bool(payload.get("archived", False)),
             archive_id=_optional_str(payload.get("archive_id")),
             archived_at=_optional_str(payload.get("archived_at")),

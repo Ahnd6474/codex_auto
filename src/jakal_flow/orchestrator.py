@@ -546,6 +546,66 @@ class Orchestrator(
         self.save_execution_plan_state(context, self.load_execution_plan_state(context))
         return context
 
+    def setup_transient_local_project(
+        self,
+        project_dir: Path,
+        runtime: RuntimeOptions,
+        branch: str = "main",
+        origin_url: str = "",
+        display_name: str = "",
+    ) -> ProjectContext:
+        runtime.execution_mode = self._normalize_execution_mode(runtime.execution_mode)
+        resolved_dir = project_dir.resolve()
+        if not self.git.is_git_repository(resolved_dir):
+            raise ExecutionPreflightError(
+                f"Terminal-Bench integration requires an existing git repository: {resolved_dir}"
+            )
+        active_branch = self.git.current_branch(resolved_dir) or branch or "main"
+        detected_origin = self.git.remote_url(resolved_dir, "origin") or origin_url.strip()
+
+        existing = self.workspace.find_project_by_repo_path(resolved_dir)
+        if existing is None:
+            context = self.workspace.initialize_local_project(
+                project_dir=resolved_dir,
+                branch=active_branch,
+                runtime=runtime,
+                origin_url=detected_origin,
+                display_name=display_name.strip(),
+                local_logs_mode="workspace",
+            )
+        else:
+            context = existing
+            context.runtime = runtime
+            context.metadata.branch = active_branch
+            context.metadata.repo_path = resolved_dir
+            context.metadata.repo_url = detected_origin or str(resolved_dir)
+            context.metadata.origin_url = detected_origin or None
+            context.metadata.repo_kind = "local"
+            context.metadata.local_logs_mode = "workspace"
+            context.metadata.display_name = display_name.strip() or context.metadata.display_name or resolved_dir.name
+            context.paths.repo_dir = resolved_dir
+            context.paths = self.workspace._apply_workspace_project_log_paths(context.paths)
+            ensure_dir(context.paths.logs_dir)
+
+        self._ensure_project_documents(context)
+        safe_revision = self.git.current_revision(context.paths.repo_dir)
+        context.metadata.branch = active_branch
+        context.metadata.current_safe_revision = safe_revision or None
+        context.metadata.current_status = "setup_ready"
+        context.metadata.last_run_at = now_utc_iso()
+        context.metadata.repo_url = detected_origin or str(context.paths.repo_dir)
+        context.metadata.origin_url = detected_origin or None
+        context.metadata.repo_kind = "local"
+        context.metadata.local_logs_mode = "workspace"
+        context.metadata.display_name = display_name.strip() or context.metadata.display_name or context.paths.repo_dir.name
+        context.loop_state.current_safe_revision = safe_revision or None
+        context.loop_state.stop_requested = False
+        context.loop_state.stop_reason = None
+        self._clear_stale_checkpoint_approval_state(context)
+        self.workspace.save_project(context)
+        self.save_execution_plan_state(context, self.load_execution_plan_state(context))
+        return context
+
     def _sync_local_setup_branch_from_origin(self, repo_dir: Path, branch: str) -> None:
         target_branch = str(branch or "").strip()
         if not target_branch:
@@ -3141,6 +3201,97 @@ class Orchestrator(
                             plan_input=updated_plan_text,
                         )
                     self._write_planning_state(context, runtime, resolved_plan_text)
+
+        self._clear_stale_checkpoint_approval_state(context)
+        self.workspace.save_project(context)
+        runner = CodexRunner(context.runtime.codex_path)
+        memory = MemoryStore(context.paths)
+        reporter = Reporter(context)
+        context.loop_state.stop_requested = False
+
+        block_limit = max(1, context.runtime.max_blocks)
+        for _ in range(block_limit):
+            if immediate_stop_requested(context):
+                context.loop_state.stop_reason = "immediate stop requested"
+                context.metadata.current_status = "paused"
+                break
+            if context.loop_state.stop_requested:
+                context.loop_state.stop_reason = "user stop requested"
+                context.metadata.current_status = "paused"
+                break
+            if context.loop_state.pending_checkpoint_approval:
+                context.metadata.current_status = "awaiting_checkpoint_approval"
+                context.loop_state.stop_reason = "checkpoint approval required"
+                break
+            stop_reason = self._stop_reason(context)
+            if stop_reason:
+                context.loop_state.stop_reason = stop_reason
+                break
+            self._run_single_block(context, runner, memory, reporter, work_items=work_items)
+            self.workspace.save_project(context)
+            if context.loop_state.stop_reason:
+                break
+
+        reporter.write_status_report()
+        self.workspace.save_project(context)
+        return context
+
+    def run_local(
+        self,
+        project_dir: Path,
+        runtime: RuntimeOptions,
+        branch: str = "main",
+        origin_url: str = "",
+        plan_path: Path | None = None,
+        plan_input: str = "",
+        work_items: list[str] | None = None,
+        resume: bool = False,
+        display_name: str = "",
+        preserve_repo_state: bool = False,
+    ) -> ProjectContext:
+        if preserve_repo_state:
+            context = self.setup_transient_local_project(
+                project_dir=project_dir,
+                runtime=runtime,
+                branch=branch,
+                origin_url=origin_url,
+                display_name=display_name,
+            )
+        else:
+            context = self.setup_local_project(
+                project_dir=project_dir,
+                runtime=runtime,
+                branch=branch,
+                origin_url=origin_url,
+                display_name=display_name,
+            )
+
+        context.runtime = runtime
+        if not resume:
+            updated_plan_text = self._read_supplied_plan_text(plan_path, plan_input)
+            if updated_plan_text:
+                if is_plan_markdown(updated_plan_text):
+                    resolved_plan_text = updated_plan_text
+                else:
+                    repo_inputs_started_at = perf_counter()
+                    repo_inputs = self._scan_repository_inputs(context)
+                    self._log_planning_metric(
+                        context,
+                        "run_local_context_scan",
+                        started_at=repo_inputs_started_at,
+                        flow="planning-bootstrap",
+                    )
+                    is_mature, maturity_details = assess_repository_maturity(context.paths.repo_dir, repo_inputs)
+                    resolved_plan_text = self._resolve_plan_text(
+                        context=context,
+                        runtime=runtime,
+                        repo_inputs=repo_inputs,
+                        is_mature=is_mature,
+                        maturity_details=maturity_details,
+                        plan_path=plan_path,
+                        plan_input=updated_plan_text,
+                    )
+                self._write_planning_state(context, runtime, resolved_plan_text)
 
         self._clear_stale_checkpoint_approval_state(context)
         self.workspace.save_project(context)

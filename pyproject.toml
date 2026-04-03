@@ -28,7 +28,7 @@ version = {attr = "jakal_flow._version.__version__"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-"jakal_flow" = ["docs/*.txt", "docs/*.md"]
+"jakal_flow" = ["docs/*.txt", "docs/*.md", "*.sh"]
 
 [tool.pytest.ini_options]
 addopts = "--basetemp=.artifacts/pytest/tmp -p no:cacheprovider"

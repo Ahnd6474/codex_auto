@@ -9,7 +9,9 @@ build/
 **/.idea/workspace.xml
 .artifacts/*
 !.artifacts/pytest/
+!.artifacts/pytest/.gitignore
 !.artifacts/pytest/.gitkeep
+.artifacts/pytest/tmp/
 desktop/node_modules/
 desktop/dist/
 desktop/.tmp-render/

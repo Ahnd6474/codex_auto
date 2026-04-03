@@ -233,6 +233,14 @@ class WorkspaceManager:
         paths.ui_event_log_file = repo_logs_dir / "ui_events.jsonl"
         return paths
 
+    def _apply_workspace_project_log_paths(self, paths: ProjectPaths) -> ProjectPaths:
+        logs_dir = paths.project_root / "logs"
+        paths.logs_dir = logs_dir
+        paths.pass_log_file = logs_dir / "passes.jsonl"
+        paths.block_log_file = logs_dir / "blocks.jsonl"
+        paths.ui_event_log_file = logs_dir / "ui_events.jsonl"
+        return paths
+
     def _migration_conflict_path(self, target_path: Path) -> Path:
         candidate = target_path.with_name(f"{target_path.stem}.workspace-legacy{target_path.suffix}")
         index = 1
@@ -427,13 +435,19 @@ class WorkspaceManager:
         runtime: RuntimeOptions,
         origin_url: str = "",
         display_name: str = "",
+        local_logs_mode: str = "repo",
     ) -> ProjectContext:
         self.ensure_workspace()
         resolved_dir = project_dir.resolve()
         repo_id, slug = stable_repo_identity(str(resolved_dir), branch)
         paths = self.build_paths(slug)
         paths.repo_dir = resolved_dir
-        paths = self._apply_local_repo_log_paths(paths, resolved_dir)
+        normalized_logs_mode = str(local_logs_mode or "repo").strip().lower() or "repo"
+        if normalized_logs_mode == "workspace":
+            paths = self._apply_workspace_project_log_paths(paths)
+        else:
+            normalized_logs_mode = "repo"
+            paths = self._apply_local_repo_log_paths(paths, resolved_dir)
         for directory in [
             paths.project_root,
             paths.docs_dir,
@@ -446,7 +460,8 @@ class WorkspaceManager:
         ]:
             ensure_dir(directory)
         ensure_dir(resolved_dir)
-        self._migrate_local_project_logs(paths.project_root, resolved_dir)
+        if normalized_logs_mode == "repo":
+            self._migrate_local_project_logs(paths.project_root, resolved_dir)
 
         registry = self._read_registry()
         if repo_id in registry["projects"]:
@@ -459,7 +474,11 @@ class WorkspaceManager:
             context.metadata.origin_url = origin_url or context.metadata.origin_url
             context.metadata.repo_url = origin_url or str(resolved_dir)
             context.paths.repo_dir = resolved_dir
-            context.paths = self._apply_local_repo_log_paths(context.paths, resolved_dir)
+            context.metadata.local_logs_mode = normalized_logs_mode
+            if normalized_logs_mode == "workspace":
+                context.paths = self._apply_workspace_project_log_paths(context.paths)
+            else:
+                context.paths = self._apply_local_repo_log_paths(context.paths, resolved_dir)
             ensure_dir(context.paths.logs_dir)
             self.save_project(context)
             return context
@@ -476,6 +495,7 @@ class WorkspaceManager:
             repo_kind="local",
             display_name=display_name.strip() or resolved_dir.name,
             origin_url=origin_url or None,
+            local_logs_mode=normalized_logs_mode,
         )
         loop_state = LoopState(repo_id=repo_id, repo_slug=slug)
         registry["projects"][repo_id] = {
@@ -688,8 +708,12 @@ class WorkspaceManager:
             if isinstance(metadata_data, dict) and str(metadata_data.get("repo_kind", "remote")).strip() == "local":
                 repo_path_hint = Path(str(metadata_data.get("repo_path", "")).strip())
                 paths.repo_dir = repo_path_hint
-                paths = self._apply_local_repo_log_paths(paths, repo_path_hint)
-                self._migrate_local_project_logs(paths.project_root, repo_path_hint)
+                logs_mode = str(metadata_data.get("local_logs_mode", "repo")).strip() or "repo"
+                if logs_mode == "workspace":
+                    paths = self._apply_workspace_project_log_paths(paths)
+                else:
+                    paths = self._apply_local_repo_log_paths(paths, repo_path_hint)
+                    self._migrate_local_project_logs(paths.project_root, repo_path_hint)
         cache_key = self._project_cache_key(paths.project_root)
         signature = self._project_context_signature(paths)
         cached = self._project_context_cache.get(cache_key)
@@ -716,6 +740,7 @@ class WorkspaceManager:
             repo_kind=metadata_data.get("repo_kind", "remote"),
             display_name=metadata_data.get("display_name"),
             origin_url=metadata_data.get("origin_url"),
+            local_logs_mode=metadata_data.get("local_logs_mode", "repo"),
             archived=bool(metadata_data.get("archived", False)),
             archive_id=metadata_data.get("archive_id"),
             archived_at=metadata_data.get("archived_at"),
@@ -723,8 +748,11 @@ class WorkspaceManager:
         )
         if metadata.repo_kind == "local":
             paths.repo_dir = metadata.repo_path
-            paths = self._apply_local_repo_log_paths(paths, metadata.repo_path)
-            self._migrate_local_project_logs(paths.project_root, metadata.repo_path)
+            if metadata.local_logs_mode == "workspace":
+                paths = self._apply_workspace_project_log_paths(paths)
+            else:
+                paths = self._apply_local_repo_log_paths(paths, metadata.repo_path)
+                self._migrate_local_project_logs(paths.project_root, metadata.repo_path)
         else:
             metadata.repo_path = paths.repo_dir
         runtime = runtime_from_payload(runtime_data)
