@@ -1,0 +1,5 @@
+Running command: chmod +x /installed-agent/install-agent.sh && /installed-agent/install-agent.sh
+Command outputs captured
+Running command: python -m jakal_flow.terminal_bench_worker --task-description-base64 SSBqdXN0IG1hZGUgc29tZSBjaGFuZ2VzIHRvIG15IHBlcnNvbmFsIHNpdGUgYW5kIGNoZWNrZWQgb3V0IG1hc3RlciwgYnV0IG5vdyBJIGNhbid0IGZpbmQgdGhvc2UgY2hhbmdlcy4gUGxlYXNlIGhlbHAgbWUgZmluZCB0aGVtIGFuZCBtZXJnZSB0aGVtIGludG8gbWFzdGVyLgo=
+Command failed
+Not retrying trial because the maximum number of retries has been reached

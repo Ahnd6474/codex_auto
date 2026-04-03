@@ -26,6 +26,7 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $srcPath = Join-Path $repoRoot "src"
 $codexHome = Join-Path $HOME ".codex"
+$stagedSourceRoot = $null
 if (-not $UseLocalSource.IsPresent -and $Mode -eq "smoke") {
     $UseLocalSource = $true
 }
@@ -64,9 +65,17 @@ $mounts = @(
 )
 
 if ($UseLocalSource.IsPresent) {
+    $stagedSourceRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("jakal-flow-terminal-bench-src-" + [System.Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $stagedSourceRoot | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $stagedSourceRoot "src") | Out-Null
+    Copy-Item -LiteralPath (Join-Path $repoRoot "pyproject.toml") -Destination (Join-Path $stagedSourceRoot "pyproject.toml")
+    if (Test-Path (Join-Path $repoRoot "README.md")) {
+        Copy-Item -LiteralPath (Join-Path $repoRoot "README.md") -Destination (Join-Path $stagedSourceRoot "README.md")
+    }
+    Copy-Item -Path (Join-Path $repoRoot "src\\*") -Destination (Join-Path $stagedSourceRoot "src") -Recurse
     $mounts += @{
         type = "bind"
-        source = $repoRoot
+        source = $stagedSourceRoot
         target = "/opt/jakal-flow-src"
         read_only = $true
     }
@@ -147,4 +156,7 @@ try {
 }
 finally {
     Remove-Item -LiteralPath $tempConfigPath -Force -ErrorAction SilentlyContinue
+    if ($stagedSourceRoot) {
+        Remove-Item -LiteralPath $stagedSourceRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }

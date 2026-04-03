@@ -1,0 +1,37 @@
+Traceback (most recent call last):
+  File "C:\Users\alber\AppData\Local\uv\cache\archive-v0\J1T33p-XeT1xvl1oYMiPs\Lib\site-packages\harbor\trial\trial.py", line 538, in run
+    await self._execute_agent()
+  File "C:\Users\alber\AppData\Local\uv\cache\archive-v0\J1T33p-XeT1xvl1oYMiPs\Lib\site-packages\harbor\trial\trial.py", line 285, in _execute_agent
+    await asyncio.wait_for(
+  File "C:\Users\alber\AppData\Local\Programs\Python\Python312\Lib\asyncio\tasks.py", line 520, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "C:\Users\alber\AppData\Local\uv\cache\archive-v0\J1T33p-XeT1xvl1oYMiPs\Lib\site-packages\harbor\agents\installed\base.py", line 41, in wrapper
+    return await fn(self, instruction, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\alber\GitHub\Jakal-flow\src\jakal_flow\terminal_bench_agent.py", line 66, in run
+    await self.exec_as_agent(
+  File "C:\Users\alber\AppData\Local\uv\cache\archive-v0\J1T33p-XeT1xvl1oYMiPs\Lib\site-packages\harbor\agents\installed\base.py", line 358, in exec_as_agent
+    return await self._exec(
+           ^^^^^^^^^^^^^^^^^
+  File "C:\Users\alber\AppData\Local\uv\cache\archive-v0\J1T33p-XeT1xvl1oYMiPs\Lib\site-packages\harbor\agents\installed\base.py", line 321, in _exec
+    raise NonZeroAgentExitCodeError(
+harbor.agents.installed.base.NonZeroAgentExitCodeError: Command failed (exit 1): python -m jakal_flow.terminal_bench_worker --task-description-base64 SSBqdXN0IG1hZGUgc29tZSBjaGFuZ2VzIHRvIG15IHBlcnNvbmFsIHNpdGUgYW5kIGNoZWNrZWQgb3V0IG1hc3RlciwgYnV0IG5vdyBJIGNhbid0IGZpbmQgdGhvc2UgY2hhbmdlcy4gUGxlYXNlIGhlbHAgbWUgZmluZCB0aGVtIGFuZCBtZXJnZSB0aGVtIGludG8gbWFzdGVyLgo=
+stdout: Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/opt/jakal-flow/src/jakal_flow/terminal_bench_worker.py", line 91, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/opt/jakal-flow/src/jakal_flow/terminal_bench_worker.py", line 77, in main
+    context = orchestrator.run_local(
+        project_dir=repo_dir,
+    ...<6 lines>...
+        preserve_repo_state=True,
+    )
+  File "/opt/jakal-flow/src/jakal_flow/orchestrator.py", line 3302, in run_local
+    if immediate_stop_requested(context):
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+NameError: name 'immediate_stop_requested' is not defined. Did you mean: 'ImmediateStopRequested'?
+
+stderr: None

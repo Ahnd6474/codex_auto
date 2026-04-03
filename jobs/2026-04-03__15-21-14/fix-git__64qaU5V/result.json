@@ -1,0 +1,123 @@
+{
+    "id": "fe41ec92-4bd7-4871-bbc2-e3f784cd0118",
+    "task_name": "fix-git",
+    "trial_name": "fix-git__64qaU5V",
+    "trial_uri": "file:///C:/Users/alber/GitHub/Jakal-flow/jobs/2026-04-03__15-21-14/fix-git__64qaU5V",
+    "task_id": {
+        "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+        "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+        "path": "fix-git"
+    },
+    "source": "terminal-bench",
+    "task_checksum": "485519dd203d247a047ab4f911ae0e11df1210397b2fa7df62a3b0edc3f9eaba",
+    "config": {
+        "task": {
+            "path": "fix-git",
+            "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+            "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+            "name": null,
+            "ref": null,
+            "overwrite": false,
+            "download_dir": null,
+            "source": "terminal-bench"
+        },
+        "trial_name": "fix-git__64qaU5V",
+        "trials_dir": "jobs\\2026-04-03__15-21-14",
+        "timeout_multiplier": 1.0,
+        "agent_timeout_multiplier": null,
+        "verifier_timeout_multiplier": null,
+        "agent_setup_timeout_multiplier": null,
+        "environment_build_timeout_multiplier": null,
+        "agent": {
+            "name": null,
+            "import_path": "jakal_flow.terminal_bench_agent:JakalFlowInstalledAgent",
+            "model_name": "openai/gpt-5.4",
+            "override_timeout_sec": null,
+            "override_setup_timeout_sec": null,
+            "max_timeout_sec": null,
+            "kwargs": {},
+            "env": {}
+        },
+        "environment": {
+            "type": "docker",
+            "import_path": null,
+            "force_build": false,
+            "delete": true,
+            "override_cpus": null,
+            "override_memory_mb": null,
+            "override_storage_mb": null,
+            "override_gpus": null,
+            "suppress_override_warnings": false,
+            "mounts_json": [
+                {
+                    "type": "bind",
+                    "source": "C:\\Users\\alber\\.codex",
+                    "target": "/opt/codex-home",
+                    "read_only": true
+                },
+                {
+                    "type": "bind",
+                    "source": "C:\\Users\\alber\\AppData\\Local\\Temp\\jakal-flow-terminal-bench-src-c0797579c77949d6ab13c1672280813f",
+                    "target": "/opt/jakal-flow-src",
+                    "read_only": true
+                }
+            ],
+            "env": {},
+            "kwargs": {}
+        },
+        "verifier": {
+            "override_timeout_sec": null,
+            "max_timeout_sec": null,
+            "disable": false
+        },
+        "artifacts": [],
+        "job_id": "5fb9e134-ce62-452e-bd62-ce2ddf499c8b"
+    },
+    "agent_info": {
+        "name": "Jakal Flow",
+        "version": "unknown",
+        "model_info": {
+            "name": "gpt-5.4",
+            "provider": "openai"
+        }
+    },
+    "agent_result": {
+        "n_input_tokens": null,
+        "n_cache_tokens": null,
+        "n_output_tokens": null,
+        "cost_usd": null,
+        "rollout_details": null,
+        "metadata": {
+            "runner": "jakal-flow"
+        }
+    },
+    "verifier_result": {
+        "rewards": {
+            "reward": 0.0
+        }
+    },
+    "exception_info": {
+        "exception_type": "NonZeroAgentExitCodeError",
+        "exception_message": "Command failed (exit 1): python -m jakal_flow.terminal_bench_worker --task-description-base64 SSBqdXN0IG1hZGUgc29tZSBjaGFuZ2VzIHRvIG15IHBlcnNvbmFsIHNpdGUgYW5kIGNoZWNrZWQgb3V0IG1hc3RlciwgYnV0IG5vdyBJIGNhbid0IGZpbmQgdGhvc2UgY2hhbmdlcy4gUGxlYXNlIGhlbHAgbWUgZmluZCB0aGVtIGFuZCBtZXJnZSB0aGVtIGludG8gbWFzdGVyLgo=\nstdout: Traceback (most recent call last):\n  File \"<frozen runpy>\", line 198, in _run_module_as_main\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"/opt/jakal-flow/src/jakal_flow/terminal_bench_worker.py\", line 91, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/opt/jakal-flow/src/jakal_flow/terminal_bench_worker.py\", line 77, in main\n    context = orchestrator.run_local(\n        project_dir=repo_dir,\n    ...<6 lines>...\n        preserve_repo_state=True,\n    )\n  File \"/opt/jakal-flow/src/jakal_flow/orchestrator.py\", line 3302, in run_local\n    if immediate_stop_requested(context):\n       ^^^^^^^^^^^^^^^^^^^^^^^^\nNameError: name 'immediate_stop_requested' is not defined. Did you mean: 'ImmediateStopRequested'?\n\nstderr: None",
+        "exception_traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\alber\\AppData\\Local\\uv\\cache\\archive-v0\\J1T33p-XeT1xvl1oYMiPs\\Lib\\site-packages\\harbor\\trial\\trial.py\", line 538, in run\n    await self._execute_agent()\n  File \"C:\\Users\\alber\\AppData\\Local\\uv\\cache\\archive-v0\\J1T33p-XeT1xvl1oYMiPs\\Lib\\site-packages\\harbor\\trial\\trial.py\", line 285, in _execute_agent\n    await asyncio.wait_for(\n  File \"C:\\Users\\alber\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\asyncio\\tasks.py\", line 520, in wait_for\n    return await fut\n           ^^^^^^^^^\n  File \"C:\\Users\\alber\\AppData\\Local\\uv\\cache\\archive-v0\\J1T33p-XeT1xvl1oYMiPs\\Lib\\site-packages\\harbor\\agents\\installed\\base.py\", line 41, in wrapper\n    return await fn(self, instruction, *args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\alber\\GitHub\\Jakal-flow\\src\\jakal_flow\\terminal_bench_agent.py\", line 66, in run\n    await self.exec_as_agent(\n  File \"C:\\Users\\alber\\AppData\\Local\\uv\\cache\\archive-v0\\J1T33p-XeT1xvl1oYMiPs\\Lib\\site-packages\\harbor\\agents\\installed\\base.py\", line 358, in exec_as_agent\n    return await self._exec(\n           ^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\alber\\AppData\\Local\\uv\\cache\\archive-v0\\J1T33p-XeT1xvl1oYMiPs\\Lib\\site-packages\\harbor\\agents\\installed\\base.py\", line 321, in _exec\n    raise NonZeroAgentExitCodeError(\nharbor.agents.installed.base.NonZeroAgentExitCodeError: Command failed (exit 1): python -m jakal_flow.terminal_bench_worker --task-description-base64 SSBqdXN0IG1hZGUgc29tZSBjaGFuZ2VzIHRvIG15IHBlcnNvbmFsIHNpdGUgYW5kIGNoZWNrZWQgb3V0IG1hc3RlciwgYnV0IG5vdyBJIGNhbid0IGZpbmQgdGhvc2UgY2hhbmdlcy4gUGxlYXNlIGhlbHAgbWUgZmluZCB0aGVtIGFuZCBtZXJnZSB0aGVtIGludG8gbWFzdGVyLgo=\nstdout: Traceback (most recent call last):\n  File \"<frozen runpy>\", line 198, in _run_module_as_main\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"/opt/jakal-flow/src/jakal_flow/terminal_bench_worker.py\", line 91, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/opt/jakal-flow/src/jakal_flow/terminal_bench_worker.py\", line 77, in main\n    context = orchestrator.run_local(\n        project_dir=repo_dir,\n    ...<6 lines>...\n        preserve_repo_state=True,\n    )\n  File \"/opt/jakal-flow/src/jakal_flow/orchestrator.py\", line 3302, in run_local\n    if immediate_stop_requested(context):\n       ^^^^^^^^^^^^^^^^^^^^^^^^\nNameError: name 'immediate_stop_requested' is not defined. Did you mean: 'ImmediateStopRequested'?\n\nstderr: None\n",
+        "occurred_at": "2026-04-03T15:25:28.195919"
+    },
+    "started_at": "2026-04-03T06:21:40.378364Z",
+    "finished_at": "2026-04-03T06:25:40.045265Z",
+    "environment_setup": {
+        "started_at": "2026-04-03T06:21:40.392092Z",
+        "finished_at": "2026-04-03T06:21:42.473394Z"
+    },
+    "agent_setup": {
+        "started_at": "2026-04-03T06:21:42.473394Z",
+        "finished_at": "2026-04-03T06:22:27.246363Z"
+    },
+    "agent_execution": {
+        "started_at": "2026-04-03T06:22:27.246363Z",
+        "finished_at": "2026-04-03T06:25:28.192867Z"
+    },
+    "verifier": {
+        "started_at": "2026-04-03T06:25:28.197877Z",
+        "finished_at": "2026-04-03T06:25:36.642881Z"
+    }
+}

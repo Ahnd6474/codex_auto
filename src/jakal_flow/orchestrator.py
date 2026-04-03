@@ -88,6 +88,7 @@ from .planning import (
     load_source_prompt_template,
 )
 from .reporting import Reporter
+from .run_control import immediate_stop_requested
 from .status_views import status_from_plan_state
 from .step_models import normalize_step_model, normalize_step_model_provider, provider_execution_preflight_error, resolve_step_model_choice
 from .utils import (
