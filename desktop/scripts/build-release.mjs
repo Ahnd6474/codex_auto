@@ -54,13 +54,16 @@ function tauriExecutable() {
     : join(desktopRoot, "node_modules", ".bin", "tauri");
 }
 
-function runCommand(command, args, cwd) {
+function runCommand(command, args, cwd, envOverrides = {}) {
   const lowerCommand = command.toLowerCase();
   const requiresShell = lowerCommand.endsWith(".cmd") || lowerCommand.endsWith(".bat");
   const completed = spawnSync(command, args, {
     cwd,
     stdio: "inherit",
-    env: process.env,
+    env: {
+      ...process.env,
+      ...envOverrides,
+    },
     shell: requiresShell,
   });
   if (completed.error) {
@@ -117,7 +120,14 @@ function buildVariant(variant) {
   if (variant === "full" || variant === "python") {
     runCommand(npmExecutable(), ["run", "prepare:runtime", "--", "--profile", variant], desktopRoot);
   }
-  runCommand(tauriExecutable(), tauriBuildArgs(variant), desktopRoot);
+  runCommand(
+    tauriExecutable(),
+    tauriBuildArgs(variant),
+    desktopRoot,
+    variant === "full" || variant === "python"
+      ? { JAKAL_FLOW_RUNTIME_PROFILE: variant }
+      : {},
+  );
   copyReleaseArtifacts(variant);
 }
 

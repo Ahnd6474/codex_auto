@@ -195,8 +195,7 @@ class GitOps:
             current_branch = self.current_branch(repo_dir)
             if current_branch == branch:
                 return created
-            branch_check = self.run(["rev-parse", "--verify", branch], cwd=repo_dir, check=False)
-            if branch_check.returncode == 0:
+            if self.branch_exists(repo_dir, branch):
                 self.run(["checkout", branch], cwd=repo_dir)
             else:
                 self.run(["checkout", "-b", branch], cwd=repo_dir)
@@ -398,6 +397,19 @@ class GitOps:
         parser = self._read_git_config(repo_dir)
         return bool(parser is not None and parser.has_section(section))
 
+    def _git_state_revision(self, repo_dir: Path, state_name: str) -> str:
+        normalized = str(state_name or "").strip()
+        if not normalized:
+            return ""
+        git_dir = self._git_dir_for_repo(repo_dir)
+        if git_dir is None:
+            return ""
+        try:
+            revision = read_text(git_dir / normalized).strip()
+        except OSError:
+            return ""
+        return revision if self._looks_like_git_revision(revision) else ""
+
     def _looks_like_git_revision(self, value: str) -> bool:
         normalized = str(value or "").strip()
         if len(normalized) < 7:
@@ -423,12 +435,15 @@ class GitOps:
 
     def remote_url(self, repo_dir: Path, remote_name: str = "origin") -> str | None:
         section = f'remote "{str(remote_name or "").strip()}"'
+        configured_url = self._read_git_config_value(repo_dir, section, "url")
+        if configured_url:
+            return configured_url
         try:
             result = self.run(["remote", "get-url", remote_name], cwd=repo_dir, check=False)
         except SubprocessTimeoutError:
-            return self._read_git_config_value(repo_dir, section, "url")
+            return configured_url
         url = result.stdout.strip()
-        return url or self._read_git_config_value(repo_dir, section, "url")
+        return url or configured_url
 
     def set_remote_url(self, repo_dir: Path, remote_name: str, remote_url: str) -> None:
         normalized_remote_name = str(remote_name or "").strip()
@@ -568,8 +583,16 @@ class GitOps:
         self.run(["push", remote_name, "--delete", branch_name], cwd=repo_dir)
 
     def branch_exists(self, repo_dir: Path, branch_name: str) -> bool:
-        result = self.run(["rev-parse", "--verify", f"refs/heads/{branch_name}"], cwd=repo_dir, check=False)
-        return result.returncode == 0
+        return bool(self.local_branch_revision(repo_dir, branch_name))
+
+    def local_branch_revision(self, repo_dir: Path, branch_name: str) -> str:
+        normalized = str(branch_name or "").strip()
+        if not normalized:
+            return ""
+        git_dir = self._git_dir_for_repo(repo_dir)
+        if git_dir is None:
+            return ""
+        return self._read_git_ref_revision(git_dir, f"refs/heads/{normalized}")
 
     def remote_branch_revision(self, repo_dir: Path, remote_name: str, branch: str) -> str | None:
         if not branch.strip():
@@ -653,8 +676,7 @@ class GitOps:
         self.run(["cherry-pick", "--continue"], cwd=repo_dir)
 
     def cherry_pick_in_progress(self, repo_dir: Path) -> bool:
-        result = self.run(["rev-parse", "-q", "--verify", "CHERRY_PICK_HEAD"], cwd=repo_dir, check=False)
-        return result.returncode == 0
+        return bool(self._git_state_revision(repo_dir, "CHERRY_PICK_HEAD"))
 
     def _parse_untracked_overwrite_paths(self, stderr: str) -> list[str]:
         lines = stderr.splitlines()

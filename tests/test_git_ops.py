@@ -113,6 +113,54 @@ class GitOpsTests(unittest.TestCase):
 
         self.assertTrue(has_commits)
 
+    def test_branch_exists_reads_refs_without_git_subprocess(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        repo_dir = Path(temp_dir.name)
+        git = GitOps()
+        revision = "0123456789abcdef0123456789abcdef01234567"
+        (repo_dir / ".git" / "refs" / "heads").mkdir(parents=True, exist_ok=True)
+        (repo_dir / ".git" / "refs" / "heads" / "main").write_text(f"{revision}\n", encoding="utf-8")
+
+        try:
+            with mock.patch.object(git, "run", side_effect=AssertionError("git subprocess should not run")):
+                exists = git.branch_exists(repo_dir, "main")
+                resolved_revision = git.local_branch_revision(repo_dir, "main")
+        finally:
+            temp_dir.cleanup()
+
+        self.assertTrue(exists)
+        self.assertEqual(resolved_revision, revision)
+
+    def test_ensure_repository_uses_ref_lookup_for_existing_branch(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        repo_dir = Path(temp_dir.name)
+        git = GitOps()
+        revision = "0123456789abcdef0123456789abcdef01234567"
+        (repo_dir / ".git" / "refs" / "heads").mkdir(parents=True, exist_ok=True)
+        (repo_dir / ".git" / "HEAD").write_text("ref: refs/heads/feature\n", encoding="utf-8")
+        (repo_dir / ".git" / "refs" / "heads" / "main").write_text(f"{revision}\n", encoding="utf-8")
+        calls: list[list[str]] = []
+
+        def fake_run(
+            args: list[str],
+            cwd: Path,
+            check: bool = True,
+            env: dict[str, str] | None = None,
+        ) -> CommandResult:
+            calls.append(args)
+            if args == ["checkout", "main"]:
+                return CommandResult(command=["git", *args], returncode=0, stdout="", stderr="")
+            raise AssertionError(f"Unexpected git command: {args}")
+
+        try:
+            with mock.patch.object(git, "run", side_effect=fake_run):
+                created = git.ensure_repository(repo_dir, "main")
+        finally:
+            temp_dir.cleanup()
+
+        self.assertFalse(created)
+        self.assertEqual(calls, [["checkout", "main"]])
+
     def test_current_branch_returns_empty_when_git_queries_time_out(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()
         repo_dir = Path(temp_dir.name)
@@ -146,6 +194,24 @@ class GitOpsTests(unittest.TestCase):
                 "run",
                 side_effect=SubprocessTimeoutError("Command timed out after 60.0 seconds: git remote get-url origin"),
             ):
+                remote_url = git.remote_url(repo_dir)
+        finally:
+            temp_dir.cleanup()
+
+        self.assertEqual(remote_url, "https://github.com/example/project.git")
+
+    def test_remote_url_reads_local_git_config_without_subprocess(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        repo_dir = Path(temp_dir.name)
+        git = GitOps()
+        (repo_dir / ".git").mkdir(parents=True, exist_ok=True)
+        (repo_dir / ".git" / "config").write_text(
+            '[remote "origin"]\n\turl = https://github.com/example/project.git\n',
+            encoding="utf-8",
+        )
+
+        try:
+            with mock.patch.object(git, "run", side_effect=AssertionError("git subprocess should not run")):
                 remote_url = git.remote_url(repo_dir)
         finally:
             temp_dir.cleanup()
@@ -375,6 +441,22 @@ class GitOpsTests(unittest.TestCase):
                 },
             ),
         )
+
+    def test_cherry_pick_in_progress_reads_git_state_without_subprocess(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        repo_dir = Path(temp_dir.name)
+        git = GitOps()
+        revision = "0123456789abcdef0123456789abcdef01234567"
+        (repo_dir / ".git").mkdir(parents=True, exist_ok=True)
+        (repo_dir / ".git" / "CHERRY_PICK_HEAD").write_text(f"{revision}\n", encoding="utf-8")
+
+        try:
+            with mock.patch.object(git, "run", side_effect=AssertionError("git subprocess should not run")):
+                in_progress = git.cherry_pick_in_progress(repo_dir)
+        finally:
+            temp_dir.cleanup()
+
+        self.assertTrue(in_progress)
 
     def test_commit_paths_uses_custom_author_name(self) -> None:
         repo_dir = Path(__file__).resolve().parents[1]

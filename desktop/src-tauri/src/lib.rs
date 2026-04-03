@@ -12,6 +12,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 
 const DEFAULT_BRIDGE_TIMEOUT_SECS: u64 = 300;
 const MIN_BRIDGE_TIMEOUT_SECS: u64 = 5;
@@ -22,6 +24,8 @@ const BRIDGE_EVENT_NAME: &str = "jakal-flow://bridge-event";
 const BUNDLED_RUNTIME_DIRNAME: &str = "rt";
 const BUNDLED_PYTHON_DIRNAME: &str = "py";
 const BUNDLED_TOOLING_DIRNAME: &str = "bin";
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Default)]
 struct AppState {
@@ -154,6 +158,26 @@ fn backend_root_is_usable(root: &Path) -> bool {
     root.join("src").join("jakal_flow").is_dir()
 }
 
+fn resource_root_candidates(resource_root: &Path) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    let relative_suffixes = [
+        PathBuf::new(),
+        PathBuf::from("_up_"),
+        PathBuf::from("_up_").join("_up_"),
+    ];
+    for suffix in relative_suffixes {
+        let candidate = if suffix.as_os_str().is_empty() {
+            resource_root.to_path_buf()
+        } else {
+            resource_root.join(suffix)
+        };
+        if !candidates.iter().any(|existing| existing == &candidate) {
+            candidates.push(candidate);
+        }
+    }
+    candidates
+}
+
 fn resolve_backend_root(checkout_root: &Path, resource_root: Option<&Path>) -> Result<PathBuf, String> {
     let checkout_candidate = checkout_root
         .canonicalize()
@@ -163,20 +187,32 @@ fn resolve_backend_root(checkout_root: &Path, resource_root: Option<&Path>) -> R
     }
 
     if let Some(resource_root) = resource_root {
-        let resource_candidate = resource_root
-            .canonicalize()
-            .unwrap_or_else(|_| resource_root.to_path_buf());
-        if backend_root_is_usable(&resource_candidate) {
-            return Ok(resource_candidate);
+        for resource_candidate in resource_root_candidates(resource_root) {
+            let resolved = resource_candidate
+                .canonicalize()
+                .unwrap_or(resource_candidate);
+            if backend_root_is_usable(&resolved) {
+                return Ok(resolved);
+            }
         }
     }
 
+    let searched_resources = resource_root
+        .map(|root| {
+            resource_root_candidates(root)
+                .into_iter()
+                .map(|candidate| candidate.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_else(|| "<none>".to_string());
     let resource_hint = resource_root
         .map(|path| path.display().to_string())
         .unwrap_or_else(|| "<none>".to_string());
     Err(format!(
-        "Failed to resolve desktop backend root. checkout={} resources={resource_hint}",
-        checkout_root.display()
+        "Failed to resolve desktop backend root. checkout={} resources={resource_hint} searched=[{}]",
+        checkout_root.display(),
+        searched_resources
     ))
 }
 
@@ -186,12 +222,14 @@ fn repo_root<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
 }
 
 fn bundled_runtime_root(resource_root: Option<&Path>) -> Option<PathBuf> {
-    let runtime_root = resource_root?.join(BUNDLED_RUNTIME_DIRNAME);
-    if runtime_root.is_dir() {
-        Some(runtime_root)
-    } else {
-        None
+    let root = resource_root?;
+    for candidate_root in resource_root_candidates(root) {
+        let runtime_root = candidate_root.join(BUNDLED_RUNTIME_DIRNAME);
+        if runtime_root.is_dir() {
+            return Some(runtime_root);
+        }
     }
+    None
 }
 
 fn bundled_python_home(resource_root: Option<&Path>) -> Option<PathBuf> {
@@ -261,6 +299,13 @@ fn prepend_env_path(path: &Path, existing: Option<OsString>) -> Result<String, S
     env::join_paths(paths)
         .map(|joined| joined.to_string_lossy().into_owned())
         .map_err(|error| format!("Failed to build PATH: {error}"))
+}
+
+fn apply_background_process_flags(command: &mut Command) {
+    #[cfg(target_os = "windows")]
+    {
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
 }
 
 fn stderr_excerpt(stderr_lines: &Arc<Mutex<Vec<String>>>) -> String {
@@ -347,6 +392,7 @@ impl BridgeSession {
                 .env("PATH", path)
                 .env("JAKAL_FLOW_BUNDLED_TOOLING_ROOT", tooling_bin.as_os_str());
         }
+        apply_background_process_flags(&mut command);
         let mut child = command
             .spawn()
             .map_err(|error| format!("Failed to start Python bridge server: {error}"))?;
@@ -905,6 +951,44 @@ mod tests {
         let resolved = resolve_backend_root(checkout.path(), Some(resources.path())).expect("backend root");
 
         assert_eq!(resolved, resources.path().canonicalize().expect("canonical resources"));
+    }
+
+    #[test]
+    fn resolve_backend_root_falls_back_to_nested_installed_resources() {
+        let checkout = TestDir::new();
+        let resources = TestDir::new();
+        touch(
+            &resources
+                .path()
+                .join("_up_")
+                .join("_up_")
+                .join("src")
+                .join("jakal_flow")
+                .join("__init__.py"),
+        );
+
+        let resolved = resolve_backend_root(checkout.path(), Some(resources.path())).expect("backend root");
+
+        assert_eq!(
+            resolved,
+            resources
+                .path()
+                .join("_up_")
+                .join("_up_")
+                .canonicalize()
+                .expect("canonical installed resources")
+        );
+    }
+
+    #[test]
+    fn bundled_runtime_root_finds_nested_installed_runtime() {
+        let resources = TestDir::new();
+        let bundled_runtime = resources.path().join("_up_").join("_up_").join(BUNDLED_RUNTIME_DIRNAME);
+        fs::create_dir_all(&bundled_runtime).expect("create bundled runtime");
+
+        let resolved = bundled_runtime_root(Some(resources.path())).expect("runtime root");
+
+        assert_eq!(resolved, bundled_runtime);
     }
 
     #[test]

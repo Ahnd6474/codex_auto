@@ -644,12 +644,9 @@ class OrchestratorLineageMixin:
         remote_url = self.git.remote_url(repo_dir, "origin")
         if not remote_url:
             return False, "missing_remote"
-        local_head_result = self.git.run(["rev-parse", "--verify", target_branch], cwd=repo_dir, check=False)
-        if local_head_result.returncode != 0:
-            return False, "missing_local_branch"
-        local_head = local_head_result.stdout.strip()
+        local_head = self.git.local_branch_revision(repo_dir, target_branch)
         if not local_head:
-            return False, "missing_local_head"
+            return False, "missing_local_branch"
         if target_commit:
             commit_result = self.git.run(["rev-parse", "--verify", target_commit], cwd=repo_dir, check=False)
             if commit_result.returncode != 0:

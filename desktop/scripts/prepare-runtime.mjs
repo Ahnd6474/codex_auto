@@ -16,6 +16,10 @@ const runtimeProfile = (() => {
   if (profileIndex >= 0) {
     return String(process.argv[profileIndex + 1] || "").trim().toLowerCase() || "full";
   }
+  const envProfile = String(process.env.JAKAL_FLOW_RUNTIME_PROFILE || "").trim().toLowerCase();
+  if (envProfile) {
+    return envProfile;
+  }
   const positional = process.argv[2];
   return String(positional || "").trim().toLowerCase() || "full";
 })();

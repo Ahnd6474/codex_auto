@@ -630,10 +630,7 @@ class Orchestrator(
         remote_url = self.git.remote_url(repo_dir, "origin")
         if not remote_url or not self.git.has_commits(repo_dir):
             return
-        local_head_result = self.git.run(["rev-parse", "--verify", target_branch], cwd=repo_dir, check=False)
-        if local_head_result.returncode != 0:
-            return
-        local_head = local_head_result.stdout.strip()
+        local_head = self.git.local_branch_revision(repo_dir, target_branch)
         if not local_head:
             return
         remote_head = self.git.remote_branch_revision(repo_dir, "origin", target_branch)
