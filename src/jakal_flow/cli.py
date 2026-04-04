@@ -8,6 +8,7 @@ import sys
 
 from .errors import RuntimeConfigError
 from .failure_logs import write_runtime_failure_log
+from .interactive_cli import configure_shell_parser, main as interactive_main, run_shell_from_namespace
 from .models import RuntimeOptions
 from .orchestrator import Orchestrator
 from .project_snapshot import context_execution_snapshot
@@ -114,8 +115,14 @@ def _add_runtime_command_arguments(target: argparse.ArgumentParser, *, include_r
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Multi-repository AI CLI orchestrator")
+    parser = argparse.ArgumentParser(
+        description="Multi-repository AI CLI orchestrator",
+        epilog="Run 'jakal-flow' with no arguments to open the interactive flow console.",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    shell_parser = subparsers.add_parser("shell", help="Open the interactive flow console")
+    configure_shell_parser(shell_parser)
 
     init_parser = subparsers.add_parser("init-repo", help="Initialize and register a managed repository")
     _add_runtime_command_arguments(init_parser)
@@ -254,8 +261,25 @@ def _best_effort_project(orchestrator: Orchestrator, args: argparse.Namespace):
 
 
 def main(argv: list[str] | None = None) -> int:
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    if not raw_argv:
+        return interactive_main([])
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(raw_argv)
+    if args.command == "shell":
+        try:
+            return run_shell_from_namespace(args)
+        except CLI_HANDLED_EXCEPTIONS as exc:
+            write_runtime_failure_log(
+                Path(args.workspace_root).expanduser().resolve(),
+                source="cli",
+                command="shell",
+                exc=exc,
+                payload=vars(args),
+                project=None,
+            )
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
     orchestrator = Orchestrator(Path(args.workspace_root))
 
     try:
