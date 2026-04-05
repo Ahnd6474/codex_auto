@@ -12,6 +12,7 @@ It keeps every managed repository isolated and preserves the artifacts you need 
 - Korean guide: [README.ko.md](README.ko.md)
 - Live CLI surface from this checkout: `$env:PYTHONPATH='src'; python -m jakal_flow --help`
 - Current package version in this checkout: `0.1.0`
+- Interactive flow shell: run `jakal-flow` with no arguments
 - Recent CLI additions: `list-repos`, `history`, `logx --source-repo-dir`, `--set KEY=VALUE`, `--plan-file`
 
 <p align="center">
@@ -53,6 +54,20 @@ Requirements:
 - Optional for desktop: Node.js 20+, Rust, and Tauri prerequisites
 
 ## Quick start
+
+Interactive shell:
+
+```bash
+jakal-flow
+```
+
+Interactive command grammar:
+
+- Plain text: chat with the current project without changing the plan
+- `/...`: actions such as `/plan`, `/execute`, `/debug`, `/merge`, `/closeout`
+- `$...`: flow editing such as `$add`, `$set`, `$drop`, `$swap`, `$closeout`
+- `!...`: runtime settings such as `!set model_provider=gemini`
+- `@...`: project selection such as `@open .`, `@list`, `@use 1`
 
 1. Create a runtime config.
 
@@ -126,6 +141,7 @@ If you only need one-off work in one repository, a plain agent session is simple
 
 | Command | What it does |
 | --- | --- |
+| `shell` | Open the interactive flow console |
 | `init-repo` | Initialize and register a managed repository |
 | `run` | Run one or more improvement blocks |
 | `resume` | Resume a managed repository run |
