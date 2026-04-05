@@ -1,60 +1,12 @@
 {
-  "content_signature": "f413319119c90fc425582004c69ddb6aaaa8b50e",
+  "content_signature": "ab3bfe5655e041dc2702e614d433e5b9fe7c0805",
   "payload": {
     "history": [],
-    "projects": [
-      {
-        "allow_background_queue": true,
-        "archive_id": "",
-        "archived": false,
-        "archived_at": null,
-        "background_queue_priority": 0,
-        "branch": "main",
-        "closeout_deadline_at": "",
-        "closeout_status": "not_started",
-        "created_at": "2026-04-05T08:58:42+00:00",
-        "current_step_deadline_at": "",
-        "current_step_id": "",
-        "current_step_label": "",
-        "detail": "https://github.com/Ahnd6474/tetris.git",
-        "display_name": "tetris",
-        "last_run_at": "2026-04-05T09:02:46+00:00",
-        "origin_url": "https://github.com/Ahnd6474/tetris.git",
-        "progress": {
-          "caption": "No plan yet",
-          "completed": 0,
-          "currentStep": "",
-          "current_step": "",
-          "current_step_id": "",
-          "deadline_at": "",
-          "estimatedRemaining": null,
-          "estimated_remaining": null,
-          "failed": 0,
-          "percent": null,
-          "running": 0,
-          "total": 0
-        },
-        "progress_caption": "No plan yet",
-        "queue_priority": 0,
-        "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd",
-        "repo_path": "C:\\Users\\alber\\GitHub\\tetris",
-        "slug": "tetris-main-9489856d4e",
-        "stats": {
-          "completed_steps": 0,
-          "failed_steps": 0,
-          "remaining_steps": 0,
-          "running_steps": 0,
-          "total_steps": 0
-        },
-        "status": "setup_ready",
-        "summary": "Name: tetris\nDirectory: C:\\Users\\alber\\GitHub\\tetris\nGitHub: https://github.com/Ahnd6474/tetris.git\nBranch: main\nStatus: setup_ready\nWorkflow: standard\nModel: gpt-5.3-codex-spark  (medium) [OpenAI / Codex Cloud]\nVerification: python -m pytest\nRemaining Steps: None\nCloseout: not_started\nPlan Title: tetris\nLast Run: 2026-04-05T09:02:46+00:00",
-        "vcs_backend": "git"
-      }
-    ],
+    "projects": [],
     "workspace": {
       "failed": 0,
-      "project_count": 1,
-      "ready_like": 1,
+      "project_count": 0,
+      "ready_like": 0,
       "running": 0
     }
   },

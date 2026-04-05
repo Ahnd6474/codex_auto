@@ -1,0 +1,86 @@
+# jakal-flow runtime failure
+generated_at: 2026-04-05T11:32:11+00:00
+source: ui-bridge
+command: list-projects
+workspace_root: \\?\D:\GitHub\Jakal-flow\.jakal-flow-workspace
+exception_type: PermissionError
+exception_message: [WinError 5] 액세스가 거부되었습니다: 'C:\\Users\\alber'
+
+## Payload
+{}
+
+## Traceback
+Traceback (most recent call last):
+  File "D:\GitHub\Jakal-flow\desktop\src-tauri\target\debug\_up_\_up_\rt\py\Lib\pathlib.py", line 1311, in mkdir
+    os.mkdir(self, mode)
+FileNotFoundError: [WinError 3] 지정된 경로를 찾을 수 없습니다: 'C:\\Users\\alber\\GitHub\\tetris\\jakal-flow-logs'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\GitHub\Jakal-flow\desktop\src-tauri\target\debug\_up_\_up_\rt\py\Lib\pathlib.py", line 1311, in mkdir
+    os.mkdir(self, mode)
+FileNotFoundError: [WinError 3] 지정된 경로를 찾을 수 없습니다: 'C:\\Users\\alber\\GitHub\\tetris'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\GitHub\Jakal-flow\desktop\src-tauri\target\debug\_up_\_up_\rt\py\Lib\pathlib.py", line 1311, in mkdir
+    os.mkdir(self, mode)
+FileNotFoundError: [WinError 3] 지정된 경로를 찾을 수 없습니다: 'C:\\Users\\alber\\GitHub'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "\\?\D:\GitHub\Jakal-flow\src\jakal_flow\ui_bridge.py", line 684, in run_command
+    result = handler(
+             ^^^^^^^^
+  File "\\?\D:\GitHub\Jakal-flow\src\jakal_flow\ui_bridge_commands\read_models.py", line 135, in <lambda>
+    "list-projects": lambda ctx: list_projects_payload(ctx.orchestrator),
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\D:\GitHub\Jakal-flow\src\jakal_flow\ui_bridge_payloads.py", line 2433, in list_projects_payload
+    projects = sorted(orchestrator.list_projects(), key=lambda item: item.metadata.created_at, reverse=True)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\D:\GitHub\Jakal-flow\src\jakal_flow\orchestrator.py", line 3609, in list_projects
+    return self.workspace.list_projects()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\D:\GitHub\Jakal-flow\src\jakal_flow\workspace.py", line 809, in list_projects
+    self._list_registered_contexts("projects", load_context=self.load_project_by_id),
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\D:\GitHub\Jakal-flow\src\jakal_flow\workspace.py", line 25, in wrapper
+    return method(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\D:\GitHub\Jakal-flow\src\jakal_flow\workspace.py", line 802, in _list_registered_contexts
+    contexts.append(load_context(entry_id))
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\D:\GitHub\Jakal-flow\src\jakal_flow\workspace.py", line 676, in load_project_by_id
+    return self._load_registered_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\D:\GitHub\Jakal-flow\src\jakal_flow\workspace.py", line 25, in wrapper
+    return method(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\D:\GitHub\Jakal-flow\src\jakal_flow\workspace.py", line 668, in _load_registered_context
+    context = self.load_project_from_root(resolved_root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\D:\GitHub\Jakal-flow\src\jakal_flow\workspace.py", line 25, in wrapper
+    return method(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\D:\GitHub\Jakal-flow\src\jakal_flow\workspace.py", line 716, in load_project_from_root
+    self._migrate_local_project_logs(paths.project_root, repo_path_hint)
+  File "\\?\D:\GitHub\Jakal-flow\src\jakal_flow\workspace.py", line 314, in _migrate_local_project_logs
+    self.migrate_logs_dir(project_root.resolve() / "logs", self.repo_logs_dir(repo_dir))
+  File "\\?\D:\GitHub\Jakal-flow\src\jakal_flow\workspace.py", line 304, in migrate_logs_dir
+    self._merge_logs_directory(source_logs_dir, target_logs_dir)
+  File "\\?\D:\GitHub\Jakal-flow\src\jakal_flow\workspace.py", line 288, in _merge_logs_directory
+    ensure_dir(target_dir)
+  File "\\?\D:\GitHub\Jakal-flow\src\jakal_flow\utils.py", line 43, in ensure_dir
+    path.mkdir(parents=True, exist_ok=True)
+  File "D:\GitHub\Jakal-flow\desktop\src-tauri\target\debug\_up_\_up_\rt\py\Lib\pathlib.py", line 1315, in mkdir
+    self.parent.mkdir(parents=True, exist_ok=True)
+  File "D:\GitHub\Jakal-flow\desktop\src-tauri\target\debug\_up_\_up_\rt\py\Lib\pathlib.py", line 1315, in mkdir
+    self.parent.mkdir(parents=True, exist_ok=True)
+  File "D:\GitHub\Jakal-flow\desktop\src-tauri\target\debug\_up_\_up_\rt\py\Lib\pathlib.py", line 1315, in mkdir
+    self.parent.mkdir(parents=True, exist_ok=True)
+  File "D:\GitHub\Jakal-flow\desktop\src-tauri\target\debug\_up_\_up_\rt\py\Lib\pathlib.py", line 1311, in mkdir
+    os.mkdir(self, mode)
+PermissionError: [WinError 5] 액세스가 거부되었습니다: 'C:\\Users\\alber'

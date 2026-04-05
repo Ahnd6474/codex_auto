@@ -13,7 +13,7 @@ from .bridge_events import emit_bridge_event
 from .models import LoopCounters, LoopState, ProjectContext, ProjectPaths, RepoMetadata, RuntimeOptions
 from .parallel_resources import normalize_parallel_worker_mode
 from .runtime_config import runtime_from_payload
-from .utils import ensure_dir, now_utc_iso, read_json, remove_tree, stable_repo_identity, write_json, write_json_if_changed
+from .utils import append_jsonl, ensure_dir, now_utc_iso, read_json, remove_tree, stable_repo_identity, write_json, write_json_if_changed
 
 LOCAL_PROJECT_LOG_DIRNAME = "jakal-flow-logs"
 
@@ -40,6 +40,10 @@ class WorkspaceManager:
     @property
     def registry_file(self) -> Path:
         return self.workspace_root / "registry.json"
+
+    @property
+    def registry_skip_log_file(self) -> Path:
+        return self.workspace_root / "registry_skips.jsonl"
 
     @staticmethod
     def _path_cache_token(path: Path) -> tuple[int, int, int]:
@@ -800,9 +804,26 @@ class WorkspaceManager:
         for entry_id in registry.get(registry_section, {}).keys():
             try:
                 contexts.append(load_context(entry_id))
-            except (FileNotFoundError, KeyError):
+            except (KeyError, OSError) as exc:
+                self._record_registry_skip(registry_section, entry_id, exc)
                 continue
         return contexts
+
+    def _record_registry_skip(self, registry_section: str, entry_id: str, exc: BaseException) -> None:
+        registry = self._read_registry()
+        item = registry.get(registry_section, {}).get(entry_id, {})
+        append_jsonl(
+            self.registry_skip_log_file,
+            {
+                "timestamp": now_utc_iso(),
+                "registry_section": registry_section,
+                "entry_id": entry_id,
+                "project_root": str(item.get("project_root", "")).strip(),
+                "repo_path": str(item.get("repo_path", "")).strip(),
+                "error_type": exc.__class__.__name__,
+                "error_message": str(exc).strip() or str(exc),
+            },
+        )
 
     def list_projects(self) -> list[ProjectContext]:
         return sorted(
@@ -827,12 +848,14 @@ class WorkspaceManager:
             if self._normalized_path(item.get("repo_path", "")) == resolved_target:
                 try:
                     return self.load_project_by_id(repo_id)
-                except (FileNotFoundError, KeyError):
+                except (KeyError, OSError) as exc:
+                    self._record_registry_skip("projects", repo_id, exc)
                     break
         for repo_id in registry["projects"].keys():
             try:
                 project = self.load_project_by_id(repo_id)
-            except (FileNotFoundError, KeyError):
+            except (KeyError, OSError) as exc:
+                self._record_registry_skip("projects", repo_id, exc)
                 continue
             if project.metadata.repo_path.resolve() == resolved_target:
                 return project
