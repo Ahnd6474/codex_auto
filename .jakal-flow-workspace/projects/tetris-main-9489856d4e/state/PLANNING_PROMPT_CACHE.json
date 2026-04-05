@@ -1,0 +1,12 @@
+{
+  "payload": {
+    "agents": "AGENTS.md not found.",
+    "docs": "## docs/runtime_boundary_audit.md\n# Runtime Boundary Audit\n\nThis brief reflects the verified runtime seams for the current runnable release prototype.\n\n## Current Subsystem Boundaries\n\n### Headless Engine\n\n- `src/tetris/engine/pieces.py` owns piece state, collision checks, lock resolution, hold rules, and board mutation.\n- `src/tetris/engine/loop.py...",
+    "readme": "# tetris\n\nStage-based puzzle Tetris prototype with a shared headless engine and a `tkinter` UI shell.\n\r\n## Project Structure\r\n\r\n- `src/tetris/engine`: falling-piece rules, bag generation, lock/clear handling, and game loop state.\r\n- `src/tetris/stage`: JSON-backed stage data, tile/object parsing, and objective evaluation.\r\n- `src/tetris/ui`: renderer-facing view models plus the `tkinter` renderer.\r\n- `src/tetris/app_shell.py`: the app controller that connects the engine, stage session, inputs, restart, and stage progression.\r\n- `tests`: engine, stage, UI, and end-to-end tutorial playthrough coverage.\r\n\r\n## Run Locally\n\nUse Python 3.12+ from the repository root.\n\n- `python -m tetris` launches the playable `tkinter` build.\n- `python -m tetris --headless --frames 30` runs the deterministic headless path.\n- `python -m pip install .` installs the packaged build and exposes the same CLI as...",
+    "shared_contracts_snapshot": "# Shared Contracts\n\nGuarded-overlap contract-wave state for the current managed repository.\n\n- Current spine version: spine-v1\n- Last updated: 2026-04-05T08:58:42+00:00\n- Known shared contracts: none recorded\n\n## Spine History\n- No contract checkpoints recorded yet.\n\n## Open Common Requirements\n\n- none\n\n## Resolved Common Requirements\n\n- none",
+    "source": "Existing implementation files detected. Prefer extending or editing these paths instead of adding scaffold-only skeleton steps unless a genuinely new boundary is required: src/tetris/__init__.py, src/tetris/__main__.py, src/tetris/actions.py, src/tetris/app.py, src/tetris/app_shell.py, src/tetris/cli.py, src/tetris/config.py, src/tetris/engine/__init__.py, src/tetris/engine/loop.py, src/tetris/engine/pieces.py, plus 14 more.",
+    "spine_version": "spine-v1"
+  },
+  "signature": "98174ab336745705511321e5cbcdc74c6a268a0c",
+  "version": 1
+}

@@ -1,0 +1,21 @@
+{
+  "archive_id": null,
+  "archived": false,
+  "archived_at": null,
+  "branch": "main",
+  "created_at": "2026-04-05T08:58:42+00:00",
+  "current_safe_revision": "072fc2a8f110abd4cae0a1a964a16388199c5c03",
+  "current_status": "setup_ready",
+  "display_name": "tetris",
+  "last_run_at": "2026-04-05T09:02:46+00:00",
+  "local_logs_mode": "repo",
+  "origin_url": "https://github.com/Ahnd6474/tetris.git",
+  "project_root": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e",
+  "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd",
+  "repo_kind": "local",
+  "repo_path": "C:\\Users\\alber\\GitHub\\tetris",
+  "repo_url": "https://github.com/Ahnd6474/tetris.git",
+  "slug": "tetris-main-9489856d4e",
+  "source_repo_id": null,
+  "vcs_backend": "git"
+}

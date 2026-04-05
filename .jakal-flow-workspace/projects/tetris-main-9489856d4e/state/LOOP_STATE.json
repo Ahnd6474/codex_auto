@@ -1,0 +1,21 @@
+{
+  "block_index": 0,
+  "counters": {
+    "empty_cycles": 0,
+    "no_progress_blocks": 0,
+    "regression_failures": 0
+  },
+  "current_checkpoint_id": null,
+  "current_checkpoint_lineage_id": null,
+  "current_safe_revision": "072fc2a8f110abd4cae0a1a964a16388199c5c03",
+  "current_task": null,
+  "last_block_completed_at": null,
+  "last_candidates": [],
+  "last_commit_hash": null,
+  "pending_checkpoint_approval": false,
+  "plan_locked": true,
+  "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd",
+  "repo_slug": "tetris-main-9489856d4e",
+  "stop_reason": null,
+  "stop_requested": false
+}

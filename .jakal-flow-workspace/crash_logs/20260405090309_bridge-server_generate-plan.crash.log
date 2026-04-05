@@ -1,0 +1,37 @@
+# jakal-flow runtime failure
+generated_at: 2026-04-05T09:03:09+00:00
+source: bridge-server
+command: generate-plan
+workspace_root: \\?\C:\Users\alber\GitHub\Jakal-flow\.jakal-flow-workspace
+exception_type: RuntimeError
+exception_message: Model 'gpt-5.3-codex-spark' is not available for provider 'openai' on this machine. Choose a configured model or leave the model on auto/default routing.
+
+## Payload
+{
+  "method": "run_job",
+  "request_id": "job-generate-plan-1775379631467-1"
+}
+
+## Traceback
+Traceback (most recent call last):
+  File "\\?\C:\Users\alber\GitHub\Jakal-flow\src\jakal_flow\bridge_server.py", line 802, in _run_job
+    result = run_command(command, workspace_root, payload)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\C:\Users\alber\GitHub\Jakal-flow\src\jakal_flow\ui_bridge.py", line 684, in run_command
+    result = handler(
+             ^^^^^^^^
+  File "\\?\C:\Users\alber\GitHub\Jakal-flow\src\jakal_flow\ui_bridge_commands\projects.py", line 130, in generate_plan
+    project, plan_state = ctx.orchestrator.generate_execution_plan(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\C:\Users\alber\GitHub\Jakal-flow\src\jakal_flow\orchestrator.py", line 721, in generate_execution_plan
+    return self._generate_execution_plan_with_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\C:\Users\alber\GitHub\Jakal-flow\src\jakal_flow\orchestrator.py", line 930, in _generate_execution_plan_with_context
+    result = self._run_pass_with_provider_fallback(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\C:\Users\alber\GitHub\Jakal-flow\src\jakal_flow\orchestrator.py", line 3332, in _run_pass_with_provider_fallback
+    run_result = active_runner.run_pass(
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\C:\Users\alber\GitHub\Jakal-flow\src\jakal_flow\codex_runner.py", line 79, in run_pass
+    raise RuntimeError(preflight_error)
+RuntimeError: Model 'gpt-5.3-codex-spark' is not available for provider 'openai' on this machine. Choose a configured model or leave the model on auto/default routing.

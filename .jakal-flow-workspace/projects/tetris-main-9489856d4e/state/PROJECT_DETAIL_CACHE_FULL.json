@@ -1,0 +1,1556 @@
+{
+  "content_signature": "cc8b47508ce69f4befee5a62e6bb0607900b4c63",
+  "payload": {
+    "activity": [
+      "2026-04-05T09:07:45+00:00 | immediate-stop-requested | Immediate stop requested. The current step will be ignored.",
+      "2026-04-05T09:03:08+00:00 | planner-agent-started | Planner Agent B is packing the final execution plan.",
+      "2026-04-05T09:03:08+00:00 | planner-agent-finished | Planner Agent A was skipped in compact planning mode; a compact heuristic outline was saved instead.",
+      "2026-04-05T09:03:08+00:00 | planner-agent-started | Planner Agent A fast lane is synthesizing a compact heuristic outline.",
+      "2026-04-05T09:02:46+00:00 | plan-started | Collecting repository context for planning.",
+      "2026-04-05T09:01:58+00:00 | chat-stop-requested | Requested that the active chat reply stop.",
+      "2026-04-05T08:59:06+00:00 | project-saved | Saved project setup from the desktop shell.",
+      "2026-04-05T08:58:45+00:00 | project-saved | Saved project setup from the desktop shell."
+    ],
+    "bottom_panels": {
+      "codex_status": {},
+      "event_json": {
+        "latest_block": {},
+        "latest_pass": {},
+        "loop_state": {
+          "block_index": 0,
+          "counters": {
+            "empty_cycles": 0,
+            "no_progress_blocks": 0,
+            "regression_failures": 0
+          },
+          "current_checkpoint_id": null,
+          "current_checkpoint_lineage_id": null,
+          "current_safe_revision": "072fc2a8f110abd4cae0a1a964a16388199c5c03",
+          "current_task": null,
+          "last_block_completed_at": null,
+          "last_candidates": [],
+          "last_commit_hash": null,
+          "pending_checkpoint_approval": false,
+          "plan_locked": true,
+          "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd",
+          "repo_slug": "tetris-main-9489856d4e",
+          "stop_reason": null,
+          "stop_requested": false
+        },
+        "run_control": {
+          "request_source": "tauri-react-ui",
+          "requested_at": "2026-04-05T09:07:45+00:00",
+          "stop_after_current_step": false,
+          "stop_immediately": true
+        }
+      },
+      "execution_log_lines": [
+        "2026-04-05T09:07:45+00:00 | immediate-stop-requested | Immediate stop requested. The current step will be ignored.",
+        "2026-04-05T09:03:08+00:00 | planner-agent-started | Planner Agent B is packing the final execution plan.",
+        "2026-04-05T09:03:08+00:00 | planner-agent-finished | Planner Agent A was skipped in compact planning mode; a compact heuristic outline was saved instead.",
+        "2026-04-05T09:03:08+00:00 | planner-agent-started | Planner Agent A fast lane is synthesizing a compact heuristic outline.",
+        "2026-04-05T09:02:46+00:00 | plan-started | Collecting repository context for planning.",
+        "2026-04-05T09:01:58+00:00 | chat-stop-requested | Requested that the active chat reply stop.",
+        "2026-04-05T08:59:06+00:00 | project-saved | Saved project setup from the desktop shell.",
+        "2026-04-05T08:58:45+00:00 | project-saved | Saved project setup from the desktop shell."
+      ],
+      "git_status": {
+        "branch": "main",
+        "current_checkpoint_id": null,
+        "current_checkpoint_lineage_id": null,
+        "current_status": "running:generate-plan",
+        "last_commit_hash": null,
+        "origin_url": "https://github.com/Ahnd6474/tetris.git",
+        "pending_checkpoint_approval": false,
+        "repo_kind": "local",
+        "safe_revision": "072fc2a8f110abd4cae0a1a964a16388199c5c03",
+        "vcs_backend": "git"
+      },
+      "runtime_insights": {
+        "cost": {
+          "estimated_total_cost_usd": 0.0,
+          "recent": {
+            "billing_mode": "included",
+            "configured": true,
+            "details": {},
+            "estimated_cost_usd": 0.0,
+            "usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "recent_usage": {
+            "cached_input_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 0
+          },
+          "remaining": {
+            "billing_mode": "included",
+            "configured": true,
+            "details": {},
+            "estimated_cost_usd": 0.0,
+            "usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "remaining_usage": {
+            "cached_input_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 0
+          }
+        },
+        "execution": {
+          "completed_step_count": 0,
+          "effort_baselines": [
+            {
+              "cost": {
+                "billing_mode": "included",
+                "configured": true,
+                "details": {},
+                "estimated_cost_usd": 0.0,
+                "usage": {
+                  "cached_input_tokens": 0,
+                  "input_tokens": 6000,
+                  "output_tokens": 2400,
+                  "reasoning_output_tokens": 600,
+                  "total_tokens": 9000
+                }
+              },
+              "effort": "low",
+              "estimated_duration_seconds": 300.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 6000,
+                "output_tokens": 2400,
+                "reasoning_output_tokens": 600,
+                "total_tokens": 9000
+              }
+            },
+            {
+              "cost": {
+                "billing_mode": "included",
+                "configured": true,
+                "details": {},
+                "estimated_cost_usd": 0.0,
+                "usage": {
+                  "cached_input_tokens": 0,
+                  "input_tokens": 11000,
+                  "output_tokens": 4500,
+                  "reasoning_output_tokens": 1500,
+                  "total_tokens": 17000
+                }
+              },
+              "effort": "medium",
+              "estimated_duration_seconds": 540.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 11000,
+                "output_tokens": 4500,
+                "reasoning_output_tokens": 1500,
+                "total_tokens": 17000
+              }
+            },
+            {
+              "cost": {
+                "billing_mode": "included",
+                "configured": true,
+                "details": {},
+                "estimated_cost_usd": 0.0,
+                "usage": {
+                  "cached_input_tokens": 0,
+                  "input_tokens": 17000,
+                  "output_tokens": 6500,
+                  "reasoning_output_tokens": 3500,
+                  "total_tokens": 27000
+                }
+              },
+              "effort": "high",
+              "estimated_duration_seconds": 840.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 17000,
+                "output_tokens": 6500,
+                "reasoning_output_tokens": 3500,
+                "total_tokens": 27000
+              }
+            },
+            {
+              "cost": {
+                "billing_mode": "included",
+                "configured": true,
+                "details": {},
+                "estimated_cost_usd": 0.0,
+                "usage": {
+                  "cached_input_tokens": 0,
+                  "input_tokens": 24000,
+                  "output_tokens": 8500,
+                  "reasoning_output_tokens": 5500,
+                  "total_tokens": 38000
+                }
+              },
+              "effort": "xhigh",
+              "estimated_duration_seconds": 1200.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 24000,
+                "output_tokens": 8500,
+                "reasoning_output_tokens": 5500,
+                "total_tokens": 38000
+              }
+            }
+          ],
+          "elapsed_seconds": 0.0,
+          "estimated_total_seconds": 0.0,
+          "pending_step_count": 0,
+          "remaining_seconds": 0.0,
+          "running_step_count": 0,
+          "step_estimates": []
+        },
+        "parallel": {
+          "cpu_logical_count": 12,
+          "cpu_parallel_limit": 3,
+          "memory_available_bytes": 8082923520,
+          "memory_budget_per_worker_gib": 3.0,
+          "memory_parallel_limit": 2,
+          "memory_total_bytes": 34027786240,
+          "reason": "automatic worker count derived from available compute resources (cpu/4 and memory budget)",
+          "recommended_workers": 2,
+          "requested_workers": 0,
+          "worker_mode": "auto"
+        }
+      },
+      "test_runs": [],
+      "token_usage": {
+        "cached_input_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 0
+      }
+    },
+    "chat": {
+      "active_session": {
+        "created_at": "2026-04-05T09:01:56+00:00",
+        "last_mode": "review",
+        "log_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\chat_sessions\\logs\\chat-20260405090156-f7824d.messages.txt",
+        "message_count": 6,
+        "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd",
+        "session_id": "chat-20260405090156-f7824d",
+        "summary_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\chat_sessions\\memory\\\uc774 \ucf54\ub4dc\uc5d0 \ub300\ud574 \uc124\uba85\ud574\uc918 20260405090156.summary.txt",
+        "title": "\uc774 \ucf54\ub4dc\uc5d0 \ub300\ud574 \uc124\uba85\ud574\uc918 20260405090156.txt",
+        "transcript_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\chat_sessions\\memory\\\uc774 \ucf54\ub4dc\uc5d0 \ub300\ud574 \uc124\uba85\ud574\uc918 20260405090156.txt",
+        "updated_at": "2026-04-05T09:05:59+00:00"
+      },
+      "active_session_id": "chat-20260405090156-f7824d",
+      "draft_session": false,
+      "messages": [
+        {
+          "created_at": "2026-04-05T09:01:56+00:00",
+          "message_id": "msg-20260405090156-d0f6c2",
+          "metadata": {},
+          "mode": "review",
+          "role": "user",
+          "status": "completed",
+          "text": "\uc774 \ucf54\ub4dc\uc5d0 \ub300\ud574 \uc124\uba85\ud574\uc918"
+        },
+        {
+          "created_at": "2026-04-05T09:02:00+00:00",
+          "message_id": "msg-20260405090200-5df176",
+          "metadata": {
+            "returncode": 1
+          },
+          "mode": "review",
+          "role": "system",
+          "status": "failed",
+          "text": "Model 'gpt-5.3-codex-spark' is not available for provider 'openai' on this machine. Choose a configured model or leave the model on auto/default routing."
+        },
+        {
+          "created_at": "2026-04-05T09:02:08+00:00",
+          "message_id": "msg-20260405090208-7799d0",
+          "metadata": {},
+          "mode": "review",
+          "role": "user",
+          "status": "completed",
+          "text": "\uc774 \ucf54\ub4dc\uc5d0 \ub300\ud574\uc11c \uc124\uba85\ud574\uc918"
+        },
+        {
+          "created_at": "2026-04-05T09:02:08+00:00",
+          "message_id": "msg-20260405090208-64bead",
+          "metadata": {
+            "returncode": 1
+          },
+          "mode": "review",
+          "role": "system",
+          "status": "failed",
+          "text": "Model 'gpt-5.3-codex-spark' is not available for provider 'openai' on this machine. Choose a configured model or leave the model on auto/default routing."
+        },
+        {
+          "created_at": "2026-04-05T09:05:59+00:00",
+          "message_id": "msg-20260405090559-36f44b",
+          "metadata": {},
+          "mode": "review",
+          "role": "user",
+          "status": "completed",
+          "text": "\uc548\ub155\\\\"
+        },
+        {
+          "created_at": "2026-04-05T09:05:59+00:00",
+          "message_id": "msg-20260405090559-2c984b",
+          "metadata": {
+            "returncode": 1
+          },
+          "mode": "review",
+          "role": "system",
+          "status": "failed",
+          "text": "Model 'gpt-5.3-codex-spark' is not available for provider 'openai' on this machine. Choose a configured model or leave the model on auto/default routing."
+        }
+      ],
+      "sessions": [
+        {
+          "created_at": "2026-04-05T09:01:56+00:00",
+          "last_mode": "review",
+          "log_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\chat_sessions\\logs\\chat-20260405090156-f7824d.messages.txt",
+          "message_count": 6,
+          "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd",
+          "session_id": "chat-20260405090156-f7824d",
+          "summary_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\chat_sessions\\memory\\\uc774 \ucf54\ub4dc\uc5d0 \ub300\ud574 \uc124\uba85\ud574\uc918 20260405090156.summary.txt",
+          "title": "\uc774 \ucf54\ub4dc\uc5d0 \ub300\ud574 \uc124\uba85\ud574\uc918 20260405090156.txt",
+          "transcript_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\chat_sessions\\memory\\\uc774 \ucf54\ub4dc\uc5d0 \ub300\ud574 \uc124\uba85\ud574\uc918 20260405090156.txt",
+          "updated_at": "2026-04-05T09:05:59+00:00"
+        }
+      ],
+      "summary_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\chat_sessions\\memory\\\uc774 \ucf54\ub4dc\uc5d0 \ub300\ud574 \uc124\uba85\ud574\uc918 20260405090156.summary.txt",
+      "summary_text": "# Chat Session Summary\n\nUse this summary file together with the recent transcript to continue the same conversation coherently.\n\n- Session ID: chat-20260405090156-f7824d\n- Title: \uc774 \ucf54\ub4dc\uc5d0 \ub300\ud574 \uc124\uba85\ud574\uc918 20260405090156.txt\n- Created At: 2026-04-05T09:01:56+00:00\n- Updated At: 2026-04-05T09:05:59+00:00\n- Message Count: 6\n- Last Mode: review\n\n## Rolling Summary\n- 2026-04-05T09:01:56+00:00 | user | review: \uc774 \ucf54\ub4dc\uc5d0 \ub300\ud574 \uc124\uba85\ud574\uc918\n- 2026-04-05T09:02:00+00:00 | system | review: Model 'gpt-5.3-codex-spark' is not available for provider 'openai' on this machine. Choose a configured model or leave the model on auto/default routing.\n- 2026-04-05T09:02:08+00:00 | user | review: \uc774 \ucf54\ub4dc\uc5d0 \ub300\ud574\uc11c \uc124\uba85\ud574\uc918\n- 2026-04-05T09:02:08+00:00 | system | review: Model 'gpt-5.3-codex-spark' is not available for provider 'openai' on this machine. Choose a configured model or leave the model on auto/default routing.\n- 2026-04-05T09:05:59+00:00 | user | review: \uc548\ub155\\\\\n- 2026-04-05T09:05:59+00:00 | system | review: Model 'gpt-5.3-codex-spark' is not available for provider 'openai' on this machine. Choose a configured model or leave the model on auto/default routing.\n\nTranscript File: \\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\chat_sessions\\memory\\\uc774 \ucf54\ub4dc\uc5d0 \ub300\ud574 \uc124\uba85\ud574\uc918 20260405090156.txt",
+      "transcript_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\chat_sessions\\memory\\\uc774 \ucf54\ub4dc\uc5d0 \ub300\ud574 \uc124\uba85\ud574\uc918 20260405090156.txt"
+    },
+    "checkpoints": {
+      "current_checkpoint_id": "",
+      "current_checkpoint_lineage_id": "",
+      "generated_at": "2026-04-05T09:07:49+00:00",
+      "items": [],
+      "pending": null,
+      "snapshot_epoch": 1775380069375,
+      "snapshot_id": "d473672fa07060cd639da2c69fa6434185dc9e6e",
+      "snapshot_kind": "cache_view",
+      "source_cursor": {
+        "approval_requested": false,
+        "block_log": "blocks.jsonl:missing",
+        "checkpoint_count": 0,
+        "checkpoint_state": "CHECKPOINTS.json:file:23:1775379525513241200",
+        "loop_state": "LOOP_STATE.json:file:592:1775379525410838100",
+        "pending_checkpoint_id": "",
+        "pending_checkpoint_lineage_id": ""
+      },
+      "source_signature": "CHECKPOINTS.json:file:23:1775379525513241200|blocks.jsonl:missing|LOOP_STATE.json:file:592:1775379525410838100",
+      "state_origin": "disk",
+      "timeline_markdown": "# Checkpoint Timeline\n\nThis timeline is derived from the saved plan and is intended for user review at checkpoint boundaries.\n\nNo checkpoints recorded yet.\n"
+    },
+    "closeout_deadline_at": "",
+    "codex_status": {},
+    "config": {
+      "generated_at": "2026-04-05T09:07:49+00:00",
+      "loop_state_json": {
+        "block_index": 0,
+        "counters": {
+          "empty_cycles": 0,
+          "no_progress_blocks": 0,
+          "regression_failures": 0
+        },
+        "current_checkpoint_id": null,
+        "current_checkpoint_lineage_id": null,
+        "current_safe_revision": "072fc2a8f110abd4cae0a1a964a16388199c5c03",
+        "current_task": null,
+        "last_block_completed_at": null,
+        "last_candidates": [],
+        "last_commit_hash": null,
+        "pending_checkpoint_approval": false,
+        "plan_locked": true,
+        "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd",
+        "repo_slug": "tetris-main-9489856d4e",
+        "stop_reason": null,
+        "stop_requested": false
+      },
+      "metadata_json": {
+        "archive_id": null,
+        "archived": false,
+        "archived_at": null,
+        "branch": "main",
+        "created_at": "2026-04-05T08:58:42+00:00",
+        "current_safe_revision": "072fc2a8f110abd4cae0a1a964a16388199c5c03",
+        "current_status": "setup_ready",
+        "display_name": "tetris",
+        "last_run_at": "2026-04-05T09:02:46+00:00",
+        "local_logs_mode": "repo",
+        "origin_url": "https://github.com/Ahnd6474/tetris.git",
+        "project_root": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e",
+        "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd",
+        "repo_kind": "local",
+        "repo_path": "C:\\Users\\alber\\GitHub\\tetris",
+        "repo_url": "https://github.com/Ahnd6474/tetris.git",
+        "slug": "tetris-main-9489856d4e",
+        "source_repo_id": null,
+        "vcs_backend": "git"
+      },
+      "run_control_json": {
+        "request_source": "tauri-react-ui",
+        "requested_at": "2026-04-05T09:07:45+00:00",
+        "stop_after_current_step": false,
+        "stop_immediately": true
+      },
+      "runtime_json": {
+        "allow_background_queue": true,
+        "allow_push": true,
+        "approval_mode": "never",
+        "auto_merge_pull_request": true,
+        "background_queue_priority": 0,
+        "billing_mode": "included",
+        "cached_input_cost_per_million_usd": 0.0,
+        "chat_local_model_provider": "",
+        "chat_model": "",
+        "chat_model_provider": "",
+        "checkpoint_interval_blocks": 1,
+        "codex_base_slug": "",
+        "codex_path": "codex.cmd",
+        "codex_variant_slug": "",
+        "effort": "medium",
+        "effort_selection_mode": "auto",
+        "empty_cycle_limit": 3,
+        "ensemble_claude_model": "claude-sonnet-4-6",
+        "ensemble_gemini_model": "gemini-3-flash-preview",
+        "ensemble_openai_model": "gpt-5.4",
+        "execution_mode": "parallel",
+        "execution_model": "gpt-5.3-codex-spark",
+        "extra_prompt": "",
+        "generate_word_report": false,
+        "git_user_email": "jakal-flow@example.invalid",
+        "git_user_name": "jakal-flow-bot",
+        "init_plan_prompt": "",
+        "input_cost_per_million_usd": 0.0,
+        "local_model_provider": "",
+        "max_blocks": 5,
+        "ml_max_cycles": 3,
+        "model": "gpt-5.3-codex-spark",
+        "model_preset": "",
+        "model_provider": "openai",
+        "model_selection_mode": "slug",
+        "model_slug_input": "gpt-5.3-codex-spark",
+        "no_progress_limit": 3,
+        "optimization_duplicate_block_lines": 4,
+        "optimization_large_file_lines": 350,
+        "optimization_long_function_lines": 80,
+        "optimization_max_files": 3,
+        "optimization_mode": "off",
+        "output_cost_per_million_usd": 0.0,
+        "parallel_memory_per_worker_gib": 3.0,
+        "parallel_worker_mode": "auto",
+        "parallel_workers": 0,
+        "per_pass_cost_usd": 0.0,
+        "planning_effort": "medium",
+        "provider_api_key_env": "OPENAI_API_KEY",
+        "provider_base_url": "",
+        "reasoning_output_cost_per_million_usd": 0.0,
+        "regression_limit": 3,
+        "repo_backend": "git",
+        "require_checkpoint_approval": false,
+        "sandbox_mode": "danger-full-access",
+        "save_project_logs": false,
+        "test_cmd": "python -m pytest",
+        "use_fast_mode": true,
+        "workflow_mode": "standard"
+      },
+      "snapshot_epoch": 1775380069377,
+      "snapshot_id": "f0f8f789740e5c2848eda747c6e5740a0df9154a",
+      "snapshot_kind": "persisted_state",
+      "source_cursor": {
+        "loop_state": "LOOP_STATE.json:file:592:1775379525410838100",
+        "metadata": "metadata.json:file:796:1775379766787321000",
+        "run_control": "UI_RUN_CONTROL.json:file:151:1775380065118781500",
+        "runtime": "project_config.json:file:1947:1775379546448533800",
+        "snapshot_loop_state": true,
+        "snapshot_run_control": true
+      },
+      "source_signature": "metadata.json:file:796:1775379766787321000|project_config.json:file:1947:1775379546448533800|LOOP_STATE.json:file:592:1775379525410838100|CHECKPOINTS.json:file:23:1775379525513241200|EXECUTION_PLAN.json:file:832:1775379525452835400:b1f565420ae164dc73dad114a1576d7ba0b9219b|UI_RUN_CONTROL.json:file:151:1775380065118781500",
+      "state_origin": "disk"
+    },
+    "content_signature": "cc8b47508ce69f4befee5a62e6bb0607900b4c63",
+    "current_step_deadline_at": "",
+    "current_step_id": "",
+    "current_step_label": "",
+    "detail_level": "full",
+    "execution_processes": [],
+    "execution_state": {
+      "active_families": [
+        "planning"
+      ],
+      "checkpoint_family": "idle",
+      "consistent": true,
+      "display_family": "planning",
+      "display_status": "running:generate-plan",
+      "flow_family": "planning",
+      "mismatch_summary": "",
+      "process_family": "planning",
+      "project_status": "running:generate-plan",
+      "report_lines": [
+        "toolbar: planning (running:generate-plan)",
+        "flow: planning (running:generate-plan)",
+        "checkpoint: idle",
+        "process: planning (running:generate-plan)"
+      ],
+      "toolbar_family": "planning"
+    },
+    "files": {
+      "chat_active_session_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\chat_sessions\\active\\9489856d4e9f1fa04726f380a7515da929ece9cd.txt",
+      "chat_sessions_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\chat_sessions\\CHAT_SESSIONS.txt",
+      "closeout_report_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\docs\\CLOSEOUT_REPORT.md",
+      "common_requirements_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\state\\COMMON_REQUIREMENTS.json",
+      "contract_wave_audit_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\state\\CONTRACT_WAVE_AUDIT.jsonl",
+      "execution_plan_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\state\\EXECUTION_PLAN.json",
+      "lineage_manifests_dir": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\state\\lineage_manifests",
+      "ml_experiment_report_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\docs\\ML_EXPERIMENT_REPORT.md",
+      "powerpoint_report_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\reports\\CLOSEOUT_REPORT.pptx",
+      "project_root": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e",
+      "repo_dir": "C:\\Users\\alber\\GitHub\\tetris",
+      "shared_contracts_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\docs\\SHARED_CONTRACTS.md",
+      "spine_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\state\\SPINE.json",
+      "ui_control_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\state\\UI_RUN_CONTROL.json",
+      "ui_event_log_file": "C:\\Users\\alber\\GitHub\\tetris\\jakal-flow-logs\\ui_events.jsonl",
+      "word_report_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\reports\\CLOSEOUT_REPORT.docx"
+    },
+    "github": {
+      "branch": "main",
+      "connected": true,
+      "origin_url": "https://github.com/Ahnd6474/tetris.git",
+      "repo_url": "https://github.com/Ahnd6474/tetris.git"
+    },
+    "history": {
+      "blocks": [],
+      "flow_svg_path": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\docs\\EXECUTION_FLOW.svg",
+      "flow_svg_text": "<!-- execution-flow-signature:4384b9f0a37ec0a36407c95ff3420b0b45547986 -->\n<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1180\" height=\"328\" viewBox=\"0 0 1180 328\" role=\"img\">\n<rect width=\"100%\" height=\"100%\" fill=\"#f8fafc\" />\n<text x=\"40\" y=\"34\" fill=\"#0f172a\" font-family=\"Segoe UI, Malgun Gothic, sans-serif\" font-size=\"24\" font-weight=\"700\">tetris execution flow</text>\n</svg>",
+      "generated_at": "2026-04-05T09:07:49+00:00",
+      "passes": [],
+      "snapshot_epoch": 1775380069373,
+      "snapshot_id": "dfc8865cab472119e07f622debbaa9285672954b",
+      "snapshot_kind": "event_derived",
+      "source_cursor": {
+        "blocks": 0,
+        "passes": 0,
+        "test_runs": 0,
+        "ui_events": 8
+      },
+      "source_signature": "ui_events.jsonl:file:2166:1775380065130105400|blocks.jsonl:missing|passes.jsonl:missing|test_runs.jsonl:missing",
+      "state_origin": "events",
+      "test_runs": [],
+      "ui_events": [
+        {
+          "details": {},
+          "event_type": "project-saved",
+          "message": "Saved project setup from the desktop shell.",
+          "timestamp": "2026-04-05T08:58:45+00:00"
+        },
+        {
+          "details": {},
+          "event_type": "project-saved",
+          "message": "Saved project setup from the desktop shell.",
+          "timestamp": "2026-04-05T08:59:06+00:00"
+        },
+        {
+          "details": {
+            "scope_id": "9489856d4e9f1fa04726f380a7515da929ece9cd::chat",
+            "source": "tauri-react-ui"
+          },
+          "event_type": "chat-stop-requested",
+          "message": "Requested that the active chat reply stop.",
+          "timestamp": "2026-04-05T09:01:58+00:00"
+        },
+        {
+          "details": {
+            "flow": "planning",
+            "stage_count": 4,
+            "stage_index": 1,
+            "stage_key": "context_scan",
+            "status": "running"
+          },
+          "event_type": "plan-started",
+          "message": "Collecting repository context for planning.",
+          "timestamp": "2026-04-05T09:02:46+00:00"
+        },
+        {
+          "details": {
+            "agent_key": "planner_a",
+            "agent_label": "Planner Agent A",
+            "flow": "planning",
+            "stage_count": 4,
+            "stage_index": 2,
+            "stage_key": "planner_a",
+            "status": "running"
+          },
+          "event_type": "planner-agent-started",
+          "message": "Planner Agent A fast lane is synthesizing a compact heuristic outline.",
+          "timestamp": "2026-04-05T09:03:08+00:00"
+        },
+        {
+          "details": {
+            "agent_key": "planner_a",
+            "agent_label": "Planner Agent A",
+            "flow": "planning",
+            "skipped": true,
+            "stage_count": 4,
+            "stage_index": 2,
+            "stage_key": "planner_a",
+            "status": "completed"
+          },
+          "event_type": "planner-agent-finished",
+          "message": "Planner Agent A was skipped in compact planning mode; a compact heuristic outline was saved instead.",
+          "timestamp": "2026-04-05T09:03:08+00:00"
+        },
+        {
+          "details": {
+            "agent_key": "planner_b",
+            "agent_label": "Planner Agent B",
+            "flow": "planning",
+            "stage_count": 4,
+            "stage_index": 3,
+            "stage_key": "planner_b",
+            "status": "running"
+          },
+          "event_type": "planner-agent-started",
+          "message": "Planner Agent B is packing the final execution plan.",
+          "timestamp": "2026-04-05T09:03:08+00:00"
+        },
+        {
+          "details": {
+            "request_source": "tauri-react-ui",
+            "requested_at": "2026-04-05T09:07:45+00:00",
+            "stop_after_current_step": false,
+            "stop_immediately": true
+          },
+          "event_type": "immediate-stop-requested",
+          "message": "Immediate stop requested. The current step will be ignored.",
+          "timestamp": "2026-04-05T09:07:45+00:00"
+        }
+      ]
+    },
+    "loop_state": {
+      "block_index": 0,
+      "counters": {
+        "empty_cycles": 0,
+        "no_progress_blocks": 0,
+        "regression_failures": 0
+      },
+      "current_checkpoint_id": null,
+      "current_checkpoint_lineage_id": null,
+      "current_safe_revision": "072fc2a8f110abd4cae0a1a964a16388199c5c03",
+      "current_task": null,
+      "last_block_completed_at": null,
+      "last_candidates": [],
+      "last_commit_hash": null,
+      "pending_checkpoint_approval": false,
+      "plan_locked": true,
+      "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd",
+      "repo_slug": "tetris-main-9489856d4e",
+      "stop_reason": null,
+      "stop_requested": false
+    },
+    "payload_cache_hit": false,
+    "plan": {
+      "closeout_codex_description": "Closeout",
+      "closeout_commit_hash": null,
+      "closeout_completed_at": null,
+      "closeout_deadline_at": "",
+      "closeout_depends_on": [],
+      "closeout_display_description": "Closeout",
+      "closeout_model": "",
+      "closeout_model_provider": "",
+      "closeout_notes": "",
+      "closeout_owned_paths": [
+        "README.md",
+        "docs/CLOSEOUT_REPORT.md"
+      ],
+      "closeout_parallel_group": "",
+      "closeout_reasoning_effort": "high",
+      "closeout_started_at": null,
+      "closeout_status": "not_started",
+      "closeout_success_criteria": "Closeout",
+      "closeout_title": "Closeout",
+      "default_test_command": "python -m pytest",
+      "execution_mode": "parallel",
+      "last_updated_at": "2026-04-05T08:58:45+00:00",
+      "plan_title": "tetris",
+      "project_prompt": "",
+      "steps": [],
+      "summary": "",
+      "workflow_mode": "standard"
+    },
+    "planning_progress": {
+      "completed_stages": 2,
+      "current_agent_label": "Planner Agent B",
+      "current_stage_index": 3,
+      "current_stage_key": "planner_b",
+      "current_stage_label": "Planner Agent B",
+      "current_stage_status": "running",
+      "event_type": "planner-agent-started",
+      "message": "Planner Agent B is packing the final execution plan.",
+      "percent": 62,
+      "stage_count": 4,
+      "stages": [
+        {
+          "index": 1,
+          "key": "context_scan",
+          "label": "Scan repository context",
+          "status": "completed"
+        },
+        {
+          "agent_label": "Planner Agent A",
+          "index": 2,
+          "key": "planner_a",
+          "label": "Planner Agent A",
+          "status": "completed"
+        },
+        {
+          "agent_label": "Planner Agent B",
+          "index": 3,
+          "key": "planner_b",
+          "label": "Planner Agent B",
+          "status": "running"
+        },
+        {
+          "index": 4,
+          "key": "finalize",
+          "label": "Validate and save plan",
+          "status": "pending"
+        }
+      ]
+    },
+    "progress": {
+      "caption": "No plan yet",
+      "completed": 0,
+      "currentStep": "",
+      "current_step": "",
+      "current_step_id": "",
+      "deadline_at": "",
+      "estimatedRemaining": null,
+      "estimated_remaining": null,
+      "failed": 0,
+      "percent": null,
+      "running": 0,
+      "total": 0
+    },
+    "progress_caption": "No plan yet",
+    "project": {
+      "archive_id": null,
+      "archived": false,
+      "archived_at": null,
+      "branch": "main",
+      "created_at": "2026-04-05T08:58:42+00:00",
+      "current_safe_revision": "072fc2a8f110abd4cae0a1a964a16388199c5c03",
+      "current_status": "running:generate-plan",
+      "display_name": "tetris",
+      "last_run_at": "2026-04-05T09:02:46+00:00",
+      "local_logs_mode": "repo",
+      "origin_url": "https://github.com/Ahnd6474/tetris.git",
+      "project_root": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e",
+      "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd",
+      "repo_kind": "local",
+      "repo_path": "C:\\Users\\alber\\GitHub\\tetris",
+      "repo_url": "https://github.com/Ahnd6474/tetris.git",
+      "slug": "tetris-main-9489856d4e",
+      "source_repo_id": null,
+      "vcs_backend": "git"
+    },
+    "queue_priority": 0,
+    "recent_blocks": [],
+    "recent_passes": [],
+    "reports": {
+      "attempt_history_text": "# Attempt History",
+      "closeout_report_file": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\docs\\CLOSEOUT_REPORT.md",
+      "closeout_report_text": "# Closeout Report\n\nNo closeout has been run yet.",
+      "common_requirements": {
+        "json_text": "{\n  \"updated_at\": \"2026-04-05T08:58:42+00:00\",\n  \"open_requirements\": [],\n  \"resolved_requirements\": []\n}",
+        "open_count": 0,
+        "open_items": [],
+        "path": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\state\\COMMON_REQUIREMENTS.json",
+        "resolved_count": 0,
+        "resolved_items": [],
+        "updated_at": "2026-04-05T08:58:42+00:00"
+      },
+      "contract_wave_audit": {
+        "jsonl_text": "",
+        "path": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\state\\CONTRACT_WAVE_AUDIT.jsonl",
+        "recent_items": []
+      },
+      "latest_failure": {},
+      "lineage_manifest_summary": {
+        "green_count": 0,
+        "latest_manifest": null,
+        "red_count": 0,
+        "total": 0,
+        "yellow_count": 0
+      },
+      "lineage_manifests": [],
+      "lineage_manifests_dir": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\state\\lineage_manifests",
+      "ml_experiment_report_text": "# ML Experiment Report\n\nNo ML experiment summary has been generated yet.",
+      "ml_results_svg_path": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\docs\\ML_EXPERIMENT_RESULTS.svg",
+      "planning_metrics": {
+        "entry_count": 2,
+        "latest_generated_at": "2026-04-05T09:03:08+00:00",
+        "path": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\logs\\planning_metrics.jsonl",
+        "recent_items": [
+          {
+            "block_index": 0,
+            "duration_ms": 0.781,
+            "flow": "planning",
+            "generated_at": "2026-04-05T09:03:08+00:00",
+            "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd",
+            "repo_slug": "tetris-main-9489856d4e",
+            "stage": "planner_a_fast_outline"
+          },
+          {
+            "block_index": 0,
+            "duration_ms": 21961.391,
+            "flow": "planning",
+            "generated_at": "2026-04-05T09:03:08+00:00",
+            "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd",
+            "repo_slug": "tetris-main-9489856d4e",
+            "stage": "context_scan"
+          }
+        ],
+        "slowest_item": {
+          "block_index": 0,
+          "duration_ms": 21961.391,
+          "flow": "planning",
+          "generated_at": "2026-04-05T09:03:08+00:00",
+          "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd",
+          "repo_slug": "tetris-main-9489856d4e",
+          "stage": "context_scan"
+        },
+        "stage_summary": [
+          {
+            "avg_ms": 21961.391,
+            "count": 1,
+            "flow": "planning",
+            "max_ms": 21961.391,
+            "stage": "context_scan",
+            "total_ms": 21961.391
+          },
+          {
+            "avg_ms": 0.781,
+            "count": 1,
+            "flow": "planning",
+            "max_ms": 0.781,
+            "stage": "planner_a_fast_outline",
+            "total_ms": 0.781
+          }
+        ]
+      },
+      "powerpoint_report_path": "",
+      "powerpoint_report_target_path": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\reports\\CLOSEOUT_REPORT.pptx",
+      "shared_contracts_path": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\docs\\SHARED_CONTRACTS.md",
+      "shared_contracts_text": "# Shared Contracts\n\nGuarded-overlap contract-wave state for the current managed repository.\n\n- Current spine version: spine-v1\n- Last updated: 2026-04-05T08:58:42+00:00\n- Known shared contracts: none recorded\n\n## Spine History\n- No contract checkpoints recorded yet.\n\n## Open Common Requirements\n\n- none\n\n## Resolved Common Requirements\n\n- none",
+      "spine": {
+        "current_version": "spine-v1",
+        "history_count": 0,
+        "json_text": "{\n  \"current_version\": \"spine-v1\",\n  \"updated_at\": \"2026-04-05T08:58:42+00:00\",\n  \"history\": []\n}",
+        "latest_checkpoint": null,
+        "path": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e\\state\\SPINE.json",
+        "recent_history": [],
+        "updated_at": "2026-04-05T08:58:42+00:00"
+      },
+      "word_report_enabled": false,
+      "word_report_path": ""
+    },
+    "run_control": {
+      "request_source": "tauri-react-ui",
+      "requested_at": "2026-04-05T09:07:45+00:00",
+      "stop_after_current_step": false,
+      "stop_immediately": true
+    },
+    "runtime": {
+      "allow_background_queue": true,
+      "allow_push": true,
+      "approval_mode": "never",
+      "auto_merge_pull_request": true,
+      "background_queue_priority": 0,
+      "billing_mode": "included",
+      "cached_input_cost_per_million_usd": 0.0,
+      "chat_local_model_provider": "",
+      "chat_model": "",
+      "chat_model_provider": "",
+      "checkpoint_interval_blocks": 1,
+      "codex_base_slug": "",
+      "codex_path": "codex.cmd",
+      "codex_variant_slug": "",
+      "effort": "medium",
+      "effort_selection_mode": "auto",
+      "empty_cycle_limit": 3,
+      "ensemble_claude_model": "claude-sonnet-4-6",
+      "ensemble_gemini_model": "gemini-3-flash-preview",
+      "ensemble_openai_model": "gpt-5.4",
+      "execution_mode": "parallel",
+      "execution_model": "gpt-5.3-codex-spark",
+      "extra_prompt": "",
+      "generate_word_report": false,
+      "git_user_email": "jakal-flow@example.invalid",
+      "git_user_name": "jakal-flow-bot",
+      "init_plan_prompt": "",
+      "input_cost_per_million_usd": 0.0,
+      "local_model_provider": "",
+      "max_blocks": 5,
+      "ml_max_cycles": 3,
+      "model": "gpt-5.3-codex-spark",
+      "model_preset": "",
+      "model_provider": "openai",
+      "model_selection_mode": "slug",
+      "model_slug_input": "gpt-5.3-codex-spark",
+      "no_progress_limit": 3,
+      "optimization_duplicate_block_lines": 4,
+      "optimization_large_file_lines": 350,
+      "optimization_long_function_lines": 80,
+      "optimization_max_files": 3,
+      "optimization_mode": "off",
+      "output_cost_per_million_usd": 0.0,
+      "parallel_memory_per_worker_gib": 3.0,
+      "parallel_worker_mode": "auto",
+      "parallel_workers": 0,
+      "per_pass_cost_usd": 0.0,
+      "planning_effort": "medium",
+      "provider_api_key_env": "OPENAI_API_KEY",
+      "provider_base_url": "",
+      "reasoning_output_cost_per_million_usd": 0.0,
+      "regression_limit": 3,
+      "repo_backend": "git",
+      "require_checkpoint_approval": false,
+      "sandbox_mode": "danger-full-access",
+      "save_project_logs": false,
+      "test_cmd": "python -m pytest",
+      "use_fast_mode": true,
+      "workflow_mode": "standard"
+    },
+    "runtime_insights": {
+      "cost": {
+        "estimated_total_cost_usd": 0.0,
+        "recent": {
+          "billing_mode": "included",
+          "configured": true,
+          "details": {},
+          "estimated_cost_usd": 0.0,
+          "usage": {
+            "cached_input_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 0
+          }
+        },
+        "recent_usage": {
+          "cached_input_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 0
+        },
+        "remaining": {
+          "billing_mode": "included",
+          "configured": true,
+          "details": {},
+          "estimated_cost_usd": 0.0,
+          "usage": {
+            "cached_input_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 0
+          }
+        },
+        "remaining_usage": {
+          "cached_input_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 0
+        }
+      },
+      "execution": {
+        "completed_step_count": 0,
+        "effort_baselines": [
+          {
+            "cost": {
+              "billing_mode": "included",
+              "configured": true,
+              "details": {},
+              "estimated_cost_usd": 0.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 6000,
+                "output_tokens": 2400,
+                "reasoning_output_tokens": 600,
+                "total_tokens": 9000
+              }
+            },
+            "effort": "low",
+            "estimated_duration_seconds": 300.0,
+            "usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 6000,
+              "output_tokens": 2400,
+              "reasoning_output_tokens": 600,
+              "total_tokens": 9000
+            }
+          },
+          {
+            "cost": {
+              "billing_mode": "included",
+              "configured": true,
+              "details": {},
+              "estimated_cost_usd": 0.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 11000,
+                "output_tokens": 4500,
+                "reasoning_output_tokens": 1500,
+                "total_tokens": 17000
+              }
+            },
+            "effort": "medium",
+            "estimated_duration_seconds": 540.0,
+            "usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 11000,
+              "output_tokens": 4500,
+              "reasoning_output_tokens": 1500,
+              "total_tokens": 17000
+            }
+          },
+          {
+            "cost": {
+              "billing_mode": "included",
+              "configured": true,
+              "details": {},
+              "estimated_cost_usd": 0.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 17000,
+                "output_tokens": 6500,
+                "reasoning_output_tokens": 3500,
+                "total_tokens": 27000
+              }
+            },
+            "effort": "high",
+            "estimated_duration_seconds": 840.0,
+            "usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 17000,
+              "output_tokens": 6500,
+              "reasoning_output_tokens": 3500,
+              "total_tokens": 27000
+            }
+          },
+          {
+            "cost": {
+              "billing_mode": "included",
+              "configured": true,
+              "details": {},
+              "estimated_cost_usd": 0.0,
+              "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 24000,
+                "output_tokens": 8500,
+                "reasoning_output_tokens": 5500,
+                "total_tokens": 38000
+              }
+            },
+            "effort": "xhigh",
+            "estimated_duration_seconds": 1200.0,
+            "usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 24000,
+              "output_tokens": 8500,
+              "reasoning_output_tokens": 5500,
+              "total_tokens": 38000
+            }
+          }
+        ],
+        "elapsed_seconds": 0.0,
+        "estimated_total_seconds": 0.0,
+        "pending_step_count": 0,
+        "remaining_seconds": 0.0,
+        "running_step_count": 0,
+        "step_estimates": []
+      },
+      "parallel": {
+        "cpu_logical_count": 12,
+        "cpu_parallel_limit": 3,
+        "memory_available_bytes": 8082923520,
+        "memory_budget_per_worker_gib": 3.0,
+        "memory_parallel_limit": 2,
+        "memory_total_bytes": 34027786240,
+        "reason": "automatic worker count derived from available compute resources (cpu/4 and memory budget)",
+        "recommended_workers": 2,
+        "requested_workers": 0,
+        "worker_mode": "auto"
+      }
+    },
+    "share": {
+      "active_session": null,
+      "project_active_session": null,
+      "server": {
+        "base_url": null,
+        "config": {
+          "access_token": "M7bakx8yxvLjvxS0r7XPaFTSjMwnbj1n",
+          "bind_host": "0.0.0.0",
+          "preferred_port": 0,
+          "public_base_url": ""
+        },
+        "host": "0.0.0.0",
+        "port": null,
+        "public_tunnel": {
+          "available": true,
+          "command_path": "C:\\Users\\alber\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Cloudflare.cloudflared_Microsoft.Winget.Source_8wekyb3d8bbwe\\cloudflared.EXE",
+          "pid": null,
+          "provider": "cloudflare-quick-tunnel",
+          "public_url": null,
+          "running": false,
+          "started_at": null,
+          "target_url": null
+        },
+        "running": false,
+        "share_base_url": null,
+        "share_base_url_source": null,
+        "viewer_path": "/share/view"
+      },
+      "sessions": []
+    },
+    "snapshot": {
+      "generated_at": "2026-04-05T09:07:49+00:00",
+      "loop_state": {
+        "block_index": 0,
+        "counters": {
+          "empty_cycles": 0,
+          "no_progress_blocks": 0,
+          "regression_failures": 0
+        },
+        "current_checkpoint_id": null,
+        "current_checkpoint_lineage_id": null,
+        "current_safe_revision": "072fc2a8f110abd4cae0a1a964a16388199c5c03",
+        "current_task": null,
+        "last_block_completed_at": null,
+        "last_candidates": [],
+        "last_commit_hash": null,
+        "pending_checkpoint_approval": false,
+        "plan_locked": true,
+        "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd",
+        "repo_slug": "tetris-main-9489856d4e",
+        "stop_reason": null,
+        "stop_requested": false
+      },
+      "project": {
+        "archive_id": null,
+        "archived": false,
+        "archived_at": null,
+        "branch": "main",
+        "created_at": "2026-04-05T08:58:42+00:00",
+        "current_safe_revision": "072fc2a8f110abd4cae0a1a964a16388199c5c03",
+        "current_status": "running:generate-plan",
+        "display_name": "tetris",
+        "last_run_at": "2026-04-05T09:02:46+00:00",
+        "local_logs_mode": "repo",
+        "origin_url": "https://github.com/Ahnd6474/tetris.git",
+        "project_root": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e",
+        "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd",
+        "repo_kind": "local",
+        "repo_path": "C:\\Users\\alber\\GitHub\\tetris",
+        "repo_url": "https://github.com/Ahnd6474/tetris.git",
+        "slug": "tetris-main-9489856d4e",
+        "source_repo_id": null,
+        "vcs_backend": "git"
+      },
+      "snapshot_epoch": 1775380069383,
+      "snapshot_id": "2b01b6909aaac1d14ffb367a9e2dbe2d931ac935",
+      "snapshot_kind": "cache_view",
+      "snapshot_sources": {
+        "cache_view": {
+          "generated_at": "2026-04-05T09:07:49+00:00",
+          "snapshot_epoch": 1775380069383,
+          "snapshot_id": "e72885c03ebbc943f96699308a324c9338f1fc25",
+          "snapshot_kind": "cache_view",
+          "source_cursor": {
+            "detail_level": "full",
+            "project_root": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e",
+            "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd"
+          },
+          "source_signature": "cc8b47508ce69f4befee5a62e6bb0607900b4c63",
+          "state_origin": "cache_view"
+        },
+        "event_derived": {
+          "generated_at": "2026-04-05T09:07:49+00:00",
+          "snapshot_epoch": 1775380069383,
+          "snapshot_id": "b85d9a30b4386a3aacb5bc6cf1d0ffb106955e28",
+          "snapshot_kind": "event_derived",
+          "source_cursor": {
+            "blocks": "blocks.jsonl:missing",
+            "passes": "passes.jsonl:missing",
+            "test_runs": "test_runs.jsonl:missing",
+            "ui_events": "ui_events.jsonl:file:2166:1775380065130105400"
+          },
+          "source_signature": "ui_events.jsonl:file:2166:1775380065130105400|blocks.jsonl:missing|passes.jsonl:missing|test_runs.jsonl:missing",
+          "state_origin": "events"
+        },
+        "live_runtime": {
+          "generated_at": "2026-04-05T09:07:49+00:00",
+          "snapshot_epoch": 1775380069383,
+          "snapshot_id": "c6fd6d9aa8c4c2802eb6b6108bd26f9ea75df94b",
+          "snapshot_kind": "live_runtime",
+          "source_cursor": {
+            "codex_path": "codex.cmd",
+            "provider_statuses": "",
+            "refresh_codex_status": false
+          },
+          "source_signature": "bf21a9e8fbc5a3846fb05b4fa0859e0917b2202f",
+          "state_origin": "process"
+        },
+        "persisted_state": {
+          "generated_at": "2026-04-05T09:07:49+00:00",
+          "snapshot_epoch": 1775380069383,
+          "snapshot_id": "11f5d99dc71fa1f8c4c8d77c47118bea604e226c",
+          "snapshot_kind": "persisted_state",
+          "source_cursor": {
+            "checkpoint_state": "CHECKPOINTS.json:file:23:1775379525513241200",
+            "execution_plan": "EXECUTION_PLAN.json:file:832:1775379525452835400:b1f565420ae164dc73dad114a1576d7ba0b9219b",
+            "loop_state": "LOOP_STATE.json:file:592:1775379525410838100",
+            "metadata": "metadata.json:file:796:1775379766787321000",
+            "run_control": "UI_RUN_CONTROL.json:file:151:1775380065118781500",
+            "runtime": "project_config.json:file:1947:1775379546448533800"
+          },
+          "source_signature": "metadata.json:file:796:1775379766787321000|project_config.json:file:1947:1775379546448533800|LOOP_STATE.json:file:592:1775379525410838100|CHECKPOINTS.json:file:23:1775379525513241200|EXECUTION_PLAN.json:file:832:1775379525452835400:b1f565420ae164dc73dad114a1576d7ba0b9219b|UI_RUN_CONTROL.json:file:151:1775380065118781500",
+          "state_origin": "disk"
+        }
+      },
+      "source_cursor": {
+        "detail_level": "full",
+        "project_root": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e",
+        "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd"
+      },
+      "source_signature": "cc8b47508ce69f4befee5a62e6bb0607900b4c63",
+      "state_origin": "cache_view"
+    },
+    "snapshot_sources": {
+      "cache_view": {
+        "generated_at": "2026-04-05T09:07:49+00:00",
+        "snapshot_epoch": 1775380069383,
+        "snapshot_id": "e72885c03ebbc943f96699308a324c9338f1fc25",
+        "snapshot_kind": "cache_view",
+        "source_cursor": {
+          "detail_level": "full",
+          "project_root": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e",
+          "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd"
+        },
+        "source_signature": "cc8b47508ce69f4befee5a62e6bb0607900b4c63",
+        "state_origin": "cache_view"
+      },
+      "event_derived": {
+        "generated_at": "2026-04-05T09:07:49+00:00",
+        "snapshot_epoch": 1775380069383,
+        "snapshot_id": "b85d9a30b4386a3aacb5bc6cf1d0ffb106955e28",
+        "snapshot_kind": "event_derived",
+        "source_cursor": {
+          "blocks": "blocks.jsonl:missing",
+          "passes": "passes.jsonl:missing",
+          "test_runs": "test_runs.jsonl:missing",
+          "ui_events": "ui_events.jsonl:file:2166:1775380065130105400"
+        },
+        "source_signature": "ui_events.jsonl:file:2166:1775380065130105400|blocks.jsonl:missing|passes.jsonl:missing|test_runs.jsonl:missing",
+        "state_origin": "events"
+      },
+      "live_runtime": {
+        "generated_at": "2026-04-05T09:07:49+00:00",
+        "snapshot_epoch": 1775380069383,
+        "snapshot_id": "c6fd6d9aa8c4c2802eb6b6108bd26f9ea75df94b",
+        "snapshot_kind": "live_runtime",
+        "source_cursor": {
+          "codex_path": "codex.cmd",
+          "provider_statuses": "",
+          "refresh_codex_status": false
+        },
+        "source_signature": "bf21a9e8fbc5a3846fb05b4fa0859e0917b2202f",
+        "state_origin": "process"
+      },
+      "persisted_state": {
+        "generated_at": "2026-04-05T09:07:49+00:00",
+        "snapshot_epoch": 1775380069383,
+        "snapshot_id": "11f5d99dc71fa1f8c4c8d77c47118bea604e226c",
+        "snapshot_kind": "persisted_state",
+        "source_cursor": {
+          "checkpoint_state": "CHECKPOINTS.json:file:23:1775379525513241200",
+          "execution_plan": "EXECUTION_PLAN.json:file:832:1775379525452835400:b1f565420ae164dc73dad114a1576d7ba0b9219b",
+          "loop_state": "LOOP_STATE.json:file:592:1775379525410838100",
+          "metadata": "metadata.json:file:796:1775379766787321000",
+          "run_control": "UI_RUN_CONTROL.json:file:151:1775380065118781500",
+          "runtime": "project_config.json:file:1947:1775379546448533800"
+        },
+        "source_signature": "metadata.json:file:796:1775379766787321000|project_config.json:file:1947:1775379546448533800|LOOP_STATE.json:file:592:1775379525410838100|CHECKPOINTS.json:file:23:1775379525513241200|EXECUTION_PLAN.json:file:832:1775379525452835400:b1f565420ae164dc73dad114a1576d7ba0b9219b|UI_RUN_CONTROL.json:file:151:1775380065118781500",
+        "state_origin": "disk"
+      }
+    },
+    "stats": {
+      "completed_steps": 0,
+      "failed_steps": 0,
+      "remaining_steps": 0,
+      "running_steps": 0,
+      "total_steps": 0
+    },
+    "summary": "Name: tetris\nDirectory: C:\\Users\\alber\\GitHub\\tetris\nGitHub: https://github.com/Ahnd6474/tetris.git\nBranch: main\nStatus: running:generate-plan\nWorkflow: standard\nModel: gpt-5.3-codex-spark  (medium) [OpenAI / Codex Cloud]\nVerification: python -m pytest\nRemaining Steps: None\nCloseout: not_started\nPlan Title: tetris\nLast Run: 2026-04-05T09:02:46+00:00",
+    "workspace_tree": [
+      {
+        "children": [
+          {
+            "children": [
+              {
+                "kind": "dir",
+                "label": "inspectionProfiles",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\.idea\\inspectionProfiles"
+              },
+              {
+                "kind": "file",
+                "label": "misc.xml",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\.idea\\misc.xml"
+              },
+              {
+                "kind": "file",
+                "label": "modules.xml",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\.idea\\modules.xml"
+              },
+              {
+                "kind": "file",
+                "label": "tetris.iml",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\.idea\\tetris.iml"
+              },
+              {
+                "kind": "file",
+                "label": "vcs.xml",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\.idea\\vcs.xml"
+              },
+              {
+                "kind": "file",
+                "label": "workspace.xml",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\.idea\\workspace.xml"
+              }
+            ],
+            "kind": "dir",
+            "label": ".idea",
+            "path": "C:\\Users\\alber\\GitHub\\tetris\\.idea"
+          },
+          {
+            "children": [
+              {
+                "kind": "file",
+                "label": "save.json",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\.local\\save.json"
+              }
+            ],
+            "kind": "dir",
+            "label": ".local",
+            "path": "C:\\Users\\alber\\GitHub\\tetris\\.local"
+          },
+          {
+            "children": [
+              {
+                "kind": "dir",
+                "label": "v",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\.pytest_cache\\v"
+              },
+              {
+                "kind": "file",
+                "label": ".gitignore",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\.pytest_cache\\.gitignore"
+              },
+              {
+                "kind": "file",
+                "label": "CACHEDIR.TAG",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\.pytest_cache\\CACHEDIR.TAG"
+              },
+              {
+                "kind": "file",
+                "label": "README.md",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\.pytest_cache\\README.md"
+              }
+            ],
+            "kind": "dir",
+            "label": ".pytest_cache",
+            "path": "C:\\Users\\alber\\GitHub\\tetris\\.pytest_cache"
+          },
+          {
+            "children": [
+              {
+                "kind": "dir",
+                "label": "Include",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\.venv\\Include"
+              },
+              {
+                "kind": "dir",
+                "label": "Lib",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\.venv\\Lib"
+              },
+              {
+                "kind": "dir",
+                "label": "Scripts",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\.venv\\Scripts"
+              },
+              {
+                "kind": "file",
+                "label": "pyvenv.cfg",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\.venv\\pyvenv.cfg"
+              }
+            ],
+            "kind": "dir",
+            "label": ".venv",
+            "path": "C:\\Users\\alber\\GitHub\\tetris\\.venv"
+          },
+          {
+            "children": [
+              {
+                "kind": "dir",
+                "label": "bdist.win-amd64",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\build\\bdist.win-amd64"
+              },
+              {
+                "kind": "dir",
+                "label": "lib",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\build\\lib"
+              }
+            ],
+            "kind": "dir",
+            "label": "build",
+            "path": "C:\\Users\\alber\\GitHub\\tetris\\build"
+          },
+          {
+            "children": [
+              {
+                "kind": "file",
+                "label": "runtime_boundary_audit.md",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\docs\\runtime_boundary_audit.md"
+              }
+            ],
+            "kind": "dir",
+            "label": "docs",
+            "path": "C:\\Users\\alber\\GitHub\\tetris\\docs"
+          },
+          {
+            "children": [
+              {
+                "kind": "dir",
+                "label": "tetris",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\src\\tetris"
+              },
+              {
+                "kind": "dir",
+                "label": "tetris.egg-info",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\src\\tetris.egg-info"
+              }
+            ],
+            "kind": "dir",
+            "label": "src",
+            "path": "C:\\Users\\alber\\GitHub\\tetris\\src"
+          },
+          {
+            "children": [
+              {
+                "kind": "dir",
+                "label": "__pycache__",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\tests\\__pycache__"
+              },
+              {
+                "kind": "file",
+                "label": "conftest.py",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\tests\\conftest.py"
+              },
+              {
+                "kind": "file",
+                "label": "test_app_shell.py",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\tests\\test_app_shell.py"
+              },
+              {
+                "kind": "file",
+                "label": "test_board_logic.py",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\tests\\test_board_logic.py"
+              },
+              {
+                "kind": "file",
+                "label": "test_bootstrap.py",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\tests\\test_bootstrap.py"
+              },
+              {
+                "kind": "file",
+                "label": "test_cli.py",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\tests\\test_cli.py"
+              },
+              {
+                "kind": "file",
+                "label": "test_object_persistence.py",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\tests\\test_object_persistence.py"
+              },
+              {
+                "kind": "file",
+                "label": "test_objectives.py",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\tests\\test_objectives.py"
+              }
+            ],
+            "kind": "dir",
+            "label": "tests",
+            "path": "C:\\Users\\alber\\GitHub\\tetris\\tests"
+          },
+          {
+            "children": [
+              {
+                "kind": "dir",
+                "label": "__pycache__",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\tetris\\__pycache__"
+              },
+              {
+                "kind": "file",
+                "label": "__init__.py",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\tetris\\__init__.py"
+              },
+              {
+                "kind": "file",
+                "label": "__main__.py",
+                "path": "C:\\Users\\alber\\GitHub\\tetris\\tetris\\__main__.py"
+              }
+            ],
+            "kind": "dir",
+            "label": "tetris",
+            "path": "C:\\Users\\alber\\GitHub\\tetris\\tetris"
+          },
+          {
+            "kind": "file",
+            "label": ".gitignore",
+            "path": "C:\\Users\\alber\\GitHub\\tetris\\.gitignore"
+          },
+          {
+            "kind": "file",
+            "label": "pyproject.toml",
+            "path": "C:\\Users\\alber\\GitHub\\tetris\\pyproject.toml"
+          },
+          {
+            "kind": "file",
+            "label": "README.md",
+            "path": "C:\\Users\\alber\\GitHub\\tetris\\README.md"
+          }
+        ],
+        "kind": "dir",
+        "label": "tetris",
+        "path": "C:\\Users\\alber\\GitHub\\tetris"
+      }
+    ]
+  },
+  "version": 19
+}

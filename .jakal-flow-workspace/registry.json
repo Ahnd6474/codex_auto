@@ -1,4 +1,14 @@
 {
   "history": {},
-  "projects": {}
+  "projects": {
+    "9489856d4e9f1fa04726f380a7515da929ece9cd": {
+      "branch": "main",
+      "project_root": "\\\\?\\C:\\Users\\alber\\GitHub\\Jakal-flow\\.jakal-flow-workspace\\projects\\tetris-main-9489856d4e",
+      "repo_id": "9489856d4e9f1fa04726f380a7515da929ece9cd",
+      "repo_kind": "local",
+      "repo_path": "C:\\Users\\alber\\GitHub\\tetris",
+      "repo_url": "https://github.com/Ahnd6474/tetris.git",
+      "slug": "tetris-main-9489856d4e"
+    }
+  }
 }

@@ -1,0 +1,104 @@
+# jakal-flow runtime failure
+generated_at: 2026-04-05T09:03:09+00:00
+source: ui-bridge
+command: generate-plan
+workspace_root: \\?\C:\Users\alber\GitHub\Jakal-flow\.jakal-flow-workspace
+repo_id: 9489856d4e9f1fa04726f380a7515da929ece9cd
+project_root: \\?\C:\Users\alber\GitHub\Jakal-flow\.jakal-flow-workspace\projects\tetris-main-9489856d4e
+repo_dir: C:\Users\alber\GitHub\tetris
+branch: main
+exception_type: RuntimeError
+exception_message: Model 'gpt-5.3-codex-spark' is not available for provider 'openai' on this machine. Choose a configured model or leave the model on auto/default routing.
+
+## Payload
+{
+  "branch": "main",
+  "display_name": "tetris",
+  "max_steps": 5,
+  "origin_url": "https://github.com/Ahnd6474/tetris.git",
+  "project_dir": "C:\\Users\\alber\\GitHub\\tetris",
+  "prompt": "현재 코드를 지우고, 일반적인 테트리스 앱을 개발해줘\n\n1. 40줄 모드\n2. 블리츠\n3. 연습 모드",
+  "runtime": {
+    "allow_background_queue": true,
+    "allow_push": true,
+    "approval_mode": "never",
+    "auto_merge_pull_request": true,
+    "background_queue_priority": 0,
+    "billing_mode": "included",
+    "cached_input_cost_per_million_usd": 0,
+    "chat_effort": "",
+    "chat_local_model_provider": "",
+    "chat_model": "",
+    "chat_model_provider": "",
+    "checkpoint_interval_blocks": 1,
+    "codex_base_slug": "",
+    "codex_path": "codex.cmd",
+    "codex_variant_slug": "",
+    "effort": "medium",
+    "effort_selection_mode": "auto",
+    "empty_cycle_limit": 3,
+    "ensemble_claude_model": "claude-sonnet-4-6",
+    "ensemble_gemini_model": "gemini-3-flash-preview",
+    "ensemble_openai_model": "gpt-5.4",
+    "execution_mode": "parallel",
+    "execution_model": "gpt-5.3-codex-spark",
+    "extra_prompt": "",
+    "generate_word_report": false,
+    "git_user_email": "jakal-flow@example.invalid",
+    "git_user_name": "jakal-flow-bot",
+    "init_plan_prompt": "",
+    "input_cost_per_million_usd": 0,
+    "local_model_provider": "",
+    "max_blocks": 5,
+    "ml_max_cycles": 3,
+    "model": "gpt-5.3-codex-spark",
+    "model_preset": "",
+    "model_provider": "openai",
+    "model_selection_mode": "slug",
+    "model_slug_input": "gpt-5.3-codex-spark",
+    "no_progress_limit": 3,
+    "optimization_duplicate_block_lines": 4,
+    "optimization_large_file_lines": 350,
+    "optimization_long_function_lines": 80,
+    "optimization_max_files": 3,
+    "optimization_mode": "off",
+    "output_cost_per_million_usd": 0,
+    "parallel_memory_per_worker_gib": 3,
+    "parallel_worker_mode": "auto",
+    "parallel_workers": 0,
+    "per_pass_cost_usd": 0,
+    "planning_effort": "medium",
+    "provider_api_key_env": "OPENAI_API_KEY",
+    "provider_base_url": "",
+    "reasoning_output_cost_per_million_usd": 0,
+    "regression_limit": 3,
+    "repo_backend": "git",
+    "require_checkpoint_approval": false,
+    "sandbox_mode": "danger-full-access",
+    "save_project_logs": false,
+    "test_cmd": "python -m pytest",
+    "use_fast_mode": true,
+    "workflow_mode": "standard"
+  }
+}
+
+## Traceback
+Traceback (most recent call last):
+  File "\\?\C:\Users\alber\GitHub\Jakal-flow\src\jakal_flow\ui_bridge.py", line 684, in run_command
+    result = handler(
+             ^^^^^^^^
+  File "\\?\C:\Users\alber\GitHub\Jakal-flow\src\jakal_flow\ui_bridge_commands\projects.py", line 130, in generate_plan
+    project, plan_state = ctx.orchestrator.generate_execution_plan(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\C:\Users\alber\GitHub\Jakal-flow\src\jakal_flow\orchestrator.py", line 721, in generate_execution_plan
+    return self._generate_execution_plan_with_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\C:\Users\alber\GitHub\Jakal-flow\src\jakal_flow\orchestrator.py", line 930, in _generate_execution_plan_with_context
+    result = self._run_pass_with_provider_fallback(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\C:\Users\alber\GitHub\Jakal-flow\src\jakal_flow\orchestrator.py", line 3332, in _run_pass_with_provider_fallback
+    run_result = active_runner.run_pass(
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+  File "\\?\C:\Users\alber\GitHub\Jakal-flow\src\jakal_flow\codex_runner.py", line 79, in run_pass
+    raise RuntimeError(preflight_error)
+RuntimeError: Model 'gpt-5.3-codex-spark' is not available for provider 'openai' on this machine. Choose a configured model or leave the model on auto/default routing.

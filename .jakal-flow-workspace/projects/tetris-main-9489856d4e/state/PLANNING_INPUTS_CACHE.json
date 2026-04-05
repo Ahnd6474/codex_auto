@@ -1,0 +1,15 @@
+{
+  "metadata": {
+    "sampled_docs": [
+      "docs/runtime_boundary_audit.md"
+    ]
+  },
+  "payload": {
+    "agents": "AGENTS.md not found.",
+    "docs": "## docs/runtime_boundary_audit.md\n# Runtime Boundary Audit\n\nThis brief reflects the verified runtime seams for the current runnable release prototype.\n\n## Current Subsystem Boundaries\n\n### Headless Engine\n\n- `src/tetris/engine/pieces.py` owns piece state, collision checks, lock resolution, hold rules, and board mutation.\n- `src/tetris/engine/loop.py...",
+    "readme": "# tetris\n\nStage-based puzzle Tetris prototype with a shared headless engine and a `tkinter` UI shell.\n\r\n## Project Structure\r\n\r\n- `src/tetris/engine`: falling-piece rules, bag generation, lock/clear handling, and game loop state.\r\n- `src/tetris/stage`: JSON-backed stage data, tile/object parsing, and objective evaluation.\r\n- `src/tetris/ui`: renderer-facing view models plus the `tkinter` renderer.\r\n- `src/tetris/app_shell.py`: the app controller that connects the engine, stage session, inputs, restart, and stage progression.\r\n- `tests`: engine, stage, UI, and end-to-end tutorial playthrough coverage.\r\n\r\n## Run Locally\n\nUse Python 3.12+ from the repository root.\n\n- `python -m tetris` launches the playable `tkinter` build.\n- `python -m tetris --headless --frames 30` runs the deterministic headless path.\n- `python -m pip install .` installs the packaged build and exposes the same CLI as `tetris`.\n- `tetris --headless --frames 30` runs the installed build through the same bootstrap path.\n- `python -m pytest` runs the test suite.\n\n## Startup And Save Paths\n\nBoth source execution (`python -m tetris`) and installed execution (`tetris`) enter the same CLI bootstrap in `tetris.cli:main`. That bootstrap resolves runtime mode, renderer strategy, stage source, and save path through `AppConfig.bootstrap(...)` before creating the app shell.\n\n- Source-tree defaults:\n  - stage source: `src/tetris/stage/stages.json`\n  - save path: `.local/save.json`\n- Installed defaults:\n  - stage source: bundled package data at `tetris.stage:stages.json`\n  - save path on Windows: `%LOCALAPPDATA%\\\\tetris\\\\save.json`\n  - fallback save path when `LOCALAPPDATA` is unset: `~/.local/state/tetris/save.json`\n- Override switches:\n  - `--runtime-mode {source,installed}`\n  - `--renderer {tk,null}` or `--headless`\n  - `--stage-source {bundled,file}` with `--stage-file PATH`\n  - `--save-path PATH`\n\n## Controls\n\r\n- `Left` / `Right`: move\r\n- `Up`: rotate\r\n- `Down`: soft drop\r\n- `Space`: hard drop\r\n- `C`: hold...",
+    "source": "Existing implementation files detected. Prefer extending or editing these paths instead of adding scaffold-only skeleton steps unless a genuinely new boundary is required: src/tetris/__init__.py, src/tetris/__main__.py, src/tetris/actions.py, src/tetris/app.py, src/tetris/app_shell.py, src/tetris/cli.py, src/tetris/config.py, src/tetris/engine/__init__.py, src/tetris/engine/loop.py, src/tetris/engine/pieces.py, plus 14 more."
+  },
+  "signature": "c7cb99a17193be6033baf25affafee802886292a",
+  "version": 2
+}
