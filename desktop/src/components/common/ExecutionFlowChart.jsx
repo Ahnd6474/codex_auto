@@ -220,7 +220,26 @@ function chartTopologySignature(steps = []) {
 }
 
 function resolveChartNodeVisuals(status = "", fallbackStatus = "") {
-  const resolvedStatus = String(status || "").trim().toLowerCase() || String(fallbackStatus || "").trim().toLowerCase();
+  const normalizedStatus = String(status || "").trim().toLowerCase();
+  const normalizedFallbackStatus = String(fallbackStatus || "").trim().toLowerCase();
+  const resolvedStatus =
+    normalizedStatus.includes("failed")
+      ? normalizedStatus
+      : normalizedFallbackStatus.includes("failed")
+        ? normalizedFallbackStatus
+        : normalizedStatus === "running:debugging" || normalizedFallbackStatus === "running:debugging"
+        ? "running:debugging"
+        : normalizedStatus === "awaiting_review" || normalizedFallbackStatus === "awaiting_review"
+          ? "awaiting_review"
+          : normalizedStatus === "syncing" || normalizedFallbackStatus === "syncing"
+            ? "syncing"
+            : normalizedFallbackStatus === "completed"
+              ? "completed"
+              : normalizedStatus.startsWith("queued")
+                ? normalizedFallbackStatus || "pending"
+                : normalizedStatus === "running"
+                  ? (normalizedFallbackStatus && normalizedFallbackStatus !== "running" ? normalizedFallbackStatus : "running")
+                  : normalizedStatus || normalizedFallbackStatus;
   const tone = statusTone(resolvedStatus);
   return {
     tone,
@@ -494,23 +513,23 @@ function buildChartData(steps = [], projectStatus = "", language = "en", activeL
   for (const item of checkpointItems) {
     const itemStatus = String(item?.status || "").trim().toLowerCase();
     const lineageId = String(item?.lineage_id || "").trim();
+    if (lineageId) {
+      registerLineageStatus(lineageId, itemStatus);
+    }
     const planRefs = Array.isArray(item?.plan_refs) ? item.plan_refs : [];
     for (const ref of planRefs) {
       registerStatus(ref, itemStatus);
-      if (lineageId) {
-        registerLineageStatus(lineageId, itemStatus);
-      }
     }
   }
   if (checkpointState?.pending && typeof checkpointState.pending === "object") {
     const pendingStatus = String(checkpointState.pending.status || "awaiting_review").trim().toLowerCase() || "awaiting_review";
     const pendingLineageId = String(checkpointState.pending.lineage_id || checkpointState.currentCheckpointLineageId || "").trim();
+    if (pendingLineageId) {
+      registerLineageStatus(pendingLineageId, pendingStatus);
+    }
     const pendingRefs = Array.isArray(checkpointState.pending.plan_refs) ? checkpointState.pending.plan_refs : [];
     for (const ref of pendingRefs) {
       registerStatus(ref, pendingStatus);
-      if (pendingLineageId) {
-        registerLineageStatus(pendingLineageId, pendingStatus);
-      }
     }
   }
   const checkpointLookup = {
@@ -700,7 +719,7 @@ function HorizontalStepper({ steps = [], projectStatus = "", language = "en", se
 }
 
 function ExecutionFlowChartComponent({ steps = [], detail = null, activeJob = null, language = "en", selectedStepId = "", onSelectStep = null }) {
-  const [viewMode, setViewMode] = useState("stepper");
+  const [viewMode, setViewMode] = useState("graph");
   const arrowId = useId().replace(/:/g, "-");
   const executionState = useMemo(() => deriveExecutionUiState(detail, null, activeJob), [detail, activeJob]);
   const chart = useMemo(

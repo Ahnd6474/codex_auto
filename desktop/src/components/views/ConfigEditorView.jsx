@@ -11,6 +11,7 @@ import {
   normalizeMemoryBudgetGiB,
   normalizedModelProvider,
   providerAvailable,
+  providerCardLabel,
   providerStatusReason,
   reasoningEffortLabel,
   resolveRuntimeModelSelectionState,
@@ -105,40 +106,22 @@ const PROVIDER_CATEGORIES = [
   {
     key: "closed",
     label: "Closed",
-    providers: [
-      { value: "openai", label: "OpenAI" },
-      { value: "claude", label: "Claude" },
-      { value: "gemini", label: "Gemini" },
-    ],
+    providers: ["openai", "claude", "gemini"],
   },
   {
     key: "opensource",
     label: "Open Source",
-    providers: [
-      { value: "qwen_code", label: "Qwen Code" },
-      { value: "deepseek", label: "DeepSeek" },
-      { value: "kimi", label: "Kimi" },
-      { value: "minimax", label: "MiniMax" },
-      { value: "glm", label: "GLM" },
-      { value: "openrouter", label: "OpenRouter" },
-      { value: "opencdk", label: "OpenCDK" },
-    ],
+    providers: ["qwen_code", "deepseek", "kimi", "minimax", "glm", "openrouter", "opencdk"],
   },
   {
     key: "oss",
     label: "Local / OSS",
-    providers: [
-      { value: "ollama", label: "Ollama" },
-      { value: "local_openai", label: "Local OpenAI" },
-      { value: "oss", label: "LM Studio / OSS" },
-    ],
+    providers: ["ollama", "local_openai", "oss"],
   },
   {
     key: "ensemble",
     label: "Ensemble",
-    providers: [
-      { value: "ensemble", label: "Claude + GPT Ensemble" },
-    ],
+    providers: ["ensemble"],
   },
 ];
 
@@ -187,7 +170,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
   const selectedExecutionModel = selectionState.selectedExecutionModel || "";
   const selectedExecutionModelVisible = selectionState.selectedExecutionModelVisible;
   const activeCategory = PROVIDER_CATEGORIES.find((category) => (
-    category.providers.some((provider) => provider.value === selectedProvider)
+    category.providers.some((provider) => provider === selectedProvider)
   ))?.key || "closed";
   const activeCategoryConfig = PROVIDER_CATEGORIES.find((category) => category.key === activeCategory) || PROVIDER_CATEGORIES[0];
   const providerUnavailable = !providerAvailable(selectedProvider, codexStatus);
@@ -211,7 +194,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
               key={category.key}
               className={`provider-cat-tab ${activeCategory === category.key ? "active" : ""}`}
               onClick={() => {
-                const firstProvider = category.providers[0]?.value || "openai";
+                const firstProvider = category.providers[0] || "openai";
                 onChangeForm((current) => ({
                   ...current,
                   runtime: applyProviderDefaults(current.runtime || {}, firstProvider),
@@ -227,7 +210,8 @@ export const ConfigEditorView = memo(function ConfigEditorView({
 
         {activeCategory !== "ensemble" ? (
           <div className="provider-sub-grid" style={{ marginTop: "8px" }}>
-            {activeCategoryConfig.providers.map(({ value, label }) => {
+            {activeCategoryConfig.providers.map((value) => {
+              const label = providerCardLabel(value, runtime?.local_model_provider);
               const installed = providerAvailable(value, codexStatus);
               return (
                 <button

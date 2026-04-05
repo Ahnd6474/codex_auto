@@ -26,7 +26,10 @@ import {
   modelDisplayName,
   mergeModelCatalogs,
   normalizedLocalModelProvider,
+  providerOptionLabel,
+  providerShortName,
   resolveModelCatalogEntry,
+  runtimeExecutionModel,
   stepModelSelectionPatch,
   parallelLimitDescription,
   parallelLimitTone,
@@ -226,27 +229,21 @@ function effortDescription(value, language) {
 }
 
 /* ?? Model chip label helpers ?? */
-const PROVIDER_SHORT = {
-  openai: "Codex", claude: "Claude", gemini: "Gemini", ensemble: "Ensemble",
-  ollama: "Ollama", deepseek: "DeepSeek", qwen_code: "Qwen", kimi: "Kimi", minimax: "MiniMax",
-  glm: "GLM", openrouter: "OpenRouter", opencdk: "CDK", local_openai: "Local", oss: "OSS",
-};
-
 const RUN_PROVIDER_OPTIONS = [
-  ["ensemble", "option.providerEnsemble"],
-  ["openai", "Codex CLI"],
-  ["claude", "Claude Code"],
-  ["gemini", "Gemini CLI"],
-  ["ollama", "Ollama"],
-  ["qwen_code", "Qwen Code"],
-  ["deepseek", "DeepSeek via Claude Code"],
-  ["kimi", "Kimi"],
-  ["minimax", "MiniMax via Claude Code"],
-  ["glm", "GLM via Claude Code"],
-  ["openrouter", "OpenRouter"],
-  ["opencdk", "OpenCDK"],
-  ["local_openai", "Local OpenAI-Compatible"],
-  ["oss", "LM Studio / Local OSS"],
+  "ensemble",
+  "openai",
+  "claude",
+  "gemini",
+  "ollama",
+  "qwen_code",
+  "deepseek",
+  "kimi",
+  "minimax",
+  "glm",
+  "openrouter",
+  "opencdk",
+  "local_openai",
+  "oss",
 ];
 
 function parallelRunControlViewPropsEqual(previousProps, nextProps) {
@@ -283,20 +280,15 @@ function parallelRunControlViewPropsEqual(previousProps, nextProps) {
   );
 }
 
-function modelChipLabel(form, detail) {
-  const model = String(
-    form?.runtime?.execution_model
-      || form?.runtime?.model_slug_input
-      || form?.runtime?.model
-      || detail?.runtime?.execution_model
-      || detail?.runtime?.model
-      || "",
-  ).trim();
+function modelChipLabel(form, detail, modelCatalog = []) {
+  const runtime = form?.runtime || detail?.runtime || {};
+  const model = runtimeExecutionModel(runtime);
   const provider = String(form?.runtime?.model_provider || detail?.runtime?.model_provider || "openai").trim().toLowerCase();
   if (model && model !== "auto") {
-    return model.length > 16 ? `${model.slice(0, 15)}\u2026` : model;
+    const label = modelDisplayName(modelCatalog, model) || model;
+    return label.length > 16 ? `${label.slice(0, 15)}\u2026` : label;
   }
-  return PROVIDER_SHORT[provider] || provider;
+  return providerShortName(provider, runtime?.local_model_provider);
 }
 
 /* ?? ModelEffortChip: single button + popover ?? */
@@ -304,12 +296,12 @@ function ModelEffortChip({ form, detail, busy, onChangeForm, language, modelCata
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const runtime = form?.runtime || detail?.runtime || {};
-  const selectedModel = String(runtime?.execution_model || runtime?.model_slug_input || runtime?.model || "").trim();
+  const selectedModel = runtimeExecutionModel(runtime);
   const reasoningOptions = MODEL_REASONING_OPTIONS;
   const currentEffort = String(runtime?.effort_selection_mode || "").trim().toLowerCase() === AUTO_REASONING_OPTION
     ? AUTO_REASONING_OPTION
     : String(runtime?.effort || "medium").trim().toLowerCase() || "medium";
-  const chipModel = modelChipLabel(form, detail);
+  const chipModel = modelChipLabel(form, detail, modelCatalog);
 
   useEffect(() => {
     if (!open) return;
@@ -405,13 +397,13 @@ function stepModelPlaceholder(step, runtime) {
   if (provider === "minimax") return MINIMAX_DEFAULT_MODEL;
   if (provider === "glm") return GLM_DEFAULT_MODEL;
   if (provider === "openai" || provider === "ensemble") {
-    return String(runtime?.execution_model || runtime?.model_slug_input || runtime?.model || "gpt-5.4").trim() || "gpt-5.4";
+    return runtimeExecutionModel(runtime, "gpt-5.4") || "gpt-5.4";
   }
   return "";
 }
 
 function executionModelLabel(modelCatalog = [], runtime = {}) {
-  const model = String(runtime?.execution_model || runtime?.model_slug_input || runtime?.model || "").trim();
+  const model = runtimeExecutionModel(runtime);
   return modelDisplayName(modelCatalog, model) || model || "gpt-5.4";
 }
 
@@ -783,7 +775,7 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
   const { language, t } = useI18n();
   const promptRef = useRef(null);
   const providerOptions = useMemo(
-    () => RUN_PROVIDER_OPTIONS.map(([value, label]) => [value, label === "option.providerEnsemble" ? t("option.providerEnsemble") : label]),
+    () => RUN_PROVIDER_OPTIONS.map((value) => [value, value === "ensemble" ? t("option.providerEnsemble") : providerOptionLabel(value)]),
     [t],
   );
 
@@ -855,7 +847,7 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
     ? selectedStepModelOptions.some((item) => item.value === selectedStepModelValue)
     : false;
   const selectedStepExecutionModelLabel = executionModelLabel(modelCatalog, detail?.runtime || {});
-  const selectedStepExecutionModel = String(detail?.runtime?.execution_model || detail?.runtime?.model_slug_input || detail?.runtime?.model || "").trim().toLowerCase();
+  const selectedStepExecutionModel = runtimeExecutionModel(detail?.runtime || {}).toLowerCase();
   const parallelLimitValue = parallelWorkerLabel(parallelInsight.recommended_workers ?? 1, language);
   const parallelLimitDetails = parallelLimitDescription(parallelInsight, language);
   const parallelLimitCardTone = parallelLimitTone(parallelInsight);
@@ -1254,7 +1246,7 @@ export const ParallelRunControlView = memo(function ParallelRunControlView({
               </span>
               <button
                 type="button"
-                className="run-prompt-strip__action-btn"
+                className="run-prompt-strip__action-btn run-prompt-collapsed__open"
                 onClick={() => setPromptExpanded(true)}
               >
                 {language === "ko" ? "Open" : "Open"}

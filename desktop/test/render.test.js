@@ -5259,7 +5259,7 @@ test("IdeToolbar, StatusBar, and ConfigEditorView stay aligned on the selected p
   assert.match(configHtml, /Demo Project/);
   assert.match(configHtml, /main/);
   assert.match(configHtml, /C:\/demo/);
-  assert.match(configHtml, /<input value="gpt-5\.4"\/>/);
+  assert.match(configHtml, /<select[^>]*>.*<option value="gpt-5\.4" selected="">gpt-5\.4<\/option>.*<\/select>/s);
 });
 
 test("ConfigEditorView keeps a saved execution model visible even when the provider differs", async () => {

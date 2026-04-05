@@ -1,7 +1,7 @@
 import { Suspense, memo, useEffect, useRef } from "react";
 import { useI18n } from "../../i18n";
 import { createPreloadableNamedExport, scheduleIdleTask } from "../../lazyLoad";
-import { projectDetailStatus, sameQueuedJobs } from "../../utils";
+import { planHasFlowContent, projectDetailStatus, sameQueuedJobs } from "../../utils";
 
 function AiChatTabIcon() {
   return (
@@ -122,16 +122,6 @@ function normalizeWorkspaceTab(tab) {
     return "flow";
   }
   return normalized;
-}
-
-function planHasFlowContent(detail, planDraft) {
-  const planningStatus = String(detail?.planning_progress?.status || detail?.planning_progress?.planningStatus || "").trim().toLowerCase();
-  const livePlan = detail?.plan || planDraft;
-  return Boolean(
-    planningStatus === "running"
-    || String(livePlan?.project_prompt || "").trim()
-    || (Array.isArray(livePlan?.steps) && livePlan.steps.length > 0),
-  );
 }
 
 function centerWorkspacePropsEqual(previousProps, nextProps) {

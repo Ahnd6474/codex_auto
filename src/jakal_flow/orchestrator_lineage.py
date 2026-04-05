@@ -647,7 +647,7 @@ class OrchestratorLineageMixin:
         local_head = self.git.local_branch_revision(repo_dir, target_branch)
         if not local_head:
             return False, "missing_local_branch"
-        if target_commit:
+        if target_commit and target_commit != local_head:
             commit_result = self.git.run(["rev-parse", "--verify", target_commit], cwd=repo_dir, check=False)
             if commit_result.returncode != 0:
                 return False, "missing_commit"

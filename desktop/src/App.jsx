@@ -11,7 +11,7 @@ import { nextRightSidebarState, nextSidebarTab } from "./controllerHelpers";
 import { useDesktopController } from "./hooks/useDesktopController";
 import { useI18n } from "./i18n";
 import { lazyNamedExport } from "./lazyLoad";
-import { toggleStepSelection } from "./utils";
+import { planHasFlowContent, toggleStepSelection } from "./utils";
 
 const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 500;
@@ -183,15 +183,10 @@ export default function App() {
   const rightPaneWidth = controller.rightCollapsed ? RIGHT_RAIL_WIDTH : controller.rightWidth;
   const rightSidebarStyle = { width: rightPaneWidth, minWidth: rightPaneWidth, flex: `0 0 ${rightPaneWidth}px` };
   const compact = Boolean(controller.programSettings?.compact_mode);
-  const hasFlowContent = useMemo(() => {
-    const planningStatus = String(detail?.planning_progress?.status || detail?.planning_progress?.planningStatus || "").trim().toLowerCase();
-    const livePlan = detail?.plan || controller.planDraft;
-    return Boolean(
-      planningStatus === "running"
-      || String(livePlan?.project_prompt || "").trim()
-      || (Array.isArray(livePlan?.steps) && livePlan.steps.length > 0)
-    );
-  }, [detail?.plan, detail?.planning_progress?.planningStatus, detail?.planning_progress?.status, controller.planDraft]);
+  const hasFlowContent = useMemo(
+    () => planHasFlowContent(detail, controller.planDraft),
+    [detail, controller.planDraft],
+  );
 
   useEffect(() => {
     const activeCommand = String(controller.activeJob?.command || "").trim().toLowerCase();
