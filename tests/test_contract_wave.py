@@ -142,6 +142,23 @@ class ContractWaveTests(unittest.TestCase):
         self.assertEqual(red.promotion_class, "red")
         self.assertFalse(red.auto_promote_eligible)
 
+    def test_normalize_execution_step_policy_removes_forbidden_scope_that_overlaps_allowed_paths(self) -> None:
+        step = normalize_execution_step_policy(
+            ExecutionStep(
+                step_id="ST1",
+                title="Contract bootstrap",
+                owned_paths=["cow/kernel/riscv.h", "cow/kernel/defs.h"],
+                shared_reviewed_paths=["cow/kernel/riscv.h", "cow/kernel/defs.h"],
+                forbidden_core_paths=["cow/kernel"],
+                step_type="contract",
+                scope_class="shared_reviewed",
+            )
+        )
+
+        self.assertEqual(step.primary_scope_paths, ["cow/kernel/riscv.h", "cow/kernel/defs.h"])
+        self.assertEqual(step.forbidden_core_paths, [])
+        self.assertEqual(step.metadata.get("forbidden_core_paths"), [])
+
     def test_can_auto_promote_lineage_step_requires_green_assessment(self) -> None:
         orchestrator = Orchestrator(Path.cwd() / ".tmp_contract_wave_workspace")
         step = ExecutionStep(step_id="ST1", title="Leaf feature")

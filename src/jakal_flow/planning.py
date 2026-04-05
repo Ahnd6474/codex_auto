@@ -958,6 +958,11 @@ def extract_plan_items(plan_text: str) -> list[PlanItem]:
         if match and len(tokenize(match.group("body"))) >= 3:
             item_id = match.group("id")
             items.append(PlanItem(item_id=item_id, text=match.group("body").strip()))
+            continue
+        match = re.match(r"#{1,6}\s+(?P<id>[A-Z]{2,}\d+)\.\s+(?P<body>.+)", stripped)
+        if match and len(tokenize(match.group("body"))) >= 2:
+            item_id = match.group("id")
+            items.append(PlanItem(item_id=item_id, text=match.group("body").strip()))
     deduped: list[PlanItem] = []
     seen: set[str] = set()
     for item in items:

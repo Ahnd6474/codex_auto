@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
@@ -136,6 +137,39 @@ class Orchestrator(
         "collected 0 items",
         "no tests ran",
         "modulenotfounderror: no module named 'pytest'",
+    )
+    _VERIFICATION_INFRASTRUCTURE_PATTERNS = (
+        ("verification_infrastructure_failure", r"permission denied", "Verification infrastructure reported a permission error."),
+        ("verification_infrastructure_failure", r"not recognized as the name of a cmdlet", "Verification infrastructure could not launch a required command."),
+        ("verification_infrastructure_failure", r"modulenotfounderror:\s*no module named ['\"]pytest['\"]", "Verification environment is missing pytest."),
+        ("verification_infrastructure_failure", r"pytest:\s*error", "Verification command invocation is invalid."),
+        ("verification_infrastructure_failure", r"error:\s*file or directory not found", "Verification command referenced a missing file."),
+        (
+            "verification_infrastructure_failure",
+            r"(?:(?:bash|python(?:3)?|pytest|make|git|uv|gcc|g\+\+|cargo|npm|node|qemu|grade-lab[^\s:]*)[^\n]*(?:command not found|no such file or directory)|(?:command not found|no such file or directory)[^\n]*(?:bash|python(?:3)?|pytest|make|git|uv|gcc|g\+\+|cargo|npm|node|qemu|grade-lab[^\s:]*))",
+            "Verification infrastructure could not locate a required tool.",
+        ),
+    )
+    _VERIFICATION_FAILURE_PATTERNS = (
+        ("verification_test_failed", r":\s*fail\b", "Verification output reported a failing test."),
+        ("verification_test_failed", r"\bsome tests failed\b", "Verification output reported failing tests."),
+        ("verification_test_failed", r"\bfailed\b", "Verification output reported a failure."),
+        ("verification_test_failed", r"\bmissing '\^", "Verification output reported a missing expected assertion."),
+        ("verification_test_failed", r"\btimeout!\s*running\b", "Verification output reported a timeout."),
+        ("verification_test_failed", r"\bunexpected scause\b", "Verification output reported a runtime trap."),
+        ("verification_test_failed", r"\bsegmentation fault\b", "Verification output reported a segmentation fault."),
+        ("verification_test_failed", r"\btraceback \(most recent call last\)", "Verification output reported a Python traceback."),
+        ("verification_test_failed", r"\bpanic:", "Verification output reported a panic."),
+        ("verification_test_failed", r"\bassert(?:ion)?error\b", "Verification output reported an assertion failure."),
+        ("verification_test_failed", r"make:\s*\*\*\*", "Verification output reported a build failure."),
+        ("verification_test_failed", r"\bfatal error:", "Verification output reported a fatal build error."),
+        ("verification_test_failed", r"\bcannot read [^\n]+", "Verification output reported a missing required artifact."),
+    )
+    _HOUSEKEEPING_PATHS = frozenset(
+        {
+            ".gitignore",
+            "jakal-flow-logs",
+        }
     )
 
     def __init__(self, workspace_root: Path) -> None:
@@ -684,15 +718,54 @@ class Orchestrator(
         progress_callback: Callable[[ProjectContext, str, str, dict[str, object] | None], None] | None = None,
     ) -> tuple[ProjectContext, ExecutionPlanState]:
         context = self.setup_local_project(project_dir=project_dir, runtime=runtime, branch=branch, origin_url=origin_url)
+        return self._generate_execution_plan_with_context(
+            context=context,
+            runtime=runtime,
+            project_prompt=project_prompt,
+            max_steps=max_steps,
+            progress_callback=progress_callback,
+        )
+
+    def generate_transient_execution_plan(
+        self,
+        project_dir: Path,
+        runtime: RuntimeOptions,
+        project_prompt: str,
+        branch: str = "main",
+        max_steps: int = 6,
+        origin_url: str = "",
+        display_name: str = "",
+        progress_callback: Callable[[ProjectContext, str, str, dict[str, object] | None], None] | None = None,
+    ) -> tuple[ProjectContext, ExecutionPlanState]:
+        context = self.setup_transient_local_project(
+            project_dir=project_dir,
+            runtime=runtime,
+            branch=branch,
+            origin_url=origin_url,
+            display_name=display_name,
+        )
+        return self._generate_execution_plan_with_context(
+            context=context,
+            runtime=runtime,
+            project_prompt=project_prompt,
+            max_steps=max_steps,
+            progress_callback=progress_callback,
+        )
+
+    def _generate_execution_plan_with_context(
+        self,
+        *,
+        context: ProjectContext,
+        runtime: RuntimeOptions,
+        project_prompt: str,
+        max_steps: int,
+        progress_callback: Callable[[ProjectContext, str, str, dict[str, object] | None], None] | None = None,
+    ) -> tuple[ProjectContext, ExecutionPlanState]:
         project_prompt = project_prompt.strip()
         previous_plan_state = self.load_execution_plan_state(context)
         workflow_mode = normalize_workflow_mode(runtime.workflow_mode)
         normalized_execution_mode = self._normalize_execution_mode(runtime.execution_mode)
-        planning_effort = normalize_reasoning_effort(
-            getattr(runtime, "planning_effort", ""),
-            fallback=normalize_reasoning_effort(runtime.effort, fallback="high"),
-        )
-        planning_effort = self._planning_effort_for_runtime(runtime, planning_effort)
+        planning_effort = self._resolved_planning_effort(runtime)
         planning_stage_count = 4
 
         def report_progress(event_type: str, message: str, details: dict[str, object] | None = None) -> None:
@@ -1033,6 +1106,13 @@ class Orchestrator(
         current_index = effort_ladder.index(normalized_effort) if normalized_effort in effort_ladder else 1
         return effort_ladder[max(0, current_index - 1)]
 
+    def _resolved_planning_effort(self, runtime: RuntimeOptions) -> str:
+        planning_effort = normalize_reasoning_effort(
+            getattr(runtime, "planning_effort", ""),
+            fallback=normalize_reasoning_effort(runtime.effort, fallback="high"),
+        )
+        return self._planning_effort_for_runtime(runtime, planning_effort)
+
     def _postprocess_generated_plan_steps(
         self,
         steps: list[ExecutionStep],
@@ -1218,15 +1298,162 @@ class Orchestrator(
             changed_paths=changed_files,
         )
 
+    def _verification_output_guard_failure(
+        self,
+        test_result: TestRunResult,
+    ) -> tuple[str, str, bool] | None:
+        stdout = read_text(test_result.stdout_file)
+        stderr = read_text(test_result.stderr_file)
+        combined = "\n".join(
+            part for part in (stdout, stderr, str(test_result.failure_reason or "").strip()) if part
+        )
+        if not combined.strip():
+            return None
+        for reason_code, pattern, message in self._VERIFICATION_INFRASTRUCTURE_PATTERNS:
+            match = re.search(pattern, combined, re.IGNORECASE | re.MULTILINE)
+            if match:
+                detail = compact_text(match.group(0).strip(), max_chars=180)
+                return reason_code, f"{message} {detail}".strip(), True
+        for reason_code, pattern, message in self._VERIFICATION_FAILURE_PATTERNS:
+            match = re.search(pattern, combined, re.IGNORECASE | re.MULTILINE)
+            if match:
+                detail = compact_text(match.group(0).strip(), max_chars=180)
+                return reason_code, f"{message} {detail}".strip(), False
+        return None
+
+    def _step_scope_guard_failure(
+        self,
+        execution_step: ExecutionStep | None,
+        changed_files: list[str] | None,
+    ) -> tuple[str, str, bool] | None:
+        normalized_changed_files = [
+            path for path in self._normalize_owned_paths(changed_files or []) if not self._is_housekeeping_path(path)
+        ]
+        if not normalized_changed_files:
+            if self._step_allows_read_only_completion(execution_step):
+                return None
+            return (
+                "no_changed_files",
+                "The block did not produce any repository changes, so it should not be treated as completed.",
+                True,
+            )
+        if execution_step is None:
+            return None
+        owned_paths = self._normalize_owned_paths(getattr(execution_step, "owned_paths", []))
+        if not owned_paths:
+            return None
+        for changed_path in normalized_changed_files:
+            for owned_path in owned_paths:
+                if self._owned_paths_overlap_level(changed_path, owned_path) != "none":
+                    return None
+        changed_preview = ", ".join(normalized_changed_files[:4])
+        owned_preview = ", ".join(owned_paths[:4])
+        return (
+            "out_of_scope_changes",
+            (
+                "The block changed files outside the execution step scope. "
+                f"Changed: {changed_preview or 'none'}. "
+                f"Expected overlap with: {owned_preview or 'none'}."
+            ),
+            True,
+        )
+
+    def _is_housekeeping_path(self, path: str) -> bool:
+        normalized = str(path or "").strip().replace("\\", "/").rstrip("/")
+        if not normalized:
+            return False
+        if normalized in self._HOUSEKEEPING_PATHS:
+            return True
+        return any(normalized.startswith(f"{item}/") for item in self._HOUSEKEEPING_PATHS)
+
+    def _step_allows_read_only_completion(self, execution_step: ExecutionStep | None) -> bool:
+        if execution_step is None:
+            return False
+        step_kind = self._step_kind(execution_step)
+        step_type = str(getattr(execution_step, "step_type", "") or "").strip().lower()
+        if step_kind in {"barrier", "join"} or step_type in {"contract", "analysis", "review"}:
+            return True
+        metadata = execution_step.metadata if isinstance(execution_step.metadata, dict) else {}
+        text_blob = " ".join(
+            str(part or "").strip().lower()
+            for part in (
+                execution_step.title,
+                execution_step.display_description,
+                execution_step.codex_description,
+                execution_step.success_criteria,
+                metadata.get("implementation_notes", ""),
+            )
+        )
+        read_only_markers = (
+            "read-only",
+            "do not modify",
+            "without modifying",
+            "no file writes",
+            "inspect ",
+            "confirm ",
+            "validate ",
+            "capture ",
+            "check ",
+        )
+        return any(marker in text_blob for marker in read_only_markers)
+
+    def _revert_housekeeping_changes(self, context: ProjectContext, execution_step: ExecutionStep | None) -> list[str]:
+        changed_files = self.git.changed_files(context.paths.repo_dir)
+        if not changed_files:
+            return []
+        if execution_step is not None:
+            owned_paths = set(self._normalize_owned_paths(getattr(execution_step, "owned_paths", [])))
+        else:
+            owned_paths = set()
+        revert_paths = [
+            path
+            for path in self._normalize_owned_paths(changed_files)
+            if self._is_housekeeping_path(path) and path not in owned_paths
+        ]
+        if not revert_paths:
+            return []
+        self.git.run(["checkout", "--", *revert_paths], cwd=context.paths.repo_dir, check=False)
+        return revert_paths
+
+    def _apply_guard_failure(
+        self,
+        run_result: CodexRunResult,
+        test_result: TestRunResult,
+        *,
+        reason_code: str,
+        message: str,
+    ) -> None:
+        diagnostics = run_result.diagnostics if isinstance(run_result.diagnostics, dict) else {}
+        diagnostics["guard_failure_reason_code"] = str(reason_code or "").strip()
+        diagnostics["guard_failure_message"] = str(message or "").strip()
+        run_result.diagnostics = diagnostics
+        test_result.returncode = test_result.returncode or 1
+        test_result.failure_reason = compact_text(str(message or "").strip(), max_chars=280)
+        test_result.summary = compact_text(
+            f"{test_result.summary} [guard:{reason_code}] {test_result.failure_reason}".strip(),
+            max_chars=320,
+        )
+
+    def _guard_failure_from_run_result(self, run_result: CodexRunResult) -> tuple[str, str] | None:
+        diagnostics = run_result.diagnostics if isinstance(run_result.diagnostics, dict) else {}
+        reason_code = str(diagnostics.get("guard_failure_reason_code", "") or "").strip()
+        if not reason_code:
+            return None
+        message = str(diagnostics.get("guard_failure_message", "") or "").strip() or "Execution guard rejected the block result."
+        return reason_code, message
+
     def _debugger_skip_reason(
         self,
         *,
         changed_files: list[str] | None,
         test_result: TestRunResult,
         partial_failure: bool = False,
+        guard_failure_reason: str | None = None,
     ) -> str | None:
         if partial_failure:
             return "partial_failure_prefers_serial_recovery"
+        if str(guard_failure_reason or "").strip():
+            return str(guard_failure_reason).strip()
         normalized_changed_files = [str(path).strip() for path in changed_files or [] if str(path).strip()]
         if not normalized_changed_files:
             return "no_changed_files"
@@ -1609,6 +1836,22 @@ class Orchestrator(
         origin_url: str = "",
     ) -> tuple[ProjectContext, ExecutionPlanState, list[ExecutionStep]]:
         context = self.setup_local_project(project_dir=project_dir, runtime=runtime, branch=branch, origin_url=origin_url)
+        return self._run_parallel_execution_batch_with_context(
+            context=context,
+            runtime=runtime,
+            step_ids=step_ids,
+        )
+
+    def _run_parallel_execution_batch_with_context(
+        self,
+        *,
+        context: ProjectContext,
+        runtime: RuntimeOptions,
+        step_ids: list[str],
+    ) -> tuple[ProjectContext, ExecutionPlanState, list[ExecutionStep]]:
+        project_dir = context.paths.repo_dir
+        branch = context.metadata.branch or "main"
+        origin_url = context.metadata.origin_url or ""
         plan_state = self.load_execution_plan_state(context)
         if not plan_state.steps:
             raise RuntimeError("No saved execution plan exists for this project.")
@@ -3743,7 +3986,8 @@ class Orchestrator(
         block_index = context.loop_state.block_index
         context.metadata.current_status = f"running:block:{block_index}"
         context.metadata.last_run_at = now_utc_iso()
-        ensure_gitignore(context.paths.repo_dir)
+        if str(getattr(context.metadata, "local_logs_mode", "repo") or "repo").strip().lower() == "repo":
+            ensure_gitignore(context.paths.repo_dir)
         safe_revision = context.metadata.current_safe_revision or self.git.current_revision(context.paths.repo_dir)
 
         if candidate_override is None:
@@ -3803,22 +4047,35 @@ class Orchestrator(
         )
         block_changed_files.extend(search_pass.changed_files)
         if search_tests is None:
-            regression_failure = search_pass.returncode == 0
-            failure = (
-                VerificationTestFailure("Search-enabled Codex pass regressed tests and was rolled back.")
-                if regression_failure
-                else AgentPassExecutionError(self._codex_failure_note(selected_task, search_pass))
-            )
+            guard_failure = self._guard_failure_from_run_result(search_pass)
+            regression_failure = search_pass.returncode == 0 and guard_failure is None
+            no_progress_failure = guard_failure is not None and guard_failure[0] in {"no_changed_files", "out_of_scope_changes"}
+            if guard_failure is not None:
+                failure = execution_failure_from_reason(guard_failure[0], guard_failure[1])
+            else:
+                failure = (
+                    VerificationTestFailure("Search-enabled Codex pass regressed tests and was rolled back.")
+                    if regression_failure
+                    else AgentPassExecutionError(self._codex_failure_note(selected_task, search_pass))
+                )
             failure_summary = str(failure)
             if regression_failure:
                 context.loop_state.counters.regression_failures += 1
+                context.loop_state.stop_reason = self._stop_reason(context)
+            elif no_progress_failure:
+                context.loop_state.counters.no_progress_blocks += 1
+                context.loop_state.counters.empty_cycles += 1
                 context.loop_state.stop_reason = self._stop_reason(context)
             else:
                 context.loop_state.stop_reason = failure_summary
             memory.record_failure(
                 task=selected_task,
                 summary=failure_summary,
-                tags=["search", "regression"] if regression_failure else ["search", "codex_failure"],
+                tags=(
+                    ["search", "regression"]
+                    if regression_failure
+                    else (["search", "guard_failure"] if guard_failure is not None else ["search", "codex_failure"])
+                ),
                 block_index=block_index,
                 commit_hash=None,
             )
@@ -3987,7 +4244,12 @@ class Orchestrator(
             safe_revision=safe_revision,
             execution_step=execution_step,
         )
+        reverted_housekeeping = self._revert_housekeeping_changes(context, execution_step)
         run_result.changed_files = self.git.changed_files(context.paths.repo_dir)
+        if reverted_housekeeping:
+            diagnostics = run_result.diagnostics if isinstance(run_result.diagnostics, dict) else {}
+            diagnostics["reverted_housekeeping_paths"] = reverted_housekeeping
+            run_result.diagnostics = diagnostics
         if run_result.returncode != 0:
             self.git.hard_reset(context.paths.repo_dir, safe_revision)
             self._log_pass_result(
@@ -4014,6 +4276,17 @@ class Orchestrator(
         except ImmediateStopRequested:
             self.git.hard_reset(context.paths.repo_dir, safe_revision)
             raise
+        guard_failure = self._verification_output_guard_failure(test_result)
+        if guard_failure is None and test_result.returncode == 0:
+            guard_failure = self._step_scope_guard_failure(execution_step, run_result.changed_files)
+        if guard_failure is not None:
+            guard_reason_code, guard_message, _guard_skip_debugger = guard_failure
+            self._apply_guard_failure(
+                run_result,
+                test_result,
+                reason_code=guard_reason_code,
+                message=guard_message,
+            )
         reporter.save_test_result(block_index, pass_name, test_result)
         commit_hash: str | None = None
         rollback_status = "not_needed"
@@ -4021,6 +4294,7 @@ class Orchestrator(
             debugger_skip_reason = self._debugger_skip_reason(
                 changed_files=run_result.changed_files,
                 test_result=test_result,
+                guard_failure_reason=guard_failure[0] if guard_failure is not None and guard_failure[2] else None,
             )
             self._log_pass_result(
                 context=context,
@@ -4349,6 +4623,7 @@ class Orchestrator(
         maturity_details: dict[str, int],
     ) -> str:
         runner = CodexRunner(runtime.codex_path)
+        planning_effort = self._resolved_planning_effort(runtime)
         prompt_started_at = perf_counter()
         prompt = bootstrap_plan_prompt(context, repo_inputs, user_prompt)
         self._log_planning_metric(
@@ -4365,6 +4640,7 @@ class Orchestrator(
             pass_type="init-project-plan",
             block_index=0,
             search_enabled=False,
+            reasoning_effort=planning_effort,
         )
         self._log_planning_metric(
             context,
@@ -4487,6 +4763,7 @@ class Orchestrator(
         max_items: int,
         repo_inputs: dict[str, str] | None = None,
     ) -> list:
+        planning_effort = self._resolved_planning_effort(context.runtime)
         if repo_inputs is None:
             repo_inputs_started_at = perf_counter()
             repo_inputs = self._scan_repository_inputs(context)
@@ -4520,6 +4797,7 @@ class Orchestrator(
             pass_type="plan-work-breakdown",
             block_index=max(0, context.loop_state.block_index),
             search_enabled=False,
+            reasoning_effort=planning_effort,
         )
         self._log_planning_metric(
             context,

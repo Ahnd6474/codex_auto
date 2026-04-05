@@ -7,7 +7,7 @@ import json
 
 from .contract_wave import normalize_execution_step_policy
 from .models import ExecutionPlanState, ExecutionStep, RuntimeOptions
-from .step_models import resolve_step_model_choice
+from .step_models import normalize_step_model, normalize_step_model_provider, resolve_step_model_choice
 from .utils import parse_json_text, similarity_score
 
 
@@ -299,18 +299,38 @@ def materialize_generated_step_models(
     steps: list[ExecutionStep],
     runtime: RuntimeOptions,
 ) -> list[ExecutionStep]:
-    if str(getattr(runtime, "model_provider", "") or "").strip().lower() != "ensemble":
-        return steps
-
     materialized: list[ExecutionStep] = []
+    runtime_provider = normalize_step_model_provider(str(getattr(runtime, "model_provider", "") or "").strip())
+    runtime_model = normalize_step_model(
+        str(
+            getattr(runtime, "execution_model", "")
+            or getattr(runtime, "model", "")
+            or getattr(runtime, "model_slug_input", "")
+            or ""
+        ).strip()
+    )
     for step in steps:
         next_step = deepcopy(step)
         choice = resolve_step_model_choice(next_step, runtime)
         metadata = deepcopy(next_step.metadata) if isinstance(next_step.metadata, dict) else {}
-        if not next_step.model_provider:
-            next_step.model_provider = choice.provider
-        if not next_step.model:
-            next_step.model = choice.model
+        step_provider = normalize_step_model_provider(next_step.model_provider)
+        step_model = normalize_step_model(next_step.model)
+        if runtime_provider == "ensemble":
+            if not next_step.model_provider:
+                next_step.model_provider = choice.provider
+            if not next_step.model:
+                next_step.model = choice.model
+        else:
+            if not step_provider and not step_model:
+                pass
+            elif not step_provider or step_provider == runtime_provider:
+                # In non-ensemble runs, planner-authored same-provider model pins are noisy and
+                # can silently override the user-selected runtime model. Preserve cross-provider
+                # routing, but collapse same-provider steps back to the active runtime selection.
+                next_step.model_provider = runtime_provider
+                next_step.model = runtime_model
+                metadata["model_selection_sanitized"] = True
+                metadata["model_selection_sanitized_reason"] = "non_ensemble_same_provider"
         if "model_selection_source" not in metadata:
             metadata["model_selection_source"] = choice.source
         if "model_selection_reason" not in metadata:

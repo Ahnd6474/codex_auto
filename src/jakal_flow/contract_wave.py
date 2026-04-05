@@ -131,6 +131,12 @@ def _paths_excluding(paths: list[str], *excluded_scopes: list[str]) -> list[str]
     return matched
 
 
+def _without_overlapping_scopes(paths: list[str], allowed_scopes: list[str]) -> list[str]:
+    if not paths or not allowed_scopes:
+        return list(paths)
+    return [path for path in paths if not any(_path_matches(path, scope_path) for scope_path in allowed_scopes)]
+
+
 def default_step_type(step: ExecutionStep, *, step_kind: str | None = None) -> str:
     metadata = step.metadata if isinstance(step.metadata, dict) else {}
     explicit = _normalize_choice(step.step_type or metadata.get("step_type", ""), STEP_TYPES, "")
@@ -191,6 +197,8 @@ def normalize_execution_step_policy(
     step.owned_paths = _normalize_paths(step.owned_paths or step.primary_scope_paths or metadata.get("owned_paths", []))
     if not step.primary_scope_paths:
         step.primary_scope_paths = list(step.owned_paths)
+    allowed_scopes = list(step.primary_scope_paths) + list(step.shared_reviewed_paths) + list(step.owned_paths)
+    step.forbidden_core_paths = _without_overlapping_scopes(step.forbidden_core_paths, allowed_scopes)
     step.promotion_class = declared_promotion_class(step, step_kind=normalized_step_kind)
 
     metadata["step_type"] = step.step_type

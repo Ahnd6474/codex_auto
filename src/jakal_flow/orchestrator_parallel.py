@@ -19,7 +19,6 @@ from .models import CandidateTask, ExecutionPlanState, ExecutionStep, LoopState,
 from .parallel_resources import build_parallel_resource_plan
 from .reporting import Reporter
 from .utils import compact_text, ensure_dir, now_utc_iso, read_json, read_last_jsonl, remove_tree, write_json
-from .workspace import WorkspaceManager
 
 
 class OrchestratorParallelMixin:
@@ -66,14 +65,12 @@ class OrchestratorParallelMixin:
         worker_root = context.paths.project_root / ".parallel_runs" / batch_token / worker_slug
         docs_dir = worker_root / "docs"
         memory_dir = worker_root / "memory"
-        legacy_logs_dir = worker_root / "logs"
-        logs_dir = WorkspaceManager.repo_logs_dir(worktree_dir)
+        logs_dir = worker_root / "logs"
         reports_dir = worker_root / "reports"
         state_dir = worker_root / "state"
         lineage_manifests_dir = state_dir / "lineage_manifests"
         for directory in [worker_root, docs_dir, memory_dir, logs_dir, reports_dir, state_dir, lineage_manifests_dir]:
             ensure_dir(directory)
-        self.workspace.migrate_logs_dir(legacy_logs_dir, logs_dir)
         return ProjectPaths(
             workspace_root=context.paths.workspace_root,
             projects_root=context.paths.projects_root,
@@ -196,6 +193,7 @@ class OrchestratorParallelMixin:
             display_name=f"{context.metadata.display_name or context.metadata.slug} [{step.step_id}]",
             origin_url=context.metadata.origin_url,
             source_repo_id=context.metadata.source_repo_id or context.metadata.repo_id,
+            local_logs_mode="workspace",
         )
         worker_loop_state = LoopState(
             repo_id=worker_metadata.repo_id,

@@ -7482,6 +7482,53 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(plan_state.steps[1].model, "gpt-5.4-mini")
         self.assertEqual(plan_state.steps[1].metadata["model_selection_source"], "auto")
 
+    def test_materialize_generated_step_models_sanitizes_same_provider_pins_for_non_ensemble_runtime(self) -> None:
+        runtime = RuntimeOptions(
+            model_provider="openai",
+            model="gpt-5.4-mini",
+            execution_model="gpt-5.4-mini",
+            effort="medium",
+        )
+        steps = [
+            ExecutionStep(
+                step_id="ST1",
+                title="Implement feature",
+                model_provider="openai",
+                model="gpt-5.2-codex",
+                reasoning_effort="high",
+            )
+        ]
+
+        materialized = execution_plan_support.materialize_generated_step_models(steps, runtime)
+
+        self.assertEqual(materialized[0].model_provider, "openai")
+        self.assertEqual(materialized[0].model, "gpt-5.4-mini")
+        self.assertTrue(materialized[0].metadata["model_selection_sanitized"])
+        self.assertEqual(materialized[0].metadata["model_selection_sanitized_reason"], "non_ensemble_same_provider")
+
+    def test_materialize_generated_step_models_preserves_cross_provider_routes_for_non_ensemble_runtime(self) -> None:
+        runtime = RuntimeOptions(
+            model_provider="openai",
+            model="gpt-5.4-mini",
+            execution_model="gpt-5.4-mini",
+            effort="medium",
+        )
+        steps = [
+            ExecutionStep(
+                step_id="ST1",
+                title="Polish UI",
+                model_provider="gemini",
+                model="gemini-3-flash-preview",
+                reasoning_effort="medium",
+            )
+        ]
+
+        materialized = execution_plan_support.materialize_generated_step_models(steps, runtime)
+
+        self.assertEqual(materialized[0].model_provider, "gemini")
+        self.assertEqual(materialized[0].model, "gemini-3-flash-preview")
+        self.assertNotIn("model_selection_sanitized", materialized[0].metadata)
+
     def test_ensure_gitignore_adds_missing_entries_once(self) -> None:
         project_dir = Path(__file__).resolve().parents[1] / ".tmp_gitignore_test"
         shutil.rmtree(project_dir, ignore_errors=True)
