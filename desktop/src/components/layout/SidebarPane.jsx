@@ -615,7 +615,7 @@ const ProjectCard = memo(function ProjectCard({
   const isActive = isActiveExecutionStatus(project?.status);
   const branchName = project?.branch || "main";
   const progress = projectProgressSnapshot(project, projectDetail);
-  const queuePositionRaw = Number.parseInt(String(project?.queue_position ?? queueJob?.queue_position ?? 0), 10) || 0;
+  const queuePositionRaw = Number.parseInt(String(project?.queue_position ?? queuedJob?.queue_position ?? 0), 10) || 0;
   const queuePriority = projectQueuePriority(project, projectDetail);
   const backgroundQueueEnabled =
     typeof project?.allow_background_queue === "boolean"

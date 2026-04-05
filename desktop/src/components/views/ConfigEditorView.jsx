@@ -11,8 +11,8 @@ import {
   normalizeMemoryBudgetGiB,
   normalizedModelProvider,
   providerAvailable,
+  providerCardLabel,
   providerStatusReason,
-  programSettingsAllowsModelSlugInput,
   reasoningEffortLabel,
   resolveRuntimeModelSelectionState,
 } from "../../utils";
@@ -106,40 +106,22 @@ const PROVIDER_CATEGORIES = [
   {
     key: "closed",
     label: "Closed",
-    providers: [
-      { value: "openai", label: "OpenAI" },
-      { value: "claude", label: "Claude" },
-      { value: "gemini", label: "Gemini" },
-    ],
+    providers: ["openai", "claude", "gemini"],
   },
   {
     key: "opensource",
     label: "Open Source",
-    providers: [
-      { value: "qwen_code", label: "Qwen Code" },
-      { value: "deepseek", label: "DeepSeek" },
-      { value: "kimi", label: "Kimi" },
-      { value: "minimax", label: "MiniMax" },
-      { value: "glm", label: "GLM" },
-      { value: "openrouter", label: "OpenRouter" },
-      { value: "opencdk", label: "OpenCDK" },
-    ],
+    providers: ["qwen_code", "deepseek", "kimi", "minimax", "glm", "openrouter", "opencdk"],
   },
   {
     key: "oss",
     label: "Local / OSS",
-    providers: [
-      { value: "ollama", label: "Ollama" },
-      { value: "local_openai", label: "Local OpenAI" },
-      { value: "oss", label: "LM Studio / OSS" },
-    ],
+    providers: ["ollama", "local_openai", "oss"],
   },
   {
     key: "ensemble",
     label: "Ensemble",
-    providers: [
-      { value: "ensemble", label: "Claude + GPT Ensemble" },
-    ],
+    providers: ["ensemble"],
   },
 ];
 
@@ -188,7 +170,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
   const selectedExecutionModel = selectionState.selectedExecutionModel || "";
   const selectedExecutionModelVisible = selectionState.selectedExecutionModelVisible;
   const activeCategory = PROVIDER_CATEGORIES.find((category) => (
-    category.providers.some((provider) => provider.value === selectedProvider)
+    category.providers.some((provider) => provider === selectedProvider)
   ))?.key || "closed";
   const activeCategoryConfig = PROVIDER_CATEGORIES.find((category) => category.key === activeCategory) || PROVIDER_CATEGORIES[0];
   const providerUnavailable = !providerAvailable(selectedProvider, codexStatus);
@@ -212,7 +194,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
               key={category.key}
               className={`provider-cat-tab ${activeCategory === category.key ? "active" : ""}`}
               onClick={() => {
-                const firstProvider = category.providers[0]?.value || "openai";
+                const firstProvider = category.providers[0] || "openai";
                 onChangeForm((current) => ({
                   ...current,
                   runtime: applyProviderDefaults(current.runtime || {}, firstProvider),
@@ -228,7 +210,8 @@ export const ConfigEditorView = memo(function ConfigEditorView({
 
         {activeCategory !== "ensemble" ? (
           <div className="provider-sub-grid" style={{ marginTop: "8px" }}>
-            {activeCategoryConfig.providers.map(({ value, label }) => {
+            {activeCategoryConfig.providers.map((value) => {
+              const label = providerCardLabel(value, runtime?.local_model_provider);
               const installed = providerAvailable(value, codexStatus);
               return (
                 <button
@@ -326,7 +309,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
           </small>
         </label>
       ) : null}
-      {visibleModels.length ? (
+      {visibleModels.length || selectedExecutionModel ? (
         <label className="field field--wide" style={{ marginTop: "4px" }}>
           <span>{language === "ko" ? "실행 모델" : "Execution model"}</span>
           <select
@@ -365,26 +348,6 @@ export const ConfigEditorView = memo(function ConfigEditorView({
               ? "계획 생성과 실제 블록 실행 모두 이 모델을 기본으로 사용합니다. 블록별 모델 지정이 있으면 그 설정이 우선합니다."
               : "Used as the default model for both planning and block execution. Per-block model overrides still take precedence."}
           </small>
-        </label>
-      ) : (selectedExecutionModel || programSettingsAllowsModelSlugInput(selectedProvider)) ? (
-        <label className="field field--wide" style={{ marginTop: "4px" }}>
-          <span>{t("field.customModelSlug")}</span>
-          <input
-            value={selectedExecutionModel}
-            onChange={(event) =>
-              onChangeForm((current) => ({
-                ...current,
-                runtime: applyConfigRuntimeModelSelection(
-                  current.runtime || {},
-                  modelCatalog,
-                  event.target.value,
-                  null,
-                  codexStatus,
-                ),
-              }))
-            }
-            disabled={executionLocked}
-          />
         </label>
       ) : null}
 

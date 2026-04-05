@@ -60,13 +60,18 @@ import {
   projectScopedJobFromJobs,
   projectFormFromDetail,
   projectStatusWithJob,
+  providerBriefName,
   resolveProjectDirectory,
+  providerCardLabel,
   runtimeSummary,
   isChatCommand,
   isChatJob,
   jobLane,
   jobLaneForRequest,
+  providerOptionLabel,
+  providerShortName,
   QWEN_CODE_DEFAULT_MODEL,
+  runtimeExecutionModel,
   sanitizeProjectDetailForJobState,
   sanitizeProjectListForJobState,
   sameQueuedJobs,
@@ -104,6 +109,29 @@ test("basename handles Windows, POSIX, and empty paths", () => {
   assert.equal(basename("C:\\work\\repo"), "repo");
   assert.equal(basename("/tmp/demo/"), "demo");
   assert.equal(basename(""), "");
+});
+
+test("runtimeExecutionModel prefers execution_model over legacy runtime fields", () => {
+  assert.equal(runtimeExecutionModel({ execution_model: "gpt-5.4", model_slug_input: "gpt-4.1", model: "gpt-4o" }), "gpt-5.4");
+  assert.equal(runtimeExecutionModel({ model_slug_input: "claude-sonnet-4-6", model: "gpt-4o" }), "claude-sonnet-4-6");
+  assert.equal(runtimeExecutionModel({ model: "gemini-3-flash-preview" }), "gemini-3-flash-preview");
+  assert.equal(runtimeExecutionModel({}, "gpt-5.4"), "gpt-5.4");
+});
+
+test("provider label helpers keep compact, brief, option, and card names aligned", () => {
+  assert.equal(providerShortName("openai"), "Codex");
+  assert.equal(providerBriefName("openai"), "OpenAI");
+  assert.equal(providerOptionLabel("openai"), "Codex CLI");
+  assert.equal(providerCardLabel("openai"), "OpenAI");
+
+  assert.equal(providerShortName("oss", "lmstudio"), "OSS");
+  assert.equal(providerBriefName("oss", "lmstudio"), "LM Studio");
+  assert.equal(providerOptionLabel("oss", "lmstudio"), "LM Studio / Local OSS");
+  assert.equal(providerCardLabel("oss", "lmstudio"), "LM Studio / OSS");
+
+  assert.equal(providerBriefName("local_openai"), "Local OpenAI");
+  assert.equal(providerOptionLabel("deepseek"), "DeepSeek via Claude Code");
+  assert.equal(providerCardLabel("ensemble"), "Claude + GPT Ensemble");
 });
 
 test("formatChatSessionTitle strips txt suffixes and trailing timestamp slugs for UI labels", () => {
@@ -992,8 +1020,8 @@ test("providerSupportsCatalog enables curated catalogs for first-party provider 
   assert.equal(providerSupportsCatalog("claude"), true);
   assert.equal(providerSupportsCatalog("ollama"), true);
   assert.equal(providerSupportsCatalog("deepseek"), true);
-  assert.equal(providerSupportsCatalog("openrouter"), false);
-  assert.equal(providerSupportsCatalog("local_openai"), false);
+  assert.equal(providerSupportsCatalog("openrouter"), true);
+  assert.equal(providerSupportsCatalog("local_openai"), true);
 });
 
 test("provider availability helpers read provider statuses from codex payloads", () => {

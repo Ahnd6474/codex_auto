@@ -456,6 +456,18 @@ export function applyProjectUiEvent(detail, eventPayload, options = {}) {
         execution_log_lines: activityLine
           ? uniquePrepend(detail.bottom_panels.execution_log_lines, activityLine, activityLimit)
           : detail.bottom_panels.execution_log_lines,
+        git_status: detail.bottom_panels.git_status && typeof detail.bottom_panels.git_status === "object"
+          ? {
+              ...detail.bottom_panels.git_status,
+              current_status: record.projectStatus || detail.bottom_panels.git_status.current_status,
+              pending_checkpoint_approval:
+                record.eventType === "project-state-synced"
+                  ? (processActive && record.details?.pending_checkpoint_approval !== undefined
+                    ? Boolean(record.details.pending_checkpoint_approval)
+                    : false)
+                  : detail.bottom_panels.git_status.pending_checkpoint_approval,
+            }
+          : detail.bottom_panels.git_status,
       }
     : detail.bottom_panels;
 

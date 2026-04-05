@@ -345,6 +345,24 @@ test("filterModelCatalogByProvider limits chat model choices to the selected pro
   );
 });
 
+test("filterModelCatalogByProvider aliases OpenAI catalog entries for OpenAI-compatible providers", () => {
+  const modelCatalog = [
+    { id: "openai:gpt-5.4", model: "gpt-5.4", display_name: "GPT-5.4", provider: "openai", hidden: false },
+    { id: "openai:gpt-5.4-mini", model: "gpt-5.4-mini", display_name: "GPT-5.4 Mini", provider: "openai", hidden: false },
+  ];
+
+  const openRouterEntries = filterModelCatalogByProvider(modelCatalog, { model_provider: "openrouter" });
+  assert.deepEqual(
+    openRouterEntries.map((item) => [item.provider, item.model]),
+    [
+      ["openrouter", "gpt-5.4"],
+      ["openrouter", "gpt-5.4-mini"],
+    ],
+  );
+
+  assert.equal(defaultModelForRuntime(modelCatalog, { model_provider: "openrouter" }), "gpt-5.4");
+});
+
 test("groupedModelCatalogOptions filters unusable providers and keeps local models in a separate group", () => {
   const modelCatalog = [
     { model: "gpt-5.4", display_name: "GPT-5.4", provider: "openai", hidden: false },

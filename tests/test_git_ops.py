@@ -113,6 +113,16 @@ class GitOpsTests(unittest.TestCase):
 
         self.assertTrue(has_commits)
 
+    def test_is_ancestor_short_circuits_identical_revisions(self) -> None:
+        repo_dir = Path(__file__).resolve().parents[1]
+        git = GitOps()
+        revision = "0123456789abcdef0123456789abcdef01234567"
+
+        with mock.patch.object(git, "run", side_effect=AssertionError("git subprocess should not run")):
+            result = git.is_ancestor(repo_dir, revision, revision)
+
+        self.assertTrue(result)
+
     def test_branch_exists_reads_refs_without_git_subprocess(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()
         repo_dir = Path(temp_dir.name)

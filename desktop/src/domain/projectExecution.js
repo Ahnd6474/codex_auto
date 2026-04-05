@@ -224,10 +224,13 @@ export function sameQueuedJobs(previousJobs = [], nextJobs = []) {
 }
 
 export function detailApplySignature(detail = null, runningJob = null) {
+  const job = visibleExecutionJob(runningJob);
   return [
     String(detail?.project?.repo_id || "").trim(),
     String(detail?.detail_level || "").trim(),
     String(detail?.detail_signature || detail?.content_signature || "").trim(),
     String(detail?.project?.current_status || "").trim(),
+    String(job?.id || "").trim(),
+    String(job?.status || "").trim().toLowerCase(),
   ].join("|");
 }

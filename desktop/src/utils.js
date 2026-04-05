@@ -104,6 +104,11 @@ export const AUTO_REASONING_OPTION = "auto";
 export const REASONING_OPTIONS = ["low", "medium", "high", "xhigh"];
 export const MODEL_REASONING_OPTIONS = [AUTO_REASONING_OPTION, ...REASONING_OPTIONS];
 export const MODEL_PROVIDER_OPTIONS = ["openai", "ensemble", "claude", "gemini", "ollama", "qwen_code", "deepseek", "kimi", "minimax", "glm", "openrouter", "opencdk", "local_openai", "oss"];
+const PROVIDER_SCOPED_CATALOG_ALIASES = Object.freeze({
+  openrouter: ["openai"],
+  opencdk: ["openai"],
+  local_openai: ["openai"],
+});
 export const PROGRAM_RUNTIME_KEYS = [
   "model_provider",
   "local_model_provider",
@@ -463,8 +468,12 @@ function currentModelMatchesProvider(provider = "openai", model = "") {
   return false;
 }
 
+export function runtimeExecutionModel(runtime = {}, fallback = "") {
+  return String(runtime?.execution_model || runtime?.model_slug_input || runtime?.model || fallback || "").trim();
+}
+
 function selectedRuntimeModel(runtime = {}) {
-  return String(runtime?.execution_model || runtime?.model_slug_input || runtime?.model || "").trim().toLowerCase();
+  return runtimeExecutionModel(runtime).toLowerCase();
 }
 
 export function defaultModelForProvider(provider = "openai", runtime = {}) {
@@ -689,6 +698,40 @@ function modelCatalogEntryKey(item = {}) {
   return [provider, localProvider, model, id].join("::");
 }
 
+function aliasedProviderCatalogEntries(modelCatalog = [], provider = "") {
+  const normalizedProvider = String(provider || "").trim().toLowerCase();
+  const sourceProviders = PROVIDER_SCOPED_CATALOG_ALIASES[normalizedProvider];
+  if (!sourceProviders?.length) {
+    return [];
+  }
+  const entries = [];
+  const seen = new Set();
+  for (const item of normalizeModelCatalog(modelCatalog)) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const itemProvider = String(item?.provider || "").trim().toLowerCase();
+    const itemLocalProvider = String(item?.local_provider || "").trim().toLowerCase();
+    const model = String(item?.model || "").trim();
+    if (!model || itemLocalProvider || !sourceProviders.includes(itemProvider)) {
+      continue;
+    }
+    const aliasEntry = {
+      ...item,
+      id: `${normalizedProvider}:${model}`,
+      provider: normalizedProvider,
+      local_provider: "",
+    };
+    const key = modelCatalogEntryKey(aliasEntry);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    entries.push(aliasEntry);
+  }
+  return entries;
+}
+
 export function mergeModelCatalogs(...catalogs) {
   const merged = [];
   const seen = new Set();
@@ -715,7 +758,7 @@ export function stepModelSelectionPatch(modelCatalog = [], runtime = {}, nextMod
   const selection = String(nextModel || "").trim();
   const parsedSelection = parseModelCatalogOptionValue(selection);
   const normalizedSelection = parsedSelection.model || selection.toLowerCase();
-  const executionModel = String(runtime?.execution_model || runtime?.model_slug_input || runtime?.model || "").trim().toLowerCase();
+  const executionModel = runtimeExecutionModel(runtime).toLowerCase();
   if (!selection || normalizedSelection === executionModel) {
     return {
       model_provider: "",
@@ -1404,8 +1447,24 @@ export function resolveCheckpointExecutionState(detail = null, activeJob = null)
   const processStatus = String(executionJob?.status || "").trim().toLowerCase();
   const processActive = Boolean(executionJob) && (processStatus === "running" || processStatus === "queued");
   const loopState = detail?.loop_state && typeof detail.loop_state === "object" ? detail.loop_state : {};
-  const currentCheckpointId = String(loopState.current_checkpoint_id || checkpoints?.pending?.checkpoint_id || "").trim();
-  const currentCheckpointLineageId = String(loopState.current_checkpoint_lineage_id || checkpoints?.pending?.lineage_id || "").trim();
+  const storedCheckpointId = String(
+    loopState.current_checkpoint_id
+    || checkpoints?.current_checkpoint_id
+    || checkpoints?.pending?.checkpoint_id
+    || "",
+  ).trim();
+  const storedCheckpointLineageId = String(
+    loopState.current_checkpoint_lineage_id
+    || checkpoints?.current_checkpoint_lineage_id
+    || checkpoints?.pending?.lineage_id
+    || "",
+  ).trim();
+  const currentCheckpointId = processActive || Boolean(loopState.pending_checkpoint_approval)
+    ? storedCheckpointId
+    : "";
+  const currentCheckpointLineageId = processActive || Boolean(loopState.pending_checkpoint_approval)
+    ? storedCheckpointLineageId
+    : "";
   const hasCheckpointContext = Boolean(currentCheckpointId || currentCheckpointLineageId);
   const currentStatus = String(detail?.project?.current_status || "").trim().toLowerCase();
   const waitingForApproval =
@@ -1466,9 +1525,11 @@ export function resolveCheckpointExecutionState(detail = null, activeJob = null)
     }
   }
 
+  const normalizedCheckpointId = processActive || waitingForApproval ? currentCheckpointId : null;
+  const normalizedCheckpointLineageId = processActive || waitingForApproval ? currentCheckpointLineageId : null;
   const hadExplicitChanges =
-    String(checkpoints?.current_checkpoint_id || "") !== currentCheckpointId
-    || String(checkpoints?.current_checkpoint_lineage_id || "") !== currentCheckpointLineageId
+    String(checkpoints?.current_checkpoint_id || "") !== String(normalizedCheckpointId || "")
+    || String(checkpoints?.current_checkpoint_lineage_id || "") !== String(normalizedCheckpointLineageId || "")
     || String(checkpoints?.pending?.checkpoint_id || "") !== String(pending?.checkpoint_id || "")
     || String(checkpoints?.pending?.status || "") !== String(pending?.status || "");
 
@@ -1476,12 +1537,12 @@ export function resolveCheckpointExecutionState(detail = null, activeJob = null)
     executionJob,
     processActive,
     waitingForApproval,
-    currentCheckpointId,
-    currentCheckpointLineageId,
+    currentCheckpointId: normalizedCheckpointId,
+    currentCheckpointLineageId: normalizedCheckpointLineageId,
     hasCheckpointContext,
     items: changed || hadExplicitChanges ? normalizedItems : items,
     pending,
-    hasActiveCheckpoint: Boolean(currentCheckpointId || currentCheckpointLineageId || pending),
+    hasActiveCheckpoint: Boolean(normalizedCheckpointId || normalizedCheckpointLineageId || pending),
   };
 }
 
@@ -2087,19 +2148,32 @@ export function sanitizeProjectListForJobState(projects = [], activeJob = null, 
     const jobStatus = String(executionJob?.status || "").trim().toLowerCase();
     const progress = normalizeProjectListProgress(project);
     const currentStepLabel = String(project?.current_step_label || progress.currentStep || "").trim();
-    const normalizedStatus = projectStatusWithJob(project?.status || project?.project_status || "", executionJob);
+    const rawStatus = String(project?.status || project?.project_status || "").trim();
+    const normalizedStatus =
+      executionJob
+        ? projectStatusWithJob(rawStatus, executionJob)
+        : isActiveExecutionStatus(rawStatus)
+          ? deriveIdleProjectStatus(
+              null,
+              {
+                ...(project?.stats && typeof project.stats === "object" ? project.stats : {}),
+                closeout_status: project?.closeout_status,
+              },
+              rawStatus,
+            )
+          : rawStatus;
     const queuePriorityValue = Number.parseInt(
       String(project?.queue_priority ?? project?.background_queue_priority ?? executionJob?.queue_priority ?? 0),
       10,
     );
     const queuePositionValue = Number.parseInt(
-      String(jobStatus === "queued" ? executionJob?.queue_position : project?.queue_position ?? 0),
+      String(jobStatus === "queued" ? executionJob?.queue_position : 0),
       10,
     );
     return {
       ...project,
-      status: normalizedStatus || String(project?.status || project?.project_status || "").trim(),
-      display_status: normalizedStatus || String(project?.display_status || project?.status || project?.project_status || "").trim(),
+      status: normalizedStatus || rawStatus,
+      display_status: normalizedStatus || String(project?.display_status || rawStatus).trim(),
       progress,
       progress_caption: progress.caption,
       current_step_label: currentStepLabel,
@@ -2107,7 +2181,7 @@ export function sanitizeProjectListForJobState(projects = [], activeJob = null, 
       queue_position: Number.isFinite(queuePositionValue) ? queuePositionValue : 0,
       queue_priority: Number.isFinite(queuePriorityValue) ? queuePriorityValue : 0,
       background_queue_priority: Number.isFinite(queuePriorityValue) ? queuePriorityValue : 0,
-      queue_command: String(project?.queue_command || executionJob?.command || "").trim(),
+      queue_command: executionJob ? String(project?.queue_command || executionJob?.command || "").trim() : "",
     };
   });
 }
@@ -2116,12 +2190,109 @@ export function sanitizeProjectDetailForJobState(detail, activeJob = null, optio
   if (!detail) {
     return detail;
   }
-  if (detail.execution_state && typeof detail.execution_state === "object") {
-    return detail;
+  const preserveBackendMirrorsWithoutExecutionState =
+    (!detail.execution_state || typeof detail.execution_state !== "object")
+    && !visibleExecutionJob(activeJob)
+    && (
+      String(detail?.loop_state?.current_task || "").trim()
+      || String(detail?.loop_state?.current_checkpoint_id || "").trim()
+      || String(detail?.loop_state?.current_checkpoint_lineage_id || "").trim()
+    );
+  if (preserveBackendMirrorsWithoutExecutionState) {
+    const projectStatus = String(detail?.project?.current_status || "").trim();
+    const projectFamily = normalizeExecutionSurfaceStatus(projectStatus);
+    const checkpointFamily = checkpointFamilyFromDetail(detail, null);
+    return {
+      ...detail,
+      execution_state: {
+        display_family: projectFamily,
+        display_status: projectStatus || "idle",
+        project_status: projectStatus,
+        consistent: true,
+        active_families: projectFamily === "idle" ? [] : [projectFamily],
+        checkpoint_family: checkpointFamily,
+        flow_family: projectFamily,
+        process_family: projectFamily,
+        toolbar_family: projectFamily,
+        mismatch_summary: "",
+        report_lines: [],
+      },
+    };
   }
-  const executionState = deriveLegacyExecutionUiState(detail, null, activeJob);
-  return {
+  const resolvedExecution = resolveProjectDetailExecution(detail, activeJob, options);
+  const checkpointState = resolvedExecution.checkpointState || {};
+  const checkpointCurrentId = checkpointState.currentCheckpointId ?? null;
+  const checkpointCurrentLineageId = checkpointState.currentCheckpointLineageId ?? null;
+  const checkpointItems = Array.isArray(checkpointState.items) ? checkpointState.items : [];
+  const checkpointPending = checkpointState.pending && typeof checkpointState.pending === "object"
+    ? checkpointState.pending
+    : null;
+  const normalizedDetail = {
     ...detail,
+    project: detail?.project && typeof detail.project === "object"
+      ? {
+          ...detail.project,
+          current_status: resolvedExecution.nextStatus,
+        }
+      : detail?.project,
+    loop_state: detail?.loop_state && typeof detail.loop_state === "object"
+      ? {
+          ...detail.loop_state,
+          current_checkpoint_id: checkpointCurrentId || "",
+          current_checkpoint_lineage_id: checkpointCurrentLineageId || "",
+          pending_checkpoint_approval: checkpointState.waitingForApproval,
+        }
+      : detail?.loop_state,
+    checkpoints: detail?.checkpoints && typeof detail.checkpoints === "object"
+      ? {
+          ...detail.checkpoints,
+          current_checkpoint_id: checkpointCurrentId,
+          current_checkpoint_lineage_id: checkpointCurrentLineageId,
+          items: checkpointItems,
+          pending: checkpointPending,
+          timeline_markdown: checkpointTimelineMarkdown(checkpointItems),
+        }
+      : detail?.checkpoints,
+    plan: resolvedExecution.nextPlan,
+    stats: resolvedExecution.nextStats,
+    progress: resolvedExecution.nextProgress,
+    planning_progress: resolvedExecution.nextPlanningProgress,
+    bottom_panels: detail?.bottom_panels && typeof detail.bottom_panels === "object"
+      ? {
+          ...detail.bottom_panels,
+          git_status: detail.bottom_panels.git_status && typeof detail.bottom_panels.git_status === "object"
+            ? {
+                ...detail.bottom_panels.git_status,
+                current_status: resolvedExecution.nextStatus,
+                pending_checkpoint_approval: checkpointState.waitingForApproval,
+              }
+            : detail.bottom_panels.git_status,
+        }
+      : detail?.bottom_panels,
+    snapshot: detail?.snapshot && typeof detail.snapshot === "object"
+      ? {
+          ...detail.snapshot,
+          project: detail.snapshot.project && typeof detail.snapshot.project === "object"
+            ? {
+                ...detail.snapshot.project,
+                current_status: resolvedExecution.nextStatus,
+              }
+            : detail.snapshot.project,
+          plan: resolvedExecution.nextPlan ?? detail.snapshot.plan,
+          loop_state: detail.snapshot.loop_state && typeof detail.snapshot.loop_state === "object"
+            ? {
+                ...detail.snapshot.loop_state,
+                current_checkpoint_id: checkpointCurrentId || "",
+                current_checkpoint_lineage_id: checkpointCurrentLineageId || "",
+                pending_checkpoint_approval: checkpointState.waitingForApproval,
+              }
+            : detail.snapshot.loop_state,
+        }
+      : detail?.snapshot,
+  };
+  const executionState = deriveLegacyExecutionUiState(normalizedDetail, null, resolvedExecution.executionJob);
+  return {
+    ...normalizedDetail,
     execution_state: {
       display_family: executionState.displayFamily,
       display_status: executionState.displayStatusValue,
@@ -2140,7 +2311,7 @@ export function sanitizeProjectDetailForJobState(detail, activeJob = null, optio
 
 export function buildProjectPayload(form, plan = null) {
   const runtime = cloneValue(form.runtime) || {};
-  const selectedModel = String(runtime.execution_model || runtime.model_slug_input || runtime.model || "").trim().toLowerCase();
+  const selectedModel = runtimeExecutionModel(runtime).toLowerCase();
   if (selectedModel) {
     runtime.execution_model = selectedModel;
     runtime.model = selectedModel;
@@ -2266,6 +2437,9 @@ export function providerSupportsCatalog(provider = "openai") {
     "kimi",
     "minimax",
     "glm",
+    "openrouter",
+    "opencdk",
+    "local_openai",
     "oss",
   ].includes(normalized);
 }
@@ -2301,52 +2475,162 @@ export function programSettingsAllowsModelSlugInput(provider = "openai") {
   return normalized === "openrouter" || normalized === "opencdk";
 }
 
-export function providerDisplayName(provider = "openai", localProvider = "") {
+function providerLabels(provider = "openai", localProvider = "") {
   const normalized = String(provider || "").trim().toLowerCase();
+  const normalizedLocalProvider = String(localProvider || "").trim().toLowerCase();
   if (normalized === "ensemble") {
-    return "GPT+Gemini+Claude Ensemble";
+    return {
+      short: "Ensemble",
+      brief: "Ensemble",
+      option: "GPT + Gemini + Claude Ensemble",
+      card: "Claude + GPT Ensemble",
+      display: "GPT+Gemini+Claude Ensemble",
+    };
   }
   if (normalized === "claude") {
-    return "Claude Code";
+    return {
+      short: "Claude",
+      brief: "Claude",
+      option: "Claude Code",
+      card: "Claude",
+      display: "Claude Code",
+    };
   }
   if (normalized === "gemini") {
-    return "Gemini CLI";
+    return {
+      short: "Gemini",
+      brief: "Gemini",
+      option: "Gemini CLI",
+      card: "Gemini",
+      display: "Gemini CLI",
+    };
   }
   if (normalized === "ollama") {
-    return "Ollama";
+    return {
+      short: "Ollama",
+      brief: "Ollama",
+      option: "Ollama",
+      card: "Ollama",
+      display: "Ollama",
+    };
   }
   if (normalized === "qwen_code") {
-    return "Qwen Code";
+    return {
+      short: "Qwen",
+      brief: "Qwen Code",
+      option: "Qwen Code",
+      card: "Qwen Code",
+      display: "Qwen Code",
+    };
   }
   if (normalized === "deepseek") {
-    return "DeepSeek via Claude Code";
+    return {
+      short: "DeepSeek",
+      brief: "DeepSeek",
+      option: "DeepSeek via Claude Code",
+      card: "DeepSeek",
+      display: "DeepSeek via Claude Code",
+    };
   }
   if (normalized === "kimi") {
-    return "Kimi";
+    return {
+      short: "Kimi",
+      brief: "Kimi",
+      option: "Kimi",
+      card: "Kimi",
+      display: "Kimi",
+    };
   }
   if (normalized === "minimax") {
-    return "MiniMax via Claude Code";
+    return {
+      short: "MiniMax",
+      brief: "MiniMax",
+      option: "MiniMax via Claude Code",
+      card: "MiniMax",
+      display: "MiniMax via Claude Code",
+    };
   }
   if (normalized === "glm") {
-    return "GLM via Claude Code";
+    return {
+      short: "GLM",
+      brief: "GLM",
+      option: "GLM via Claude Code",
+      card: "GLM",
+      display: "GLM via Claude Code",
+    };
   }
   if (normalized === "oss") {
-    const local = String(localProvider || "").trim().toLowerCase();
-    if (local === "lmstudio") {
-      return "Local/LM Studio";
+    if (normalizedLocalProvider === "lmstudio") {
+      return {
+        short: "OSS",
+        brief: "LM Studio",
+        option: "LM Studio / Local OSS",
+        card: "LM Studio / OSS",
+        display: "Local/LM Studio",
+      };
     }
-    return "Local/Ollama";
+    return {
+      short: "OSS",
+      brief: "Ollama",
+      option: "LM Studio / Local OSS",
+      card: "LM Studio / OSS",
+      display: "Local/Ollama",
+    };
   }
   if (normalized === "openrouter") {
-    return "OpenRouter";
+    return {
+      short: "OpenRouter",
+      brief: "OpenRouter",
+      option: "OpenRouter",
+      card: "OpenRouter",
+      display: "OpenRouter",
+    };
   }
   if (normalized === "opencdk") {
-    return "OpenCDK";
+    return {
+      short: "CDK",
+      brief: "OpenCDK",
+      option: "OpenCDK",
+      card: "OpenCDK",
+      display: "OpenCDK",
+    };
   }
   if (normalized === "local_openai") {
-    return "Local OpenAI-Compatible";
+    return {
+      short: "Local",
+      brief: "Local OpenAI",
+      option: "Local OpenAI-Compatible",
+      card: "Local OpenAI",
+      display: "Local OpenAI-Compatible",
+    };
   }
-  return "OpenAI/Codex";
+  return {
+    short: "Codex",
+    brief: "OpenAI",
+    option: "Codex CLI",
+    card: "OpenAI",
+    display: "OpenAI/Codex",
+  };
+}
+
+export function providerShortName(provider = "openai", localProvider = "") {
+  return providerLabels(provider, localProvider).short;
+}
+
+export function providerBriefName(provider = "openai", localProvider = "") {
+  return providerLabels(provider, localProvider).brief;
+}
+
+export function providerOptionLabel(provider = "openai", localProvider = "") {
+  return providerLabels(provider, localProvider).option;
+}
+
+export function providerCardLabel(provider = "openai", localProvider = "") {
+  return providerLabels(provider, localProvider).card;
+}
+
+export function providerDisplayName(provider = "openai", localProvider = "") {
+  return providerLabels(provider, localProvider).display;
 }
 
 export function normalizedModelProvider(runtime = {}) {
@@ -2630,7 +2914,11 @@ export function filterModelCatalogByProvider(modelCatalog = [], runtime = {}, co
   if (!providerUsable(provider, codexStatus)) {
     return [];
   }
-  return (modelCatalog || []).filter((item) => {
+  const scopedCatalog = mergeModelCatalogs(
+    normalizeModelCatalog(modelCatalog),
+    aliasedProviderCatalogEntries(modelCatalog, provider),
+  );
+  return scopedCatalog.filter((item) => {
     if (!modelOptionMatchesScopedProvider(item, provider, localProvider)) {
       return false;
     }
@@ -2697,7 +2985,7 @@ export function resolveRuntimeModelSelectionState(currentRuntime = {}, modelCata
     scope: "provider",
   });
   const model = String(nextModel || "").trim()
-    || String(currentRuntime?.execution_model || currentRuntime?.model_slug_input || currentRuntime?.model || "").trim()
+    || runtimeExecutionModel(currentRuntime)
     || defaultModelForRuntime(modelCatalog, currentRuntime, codexStatus)
     || defaultModelForProvider(currentRuntime?.model_provider || "openai", currentRuntime)
     || "";
@@ -3188,6 +3476,16 @@ export function resolveExecutionDisplayPlan(detail = null, planDraft = null, act
     return livePlan;
   }
   return draftPlan || livePlan || { steps: [] };
+}
+
+export function planHasFlowContent(detail = null, planDraft = null) {
+  const planningStatus = String(detail?.planning_progress?.status || detail?.planning_progress?.planningStatus || "").trim().toLowerCase();
+  const livePlan = detail?.plan || planDraft;
+  return Boolean(
+    planningStatus === "running"
+    || String(livePlan?.project_prompt || "").trim()
+    || (Array.isArray(livePlan?.steps) && livePlan.steps.length > 0),
+  );
 }
 
 export function runtimeSummary(runtime, modelPresets = [], language = "en", modelCatalog = []) {

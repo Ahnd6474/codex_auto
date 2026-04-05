@@ -1125,7 +1125,9 @@ const STATIC_LANGUAGE_PACKS = new Map([
   [
     "ko",
     {
+      ...(STRINGS.ko || {}),
       ...STATIC_KO_FALLBACKS,
+      ...KO_HIGH_QUALITY_OVERRIDES,
     },
   ],
 ]);

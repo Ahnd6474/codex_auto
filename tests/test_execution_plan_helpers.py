@@ -149,6 +149,54 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(timeout_map[("cherry-pick", "abc123")], 180.0)
         self.assertEqual(timeout_map[("clone", "--branch")], 300.0)
 
+    def test_evaluate_push_readiness_skips_commit_ancestry_check_for_branch_head(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_push_readiness_same_head"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(model="gpt-5.4", effort="medium", test_cmd="python -m pytest", allow_push=True)
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(
+                project_dir=repo_dir,
+                branch="main",
+                runtime=runtime,
+            )
+            with mock.patch.object(
+                orchestrator.git,
+                "remote_url",
+                return_value="https://example.com/repo.git",
+            ), mock.patch.object(
+                orchestrator.git,
+                "local_branch_revision",
+                return_value="abc123",
+            ), mock.patch.object(
+                orchestrator.git,
+                "run",
+                side_effect=AssertionError("rev-parse should not run for the current branch head"),
+            ), mock.patch.object(
+                orchestrator.git,
+                "is_ancestor",
+                side_effect=AssertionError("merge-base should not run for the current branch head"),
+            ), mock.patch.object(
+                orchestrator.git,
+                "remote_branch_revision",
+                return_value=None,
+            ):
+                ready, reason = orchestrator._evaluate_push_readiness(
+                    context,
+                    repo_dir,
+                    "main",
+                    commit_hash="abc123",
+                )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertTrue(ready)
+        self.assertEqual(reason, "push_ready")
+
     def test_verification_runner_uses_explicit_state_fingerprint(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_verification_state_fingerprint_test"
         shutil.rmtree(temp_root, ignore_errors=True)

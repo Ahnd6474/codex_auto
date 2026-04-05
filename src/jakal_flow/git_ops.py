@@ -710,6 +710,8 @@ class GitOps:
         newer = newer_revision.strip()
         if not older or not newer:
             return False
+        if older == newer:
+            return True
         result = self.run(["merge-base", "--is-ancestor", older, newer], cwd=repo_dir, check=False)
         return result.returncode == 0
 
