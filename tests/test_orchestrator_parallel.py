@@ -88,7 +88,10 @@ class OrchestratorParallelTests(unittest.TestCase):
             shutil.rmtree(temp_root, ignore_errors=True)
 
         self.assertEqual(worker_paths.lineage_state_file, worker_paths.state_dir / "LINEAGES.json")
-        self.assertEqual(worker_paths.logs_dir, repo_dir.resolve() / "jakal-flow-logs")
+        self.assertEqual(
+            worker_paths.logs_dir,
+            context.paths.project_root / ".parallel_runs" / "batch-demo" / "01-st1" / "logs",
+        )
 
     def test_copy_parallel_worker_support_files_skips_parent_state_caches(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_parallel_worker_support_files_test"

@@ -34,7 +34,7 @@ from .errors import (
     failure_log_fields,
 )
 from .execution_control import ImmediateStopRequested
-from .git_ops import GitOps
+from .git_ops import GitCommandError, GitOps
 from .memory import MemoryStore
 from .model_providers import effective_local_model_provider, normalize_billing_mode, provider_preset, provider_supports_auto_model
 from .provider_fallbacks import (
@@ -45,6 +45,7 @@ from .provider_fallbacks import (
 from .model_selection import normalize_reasoning_effort
 from .models import CandidateTask, Checkpoint, CodexRunResult, ExecutionPlanState, ExecutionStep, LineageState, LoopState, MLExperimentRecord, MLModeState, ProjectContext, ProjectPaths, RepoMetadata, RuntimeOptions, TestRunResult
 from .optimization import scan_optimization_candidates
+from .planning_heuristics import assess_direct_execution_bypass
 from .parallel_resources import normalize_parallel_worker_mode
 from .platform_defaults import default_codex_path
 from .planning import (
@@ -504,13 +505,13 @@ class Orchestrator(
 
     def _resolve_local_repo_backend(self, repo_dir: Path, preferred: str = "auto") -> str:
         normalized = str(preferred or "auto").strip().lower() or "auto"
-        if normalized in {"git", "lit"}:
-            return normalized
         if self.git.is_git_repository(repo_dir):
             return "git"
         if self.git.is_lit_repository(repo_dir):
             return "lit"
-        return "lit"
+        if normalized in {"git", "lit"}:
+            return normalized
+        return "git"
 
     def setup_local_project(
         self,
@@ -575,17 +576,21 @@ class Orchestrator(
                 context.paths.repo_dir,
                 initial_commit.message,
                 author_name=initial_commit.author_name,
+                force=True,
             )
         else:
             safe_revision = self.git.current_revision(context.paths.repo_dir)
             if gitignore_updated:
-                setup_commit = build_setup_commit_descriptor(context)
-                safe_revision = self.git.commit_paths(
-                    context.paths.repo_dir,
-                    [".gitignore"],
-                    setup_commit.message,
-                    author_name=setup_commit.author_name,
-                )
+                changed_after_gitignore = set(self.git.changed_files(context.paths.repo_dir))
+                if ".gitignore" in changed_after_gitignore:
+                    setup_commit = build_setup_commit_descriptor(context)
+                    safe_revision = self.git.commit_paths(
+                        context.paths.repo_dir,
+                        [".gitignore"],
+                        setup_commit.message,
+                        author_name=setup_commit.author_name,
+                        force=True,
+                    )
 
         context.metadata.branch = self.git.current_branch(context.paths.repo_dir) or active_branch
         if repo_backend == "git":
@@ -690,7 +695,10 @@ class Orchestrator(
         remote_url = self.git.remote_url(repo_dir, "origin")
         if not remote_url:
             return
-        self.git.fetch(repo_dir, "origin", target_branch)
+        try:
+            self.git.fetch(repo_dir, "origin", target_branch)
+        except GitCommandError:
+            return
         remote_head = self.git.remote_branch_revision(repo_dir, "origin", target_branch)
         if not remote_head:
             return
@@ -698,7 +706,10 @@ class Orchestrator(
             raise ExecutionPreflightError(
                 f"Cannot pull origin/{target_branch} into an uncommitted local repository. Commit or clone the remote first."
             )
-        self.git.pull_ff_only(repo_dir, "origin", target_branch)
+        try:
+            self.git.pull_ff_only(repo_dir, "origin", target_branch)
+        except GitCommandError:
+            return
 
     def _push_local_setup_branch_to_origin(self, repo_dir: Path, branch: str) -> None:
         target_branch = str(branch or "").strip()
@@ -713,7 +724,10 @@ class Orchestrator(
         remote_head = self.git.remote_branch_revision(repo_dir, "origin", target_branch)
         if remote_head == local_head:
             return
-        self.git.push(repo_dir, target_branch)
+        try:
+            self.git.push(repo_dir, target_branch)
+        except GitCommandError:
+            return
 
     def generate_execution_plan(
         self,
@@ -773,6 +787,7 @@ class Orchestrator(
         previous_plan_state = self.load_execution_plan_state(context)
         workflow_mode = normalize_workflow_mode(runtime.workflow_mode)
         normalized_execution_mode = self._normalize_execution_mode(runtime.execution_mode)
+        planning_mode = self._planning_mode(runtime)
         planning_effort = self._resolved_planning_effort(runtime)
         planning_stage_count = 4
 
@@ -803,36 +818,33 @@ class Orchestrator(
         )
         context_scan_started_at = perf_counter()
         repo_inputs = self._scan_repository_inputs(context)
-        self._log_planning_metric(
-            context,
-            "context_scan",
-            started_at=context_scan_started_at,
-            details={"cache_file": str(context.paths.planning_inputs_cache_file)},
-        )
-        skip_full_planning = self._should_bypass_full_planning(
-            planning_effort,
-            workflow_mode,
+        direct_execution_assessment = assess_direct_execution_bypass(
             repo_inputs=repo_inputs,
             project_prompt=project_prompt,
             previous_plan_state=previous_plan_state,
             max_steps=max_steps,
+            planning_effort=planning_effort,
+            workflow_mode=workflow_mode,
         )
+        self._log_planning_metric(
+            context,
+            "context_scan",
+            started_at=context_scan_started_at,
+            details={
+                "cache_file": str(context.paths.planning_inputs_cache_file),
+                "planning_mode": planning_mode,
+            },
+        )
+        skip_full_planning = planning_mode == "no"
         runner = CodexRunner(context.runtime.codex_path)
         plan_title = ""
         summary = ""
         steps: list[ExecutionStep] = []
         skip_planner_a = self._should_skip_planner_decomposition(
-            context,
-            planning_effort,
-            workflow_mode,
-            repo_inputs=repo_inputs,
-            project_prompt=project_prompt,
-            previous_plan_state=previous_plan_state,
-            max_steps=max_steps,
+            planning_mode,
         )
         planner_outline = ""
         if skip_full_planning:
-            direct_step_type = self._direct_execution_step_type(project_prompt)
             report_progress(
                 "planner-agent-started",
                 "Direct execution bypass is synthesizing a single focused block.",
@@ -851,14 +863,24 @@ class Orchestrator(
                 test_command=runtime.test_cmd,
                 reasoning_effort=normalize_reasoning_effort(runtime.effort, fallback="high"),
                 spine_version=current_spine_version(context.paths),
-                step_type=direct_step_type,
+                step_type=direct_execution_assessment.step_type,
+                direct_execution_score=direct_execution_assessment.score,
+                direct_execution_reasons=direct_execution_assessment.reasons,
             )
             steps = self._materialize_generated_step_models(steps, runtime)
             self._log_planning_metric(
                 context,
                 "planner_direct_bypass",
                 started_at=direct_plan_started_at,
-                details={"step_type": direct_step_type, "step_count": len(steps)},
+                details={
+                    "step_type": direct_execution_assessment.step_type,
+                    "step_count": len(steps),
+                    "score": direct_execution_assessment.score,
+                    "threshold": direct_execution_assessment.threshold,
+                    "reasons": list(direct_execution_assessment.reasons),
+                    "positive_markers": list(direct_execution_assessment.positive_markers),
+                    "negative_markers": list(direct_execution_assessment.negative_markers),
+                },
             )
             report_progress(
                 "planner-agent-finished",
@@ -872,6 +894,8 @@ class Orchestrator(
                     "agent_label": "Planner Agent A",
                     "skipped": True,
                     "bypass_reason": "small_task_direct_execution",
+                    "score": direct_execution_assessment.score,
+                    "planning_mode": planning_mode,
                 },
             )
             report_progress(
@@ -898,6 +922,8 @@ class Orchestrator(
                     "agent_label": "Planner Agent B",
                     "skipped": True,
                     "bypass_reason": "small_task_direct_execution",
+                    "score": direct_execution_assessment.score,
+                    "planning_mode": planning_mode,
                 },
             )
         elif skip_planner_a:
@@ -1119,132 +1145,16 @@ class Orchestrator(
 
     def _should_skip_planner_decomposition(
         self,
-        context: ProjectContext,
-        planning_effort: str,
-        workflow_mode: str,
-        *,
-        repo_inputs: dict[str, str],
-        project_prompt: str,
-        previous_plan_state: ExecutionPlanState,
-        max_steps: int,
+        planning_mode: str,
     ) -> bool:
-        if workflow_mode == "ml":
-            return False
-        if planning_effort == "xhigh":
-            return False
-        if bool(getattr(context.runtime, "use_fast_mode", False)):
-            return True
-        return self._should_use_adaptive_single_pass(
-            repo_inputs=repo_inputs,
-            project_prompt=project_prompt,
-            previous_plan_state=previous_plan_state,
-            max_steps=max_steps,
-            planning_effort=planning_effort,
-        )
+        return planning_mode == "compact"
 
     @staticmethod
-    def _should_bypass_full_planning(
-        planning_effort: str,
-        workflow_mode: str,
-        *,
-        repo_inputs: dict[str, str],
-        project_prompt: str,
-        previous_plan_state: ExecutionPlanState,
-        max_steps: int,
-    ) -> bool:
-        if workflow_mode == "ml":
-            return False
-        if planning_effort not in {"low", "medium"}:
-            return False
-        if max_steps > 3:
-            return False
-        normalized_prompt = " ".join(str(project_prompt or "").split()).strip().lower()
-        if not normalized_prompt:
-            return False
-        if len(normalized_prompt) > 160 or len(normalized_prompt.split()) > 24:
-            return False
-        broad_scope_markers = (
-            "new feature",
-            "new screen",
-            "new page",
-            "new workflow",
-            "redesign",
-            "architecture",
-            "migrate",
-            "multi-step",
-            "end-to-end",
-            "from scratch",
-            "refactor the",
-            "overhaul",
-            "dashboard",
-            "desktop app",
-            "tauri",
-        )
-        if any(marker in normalized_prompt for marker in broad_scope_markers):
-            return False
-        direct_execution_markers = (
-            "fix",
-            "debug",
-            "bug",
-            "broken",
-            "failing",
-            "failure",
-            "issue",
-            "error",
-            "regression",
-            "repair",
-            "adjust",
-            "tweak",
-            "rename",
-            "update",
-            "remove",
-            "clean up",
-            "wire",
-            "align",
-        )
-        if not any(marker in normalized_prompt for marker in direct_execution_markers):
-            return False
-        repo_size = sum(len(str(repo_inputs.get(key, ""))) for key in ("readme", "agents", "docs", "source"))
-        if repo_size > 7_500:
-            return False
-        active_statuses = {"running", "integrating"}
-        if any(step.status in active_statuses for step in previous_plan_state.steps):
-            return False
-        return True
-
-    @staticmethod
-    def _direct_execution_step_type(project_prompt: str) -> str:
-        normalized_prompt = " ".join(str(project_prompt or "").split()).strip().lower()
-        debug_markers = ("fix", "debug", "bug", "broken", "failing", "failure", "issue", "error", "regression", "repair")
-        return "debug" if any(marker in normalized_prompt for marker in debug_markers) else "feature"
-
-    @staticmethod
-    def _should_use_adaptive_single_pass(
-        *,
-        repo_inputs: dict[str, str],
-        project_prompt: str,
-        previous_plan_state: ExecutionPlanState,
-        max_steps: int,
-        planning_effort: str,
-    ) -> bool:
-        if planning_effort not in {"low", "medium"}:
-            return False
-        if max_steps > 4:
-            return False
-        if len(project_prompt.split()) > 18:
-            return False
-        if len(previous_plan_state.steps) == 0 or len(previous_plan_state.steps) > 6:
-            return False
-        repo_size = sum(len(str(repo_inputs.get(key, ""))) for key in ("readme", "agents", "docs", "source"))
-        if repo_size > 5200:
-            return False
-        source_summary = str(repo_inputs.get("source", "")).lower()
-        if "plus many more" in source_summary:
-            return False
-        docs_summary = str(repo_inputs.get("docs", "")).lower()
-        if "additional markdown doc files omitted" in docs_summary:
-            return False
-        return True
+    def _planning_mode(runtime: RuntimeOptions) -> str:
+        normalized = str(getattr(runtime, "planning_mode", "") or "").strip().lower()
+        if normalized in {"no", "compact", "full"}:
+            return normalized
+        return "compact" if bool(getattr(runtime, "use_fast_mode", False)) else "full"
 
     def _planning_effort_for_runtime(self, runtime: RuntimeOptions, planning_effort: str) -> str:
         selected_provider = str(getattr(runtime, "model_provider", "") or "").strip().lower()

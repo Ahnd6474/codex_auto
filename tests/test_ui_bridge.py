@@ -621,6 +621,9 @@ class UIBridgeTests(unittest.TestCase):
             ), mock.patch(
                 "jakal_flow.ui_bridge.Path.home",
                 return_value=home_dir,
+            ), mock.patch(
+                "jakal_flow.ui_bridge.repo_root",
+                return_value=temp_dir / "repo",
             ):
                 resolved = default_workspace_root()
 
@@ -1070,13 +1073,14 @@ class UIBridgeTests(unittest.TestCase):
         self.assertEqual(runtime.effort, "high")
         self.assertEqual(runtime.planning_effort, "high")
 
-    def test_runtime_from_payload_defaults_fast_mode_for_desktop(self) -> None:
+    def test_runtime_from_payload_defaults_compact_planning_for_desktop(self) -> None:
         runtime = runtime_from_payload(
             {
                 "model": "gpt-5.4",
             }
         )
 
+        self.assertEqual(runtime.planning_mode, "compact")
         self.assertTrue(runtime.use_fast_mode)
 
     def test_cli_runtime_from_args_loads_toml_config_and_set_overrides(self) -> None:
@@ -1362,6 +1366,7 @@ class UIBridgeTests(unittest.TestCase):
         )
 
         self.assertEqual(runtime.model, "gpt-5.4")
+        self.assertEqual(runtime.planning_mode, "compact")
         self.assertTrue(runtime.use_fast_mode)
 
     def test_runtime_from_payload_preserves_explicit_fast_mode_disable(self) -> None:
@@ -1373,6 +1378,7 @@ class UIBridgeTests(unittest.TestCase):
         )
 
         self.assertEqual(runtime.model, "gpt-5.4")
+        self.assertEqual(runtime.planning_mode, "full")
         self.assertFalse(runtime.use_fast_mode)
 
     def test_runtime_from_payload_accepts_compact_planning_alias(self) -> None:
@@ -1384,6 +1390,20 @@ class UIBridgeTests(unittest.TestCase):
         )
 
         self.assertEqual(runtime.model, "gpt-5.4")
+        self.assertEqual(runtime.planning_mode, "compact")
+        self.assertTrue(runtime.use_fast_mode)
+
+    def test_runtime_from_payload_prefers_explicit_planning_mode_over_legacy_fast_flag(self) -> None:
+        runtime = runtime_from_payload(
+            {
+                "model": "gpt-5.4",
+                "planning_mode": "no",
+                "use_fast_mode": "false",
+            }
+        )
+
+        self.assertEqual(runtime.model, "gpt-5.4")
+        self.assertEqual(runtime.planning_mode, "no")
         self.assertTrue(runtime.use_fast_mode)
 
     def test_runtime_from_payload_coerces_word_report_flag(self) -> None:
@@ -4777,6 +4797,110 @@ class UIBridgeTests(unittest.TestCase):
             self.assertTrue(Path(session.transcript_file).exists())
             self.assertTrue(Path(session.log_file).exists())
             self.assertTrue(str(Path(session.transcript_file)).startswith(str(chat_home)))
+            self.assertFalse(legacy_registry.exists())
+            self.assertFalse(legacy_active.exists())
+            self.assertFalse(legacy_log_path.exists())
+            self.assertFalse(legacy_summary_path.exists())
+            self.assertFalse(legacy_transcript_path.exists())
+
+    def test_chat_storage_root_defaults_to_workspace_root_when_chat_home_override_is_unset(self) -> None:
+        with TemporaryTestDir() as temp_dir, mock.patch.dict(
+            os.environ,
+            {CHAT_HOME_ENV_VAR: ""},
+            clear=False,
+        ):
+            context = build_test_project_context(
+                temp_dir,
+                repo_id="workspace-chat-demo",
+                slug="workspace-chat-demo",
+                display_name="Workspace Chat Demo",
+            )
+
+            self.assertEqual(
+                chat_sessions.chat_storage_root(context),
+                context.paths.workspace_root / "chat_sessions",
+            )
+
+    def test_load_chat_sessions_migrates_source_checkout_chat_storage_into_workspace_chat_home(self) -> None:
+        with TemporaryTestDir() as temp_dir, mock.patch.dict(
+            os.environ,
+            {CHAT_HOME_ENV_VAR: ""},
+            clear=False,
+        ):
+            context = build_test_project_context(
+                temp_dir,
+                repo_id="source-chat-demo",
+                slug="source-chat-demo",
+                display_name="Source Chat Demo",
+            )
+            legacy_chat_home = temp_dir / "legacy-source-chat"
+            session_id = "chat-20260330020202-source"
+            legacy_registry = legacy_chat_home / "CHAT_SESSIONS.txt"
+            legacy_active = legacy_chat_home / "active" / f"{context.metadata.repo_id}.txt"
+            legacy_logs_dir = legacy_chat_home / "logs"
+            legacy_memory_dir = legacy_chat_home / "memory"
+            legacy_logs_dir.mkdir(parents=True, exist_ok=True)
+            legacy_memory_dir.mkdir(parents=True, exist_ok=True)
+            legacy_active.parent.mkdir(parents=True, exist_ok=True)
+
+            legacy_log_path = legacy_logs_dir / f"{session_id}.messages.txt"
+            legacy_summary_path = legacy_memory_dir / f"{session_id}.summary.txt"
+            legacy_transcript_path = legacy_memory_dir / "Source chat title 20260330020202.txt"
+            legacy_log_path.write_text(
+                json.dumps(
+                    {
+                        "message_id": "msg-1",
+                        "role": "user",
+                        "text": "Source chat title",
+                        "created_at": "2026-03-30T02:02:02+00:00",
+                        "mode": "conversation",
+                        "status": "completed",
+                        "metadata": {},
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            legacy_summary_path.write_text("source summary\n", encoding="utf-8")
+            legacy_transcript_path.write_text("source transcript\n", encoding="utf-8")
+            legacy_registry.write_text(
+                json.dumps(
+                    {
+                        "session_id": session_id,
+                        "repo_id": context.metadata.repo_id,
+                        "title": "Source chat title 20260330020202.txt",
+                        "created_at": "2026-03-30T02:02:02+00:00",
+                        "updated_at": "2026-03-30T02:02:02+00:00",
+                        "message_count": 1,
+                        "last_mode": "conversation",
+                        "summary_file": str(legacy_summary_path),
+                        "transcript_file": str(legacy_transcript_path),
+                        "log_file": str(legacy_log_path),
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            legacy_active.write_text(f"{session_id}\n", encoding="utf-8")
+
+            with mock.patch(
+                "jakal_flow.chat_sessions._legacy_source_checkout_chat_home_root",
+                return_value=legacy_chat_home,
+            ):
+                sessions = load_chat_sessions(context)
+
+            self.assertEqual(len(sessions), 1)
+            session = sessions[0]
+            workspace_chat_home = context.paths.workspace_root / "chat_sessions"
+            self.assertEqual(session.repo_id, context.metadata.repo_id)
+            self.assertTrue(str(Path(session.summary_file)).startswith(str(workspace_chat_home)))
+            self.assertTrue(str(Path(session.transcript_file)).startswith(str(workspace_chat_home)))
+            self.assertTrue(str(Path(session.log_file)).startswith(str(workspace_chat_home)))
+            self.assertTrue((workspace_chat_home / "active" / f"{context.metadata.repo_id}.txt").exists())
             self.assertFalse(legacy_registry.exists())
             self.assertFalse(legacy_active.exists())
             self.assertFalse(legacy_log_path.exists())

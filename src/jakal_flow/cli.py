@@ -188,6 +188,7 @@ def _legacy_runtime_overrides(args: argparse.Namespace) -> dict[str, object]:
         "per_pass_cost_usd": "per_pass_cost_usd",
         "fast": "use_fast_mode",
         "compact_planning": "use_fast_mode",
+        "planning_mode": "planning_mode",
         "word_report": "generate_word_report",
         "effort": "effort",
         "planning_effort": "planning_effort",

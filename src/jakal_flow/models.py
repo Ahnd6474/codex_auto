@@ -99,6 +99,7 @@ class RuntimeOptions:
     model_slug_input: str = ""
     chat_model: str = ""
     effort_selection_mode: str = "explicit"
+    planning_mode: str = "full"
     use_fast_mode: bool = False
     generate_word_report: bool = False
     codex_base_slug: str = ""

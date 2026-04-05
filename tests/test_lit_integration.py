@@ -10,7 +10,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from jakal_flow.git_ops import GitOps
+from jakal_flow.git_ops import GitOps, GitCommandError
+from jakal_flow.lit_ops import LitCommandError, LitOps
 from jakal_flow.models import ExecutionPlanState, RuntimeOptions
 from jakal_flow.orchestrator import Orchestrator
 from jakal_flow.runtime_config import normalize_runtime_payload
@@ -93,6 +94,14 @@ class GitOpsLitTests(unittest.TestCase):
 
         self.assertEqual(changed, ["src/app.py", "README.md", "stale.txt", "notes.txt"])
 
+    def test_lit_run_wraps_missing_executable_as_lit_command_error(self) -> None:
+        repo_dir = self._prepare_lit_repo()
+        ops = LitOps(command="lit-missing")
+
+        with mock.patch("jakal_flow.lit_ops.run_subprocess", side_effect=FileNotFoundError("missing lit")):
+            with self.assertRaisesRegex(LitCommandError, "executable could not be started"):
+                ops.run(["status"], cwd=repo_dir)
+
 
 class OrchestratorLitSetupTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -165,7 +174,7 @@ class OrchestratorLitSetupTests(unittest.TestCase):
 
         self.assertEqual(backend, "git")
 
-    def test_resolve_local_repo_backend_falls_back_to_lit_for_new_local_dirs(self) -> None:
+    def test_resolve_local_repo_backend_defaults_to_git_for_new_local_dirs(self) -> None:
         workspace_root = self.temp_dir / "workspace-auto"
         repo_dir = self.temp_dir / "repo-auto"
         repo_dir.mkdir(parents=True, exist_ok=True)
@@ -173,7 +182,27 @@ class OrchestratorLitSetupTests(unittest.TestCase):
 
         backend = orchestrator._resolve_local_repo_backend(repo_dir, preferred="auto")
 
+        self.assertEqual(backend, "git")
+
+    def test_resolve_local_repo_backend_honors_explicit_lit_for_new_local_dirs(self) -> None:
+        workspace_root = self.temp_dir / "workspace-auto-lit"
+        repo_dir = self.temp_dir / "repo-auto-lit"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+
+        backend = orchestrator._resolve_local_repo_backend(repo_dir, preferred="lit")
+
         self.assertEqual(backend, "lit")
+
+    def test_resolve_local_repo_backend_prefers_actual_git_repo_over_stale_lit_preference(self) -> None:
+        workspace_root = self.temp_dir / "workspace-prefer-actual"
+        repo_dir = self.temp_dir / "repo-prefer-actual"
+        (repo_dir / ".git").mkdir(parents=True, exist_ok=True)
+        orchestrator = Orchestrator(workspace_root)
+
+        backend = orchestrator._resolve_local_repo_backend(repo_dir, preferred="lit")
+
+        self.assertEqual(backend, "git")
 
 
 if __name__ == "__main__":

@@ -822,6 +822,7 @@ test("program settings helpers keep global runtime controls separate from projec
     approval_mode: "untrusted",
     sandbox_mode: "workspace-write",
     allow_push: false,
+    planning_mode: "no",
   });
 
   assert.deepEqual(settings, {
@@ -839,6 +840,7 @@ test("program settings helpers keep global runtime controls separate from projec
     execution_model: "gpt-5.4",
     chat_model: "",
     planning_effort: "medium",
+    planning_mode: "no",
     model_preset: "",
     model_selection_mode: "slug",
     model_slug_input: "gpt-5.4",
@@ -856,6 +858,7 @@ test("program settings helpers keep global runtime controls separate from projec
     parallel_memory_per_worker_gib: 3,
     save_project_logs: false,
     optimization_mode: "off",
+    use_fast_mode: true,
     developer_mode: false,
     ui_theme: "dark",
     dashboard_visibility: {
@@ -894,6 +897,7 @@ test("program settings helpers keep global runtime controls separate from projec
       allow_push: false,
       require_checkpoint_approval: false,
       workflow_mode: "standard",
+      planning_mode: "no",
       ml_max_cycles: 3,
       execution_mode: "parallel",
       parallel_worker_mode: "auto",
@@ -927,6 +931,7 @@ test("program settings helpers keep global runtime controls separate from projec
         allow_push: false,
         require_checkpoint_approval: false,
         workflow_mode: "standard",
+        planning_mode: "no",
         ml_max_cycles: 3,
         execution_mode: "parallel",
         parallel_worker_mode: "auto",
@@ -1325,6 +1330,7 @@ test("projectFormFromDetail merges persisted runtime and derives GitHub mode", (
   const form = projectFormFromDetail(detail, defaultRuntime);
 
   assert.deepEqual(form, {
+    repo_id: "",
     project_dir: "C:/work/demo",
     display_name: "Demo App",
     branch: "release",
@@ -1341,6 +1347,8 @@ test("projectFormFromDetail merges persisted runtime and derives GitHub mode", (
       model: "gpt-5.4",
       model_slug_input: "gpt-5.4",
       execution_model: "gpt-5.4",
+      planning_mode: "compact",
+      use_fast_mode: true,
     },
   });
 });
@@ -2089,6 +2097,7 @@ test("buildProjectPayload trims fields, blanks origin_url for existing repos, an
   assert.deepEqual(form.runtime, { test_cmd: "pytest -q" });
   assert.deepEqual(plan.steps, [{ step_id: "S1", status: "pending" }]);
   assert.deepEqual(payload, {
+    repo_id: "",
     project_dir: "C:/work/demo",
     display_name: "Demo App",
     branch: "main",
@@ -2176,6 +2185,7 @@ test("buildRunPlanPayloadFromDetail reuses the generated plan and persisted runt
   });
 
   assert.deepEqual(payload, {
+    repo_id: "",
     project_dir: "C:/work/demo",
     display_name: "Demo App",
     branch: "release",
@@ -2190,6 +2200,8 @@ test("buildRunPlanPayloadFromDetail reuses the generated plan and persisted runt
       model_slug_input: "gpt-5.4",
       execution_model: "gpt-5.4",
       test_cmd: "npm run check",
+      planning_mode: "compact",
+      use_fast_mode: true,
     },
     plan: {
       workflow_mode: "standard",
@@ -2312,8 +2324,8 @@ test("runtimeSummary reflects execution mode in preset and direct model summarie
     "OpenAI/Codex | Standard Mode | gpt-5.4 | reasoning Auto | parallel auto",
   );
   assert.equal(
-    runtimeSummary({ model: "gpt-5.4", effort: "low", use_fast_mode: true }, []),
-    "OpenAI/Codex | Standard Mode | gpt-5.4 | reasoning Low | parallel auto | faster planning",
+    runtimeSummary({ model: "gpt-5.4", effort: "low", planning_mode: "compact" }, []),
+    "OpenAI/Codex | Standard Mode | gpt-5.4 | reasoning Low | parallel auto | planning compact",
   );
   assert.equal(runtimeSummary({ model: "gpt-5.4" }), "OpenAI/Codex | Standard Mode | gpt-5.4 | reasoning High | parallel auto");
   assert.equal(
@@ -2322,6 +2334,23 @@ test("runtimeSummary reflects execution mode in preset and direct model summarie
   );
   assert.equal(runtimeSummary({}, undefined), "No model selected");
   assert.match(runtimeSummary({ model: "gpt-5.4", effort: "high" }, [], "ko"), /^OpenAI\/Codex \| .* \| gpt-5\.4 .* parallel .*$/);
+});
+
+test("program settings normalize planning mode from legacy fast flag and apply it to project runtime", () => {
+  const settings = programSettingsFromRuntime({
+    use_fast_mode: true,
+  });
+
+  assert.equal(settings.planning_mode, "compact");
+  assert.equal(
+    applyProgramSettings(
+      {
+        test_cmd: "pytest -q",
+      },
+      settings,
+    ).planning_mode,
+    "compact",
+  );
 });
 
 test("resolveProjectDirectory prefers loaded project detail over a stale form value", () => {

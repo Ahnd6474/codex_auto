@@ -79,6 +79,16 @@ class GitOpsTests(unittest.TestCase):
 
         self.assertEqual(branch, "main")
 
+    def test_run_wraps_missing_git_executable_as_git_command_error(self) -> None:
+        repo_dir = Path(tempfile.mkdtemp(prefix="jakal-flow-git-missing-"))
+        git = GitOps()
+        try:
+            with mock.patch("jakal_flow.git_ops.run_subprocess", side_effect=FileNotFoundError("missing git")):
+                with self.assertRaisesRegex(GitCommandError, "git executable could not be started"):
+                    git.run(["status"], cwd=repo_dir)
+        finally:
+            shutil.rmtree(repo_dir, ignore_errors=True)
+
     def test_current_revision_reads_head_without_git_subprocess(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()
         repo_dir = Path(temp_dir.name)
@@ -723,7 +733,7 @@ class GitOpsTests(unittest.TestCase):
         repo_dir = Path("C:/Users/ahnd6/OneDrive/문서/GitHub/lit")
         worktree_dir = Path("C:/Users/ahnd6/OneDrive/문서/GitHub/lit/worktree")
         git = GitOps()
-        expected_gitdir = repo_dir.resolve() / ".git" / "worktrees" / worktree_dir.name
+        expected_gitdir = repo_dir / ".git" / "worktrees" / worktree_dir.name
         stale_gitdir = Path("C:/Users/ahnd6/OneDrive/문서/GitHub/lit/.git/worktrees/repo")
         git_file.write_text(f"gitdir: {stale_gitdir.as_posix()}\n", encoding="utf-8")
 

@@ -16,6 +16,7 @@ from .model_constants import (
     VALID_BILLING_MODES,
     VALID_MODEL_PROVIDERS,
 )
+from .platform_defaults import configured_ollama_model_store_root
 
 ALL_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"]
 _LOCAL_MODEL_CATALOG_TTL_SECONDS = 15.0
@@ -399,13 +400,25 @@ def builtin_model_catalog() -> list[dict[str, Any]]:
     return entries
 
 
-def _local_model_cache_key(third_party_root: Path | None = None) -> str:
-    if third_party_root is None:
+def _cacheable_path_string(path: Path | None) -> str:
+    if path is None:
         return ""
     try:
-        return str(third_party_root.resolve())
+        return str(path.resolve())
     except OSError:
-        return str(third_party_root)
+        return str(path)
+
+
+def _local_model_cache_key(
+    third_party_root: Path | None = None,
+    managed_ollama_root: Path | None = None,
+) -> str:
+    return "|".join(
+        (
+            _cacheable_path_string(third_party_root),
+            _cacheable_path_string(managed_ollama_root),
+        )
+    )
 
 
 def _clone_local_model_catalog(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -414,10 +427,11 @@ def _clone_local_model_catalog(entries: list[dict[str, Any]]) -> list[dict[str, 
 
 def discover_local_model_catalog(
     third_party_root: Path | None = None,
+    managed_ollama_root: Path | None = None,
     *,
     force_refresh: bool = False,
 ) -> list[dict[str, Any]]:
-    cache_key = _local_model_cache_key(third_party_root)
+    cache_key = _local_model_cache_key(third_party_root, managed_ollama_root)
     now = time.monotonic()
     cached = _LOCAL_MODEL_CATALOG_CACHE.get(cache_key)
     if (
@@ -429,7 +443,10 @@ def discover_local_model_catalog(
 
     entries: list[dict[str, Any]] = []
     seen_keys: set[tuple[str, str]] = set()
-    for provider, model_name, source, installed in _iter_local_models(third_party_root=third_party_root):
+    for provider, model_name, source, installed in _iter_local_models(
+        third_party_root=third_party_root,
+        managed_ollama_root=managed_ollama_root,
+    ):
         key = (provider, model_name.lower())
         if key in seen_keys:
             continue
@@ -459,9 +476,17 @@ def discover_local_model_catalog(
     return _clone_local_model_catalog(result)
 
 
-def default_local_model(value: str, local_provider: str, third_party_root: Path | None = None) -> str:
+def default_local_model(
+    value: str,
+    local_provider: str,
+    third_party_root: Path | None = None,
+    managed_ollama_root: Path | None = None,
+) -> str:
     target_local_provider = effective_local_model_provider(value, local_provider, fallback="")
-    for item in discover_local_model_catalog(third_party_root=third_party_root):
+    for item in discover_local_model_catalog(
+        third_party_root=third_party_root,
+        managed_ollama_root=managed_ollama_root,
+    ):
         if not isinstance(item, dict):
             continue
         model_name = str(item.get("model", "")).strip().lower()
@@ -474,7 +499,10 @@ def default_local_model(value: str, local_provider: str, third_party_root: Path 
     return ""
 
 
-def _iter_local_models(third_party_root: Path | None = None) -> list[tuple[str, str, str, bool]]:
+def _iter_local_models(
+    third_party_root: Path | None = None,
+    managed_ollama_root: Path | None = None,
+) -> list[tuple[str, str, str, bool]]:
     discovered: list[tuple[str, str, str, bool]] = []
     seen: set[tuple[str, str]] = set()
 
@@ -484,6 +512,13 @@ def _iter_local_models(third_party_root: Path | None = None) -> list[tuple[str, 
             continue
         seen.add(key)
         discovered.append((DEFAULT_LOCAL_MODEL_PROVIDER, model_name, "ollama-cli", True))
+
+    for model_name in _managed_ollama_models(managed_ollama_root=managed_ollama_root):
+        key = (DEFAULT_LOCAL_MODEL_PROVIDER, model_name.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        discovered.append((DEFAULT_LOCAL_MODEL_PROVIDER, model_name, "managed-ollama-store", True))
 
     for model_name in _vendored_ollama_models(third_party_root=third_party_root):
         key = (DEFAULT_LOCAL_MODEL_PROVIDER, model_name.lower())
@@ -520,6 +555,26 @@ def _ollama_cli_models() -> list[str]:
         model_name = stripped.split()[0].strip()
         if model_name:
             models.append(model_name)
+    return models
+
+
+def _legacy_repo_ollama_model_store_root() -> Path:
+    return _default_third_party_root() / "ollama" / "models"
+
+
+def _managed_ollama_models(managed_ollama_root: Path | None = None) -> list[str]:
+    root = managed_ollama_root or configured_ollama_model_store_root(
+        legacy_root=_legacy_repo_ollama_model_store_root(),
+    )
+    manifest_root = root / "manifests" / "registry.ollama.ai" / "library"
+    if not manifest_root.exists():
+        return []
+    models: list[str] = []
+    for family_dir in sorted(path for path in manifest_root.iterdir() if path.is_dir()):
+        for tag_path in sorted(path for path in family_dir.iterdir() if path.is_file()):
+            model_name = f"{family_dir.name}:{tag_path.name}"
+            if model_name not in models:
+                models.append(model_name)
     return models
 
 

@@ -66,6 +66,7 @@ function sameRuntimeSummaryState(previousRuntime = null, nextRuntime = null) {
     && previous.parallel_workers === next.parallel_workers
     && previous.effort_selection_mode === next.effort_selection_mode
     && previous.effort === next.effort
+    && previous.planning_mode === next.planning_mode
     && previous.use_fast_mode === next.use_fast_mode
   );
 }

@@ -32,6 +32,7 @@ from jakal_flow.errors import (
 from jakal_flow.execution_control import ImmediateStopRequested, execution_scope_id
 from jakal_flow.git_ops import GitOps
 from jakal_flow.memory import MemoryStore
+from jakal_flow.planning_heuristics import assess_direct_execution_bypass
 from jakal_flow.model_selection import (
     DEFAULT_MODEL_PRESET_ID,
     MODEL_MODE_CODEX,
@@ -3870,7 +3871,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             with mock.patch.object(orchestrator, "_run_test_command", side_effect=[failing_test, recovered_test]), mock.patch.object(
                 orchestrator.git,
                 "changed_files",
-                side_effect=[["src/app.py"], ["src/app.py", "src/fix.py"]],
+                side_effect=[["src/app.py"], ["src/app.py", "src/fix.py"], ["src/app.py", "src/fix.py"]],
             ), mock.patch.object(orchestrator.git, "has_changes", return_value=True), mock.patch.object(
                 orchestrator.git,
                 "commit_all",
@@ -3986,7 +3987,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIsNone(commit_hash)
         mocked_debugger.assert_not_called()
         mocked_reset.assert_called_once_with(repo_dir, "safe-revision")
-        self.assertEqual(pass_entries[-1]["rollback_status"], "debugger_skipped_no_changed_files")
+        self.assertEqual(pass_entries[-1]["rollback_status"], "debugger_skipped_verification_infrastructure_failure")
 
     def test_execute_pass_falls_back_to_openai_after_auto_gemini_runtime_failure(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_step_provider_fallback_test"
@@ -6140,6 +6141,216 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("{repo_url}", scope_template)
         self.assertIn("reserve README.md edits for planning-time alignment or the final closeout pass", scope_template)
 
+    def test_compact_text_balanced_preserves_head_and_tail_context(self) -> None:
+        text = "Header context\n" + ("middle noise\n" * 200) + "Critical tail error: failing assertion on final line"
+        compacted = compact_text_balanced(text, max_chars=220)
+        self.assertIn("Header context", compacted)
+        self.assertIn("Critical tail error", compacted)
+        self.assertIn("...", compacted)
+        self.assertLessEqual(len(compacted), 220)
+
+    def test_runtime_and_plan_state_force_parallel_execution_mode(self) -> None:
+        runtime_payload = normalize_runtime_payload({"execution_mode": "serial"})
+        plan_state = parse_plan_state({"plan_title": "Demo plan"})
+        self.assertEqual(runtime_payload["execution_mode"], "parallel")
+        self.assertEqual(plan_state.execution_mode, "parallel")
+
+    def test_assess_direct_execution_bypass_scores_narrow_fix_highly(self) -> None:
+        assessment = assess_direct_execution_bypass(
+            repo_inputs={
+                "readme": "README summary",
+                "agents": "AGENTS summary",
+                "docs": "Docs summary",
+                "source": "src/parser.py",
+            },
+            project_prompt="Fix failing parser test",
+            previous_plan_state=ExecutionPlanState(),
+            max_steps=2,
+            planning_effort="medium",
+            workflow_mode="standard",
+        )
+        self.assertTrue(assessment.should_bypass)
+        self.assertEqual(assessment.step_type, "debug")
+        self.assertGreaterEqual(assessment.score, assessment.threshold)
+        self.assertIn("fix", assessment.positive_markers)
+
+    def test_assess_direct_execution_bypass_rejects_broad_redesign(self) -> None:
+        assessment = assess_direct_execution_bypass(
+            repo_inputs={
+                "readme": "README summary",
+                "agents": "AGENTS summary",
+                "docs": "Docs summary",
+                "source": "desktop/src/App.jsx",
+            },
+            project_prompt="Redesign the desktop app workflow and add a new dashboard page from scratch",
+            previous_plan_state=ExecutionPlanState(),
+            max_steps=3,
+            planning_effort="medium",
+            workflow_mode="standard",
+        )
+        self.assertFalse(assessment.should_bypass)
+        self.assertLess(assessment.score, assessment.threshold)
+        self.assertIn("redesign", assessment.negative_markers)
+
+    def test_assess_direct_execution_bypass_blocks_ml_workflow(self) -> None:
+        assessment = assess_direct_execution_bypass(
+            repo_inputs={"readme": "", "agents": "", "docs": "", "source": ""},
+            project_prompt="Fix the evaluation script",
+            previous_plan_state=ExecutionPlanState(),
+            max_steps=2,
+            planning_effort="medium",
+            workflow_mode="ml",
+        )
+        self.assertFalse(assessment.should_bypass)
+        self.assertIn("ml_workflow", assessment.blockers)
+
+    def test_build_conversation_prompt_injects_execution_state_summary(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_conversation_prompt_state_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        repo_dir = temp_root / "repo"
+        managed_docs = temp_root / "managed-docs"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        managed_docs.mkdir(parents=True, exist_ok=True)
+        (managed_docs / "PLAN.md").write_text("Saved plan snapshot", encoding="utf-8")
+        (managed_docs / "SCOPE_GUARD.md").write_text("Scope guard snapshot", encoding="utf-8")
+        (managed_docs / "RESEARCH_NOTES.md").write_text("Research notes snapshot", encoding="utf-8")
+        context = SimpleNamespace(
+            metadata=SimpleNamespace(
+                display_name="Demo project",
+                slug="demo-project",
+                branch="main",
+                current_status="running:st1",
+                repo_path=repo_dir,
+            ),
+            paths=SimpleNamespace(
+                repo_dir=repo_dir,
+                docs_dir=managed_docs,
+                plan_file=managed_docs / "PLAN.md",
+                scope_guard_file=managed_docs / "SCOPE_GUARD.md",
+                research_notes_file=managed_docs / "RESEARCH_NOTES.md",
+            ),
+        )
+        plan_state = ExecutionPlanState(
+            plan_title="Planner output",
+            project_prompt="Fix the failing parser test.",
+            closeout_status="not_started",
+            steps=[
+                ExecutionStep(
+                    step_id="ST1",
+                    title="Fix parser regression",
+                    status="failed",
+                    success_criteria="Parser tests pass again.",
+                ),
+                ExecutionStep(
+                    step_id="ST2",
+                    title="Verify parser flow",
+                    status="pending",
+                    depends_on=["ST1"],
+                    success_criteria="Regression coverage is present.",
+                ),
+            ],
+        )
+        session = ChatSessionMeta(
+            session_id="chat-1",
+            repo_id="repo-1",
+            title="Demo",
+            created_at="2026-04-05T00:00:00+00:00",
+            updated_at="2026-04-05T00:00:00+00:00",
+            summary_file=str(managed_docs / "chat.summary.txt"),
+            transcript_file=str(managed_docs / "chat.transcript.txt"),
+        )
+        try:
+            prompt = build_conversation_prompt(
+                context,
+                plan_state=plan_state,
+                session=session,
+                prior_summary="Prior summary",
+                recent_messages=[],
+                user_message="What is failing right now?",
+            )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertIn("Current execution state:", prompt)
+        self.assertIn("ST1 [failed] Fix parser regression", prompt)
+        self.assertIn("ST2 [pending] Verify parser flow", prompt)
+        self.assertIn("Progress: 0/2 completed", prompt)
+
+    def test_generate_execution_plan_bypasses_planners_for_small_debug_prompt(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_small_task_direct_plan_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        (repo_dir / "README.md").write_text("README summary", encoding="utf-8")
+        (repo_dir / "AGENTS.md").write_text("AGENTS summary", encoding="utf-8")
+        (repo_dir / "src").mkdir(parents=True, exist_ok=True)
+        (repo_dir / "src" / "parser.py").write_text("def parse() -> None:\n    pass\n", encoding="utf-8")
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            model="gpt-5.4",
+            effort="medium",
+            planning_effort="medium",
+            planning_mode="no",
+            execution_mode="parallel",
+            test_cmd="python -m pytest",
+        )
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(project_dir=repo_dir, branch="main", runtime=runtime)
+            with mock.patch.object(orchestrator, "setup_local_project", return_value=context), mock.patch(
+                "jakal_flow.orchestrator.CodexRunner.run_pass",
+                side_effect=AssertionError("planner LLM should not run for small direct-execution prompts"),
+            ):
+                _context, plan_state = orchestrator.generate_execution_plan(
+                    project_dir=repo_dir,
+                    runtime=runtime,
+                    project_prompt="Fix failing parser test",
+                    max_steps=2,
+                )
+                outline_text = (context.paths.docs_dir / "PLAN_AGENT_A_OUTLINE.md").read_text(encoding="utf-8")
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual([step.step_id for step in plan_state.steps], ["ST1"])
+        self.assertEqual(plan_state.steps[0].step_type, "debug")
+        self.assertTrue(plan_state.steps[0].metadata.get("direct_execution"))
+        self.assertGreater(int(plan_state.steps[0].metadata.get("direct_execution_score", 0)), 0)
+        self.assertIn("Direct execution mode", plan_state.summary)
+        self.assertIn("Direct execution bypass", outline_text)
+
+    def test_plan_generation_prompt_places_user_request_before_repository_summary(self) -> None:
+        context = SimpleNamespace(
+            paths=SimpleNamespace(
+                repo_dir=Path("demo-repo"),
+                spine_file=Path("demo-repo/docs/SPINE.json"),
+                shared_contracts_file=Path("demo-repo/docs/SHARED_CONTRACTS.md"),
+                planning_prompt_cache_file=None,
+            ),
+            runtime=SimpleNamespace(workflow_mode="standard", model_provider="openai"),
+        )
+        repo_inputs = {
+            "readme": "README summary",
+            "agents": "AGENTS summary",
+            "docs": "Docs summary",
+            "source": "Source summary",
+        }
+        with mock.patch.object(planning_module, "_planning_spine_version", return_value="spine-v1"), mock.patch.object(
+            planning_module,
+            "_planning_shared_contracts_snapshot",
+            return_value="# Shared Contracts",
+        ):
+            prompt = prompt_to_execution_plan_prompt(
+                context,
+                repo_inputs,
+                "Fix failing parser test",
+                2,
+                "parallel",
+            )
+        self.assertIn('top-level "tasks" array containing 1 to 2 items', prompt)
+        self.assertLess(prompt.index("Primary user request:"), prompt.index("Repository summary:"))
+        self.assertLess(prompt.index("Fix failing parser test"), prompt.index("Repository summary:"))
+
     def test_scan_repository_inputs_and_source_reference_guide_feed_planning_prompts(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_reference_notes_test"
         shutil.rmtree(temp_root, ignore_errors=True)
@@ -7120,8 +7331,8 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual([step.step_id for step in plan_state.steps], ["ST1", "ST2"])
         self.assertIn("If the relevant module, class, or function already exists, update it in place", plan_state.steps[0].codex_description)
 
-    def test_generate_execution_plan_skips_planner_agent_a_in_fast_mode(self) -> None:
-        temp_root = Path(__file__).resolve().parents[1] / ".tmp_fast_planner_test"
+    def test_generate_execution_plan_skips_planner_agent_a_in_compact_planning_mode(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_compact_planner_test"
         shutil.rmtree(temp_root, ignore_errors=True)
         workspace_root = temp_root / "workspace"
         repo_dir = temp_root / "repo"
@@ -7135,8 +7346,8 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             model="gpt-5.4",
             effort="medium",
             planning_effort="medium",
+            planning_mode="compact",
             execution_mode="parallel",
-            use_fast_mode=True,
             test_cmd="python -m pytest",
         )
 
@@ -7145,7 +7356,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             planning_events: list[tuple[str, str, dict[str, object] | None]] = []
             final_plan_json = """
             {
-              "title": "Fast planner demo",
+              "title": "Compact planner demo",
               "summary": "Use the compact outline and emit the final DAG directly.",
               "tasks": [
                 {
@@ -7209,11 +7420,11 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             ],
         )
         self.assertTrue(planning_events[2][2]["skipped"])
-        self.assertEqual(plan_state.plan_title, "Fast planner demo")
+        self.assertEqual(plan_state.plan_title, "Compact planner demo")
         self.assertEqual([step.step_id for step in plan_state.steps], ["ST1"])
 
     def test_generate_execution_plan_skips_planner_agent_a_for_compact_existing_plan(self) -> None:
-        temp_root = Path(__file__).resolve().parents[1] / ".tmp_adaptive_fast_planner_test"
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_compact_existing_plan_test"
         shutil.rmtree(temp_root, ignore_errors=True)
         workspace_root = temp_root / "workspace"
         repo_dir = temp_root / "repo"
@@ -7227,8 +7438,8 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             model="gpt-5.4",
             effort="medium",
             planning_effort="medium",
+            planning_mode="compact",
             execution_mode="parallel",
-            use_fast_mode=False,
             test_cmd="python -m pytest",
         )
 
@@ -7255,7 +7466,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             planning_events: list[tuple[str, str, dict[str, object] | None]] = []
             final_plan_json = """
             {
-              "title": "Adaptive fast planner demo",
+              "title": "Compact planner demo",
               "summary": "Reuse the compact outline and emit the final DAG directly.",
               "tasks": [
                 {
@@ -7306,7 +7517,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("Compact planning mode", outline_text)
         self.assertIn("Planner Agent A decomposition artifact:", prompt)
         self.assertTrue(planning_events[2][2]["skipped"])
-        self.assertEqual(plan_state.plan_title, "Adaptive fast planner demo")
+        self.assertEqual(plan_state.plan_title, "Compact planner demo")
         self.assertEqual([step.step_id for step in plan_state.steps], ["ST1"])
 
     def test_generate_execution_plan_uses_selected_planning_model_and_downgrades_gpt_54_effort(self) -> None:
@@ -7322,8 +7533,8 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             model="gpt-5.4",
             planning_effort="high",
             effort="high",
+            planning_mode="compact",
             execution_mode="parallel",
-            use_fast_mode=True,
             test_cmd="python -m pytest",
         )
         final_plan_json = """
@@ -7462,7 +7673,7 @@ class ExecutionPlanHelperTests(unittest.TestCase):
             ensemble_openai_model="gpt-5.4-mini",
             ensemble_gemini_model="gemini-2.5-pro",
             ensemble_claude_model="claude-3.7-sonnet",
-            use_fast_mode=True,
+            planning_mode="compact",
             test_cmd="python -m pytest",
         )
 

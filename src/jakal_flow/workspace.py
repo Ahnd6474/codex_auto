@@ -719,9 +719,15 @@ class WorkspaceManager:
         item = registry[registry_section].get(entry_id)
         if not item:
             raise KeyError(f"Unknown {missing_error_label}: {entry_id}")
+        root_hint = self._resolve_registry_item_root_hint(item)
+        cached = self._cached_registered_context(root_hint)
+        if cached is not None:
+            if sync_registry_root is not None:
+                sync_registry_root(entry_id, cached)
+            return transform_context(cached, item) if transform_context is not None else cached
         resolved_root = self._resolve_registry_item_project_root(item, base_dir)
         if resolved_root is None:
-            resolved_root = self._resolve_registry_item_root_hint(item)
+            resolved_root = root_hint
         cached = self._cached_registered_context(resolved_root)
         if cached is not None:
             if sync_registry_root is not None:

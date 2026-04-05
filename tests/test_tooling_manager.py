@@ -75,7 +75,7 @@ class ToolingManagerTests(unittest.TestCase):
             running=True,
             models=["qwen2.5-coder:0.5b"],
             recommended_models=["qwen2.5-coder:0.5b", "qwen2.5-coder:7b"],
-            model_store_path="C:/repo/third_party/ollama/models",
+            model_store_path="C:/Users/demo/AppData/Local/jakal-flow/ollama/models",
             reason="Ollama is connected with 1 installed model(s).",
         )):
             statuses = tooling_manager.get_tooling_statuses()
@@ -86,7 +86,7 @@ class ToolingManagerTests(unittest.TestCase):
         self.assertEqual(statuses["claude"]["version"], "1.2.3")
         self.assertEqual(statuses["ollama"]["models"], ["qwen2.5-coder:0.5b"])
         self.assertEqual(statuses["ollama"]["recommended_models"], ["qwen2.5-coder:0.5b", "qwen2.5-coder:7b"])
-        self.assertEqual(statuses["ollama"]["model_store_path"], "C:/repo/third_party/ollama/models")
+        self.assertEqual(statuses["ollama"]["model_store_path"], "C:/Users/demo/AppData/Local/jakal-flow/ollama/models")
 
     def test_get_tooling_statuses_reuses_cached_snapshot_until_force_refresh(self) -> None:
         with mock.patch.object(
@@ -179,6 +179,7 @@ class ToolingManagerTests(unittest.TestCase):
         self.assertIn('"phase": "completed"', log_text)
 
     def test_run_tooling_action_connects_ollama_and_pulls_model(self) -> None:
+        managed_root = None
         with TemporaryTestDir() as temp_dir, mock.patch.object(
             tooling_manager,
             "_ollama_status",
@@ -196,16 +197,17 @@ class ToolingManagerTests(unittest.TestCase):
         ), mock.patch.object(
             tooling_manager,
             "_configure_ollama_model_store",
-            return_value=Path("C:/repo/third_party/ollama/models"),
+            return_value=(temp_dir / "user-data" / "jakal-flow" / "ollama" / "models"),
         ), mock.patch.object(tooling_manager, "_ensure_ollama_running") as ensure_running, mock.patch.object(
             tooling_manager,
             "_ollama_runtime_status",
             side_effect=[(True, []), (True, ["qwen2.5-coder:0.5b"])],
-        ), mock.patch.object(tooling_manager, "_vendored_ollama_models", return_value=[]), mock.patch.object(
+        ), mock.patch.object(tooling_manager, "_managed_ollama_models", return_value=[]), mock.patch.object(
             tooling_manager,
             "run_subprocess",
             return_value=mock.Mock(returncode=0, stdout="", stderr=""),
         ) as run_subprocess_mock:
+            managed_root = temp_dir / "user-data" / "jakal-flow" / "ollama" / "models"
             result = tooling_manager.run_tooling_action(
                 temp_dir,
                 action="connect",
@@ -219,23 +221,24 @@ class ToolingManagerTests(unittest.TestCase):
         self.assertTrue(str(run_subprocess_mock.call_args.args[0][0]).lower().endswith("ollama.exe"))
         self.assertEqual(
             run_subprocess_mock.call_args.kwargs["env"]["OLLAMA_MODELS"],
-            str(Path("C:/repo/third_party/ollama/models")),
+            str(managed_root),
         )
         self.assertTrue(result["changed"])
         self.assertEqual(result["model"], "qwen2.5-coder:0.5b")
         self.assertIn("pulled", result["message"].lower())
-        self.assertEqual(result["model_store_path"], str(Path("C:/repo/third_party/ollama/models")))
+        self.assertEqual(result["model_store_path"], str(managed_root))
 
     def test_persist_windows_ollama_models_env_still_calls_setx_when_process_env_matches(self) -> None:
-        with mock.patch.dict(tooling_manager.os.environ, {"OLLAMA_MODELS": "C:/repo/third_party/ollama/models"}, clear=False), mock.patch.object(
+        managed_root = Path("C:/Users/demo/AppData/Local/jakal-flow/ollama/models")
+        with mock.patch.dict(tooling_manager.os.environ, {"OLLAMA_MODELS": str(managed_root)}, clear=False), mock.patch.object(
             tooling_manager,
             "run_subprocess",
             return_value=mock.Mock(returncode=0, stdout="", stderr=""),
         ) as run_subprocess_mock:
-            tooling_manager._persist_windows_ollama_models_env(Path("C:/repo/third_party/ollama/models"))
+            tooling_manager._persist_windows_ollama_models_env(managed_root)
 
         run_subprocess_mock.assert_called_once_with(
-            ["setx", "OLLAMA_MODELS", str(Path("C:/repo/third_party/ollama/models"))],
+            ["setx", "OLLAMA_MODELS", str(managed_root)],
             capture_output=True,
             check=False,
             text=True,
@@ -243,6 +246,66 @@ class ToolingManagerTests(unittest.TestCase):
             errors="replace",
             timeout_seconds=30.0,
         )
+
+    def test_ollama_model_store_root_uses_user_data_root_when_legacy_repo_store_was_persisted(self) -> None:
+        legacy_root = Path("C:/repo/third_party/ollama/models")
+        managed_root = Path("C:/Users/demo/AppData/Local/jakal-flow/ollama/models")
+        with mock.patch.dict(tooling_manager.os.environ, {"OLLAMA_MODELS": str(legacy_root)}, clear=False), mock.patch.object(
+            tooling_manager,
+            "_legacy_repo_ollama_model_store_root",
+            return_value=legacy_root,
+        ), mock.patch(
+            "jakal_flow.platform_defaults.default_ollama_model_store_root",
+            return_value=managed_root,
+        ):
+            resolved = tooling_manager._ollama_model_store_root()
+
+        self.assertEqual(resolved, managed_root)
+
+    def test_configure_ollama_model_store_migrates_legacy_repo_store_into_user_data_root(self) -> None:
+        with TemporaryTestDir() as temp_dir, mock.patch.dict(tooling_manager.os.environ, {}, clear=False), mock.patch.object(
+            tooling_manager,
+            "_ollama_model_store_is_app_managed",
+            return_value=False,
+        ):
+            legacy_root = temp_dir / "repo" / "third_party" / "ollama" / "models"
+            managed_root = temp_dir / "user-data" / "jakal-flow" / "ollama" / "models"
+            manifest_path = legacy_root / "manifests" / "registry.ollama.ai" / "library" / "qwen2.5-coder" / "0.5b"
+            manifest_path.parent.mkdir(parents=True, exist_ok=True)
+            manifest_path.write_text("{}", encoding="utf-8")
+
+            with mock.patch.object(
+                tooling_manager,
+                "_legacy_repo_ollama_model_store_root",
+                return_value=legacy_root,
+            ), mock.patch.object(
+                tooling_manager,
+                "_ollama_model_store_root",
+                return_value=managed_root,
+            ):
+                resolved = tooling_manager._configure_ollama_model_store()
+                self.assertEqual(resolved, managed_root)
+                self.assertTrue((managed_root / "manifests" / "registry.ollama.ai" / "library" / "qwen2.5-coder" / "0.5b").exists())
+                self.assertFalse(legacy_root.exists())
+
+    def test_configure_ollama_model_store_respects_custom_ollama_models_env_without_persisting_new_root(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            custom_root = temp_dir / "custom" / "ollama" / "models"
+            with mock.patch.dict(tooling_manager.os.environ, {"OLLAMA_MODELS": str(custom_root)}, clear=False), mock.patch(
+                "jakal_flow.tooling_manager.os.name",
+                "nt",
+            ), mock.patch.object(
+                tooling_manager,
+                "_ollama_model_store_root",
+                return_value=custom_root,
+            ), mock.patch.object(
+                tooling_manager,
+                "_persist_windows_ollama_models_env",
+            ) as persist_env_mock:
+                resolved = tooling_manager._configure_ollama_model_store()
+
+        self.assertEqual(resolved, custom_root)
+        persist_env_mock.assert_not_called()
 
 
 class ToolingBridgeTests(unittest.TestCase):

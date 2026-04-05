@@ -183,7 +183,9 @@ class CodexRunner:
         )
 
     def _format_prompt(self, context: ProjectContext, prompt: str) -> str:
-        if not getattr(context.runtime, "use_fast_mode", False):
+        planning_mode = str(getattr(context.runtime, "planning_mode", "") or "").strip().lower()
+        fast_prompt_enabled = planning_mode in {"no", "compact"} or bool(getattr(context.runtime, "use_fast_mode", False))
+        if not fast_prompt_enabled:
             return prompt
         stripped = prompt.lstrip()
         if stripped.startswith("/fast"):

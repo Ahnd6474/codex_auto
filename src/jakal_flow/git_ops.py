@@ -10,7 +10,7 @@ from .errors import SubprocessTimeoutError
 from .lit_ops import LitCommandError, LitOps
 from .models import CommandResult
 from .subprocess_utils import run_subprocess
-from .utils import decode_process_output, read_text, remove_tree
+from .utils import decode_process_output, read_text, remove_tree, write_text
 
 
 class GitCommandError(RuntimeError):
@@ -131,14 +131,19 @@ class GitOps:
         if env:
             process_env = os.environ.copy()
             process_env.update(env)
-        completed = run_subprocess(
-            command,
-            cwd=cwd,
-            capture_output=True,
-            check=False,
-            env=process_env,
-            timeout_seconds=self._timeout_seconds_for_args(args, timeout_seconds),
-        )
+        try:
+            completed = run_subprocess(
+                command,
+                cwd=cwd,
+                capture_output=True,
+                check=False,
+                env=process_env,
+                timeout_seconds=self._timeout_seconds_for_args(args, timeout_seconds),
+            )
+        except OSError as exc:
+            raise GitCommandError(
+                f"git executable could not be started: {exc}"
+            ) from exc
         stdout = decode_process_output(completed.stdout)
         stderr = self._filter_benign_stderr(decode_process_output(completed.stderr))
         result = CommandResult(
@@ -241,10 +246,33 @@ class GitOps:
             self._configured_identity_cache[repo_key] = normalized
             return
         if configured_name != normalized[0]:
-            self.run(["config", "user.name", normalized[0]], cwd=repo_dir)
+            self._run_config_command(repo_dir, ["config", "user.name", normalized[0]])
         if configured_email != normalized[1]:
-            self.run(["config", "user.email", normalized[1]], cwd=repo_dir)
+            self._run_config_command(repo_dir, ["config", "user.email", normalized[1]])
         self._configured_identity_cache[repo_key] = normalized
+
+    def _config_lock_file(self, repo_dir: Path) -> Path | None:
+        config_path = self._git_config_path_for_repo(repo_dir)
+        if config_path is None:
+            return None
+        return config_path.with_name("config.lock")
+
+    def _run_config_command(self, repo_dir: Path, args: list[str]) -> None:
+        try:
+            self.run(args, cwd=repo_dir)
+            return
+        except GitCommandError as exc:
+            message = str(exc)
+            if "could not lock config file" not in message or "File exists" not in message:
+                raise
+        lock_file = self._config_lock_file(repo_dir)
+        if lock_file is None or not lock_file.exists():
+            raise
+        try:
+            lock_file.unlink()
+        except OSError:
+            raise
+        self.run(args, cwd=repo_dir)
 
     def current_revision(self, repo_dir: Path) -> str:
         repo_key = str(repo_dir.resolve())
@@ -320,10 +348,31 @@ class GitOps:
             gitdir = (worktree_dir / gitdir).resolve(strict=False)
         return gitdir
 
+    def _expected_worktree_gitdir(self, repo_dir: Path, worktree_dir: Path) -> Path:
+        git_dir = self._git_dir_for_repo(repo_dir)
+        if git_dir is None:
+            return repo_dir.resolve(strict=False) / ".git" / "worktrees" / worktree_dir.name
+        return git_dir / "worktrees" / worktree_dir.name
+
+    def _repair_worktree_gitdir_alias(self, repo_dir: Path, worktree_dir: Path, current_gitdir: Path) -> bool:
+        git_file = self._worktree_git_file(worktree_dir)
+        expected_gitdir = self._expected_worktree_gitdir(repo_dir, worktree_dir)
+        if current_gitdir == expected_gitdir:
+            return False
+        if current_gitdir.parent.resolve(strict=False) != expected_gitdir.parent.resolve(strict=False):
+            return False
+        try:
+            write_text(git_file, f"gitdir: {expected_gitdir.as_posix()}\n")
+        except OSError:
+            return False
+        return True
+
     def _has_live_worktree_registration(self, repo_dir: Path, worktree_dir: Path) -> bool:
         current_gitdir = self._read_worktree_gitdir(worktree_dir)
         if current_gitdir is None:
             return False
+        if self._repair_worktree_gitdir_alias(repo_dir, worktree_dir, current_gitdir):
+            return True
         if current_gitdir.exists():
             return True
         self._clear_stale_worktree_registration(repo_dir, worktree_dir)
@@ -586,7 +635,7 @@ class GitOps:
         self.run(["commit", "-m", message], cwd=repo_dir, env=self._commit_env(author_name))
         return self.current_revision(repo_dir)
 
-    def add_paths(self, repo_dir: Path, paths: list[str]) -> None:
+    def add_paths(self, repo_dir: Path, paths: list[str], force: bool = False) -> None:
         if self._uses_lit_backend(repo_dir):
             try:
                 self.lit.add_paths(repo_dir, paths)
@@ -597,7 +646,11 @@ class GitOps:
         normalized_paths = [str(path).strip() for path in paths if str(path).strip()]
         if not normalized_paths:
             return
-        self.run(["add", "--", *normalized_paths], cwd=repo_dir)
+        args = ["add"]
+        if force:
+            args.append("-f")
+        args.extend(["--", *normalized_paths])
+        self.run(args, cwd=repo_dir)
 
     def add_all(self, repo_dir: Path) -> None:
         if self._uses_lit_backend(repo_dir):
@@ -609,7 +662,7 @@ class GitOps:
             return
         self.run(["add", "-A"], cwd=repo_dir)
 
-    def create_initial_commit(self, repo_dir: Path, message: str, author_name: str | None = None) -> str:
+    def create_initial_commit(self, repo_dir: Path, message: str, author_name: str | None = None, force: bool = False) -> str:
         if self._uses_lit_backend(repo_dir):
             try:
                 revision = self.lit.create_initial_commit(repo_dir, message)
@@ -617,11 +670,14 @@ class GitOps:
                 raise GitCommandError(str(exc)) from exc
             self._current_revision_cache[str(repo_dir.resolve())] = revision
             return revision
-        self.run(["add", "-A"], cwd=repo_dir)
+        add_args = ["add", "-A"]
+        if force:
+            add_args.append("-f")
+        self.run(add_args, cwd=repo_dir)
         self.run(["commit", "--allow-empty", "-m", message], cwd=repo_dir, env=self._commit_env(author_name))
         return self.current_revision(repo_dir)
 
-    def commit_paths(self, repo_dir: Path, paths: list[str], message: str, author_name: str | None = None) -> str:
+    def commit_paths(self, repo_dir: Path, paths: list[str], message: str, author_name: str | None = None, force: bool = False) -> str:
         if self._uses_lit_backend(repo_dir):
             try:
                 revision = self.lit.commit_paths(repo_dir, paths, message)
@@ -632,7 +688,7 @@ class GitOps:
         normalized_paths = [str(path).strip() for path in paths if str(path).strip()]
         if not normalized_paths:
             raise ValueError("paths must not be empty.")
-        self.add_paths(repo_dir, normalized_paths)
+        self.add_paths(repo_dir, normalized_paths, force=force)
         self.run(["commit", "-m", message, "--", *normalized_paths], cwd=repo_dir, env=self._commit_env(author_name))
         return self.current_revision(repo_dir)
 
@@ -688,9 +744,11 @@ class GitOps:
         if not normalized:
             return ""
         git_dir = self._git_dir_for_repo(repo_dir)
-        if git_dir is None:
-            return ""
-        return self._read_git_ref_revision(git_dir, f"refs/heads/{normalized}")
+        revision = self._read_git_ref_revision(git_dir, f"refs/heads/{normalized}") if git_dir is not None else ""
+        if revision:
+            return revision
+        result = self.run(["rev-parse", "--verify", f"refs/heads/{normalized}"], cwd=repo_dir, check=False)
+        return result.stdout.strip() if result.returncode == 0 else ""
 
     def remote_branch_revision(self, repo_dir: Path, remote_name: str, branch: str) -> str | None:
         if self._uses_lit_backend(repo_dir):

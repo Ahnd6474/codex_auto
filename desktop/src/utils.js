@@ -123,6 +123,7 @@ export const PROGRAM_RUNTIME_KEYS = [
   "execution_model",
   "chat_model",
   "planning_effort",
+  "planning_mode",
   "model_preset",
   "model_selection_mode",
   "model_slug_input",
@@ -148,6 +149,7 @@ const PROGRAM_RUNTIME_APPLIED_KEYS = [
   "allow_push",
   "require_checkpoint_approval",
   "workflow_mode",
+  "planning_mode",
   "ml_max_cycles",
   "execution_mode",
   "parallel_worker_mode",
@@ -201,6 +203,7 @@ const DEFAULT_PROGRAM_RUNTIME = {
   execution_model: "gpt-5.4",
   chat_model: "",
   planning_effort: "medium",
+  planning_mode: "compact",
   model_preset: "",
   model_selection_mode: "slug",
   model_slug_input: "gpt-5.4",
@@ -330,6 +333,11 @@ export function programSettingsFromRuntime(runtime) {
   const normalizedSettings = normalizeProgramSettingsProviderSelection(settings);
   Object.assign(settings, normalizedSettings);
   settings.execution_mode = "parallel";
+  settings.planning_mode = normalizePlanningMode(
+    settings.planning_mode,
+    settings.use_fast_mode ? "compact" : DEFAULT_PROGRAM_RUNTIME.planning_mode,
+  );
+  settings.use_fast_mode = settings.planning_mode === "no" || settings.planning_mode === "compact";
   settings.dashboard_visibility = normalizeDashboardVisibility(settings.dashboard_visibility);
   settings.background_concurrency_limit = Math.max(1, Number.parseInt(String(settings.background_concurrency_limit || 2), 10) || 2);
   const fallbackModel = defaultModelForProvider(settings.model_provider, settings);
@@ -602,6 +610,11 @@ export function blankProjectForm(defaultRuntime) {
     ...DEFAULT_PROGRAM_RUNTIME,
     ...runtimeSource,
   };
+  runtimeDefaults.planning_mode = normalizePlanningMode(
+    runtimeSource.planning_mode,
+    runtimeSource.use_fast_mode ? "compact" : DEFAULT_PROGRAM_RUNTIME.planning_mode,
+  );
+  runtimeDefaults.use_fast_mode = runtimeDefaults.planning_mode === "no" || runtimeDefaults.planning_mode === "compact";
   const defaultModel = defaultModelForProvider(runtimeDefaults.model_provider, runtimeDefaults) || "gpt-5.4";
   const defaultModelSlugInput = String(runtimeSource.model_slug_input ?? defaultModel).trim().toLowerCase() || defaultModel;
   const defaultModelPreset =
@@ -646,6 +659,11 @@ export function projectFormFromDetail(detail, defaultRuntime) {
         10,
       ) || 0,
   };
+  mergedRuntime.planning_mode = normalizePlanningMode(
+    detail?.runtime?.planning_mode ?? defaultRuntime?.planning_mode,
+    detail?.runtime?.use_fast_mode || defaultRuntime?.use_fast_mode ? "compact" : DEFAULT_PROGRAM_RUNTIME.planning_mode,
+  );
+  mergedRuntime.use_fast_mode = mergedRuntime.planning_mode === "no" || mergedRuntime.planning_mode === "compact";
   mergedRuntime.execution_model = String(
     detail?.runtime?.execution_model
     ?? detail?.runtime?.model
@@ -2984,6 +3002,14 @@ function normalizeModelSelectionMode(value) {
   return normalized === "codex" ? "codex" : "slug";
 }
 
+export function normalizePlanningMode(value, fallback = "full") {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "no" || normalized === "compact" || normalized === "full") {
+    return normalized;
+  }
+  return fallback === "no" || fallback === "compact" || fallback === "full" ? fallback : "full";
+}
+
 export function resolveRuntimeModelSelectionState(currentRuntime = {}, modelCatalog = [], nextModel = "", nextEffort = null, codexStatus = {}) {
   const visibleModelTree = groupedModelCatalogOptions(modelCatalog, currentRuntime, codexStatus, {
     scope: "provider",
@@ -3006,8 +3032,9 @@ export function resolveRuntimeModelSelectionState(currentRuntime = {}, modelCata
     model,
     execution_model: executionModel,
     effort,
-    planning_effort: planningEffort,
-    effort_selection_mode: selection === AUTO_REASONING_OPTION ? AUTO_REASONING_OPTION : "explicit",
+      planning_effort: planningEffort,
+      planning_mode: normalizePlanningMode(currentRuntime?.planning_mode, currentRuntime?.use_fast_mode ? "compact" : "full"),
+      effort_selection_mode: selection === AUTO_REASONING_OPTION ? AUTO_REASONING_OPTION : "explicit",
     model_preset: normalizedModel === "auto" ? (selection === AUTO_REASONING_OPTION ? "auto" : selection) : "",
     model_selection_mode: normalizeModelSelectionMode(currentRuntime?.model_selection_mode),
     model_slug_input: executionModel,
@@ -3496,7 +3523,8 @@ export function runtimeSummary(runtime, modelPresets = [], language = "en", mode
   const provider = normalizedModelProvider(runtime);
   const providerPrefix = providerDisplayName(provider, normalizedLocalModelProvider(runtime));
   const selectedModel = String(runtime?.execution_model || runtime?.model || runtime?.model_slug_input || "").trim();
-  const compactPlanningSuffix = runtime?.use_fast_mode ? ` | ${translate(language, "runtime.compactPlanning")}` : "";
+  const planningMode = normalizePlanningMode(runtime?.planning_mode, runtime?.use_fast_mode ? "compact" : "full");
+  const planningSuffix = planningMode === "full" ? "" : ` | planning ${planningMode}`;
   const workflowSuffix =
     String(runtime?.workflow_mode || "standard").trim().toLowerCase() === "ml"
       ? ` | ${translate(language, "option.workflowML")}`
@@ -3508,7 +3536,7 @@ export function runtimeSummary(runtime, modelPresets = [], language = "en", mode
   const preset = modelPresets.find((item) => item.preset_id === runtime?.model_preset);
   if (preset && providerSupportsAutoModel(provider)) {
     const summary = `${providerPrefix}${workflowSuffix} | ${preset.summary}${executionSuffix}`;
-    return `${summary}${compactPlanningSuffix}`;
+    return `${summary}${planningSuffix}`;
   }
   if (selectedModel) {
     const label = modelDisplayName(modelCatalog, selectedModel);
@@ -3526,10 +3554,10 @@ export function runtimeSummary(runtime, modelPresets = [], language = "en", mode
         effort: effortLabel,
       });
       const nextSummary = `${summary}${executionSuffix}`;
-      return `${nextSummary}${compactPlanningSuffix}`;
+      return `${nextSummary}${planningSuffix}`;
     }
     const summary = `${providerPrefix}${workflowSuffix} | ${label} | reasoning ${effortLabel}${executionSuffix}`;
-    return `${summary}${compactPlanningSuffix}`;
+    return `${summary}${planningSuffix}`;
   }
   return translate(language, "runtime.noModelSelected");
 }

@@ -680,22 +680,28 @@ export const ConfigEditorView = memo(function ConfigEditorView({
                 hint={language === "ko" ? "체크포인트에 도달하면 검토를 위해 일시 중지합니다." : "Pause for review when a checkpoint is reached."}
                 disabled={executionLocked && !allowSafeRuntimeEdits}
               />
-              <ToggleRow
-                checked={Boolean(runtime.use_fast_mode)}
-                onChange={(event) =>
-                  onChangeForm((current) => ({
-                    ...current,
-                    runtime: { ...current.runtime, use_fast_mode: event.target.checked },
-                  }))
-                }
-                label={t("option.useFastMode")}
-                hint={
-                  language === "ko"
-                    ? "계획 생성 시간을 줄이기 위해 Planner Agent A를 건너뛰고 더 빠른 계획 경로를 사용합니다."
-                    : "Reduce plan generation time by skipping Planner Agent A and using the faster planning path."
-                }
-                disabled={executionLocked}
-              />
+              <label className="field">
+                <span>{language === "ko" ? "계획 모드" : "Planning mode"}</span>
+                <select
+                  value={runtime.planning_mode || (runtime.use_fast_mode ? "compact" : "full")}
+                  onChange={(event) =>
+                    onChangeForm((current) => ({
+                      ...current,
+                      runtime: { ...current.runtime, planning_mode: event.target.value },
+                    }))
+                  }
+                  disabled={executionLocked}
+                >
+                  <option value="no">no planning</option>
+                  <option value="compact">compact planning</option>
+                  <option value="full">full planning</option>
+                </select>
+                <small style={{ fontSize: "11px", color: "var(--text-dim)" }}>
+                  {language === "ko"
+                    ? "no는 planner를 생략하고 바로 실행 블록을 만들고, compact는 Planner A를 건너뛰며, full은 Planner A와 B를 모두 사용합니다."
+                    : "no skips planners and creates one execution block, compact skips Planner A, and full runs Planner A and B."}
+                </small>
+              </label>
             </div>
           </div>
         </div>

@@ -16,7 +16,12 @@ from urllib import request as urllib_request
 from .codex_app_server import resolve_codex_path
 from .lru_ttl_cache import LruTtlCache
 from .model_providers import default_local_model
-from .platform_defaults import default_codex_path
+from .platform_defaults import (
+    OLLAMA_MODELS_ENV_VAR,
+    configured_ollama_model_store_root,
+    default_codex_path,
+    default_ollama_model_store_root,
+)
 from .subprocess_utils import run_subprocess
 from .utils import append_jsonl, now_utc_iso
 
@@ -257,6 +262,7 @@ def _cli_status(tool: str, *, startup_safe: bool = False) -> ToolingStatus:
 
 def _ollama_status(*, startup_safe: bool = False, include_details: bool = True) -> ToolingStatus:
     model_store_root = _ollama_model_store_root()
+    _migrate_legacy_ollama_model_store(model_store_root)
     resolved_command = _resolve_command("ollama")
     installed = bool(resolved_command)
     version = _command_version(resolved_command) if installed and not startup_safe else ""
@@ -266,8 +272,8 @@ def _ollama_status(*, startup_safe: bool = False, include_details: bool = True) 
         models: list[str] = []
     else:
         running, runtime_models = _ollama_runtime_status() if installed else (False, [])
-        vendored_models = _vendored_ollama_models()
-        models = _merge_model_names(runtime_models, vendored_models)
+        managed_models = _managed_ollama_models(model_store_root)
+        models = _merge_model_names(runtime_models, managed_models)
     if not installed:
         reason = "Ollama is not installed."
     elif startup_safe:
@@ -277,7 +283,7 @@ def _ollama_status(*, startup_safe: bool = False, include_details: bool = True) 
     elif running and models:
         reason = f"Ollama is connected with {len(models)} installed model(s)."
     elif models:
-        reason = f"Ollama found {len(models)} model(s) in the managed third_party store."
+        reason = f"Ollama found {len(models)} model(s) in the managed model store."
     elif running:
         reason = "Ollama is running but no models are installed yet."
     else:
@@ -383,7 +389,7 @@ def _connect_ollama(model: str) -> dict[str, Any]:
         if completed.returncode != 0:
             raise RuntimeError(_subprocess_error_message(completed, f"Failed to pull {selected_model} from Ollama."))
     running, runtime_models = _ollama_runtime_status()
-    models = _merge_model_names(runtime_models, _vendored_ollama_models())
+    models = _merge_model_names(runtime_models, _managed_ollama_models(model_store_root))
     return {
         "tool": "ollama",
         "action": "connect",
@@ -511,15 +517,65 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _ollama_model_store_root() -> Path:
+def _legacy_repo_ollama_model_store_root() -> Path:
     return _repo_root() / "third_party" / "ollama" / "models"
+
+
+def _ollama_model_store_root() -> Path:
+    return configured_ollama_model_store_root(legacy_root=_legacy_repo_ollama_model_store_root())
+
+
+def _migrate_legacy_ollama_model_store(model_store_root: Path) -> bool:
+    legacy_root = _legacy_repo_ollama_model_store_root()
+    try:
+        if legacy_root.resolve() == model_store_root.resolve():
+            return False
+    except OSError:
+        if str(legacy_root) == str(model_store_root):
+            return False
+    if not legacy_root.exists():
+        return False
+    if model_store_root.exists():
+        try:
+            next(model_store_root.iterdir())
+            return False
+        except StopIteration:
+            try:
+                model_store_root.rmdir()
+            except OSError:
+                return False
+        except OSError:
+            return False
+    try:
+        model_store_root.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(legacy_root), str(model_store_root))
+        return True
+    except OSError:
+        return False
+
+
+def _ollama_model_store_is_app_managed() -> bool:
+    explicit_override = str(os.environ.get(OLLAMA_MODELS_ENV_VAR, "") or "").strip()
+    if explicit_override:
+        return False
+    existing_store = str(os.environ.get("OLLAMA_MODELS", "") or "").strip()
+    if existing_store:
+        candidate = Path(existing_store).expanduser().resolve()
+        try:
+            if candidate != _legacy_repo_ollama_model_store_root().resolve():
+                return False
+        except OSError:
+            if str(candidate) != str(_legacy_repo_ollama_model_store_root()):
+                return False
+    return _ollama_model_store_root() == default_ollama_model_store_root()
 
 
 def _configure_ollama_model_store() -> Path:
     root = _ollama_model_store_root()
+    _migrate_legacy_ollama_model_store(root)
     root.mkdir(parents=True, exist_ok=True)
     os.environ["OLLAMA_MODELS"] = str(root)
-    if os.name == "nt":
+    if os.name == "nt" and _ollama_model_store_is_app_managed():
         _persist_windows_ollama_models_env(root)
     return root
 
@@ -562,8 +618,8 @@ def _merge_model_names(*model_groups: list[str]) -> list[str]:
     return merged
 
 
-def _vendored_ollama_models() -> list[str]:
-    manifest_root = _ollama_model_store_root() / "manifests" / "registry.ollama.ai" / "library"
+def _managed_ollama_models(model_store_root: Path | None = None) -> list[str]:
+    manifest_root = (model_store_root or _ollama_model_store_root()) / "manifests" / "registry.ollama.ai" / "library"
     if not manifest_root.exists():
         return []
     models: list[str] = []

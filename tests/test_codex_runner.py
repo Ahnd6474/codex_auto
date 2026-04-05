@@ -186,7 +186,7 @@ class CodexRunnerTests(unittest.TestCase):
             self.assertEqual(len(observed_commands), 1)
             self.assertIn('reasoning.effort="xhigh"', observed_commands[0])
 
-    def test_run_pass_prefixes_fast_command_when_enabled(self) -> None:
+    def test_run_pass_prefixes_fast_command_when_compact_planning_is_enabled(self) -> None:
         with _TemporaryTestDir() as temp_root:
             repo_dir = temp_root / "repo"
             repo_dir.mkdir(parents=True, exist_ok=True)
@@ -194,7 +194,7 @@ class CodexRunnerTests(unittest.TestCase):
             context = manager.initialize_local_project(
                 project_dir=repo_dir,
                 branch="main",
-                runtime=RuntimeOptions(model="gpt-5.4", effort="medium", use_fast_mode=True),
+                runtime=RuntimeOptions(model="gpt-5.4", effort="medium", planning_mode="compact"),
             )
             runner = CodexRunner("codex.cmd")
             observed_inputs: list[bytes] = []

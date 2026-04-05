@@ -185,11 +185,15 @@ def _cached_text(path: Path) -> str:
 
 
 def _default_chat_home_root(context: ProjectContext) -> Path:
+    return context.paths.workspace_root / CHAT_SESSIONS_DIRNAME
+
+
+def _legacy_source_checkout_chat_home_root() -> Path | None:
     module_path = Path(__file__).resolve()
     for parent in module_path.parents:
         if (parent / "pyproject.toml").exists() and (parent / "src" / "jakal_flow").exists():
             return parent / CHAT_SESSIONS_DIRNAME
-    return context.paths.workspace_root / CHAT_SESSIONS_DIRNAME
+    return None
 
 
 def chat_storage_root(context: ProjectContext) -> Path:
@@ -441,6 +445,76 @@ def _cleanup_legacy_chat_dirs(context: ProjectContext) -> None:
             continue
 
 
+def _cleanup_chat_home_root(root: Path) -> None:
+    for directory in (root / CHAT_ACTIVE_DIRNAME, root / CHAT_STORAGE_LOGS_DIRNAME, root / CHAT_STORAGE_MEMORY_DIRNAME):
+        if not directory.exists():
+            continue
+        try:
+            next(directory.iterdir())
+        except StopIteration:
+            directory.rmdir()
+        except OSError:
+            continue
+    try:
+        next(root.iterdir())
+    except StopIteration:
+        root.rmdir()
+    except OSError:
+        return
+
+
+def _migrate_legacy_source_checkout_chat_storage(context: ProjectContext) -> None:
+    override = str(os.environ.get(CHAT_HOME_ENV_VAR, "")).strip()
+    if override:
+        return
+    legacy_root = _legacy_source_checkout_chat_home_root()
+    if legacy_root is None:
+        return
+    target_root = _default_chat_home_root(context)
+    try:
+        if legacy_root.resolve() == target_root.resolve():
+            return
+    except OSError:
+        if str(legacy_root) == str(target_root):
+            return
+    legacy_registry = legacy_root / CHAT_SESSIONS_FILENAME
+    legacy_active = legacy_root / CHAT_ACTIVE_DIRNAME / f"{context.metadata.repo_id}.txt"
+    has_legacy_state = legacy_registry.exists() or legacy_active.exists()
+    if not has_legacy_state:
+        return
+
+    current_repo_id = context.metadata.repo_id
+    existing_sessions = _read_registry_sessions(chat_sessions_registry_file(context))
+    merged_sessions: dict[str, ChatSessionMeta] = {session.session_id: session for session in existing_sessions}
+    migrated_session_ids: set[str] = set()
+    legacy_sessions = _read_registry_sessions(legacy_registry)
+    preserved_legacy_sessions: list[ChatSessionMeta] = []
+    for session in legacy_sessions:
+        if session.repo_id != current_repo_id:
+            preserved_legacy_sessions.append(session)
+            continue
+        session = _relocate_session_memory_files(context, session)
+        session.repo_id = current_repo_id
+        merged_sessions[session.session_id] = session
+        migrated_session_ids.add(session.session_id)
+
+    if migrated_session_ids:
+        _save_registry_sessions(chat_sessions_registry_file(context), list(merged_sessions.values()))
+        if preserved_legacy_sessions:
+            _save_registry_sessions(legacy_registry, preserved_legacy_sessions)
+        else:
+            legacy_registry.unlink(missing_ok=True)
+            _CHAT_REGISTRY_MEMORY_CACHE.pop(str(legacy_registry.resolve()))
+
+    active_session_id = read_text(legacy_active).strip()
+    if active_session_id and (active_session_id in migrated_session_ids or active_session_id in merged_sessions):
+        save_active_chat_session_id(context, active_session_id)
+    if legacy_active.exists():
+        legacy_active.unlink(missing_ok=True)
+        _CHAT_ACTIVE_SESSION_MEMORY_CACHE.pop(str(legacy_active.resolve()))
+    _cleanup_chat_home_root(legacy_root)
+
+
 def _migrate_legacy_project_chat_storage(context: ProjectContext) -> None:
     legacy_registry = _legacy_chat_sessions_registry_file(context)
     legacy_active = _legacy_chat_active_session_file(context)
@@ -475,6 +549,7 @@ def _migrate_legacy_project_chat_storage(context: ProjectContext) -> None:
 
 
 def load_chat_sessions(context: ProjectContext) -> list[ChatSessionMeta]:
+    _migrate_legacy_source_checkout_chat_storage(context)
     _migrate_legacy_project_chat_storage(context)
     sessions = [
         session

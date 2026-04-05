@@ -95,6 +95,13 @@ def coerce_bool(value: Any, default: bool) -> bool:
     return default
 
 
+def normalize_planning_mode(value: Any, fallback: str = "full") -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"no", "compact", "full"}:
+        return normalized
+    return fallback if fallback in {"no", "compact", "full"} else "full"
+
+
 def desktop_runtime_defaults() -> dict[str, Any]:
     return RuntimeOptions(
         approval_mode="never",
@@ -104,6 +111,7 @@ def desktop_runtime_defaults() -> dict[str, Any]:
         checkpoint_interval_blocks=1,
         require_checkpoint_approval=False,
         generate_word_report=False,
+        planning_mode="compact",
         use_fast_mode=True,
         max_blocks=5,
         workflow_mode="standard",
@@ -290,10 +298,17 @@ def normalize_runtime_payload(
     merged["effort_selection_mode"] = str(merged.get("effort_selection_mode", "")).strip().lower()
     if merged["effort_selection_mode"] not in {"auto", "explicit"}:
         merged["effort_selection_mode"] = "explicit"
-    merged["use_fast_mode"] = coerce_bool(
-        merged.get("use_fast_mode", default_values.get("use_fast_mode", False)),
-        bool(default_values.get("use_fast_mode", False)),
+    default_planning_mode = normalize_planning_mode(
+        default_values.get("planning_mode", "compact" if bool(default_values.get("use_fast_mode", False)) else "full"),
+        fallback="full",
     )
+    if "planning_mode" in source:
+        merged["planning_mode"] = normalize_planning_mode(source.get("planning_mode"), fallback=default_planning_mode)
+    elif "use_fast_mode" in source:
+        merged["planning_mode"] = "compact" if coerce_bool(source.get("use_fast_mode"), False) else "full"
+    else:
+        merged["planning_mode"] = default_planning_mode
+    merged["use_fast_mode"] = merged["planning_mode"] in {"no", "compact"}
     merged["generate_word_report"] = coerce_bool(
         merged.get("generate_word_report", default_values.get("generate_word_report", False)),
         bool(default_values.get("generate_word_report", False)),

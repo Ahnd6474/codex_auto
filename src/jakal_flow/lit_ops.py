@@ -37,14 +37,19 @@ class LitOps:
             process_env = os.environ.copy()
             process_env.update(env)
         command = [self.command, *args]
-        completed = run_subprocess(
-            command,
-            cwd=cwd,
-            capture_output=True,
-            check=False,
-            env=process_env,
-            timeout_seconds=self._timeout_seconds_for_args(args, timeout_seconds),
-        )
+        try:
+            completed = run_subprocess(
+                command,
+                cwd=cwd,
+                capture_output=True,
+                check=False,
+                env=process_env,
+                timeout_seconds=self._timeout_seconds_for_args(args, timeout_seconds),
+            )
+        except OSError as exc:
+            raise LitCommandError(
+                f"{self.command} executable could not be started: {exc}"
+            ) from exc
         stdout = completed.stdout if isinstance(completed.stdout, str) else decode_process_output(completed.stdout)
         stderr = completed.stderr if isinstance(completed.stderr, str) else decode_process_output(completed.stderr)
         result = CommandResult(

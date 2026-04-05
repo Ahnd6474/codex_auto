@@ -885,6 +885,19 @@ export const AppSettingsView = memo(function AppSettingsView({
               </label>
 
               <label className="field">
+                <span>{language === "ko" ? "계획 모드" : "Planning mode"}</span>
+                <select
+                  value={draftSettings.planning_mode || (draftSettings.use_fast_mode ? "compact" : "full")}
+                  onChange={(event) => updateDraftSettings((current) => ({ ...current, planning_mode: event.target.value }))}
+                  disabled={runtimeBusy}
+                >
+                  <option value="no">no planning</option>
+                  <option value="compact">compact planning</option>
+                  <option value="full">full planning</option>
+                </select>
+              </label>
+
+              <label className="field">
                 <span>{t("field.checkpointInterval")}</span>
                 <input
                   type="number"

@@ -797,6 +797,8 @@ def build_direct_execution_plan(
     reasoning_effort: str,
     spine_version: str = DEFAULT_SPINE_VERSION,
     step_type: str = "feature",
+    direct_execution_score: int = 0,
+    direct_execution_reasons: list[str] | None = None,
 ) -> tuple[str, str, list[ExecutionStep], str]:
     normalized_prompt = " ".join(str(project_prompt or "").split()).strip() or "Implement the requested repository change safely."
     compact_title = compact_text(normalized_prompt, 72) or "Direct execution task"
@@ -842,6 +844,8 @@ def build_direct_execution_plan(
                 "step_kind": "task",
                 "direct_execution": True,
                 "direct_execution_reason": "small_task_bypass",
+                "direct_execution_score": max(0, int(direct_execution_score or 0)),
+                "direct_execution_reasons": list(direct_execution_reasons or []),
             },
         )
     ]
