@@ -104,6 +104,11 @@ export const AUTO_REASONING_OPTION = "auto";
 export const REASONING_OPTIONS = ["low", "medium", "high", "xhigh"];
 export const MODEL_REASONING_OPTIONS = [AUTO_REASONING_OPTION, ...REASONING_OPTIONS];
 export const MODEL_PROVIDER_OPTIONS = ["openai", "ensemble", "claude", "gemini", "ollama", "qwen_code", "deepseek", "kimi", "minimax", "glm", "openrouter", "opencdk", "local_openai", "oss"];
+const PROVIDER_SCOPED_CATALOG_ALIASES = Object.freeze({
+  openrouter: ["openai"],
+  opencdk: ["openai"],
+  local_openai: ["openai"],
+});
 export const PROGRAM_RUNTIME_KEYS = [
   "model_provider",
   "local_model_provider",
@@ -687,6 +692,40 @@ function modelCatalogEntryKey(item = {}) {
   const model = String(item?.model || "").trim().toLowerCase();
   const id = String(item?.id || "").trim().toLowerCase();
   return [provider, localProvider, model, id].join("::");
+}
+
+function aliasedProviderCatalogEntries(modelCatalog = [], provider = "") {
+  const normalizedProvider = String(provider || "").trim().toLowerCase();
+  const sourceProviders = PROVIDER_SCOPED_CATALOG_ALIASES[normalizedProvider];
+  if (!sourceProviders?.length) {
+    return [];
+  }
+  const entries = [];
+  const seen = new Set();
+  for (const item of normalizeModelCatalog(modelCatalog)) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const itemProvider = String(item?.provider || "").trim().toLowerCase();
+    const itemLocalProvider = String(item?.local_provider || "").trim().toLowerCase();
+    const model = String(item?.model || "").trim();
+    if (!model || itemLocalProvider || !sourceProviders.includes(itemProvider)) {
+      continue;
+    }
+    const aliasEntry = {
+      ...item,
+      id: `${normalizedProvider}:${model}`,
+      provider: normalizedProvider,
+      local_provider: "",
+    };
+    const key = modelCatalogEntryKey(aliasEntry);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    entries.push(aliasEntry);
+  }
+  return entries;
 }
 
 export function mergeModelCatalogs(...catalogs) {
@@ -2266,6 +2305,9 @@ export function providerSupportsCatalog(provider = "openai") {
     "kimi",
     "minimax",
     "glm",
+    "openrouter",
+    "opencdk",
+    "local_openai",
     "oss",
   ].includes(normalized);
 }
@@ -2630,7 +2672,11 @@ export function filterModelCatalogByProvider(modelCatalog = [], runtime = {}, co
   if (!providerUsable(provider, codexStatus)) {
     return [];
   }
-  return (modelCatalog || []).filter((item) => {
+  const scopedCatalog = mergeModelCatalogs(
+    normalizeModelCatalog(modelCatalog),
+    aliasedProviderCatalogEntries(modelCatalog, provider),
+  );
+  return scopedCatalog.filter((item) => {
     if (!modelOptionMatchesScopedProvider(item, provider, localProvider)) {
       return false;
     }

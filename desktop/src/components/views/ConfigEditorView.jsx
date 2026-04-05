@@ -12,7 +12,6 @@ import {
   normalizedModelProvider,
   providerAvailable,
   providerStatusReason,
-  programSettingsAllowsModelSlugInput,
   reasoningEffortLabel,
   resolveRuntimeModelSelectionState,
 } from "../../utils";
@@ -326,7 +325,7 @@ export const ConfigEditorView = memo(function ConfigEditorView({
           </small>
         </label>
       ) : null}
-      {visibleModels.length ? (
+      {visibleModels.length || selectedExecutionModel ? (
         <label className="field field--wide" style={{ marginTop: "4px" }}>
           <span>{language === "ko" ? "실행 모델" : "Execution model"}</span>
           <select
@@ -365,26 +364,6 @@ export const ConfigEditorView = memo(function ConfigEditorView({
               ? "계획 생성과 실제 블록 실행 모두 이 모델을 기본으로 사용합니다. 블록별 모델 지정이 있으면 그 설정이 우선합니다."
               : "Used as the default model for both planning and block execution. Per-block model overrides still take precedence."}
           </small>
-        </label>
-      ) : (selectedExecutionModel || programSettingsAllowsModelSlugInput(selectedProvider)) ? (
-        <label className="field field--wide" style={{ marginTop: "4px" }}>
-          <span>{t("field.customModelSlug")}</span>
-          <input
-            value={selectedExecutionModel}
-            onChange={(event) =>
-              onChangeForm((current) => ({
-                ...current,
-                runtime: applyConfigRuntimeModelSelection(
-                  current.runtime || {},
-                  modelCatalog,
-                  event.target.value,
-                  null,
-                  codexStatus,
-                ),
-              }))
-            }
-            disabled={executionLocked}
-          />
         </label>
       ) : null}
 
