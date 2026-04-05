@@ -772,7 +772,17 @@ export const InspectorPanel = memo(function InspectorPanel({
         <dl className="details-list">
           <div><dt>{t("common.name")}</dt><dd>{detail?.project?.display_name || detail?.project?.slug || t("project.none")}</dd></div>
           <div><dt>{t("common.branch")}</dt><dd>{detail?.project?.branch || t("common.unknown")}</dd></div>
-          <div><dt>Path</dt><dd>{detail?.project?.repo_path || t("common.unknown")}</dd></div>
+          <div>
+            <dt>Path</dt>
+            <dd>
+              {detail?.project?.repo_path
+                || detail?.project?.repo_path_hint
+                || t("common.unknown")}
+              {detail?.project?.repo_available === false && detail?.project?.repo_path_hint
+                ? ` (${t("common.unavailable")})`
+                : ""}
+            </dd>
+          </div>
           <div><dt>Model</dt><dd>{runtimeSummary(detail?.runtime || {}, modelPresets)}</dd></div>
           <div><dt>Revision</dt><dd>{detail?.project?.current_safe_revision || "-"}</dd></div>
         </dl>

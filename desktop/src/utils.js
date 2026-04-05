@@ -610,6 +610,7 @@ export function blankProjectForm(defaultRuntime) {
       : "";
   const defaultExecutionModel = String(runtimeSource.execution_model ?? defaultModel).trim().toLowerCase() || defaultModel;
   return {
+    repo_id: "",
     project_dir: "",
     display_name: "",
     branch: "main",
@@ -657,7 +658,8 @@ export function projectFormFromDetail(detail, defaultRuntime) {
     mergedRuntime.model_slug_input = mergedRuntime.execution_model;
   }
   return {
-    project_dir: detail?.project?.repo_path || "",
+    repo_id: detail?.project?.repo_id || "",
+    project_dir: detail?.project?.repo_path || detail?.project?.repo_path_hint || "",
     display_name: detail?.project?.display_name || detail?.project?.slug || "",
     branch: detail?.project?.branch || "main",
     origin_url: detail?.project?.origin_url || "",
@@ -667,7 +669,7 @@ export function projectFormFromDetail(detail, defaultRuntime) {
 }
 
 export function resolveProjectDirectory(form = null, detail = null) {
-  const detailProjectDir = String(detail?.project?.repo_path || "").trim();
+  const detailProjectDir = String(detail?.project?.repo_path || detail?.project?.repo_path_hint || "").trim();
   if (detailProjectDir) {
     return detailProjectDir;
   }
@@ -678,6 +680,7 @@ export function inheritProjectIdentityForm(form, defaultRuntime) {
   const nextForm = cloneValue(form) || {};
   return {
     ...blankProjectForm(defaultRuntime),
+    repo_id: nextForm.repo_id || "",
     project_dir: nextForm.project_dir || "",
     display_name: nextForm.display_name || "",
     branch: nextForm.branch || "main",
@@ -2318,6 +2321,7 @@ export function buildProjectPayload(form, plan = null) {
     runtime.model_slug_input = selectedModel;
   }
   const payload = {
+    repo_id: String(form.repo_id || "").trim(),
     project_dir: form.project_dir.trim(),
     display_name: form.display_name.trim(),
     branch: form.branch.trim() || "main",

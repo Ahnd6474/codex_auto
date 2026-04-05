@@ -592,7 +592,11 @@ class BridgeServer:
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         repo_id = str(payload.get("repo_id", "")).strip()
-        project_dir = str(payload.get("repo_path", payload.get("project_dir", ""))).strip()
+        project_dir = str(
+            payload.get("repo_path")
+            or payload.get("repo_path_hint")
+            or payload.get("project_dir", "")
+        ).strip()
         active_job = self._jobs.active_execution_job_for_project(
             workspace_root,
             repo_id=repo_id,
@@ -641,7 +645,7 @@ class BridgeServer:
         active_job = self._jobs.active_execution_job_for_project(
             workspace_root,
             repo_id=str(project.get("repo_id", "")).strip(),
-            project_dir=str(project.get("repo_path", "")).strip(),
+            project_dir=str(project.get("repo_path") or project.get("repo_path_hint") or "").strip(),
         )
         next_status = self._job_project_status(active_job)
         if not next_status:
@@ -745,6 +749,37 @@ class BridgeServer:
         payload: dict[str, Any] | None,
         result: Any,
     ) -> dict[str, Any]:
+        def project_payload_from_result(project_payload: dict[str, Any]) -> dict[str, Any]:
+            project_dir = str(project_payload.get("repo_path", "")).strip()
+            project_dir_hint = str(project_payload.get("repo_path_hint", "")).strip() or project_dir
+            normalized_payload = {
+                "repo_id": str(project_payload.get("repo_id", "")).strip(),
+                "project_dir": project_dir,
+                "project_dir_hint": project_dir_hint,
+                "status": str(project_payload.get("current_status", "")).strip(),
+            }
+            if "repo_available" in project_payload:
+                normalized_payload["repo_available"] = bool(project_payload.get("repo_available"))
+            repo_binding = str(project_payload.get("repo_binding", "")).strip()
+            if repo_binding:
+                normalized_payload["repo_binding"] = repo_binding
+            project_root_relative = str(project_payload.get("project_root_relative", "")).strip()
+            if project_root_relative:
+                normalized_payload["project_root_relative"] = project_root_relative
+            return normalized_payload
+
+        def deleted_project_payload(deleted_payload: dict[str, Any]) -> dict[str, Any]:
+            project_dir_hint = str(deleted_payload.get("project_dir", "")).strip()
+            normalized_payload = {
+                "repo_id": str(deleted_payload.get("repo_id", "")).strip(),
+                "project_dir_hint": project_dir_hint,
+                "status": "deleted",
+            }
+            display_name = str(deleted_payload.get("display_name", "")).strip()
+            if display_name:
+                normalized_payload["display_name"] = display_name
+            return normalized_payload
+
         event_payload: dict[str, Any] = {
             "command": command,
             "workspace_root": str(workspace_root),
@@ -757,22 +792,14 @@ class BridgeServer:
                 detail = result.get("detail")
                 project = detail.get("project") if isinstance(detail, dict) else None
             if isinstance(project, dict):
-                event_payload["project"] = {
-                    "repo_id": str(project.get("repo_id", "")).strip(),
-                    "project_dir": str(project.get("repo_path", "")).strip(),
-                    "status": str(project.get("current_status", "")).strip(),
-                }
+                event_payload["project"] = project_payload_from_result(project)
             elif isinstance(result.get("deleted"), dict):
-                deleted = result["deleted"]
-                event_payload["project"] = {
-                    "repo_id": str(deleted.get("repo_id", "")).strip(),
-                    "project_dir": str(deleted.get("project_dir", "")).strip(),
-                    "status": "deleted",
-                }
+                event_payload["project"] = deleted_project_payload(result["deleted"])
         if "project" not in event_payload:
+            request_project_dir = str(request_payload.get("project_dir", "")).strip()
             event_payload["project"] = {
                 "repo_id": str(request_payload.get("repo_id", "")).strip(),
-                "project_dir": str(request_payload.get("project_dir", "")).strip(),
+                "project_dir_hint": request_project_dir,
                 "status": "",
             }
         return event_payload

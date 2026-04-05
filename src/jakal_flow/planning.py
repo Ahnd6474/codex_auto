@@ -16,7 +16,7 @@ from .model_selection import normalize_reasoning_effort
 from .models import CandidateTask, Checkpoint, ExecutionPlanState, ExecutionStep, ProjectContext
 from .subprocess_utils import run_subprocess
 from .step_models import planning_model_selection_guidance, resolve_step_model_choice
-from .utils import compact_text, normalize_workflow_mode, now_utc_iso, parse_json_text, read_json, read_text, similarity_score, svg_text_element, tokenize, wrap_svg_text, write_json_if_changed, write_text
+from .utils import compact_text, compact_text_balanced, normalize_workflow_mode, now_utc_iso, parse_json_text, read_json, read_text, similarity_score, svg_text_element, tokenize, wrap_svg_text, write_json_if_changed, write_text
 
 
 @dataclass(slots=True)
@@ -790,6 +790,113 @@ def build_fast_planner_outline(
     return json.dumps(payload, indent=2, sort_keys=True)
 
 
+def build_direct_execution_plan(
+    project_prompt: str,
+    *,
+    test_command: str,
+    reasoning_effort: str,
+    spine_version: str = DEFAULT_SPINE_VERSION,
+    step_type: str = "feature",
+) -> tuple[str, str, list[ExecutionStep], str]:
+    normalized_prompt = " ".join(str(project_prompt or "").split()).strip() or "Implement the requested repository change safely."
+    compact_title = compact_text(normalized_prompt, 72) or "Direct execution task"
+    is_debug = step_type == "debug"
+    display_description = (
+        "Diagnose and repair the targeted issue with the smallest safe verified change."
+        if is_debug
+        else "Handle the small targeted request directly without a multi-step planning pass."
+    )
+    codex_description = (
+        f"Inspect the relevant implementation and verification surfaces for this request first: {normalized_prompt} "
+        "Then make the smallest safe code change that resolves the issue, add or update executable verification when practical, "
+        "and leave the repository in a passing state."
+        if is_debug
+        else f"Inspect the relevant implementation files for this request first: {normalized_prompt} "
+        "Then make the smallest safe change that satisfies it, add or update executable verification when practical, "
+        "and leave the repository in a passing state."
+    )
+    success_criteria = (
+        f"The targeted issue described by the user is resolved and the verification command `{test_command}` exits successfully."
+        if is_debug
+        else f"The requested small change is implemented and the verification command `{test_command}` exits successfully."
+    )
+    title = compact_title if len(compact_title) <= 60 else compact_text(compact_title, 60)
+    summary = (
+        "Direct execution mode was selected because the request looks narrow enough to handle safely in one focused pass "
+        "without a separate multi-step plan."
+    )
+    steps = [
+        ExecutionStep(
+            step_id="ST1",
+            title=title,
+            display_description=display_description,
+            codex_description=codex_description,
+            test_command=test_command,
+            success_criteria=success_criteria,
+            reasoning_effort=reasoning_effort,
+            step_type=step_type,
+            scope_class="free_owned",
+            spine_version=spine_version,
+            verification_profile="default",
+            metadata={
+                "step_kind": "task",
+                "direct_execution": True,
+                "direct_execution_reason": "small_task_bypass",
+            },
+        )
+    ]
+    outline = json.dumps(
+        {
+            "title": title,
+            "strategy_summary": "Direct execution bypass: skip planner agents for a narrow request and run one focused block.",
+            "shared_contracts": [],
+            "skeleton_step": {
+                "block_id": "SK1",
+                "needed": False,
+                "task_title": "",
+                "purpose": "",
+                "contract_docstring": "",
+                "step_type_hint": "contract",
+                "scope_class_hint": "shared_reviewed",
+                "verification_profile_hint": "default",
+                "spine_version_hint": spine_version,
+                "shared_contracts": [],
+                "candidate_owned_paths": [],
+                "primary_scope_candidates": [],
+                "shared_reviewed_candidates": [],
+                "forbidden_core_candidates": [],
+                "success_criteria": "",
+            },
+            "candidate_blocks": [
+                {
+                    "block_id": "B1",
+                    "goal": normalized_prompt,
+                    "step_type_hint": step_type,
+                    "scope_class_hint": "free_owned",
+                    "verification_profile_hint": "default",
+                    "spine_version_hint": spine_version,
+                    "shared_contracts": [],
+                    "work_items": [normalized_prompt],
+                    "implementation_notes": "Skip separate planner passes and handle the request in one focused execution block.",
+                    "testable_boundary": success_criteria,
+                    "candidate_owned_paths": [],
+                    "primary_scope_candidates": [],
+                    "shared_reviewed_candidates": [],
+                    "forbidden_core_candidates": [],
+                    "parallelizable_after": [],
+                    "parallel_notes": "This request is intentionally handled as a single direct block.",
+                }
+            ],
+            "packing_notes": [
+                "Use direct execution only for narrow requests that can be completed safely in one pass.",
+            ],
+        },
+        indent=2,
+        sort_keys=True,
+    )
+    return title, summary, steps, outline
+
+
 def assess_repository_maturity(repo_dir: Path, repo_inputs: dict[str, str]) -> tuple[bool, dict[str, int]]:
     score = 0
     details = {"readme": 0, "docs": 0, "source": 0, "tests": 0}
@@ -1118,7 +1225,7 @@ def prompt_to_execution_plan_prompt(
     try:
         return template.format(
             repo_dir=context.paths.repo_dir,
-            max_steps=max(3, max_steps),
+            max_steps=max(1, max_steps),
             workflow_mode=workflow_mode,
             execution_mode=_normalize_execution_mode(execution_mode),
             readme=prompt_bundle["readme"],
@@ -1127,7 +1234,7 @@ def prompt_to_execution_plan_prompt(
             docs=prompt_bundle["docs"],
             source=prompt_bundle["source"],
             user_prompt=user_prompt.strip(),
-            planner_outline=compact_text(planner_outline.strip(), 4000) or "Planner Agent A output unavailable.",
+            planner_outline=compact_text_balanced(planner_outline.strip(), 4000) or "Planner Agent A output unavailable.",
             model_selection_guidance=planning_model_selection_guidance(runtime),
             current_spine_version=prompt_bundle["spine_version"],
             shared_contracts_snapshot=prompt_bundle["shared_contracts_snapshot"],
@@ -1151,7 +1258,7 @@ def prompt_to_plan_decomposition_prompt(
     try:
         return template.format(
             repo_dir=context.paths.repo_dir,
-            max_steps=max(3, max_steps),
+            max_steps=max(1, max_steps),
             workflow_mode=workflow_mode,
             execution_mode=_normalize_execution_mode(execution_mode),
             readme=prompt_bundle["readme"],
@@ -1385,10 +1492,10 @@ def implementation_prompt(
             step_metadata=json.dumps({**step_metadata, "policy_summary": step_policy}, indent=2, sort_keys=True) if step_metadata or step_policy else "{}",
             candidate_rationale=candidate.rationale,
             memory_context=memory_context,
-            plan_snapshot=compact_text(plan_text, 4000),
-            mid_term_plan=compact_text(mid_term, 2500),
-            scope_guard=compact_text(scope_guard, 2500),
-            research_notes=compact_text(research_notes, 2500),
+            plan_snapshot=compact_text_balanced(plan_text, 4000),
+            mid_term_plan=compact_text_balanced(mid_term, 2500),
+            scope_guard=compact_text_balanced(scope_guard, 2500),
+            research_notes=compact_text_balanced(research_notes, 2500),
             research_notes_file=context.paths.research_notes_file,
             ml_step_report_file=context.paths.ml_step_report_file,
             ml_experiment_report_file=context.paths.ml_experiment_report_file,
@@ -1461,15 +1568,15 @@ def debugger_prompt(
             step_metadata=json.dumps({**step_metadata, "policy_summary": step_policy}, indent=2, sort_keys=True) if step_metadata or step_policy else "{}",
             candidate_rationale=candidate.rationale,
             memory_context=memory_context,
-            plan_snapshot=compact_text(plan_text, 4000),
-            mid_term_plan=compact_text(mid_term, 2500),
-            scope_guard=compact_text(scope_guard, 2500),
-            research_notes=compact_text(research_notes, 2500),
+            plan_snapshot=compact_text_balanced(plan_text, 4000),
+            mid_term_plan=compact_text_balanced(mid_term, 2500),
+            scope_guard=compact_text_balanced(scope_guard, 2500),
+            research_notes=compact_text_balanced(research_notes, 2500),
             research_notes_file=context.paths.research_notes_file,
             ml_step_report_file=context.paths.ml_step_report_file,
-            failing_test_summary=compact_text(failing_test_summary, 1200) or "No verification summary was captured.",
-            failing_test_stdout=compact_text(failing_test_stdout, 4000) or "No stdout captured.",
-            failing_test_stderr=compact_text(failing_test_stderr, 4000) or "No stderr captured.",
+            failing_test_summary=compact_text_balanced(failing_test_summary, 1200) or "No verification summary was captured.",
+            failing_test_stdout=compact_text_balanced(failing_test_stdout, 4000) or "No stdout captured.",
+            failing_test_stderr=compact_text_balanced(failing_test_stderr, 4000) or "No stderr captured.",
             extra_prompt=context.runtime.extra_prompt.strip() or "None.",
         )
     except KeyError as exc:
@@ -1542,15 +1649,15 @@ def merger_prompt(
             step_metadata=json.dumps({**step_metadata, "policy_summary": step_policy}, indent=2, sort_keys=True) if step_metadata or step_policy else "{}",
             candidate_rationale=candidate.rationale,
             memory_context=memory_context,
-            plan_snapshot=compact_text(plan_text, 4000),
-            mid_term_plan=compact_text(mid_term, 2500),
-            scope_guard=compact_text(scope_guard, 2500),
-            research_notes=compact_text(research_notes, 2500),
+            plan_snapshot=compact_text_balanced(plan_text, 4000),
+            mid_term_plan=compact_text_balanced(mid_term, 2500),
+            scope_guard=compact_text_balanced(scope_guard, 2500),
+            research_notes=compact_text_balanced(research_notes, 2500),
             research_notes_file=context.paths.research_notes_file,
             failing_command=failing_command,
-            failing_summary=compact_text(failing_summary, 1200) or "No merge summary was captured.",
-            failing_stdout=compact_text(failing_stdout, 4000) or "No stdout captured.",
-            failing_stderr=compact_text(failing_stderr, 4000) or "No stderr captured.",
+            failing_summary=compact_text_balanced(failing_summary, 1200) or "No merge summary was captured.",
+            failing_stdout=compact_text_balanced(failing_stdout, 4000) or "No stdout captured.",
+            failing_stderr=compact_text_balanced(failing_stderr, 4000) or "No stderr captured.",
             merge_targets=", ".join(merge_targets or []) or "none declared",
             extra_prompt=context.runtime.extra_prompt.strip() or "None.",
         )

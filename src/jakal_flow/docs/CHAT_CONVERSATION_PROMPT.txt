@@ -13,6 +13,9 @@ Conversation session:
 Current saved project summary:
 {project_summary}
 
+Current execution state:
+{execution_state}
+
 Plan snapshot:
 {plan_snapshot}
 

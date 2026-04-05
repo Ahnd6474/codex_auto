@@ -31,9 +31,9 @@ from .utils import append_jsonl, compact_text, normalize_workflow_mode, now_utc_
 from .workspace import LOCAL_PROJECT_LOG_DIRNAME
 
 
-DETAIL_CACHE_VERSION = 19
-LIST_ITEM_CACHE_VERSION = 2
-WORKSPACE_LISTING_CACHE_VERSION = 2
+DETAIL_CACHE_VERSION = 20
+LIST_ITEM_CACHE_VERSION = 3
+WORKSPACE_LISTING_CACHE_VERSION = 3
 PROJECT_TREE_EXCLUDED_NAMES = frozenset({".git", LOCAL_PROJECT_LOG_DIRNAME, "ui_bridge_perf.jsonl"})
 _DETAIL_BASE_PAYLOAD_MEMORY_CACHE = LruTtlCache[str, tuple[int, str, dict[str, Any]]](max_entries=48)
 _LIST_ITEM_PAYLOAD_MEMORY_CACHE = LruTtlCache[str, tuple[int, str, dict[str, Any]]](max_entries=256)
@@ -73,6 +73,48 @@ def _path_signature(path: Path) -> str:
         return f"{path.name}:unavailable"
     kind = "dir" if path.is_dir() else "file"
     return f"{path.name}:{kind}:{stat.st_size}:{stat.st_mtime_ns}"
+
+
+def _path_is_accessible_dir(path: Path | None) -> bool:
+    if path is None:
+        return False
+    try:
+        return path.exists() and path.is_dir()
+    except OSError:
+        return False
+
+
+def _workspace_relative_path_text(workspace_root: Path, path: Path | None) -> str:
+    if path is None:
+        return ""
+    try:
+        return path.resolve().relative_to(workspace_root.resolve()).as_posix()
+    except ValueError:
+        return ""
+    except OSError:
+        return ""
+
+
+def _project_repo_binding_payload(workspace_root: Path, project: ProjectContext) -> dict[str, Any]:
+    repo_kind = str(project.metadata.repo_kind or "").strip().lower() or "remote"
+    project_root_relative = _workspace_relative_path_text(workspace_root, project.paths.project_root)
+    repo_path_hint = str(project.metadata.repo_path or "").strip()
+    if repo_kind == "local":
+        repo_path_candidate = Path(repo_path_hint) if repo_path_hint else None
+        repo_available = _path_is_accessible_dir(repo_path_candidate)
+        repo_path = repo_path_hint if repo_available else ""
+        repo_binding = "bound" if repo_available else "missing"
+    else:
+        repo_available = _path_is_accessible_dir(project.paths.repo_dir)
+        repo_path = str(project.paths.repo_dir) if repo_available else ""
+        repo_binding = "managed" if repo_available else "missing"
+    return {
+        "repo_path": repo_path,
+        "repo_path_hint": repo_path_hint,
+        "repo_available": repo_available,
+        "repo_binding": repo_binding,
+        "project_root_relative": project_root_relative,
+    }
 
 
 def _normalize_execution_family_token(value: str) -> str:
@@ -904,9 +946,13 @@ def project_summary(
     else:
         provider_summary = preset.display_name
     runtime_model = str(getattr(project.runtime, "execution_model", "") or getattr(project.runtime, "model", "") or "").strip()
+    repo_binding = _project_repo_binding_payload(project.paths.workspace_root, project)
+    directory_line = repo_binding["repo_path"] or repo_binding["repo_path_hint"] or "Unavailable"
+    if not repo_binding["repo_available"] and repo_binding["repo_path_hint"]:
+        directory_line = f"{repo_binding['repo_path_hint']} (unavailable)"
     lines = [
         f"Name: {project.metadata.display_name or project.metadata.slug}",
-        f"Directory: {project.metadata.repo_path}",
+        f"Directory: {directory_line}",
         f"GitHub: {project.metadata.origin_url or 'Not connected'}",
         f"Branch: {project.metadata.branch}",
         f"Status: {current_status or project.metadata.current_status}",
@@ -1145,11 +1191,19 @@ def _flow_svg_payload(context: ProjectContext) -> dict[str, Any]:
 
 
 def managed_workspace_tree(context: ProjectContext) -> list[dict[str, Any]]:
+    repo_binding = _project_repo_binding_payload(context.paths.workspace_root, context)
+    root_path = context.paths.repo_dir
+    root_label = context.paths.repo_dir.name or context.metadata.display_name or context.metadata.slug or "Project"
+    if not _path_is_accessible_dir(root_path):
+        root_path = context.paths.project_root
+        root_label = f"{context.metadata.display_name or context.metadata.slug or root_path.name} (managed workspace)"
     cache_key = f"workspace-tree|{context.metadata.repo_id}"
     signature = "|".join(
         (
-            _preview_tree_signature(context.paths.repo_dir),
-            str(context.metadata.display_name or context.metadata.slug or context.paths.repo_dir.name),
+            _preview_tree_signature(root_path),
+            root_label,
+            str(repo_binding["repo_binding"]),
+            str(repo_binding["repo_path_hint"]),
         )
     )
     cached = _section_payload_from_cache(cache_key, signature)
@@ -1158,10 +1212,10 @@ def managed_workspace_tree(context: ProjectContext) -> list[dict[str, Any]]:
     payload = {
         "workspace_tree": [
             {
-                "label": context.paths.repo_dir.name or context.metadata.display_name or context.metadata.slug or "Project",
-                "path": str(context.paths.repo_dir),
+                "label": root_label,
+                "path": str(root_path),
                 "kind": "dir",
-                "children": preview_tree(context.paths.repo_dir),
+                "children": preview_tree(root_path),
             }
         ]
     }
@@ -1793,22 +1847,29 @@ def _list_item_memory_cache_key(project: ProjectContext, *, archived: bool) -> s
     return f"{project.paths.project_root.resolve()}|{suffix}"
 
 
-def _project_list_item_signature_from_registry_item(item: dict[str, Any]) -> str:
-    project_root = Path(str(item.get("project_root", "")).strip()).expanduser()
+def _project_list_item_signature_from_registry_item(workspace_root: Path, item: dict[str, Any]) -> str:
+    project_root_relative = str(item.get("project_root_relative", "")).strip()
+    if project_root_relative:
+        project_root = (workspace_root / project_root_relative).expanduser()
+    else:
+        project_root = Path(str(item.get("project_root", "")).strip()).expanduser()
     if not str(project_root).strip():
         return "missing-project-root"
     repo_kind = str(item.get("repo_kind", "")).strip().lower()
     repo_path_text = str(item.get("repo_path", "")).strip()
     repo_path = Path(repo_path_text).expanduser() if repo_path_text else None
+    metadata_data = read_json(project_root / "metadata.json", default=None)
+    local_logs_mode = str(metadata_data.get("local_logs_mode", "repo")).strip().lower() if isinstance(metadata_data, dict) else "repo"
     digest = hashlib.sha1()
     digest.update(str(project_root).encode("utf-8"))
+    digest.update(project_root_relative.encode("utf-8"))
     digest.update(_path_signature(project_root / "metadata.json").encode("utf-8"))
     digest.update(_path_signature(project_root / "project_config.json").encode("utf-8"))
     digest.update(_path_signature(project_root / "state" / "LOOP_STATE.json").encode("utf-8"))
     digest.update(_path_signature(project_root / "state" / "EXECUTION_PLAN.json").encode("utf-8"))
     block_log_file = (
         repo_path / LOCAL_PROJECT_LOG_DIRNAME / "blocks.jsonl"
-        if repo_kind == "local" and repo_path is not None
+        if repo_kind == "local" and local_logs_mode != "workspace" and _path_is_accessible_dir(repo_path)
         else project_root / "logs" / "blocks.jsonl"
     )
     digest.update(_path_signature(block_log_file).encode("utf-8"))
@@ -1823,10 +1884,10 @@ def _workspace_listing_content_signature(orchestrator: Orchestrator) -> str:
     digest.update(_path_signature(orchestrator.workspace.registry_file).encode("utf-8"))
     for repo_id, item in sorted(registry.get("projects", {}).items(), key=lambda pair: str(pair[0])):
         digest.update(str(repo_id).encode("utf-8"))
-        digest.update(_project_list_item_signature_from_registry_item(item).encode("utf-8"))
+        digest.update(_project_list_item_signature_from_registry_item(orchestrator.workspace.workspace_root, item).encode("utf-8"))
     for archive_id, item in sorted(registry.get("history", {}).items(), key=lambda pair: str(pair[0])):
         digest.update(str(archive_id).encode("utf-8"))
-        digest.update(_project_list_item_signature_from_registry_item(item).encode("utf-8"))
+        digest.update(_project_list_item_signature_from_registry_item(orchestrator.workspace.workspace_root, item).encode("utf-8"))
     return digest.hexdigest()
 
 
@@ -1858,11 +1919,16 @@ def _build_project_list_item_payload(
     detail = project.metadata.origin_url or f"Branch {project.metadata.branch}"
     progress_payload = project_progress_payload(plan_state)
     queue_priority = int(getattr(project.runtime, "background_queue_priority", 0) or 0)
+    repo_binding = _project_repo_binding_payload(orchestrator.workspace.workspace_root, project)
     payload = {
         "repo_id": project.metadata.repo_id,
         "slug": project.metadata.slug,
         "display_name": project.metadata.display_name or project.metadata.slug,
-        "repo_path": str(project.metadata.repo_path),
+        "repo_path": repo_binding["repo_path"],
+        "repo_path_hint": repo_binding["repo_path_hint"],
+        "repo_available": repo_binding["repo_available"],
+        "repo_binding": repo_binding["repo_binding"],
+        "project_root_relative": repo_binding["project_root_relative"],
         "origin_url": project.metadata.origin_url,
         "branch": project.metadata.branch,
         "vcs_backend": project.metadata.vcs_backend,
@@ -1889,8 +1955,8 @@ def _build_project_list_item_payload(
     if archived:
         archived_at = project.metadata.archived_at or project.metadata.last_run_at or project.metadata.created_at
         history_detail = archived_at
-        if project.metadata.repo_path:
-            history_detail = f"{project.metadata.repo_path} | {archived_at}"
+        if repo_binding["repo_path"] or repo_binding["repo_path_hint"]:
+            history_detail = f"{repo_binding['repo_path'] or repo_binding['repo_path_hint']} | {archived_at}"
         payload.update(
             {
                 "repo_id": project.metadata.archive_id or project.metadata.repo_id,
@@ -2096,6 +2162,12 @@ def _build_project_detail_base_payload(
         generated_at=generated_at,
     )
     project_payload = project.metadata.to_dict()
+    repo_binding = _project_repo_binding_payload(project.paths.workspace_root, project)
+    project_payload["repo_path"] = repo_binding["repo_path"]
+    project_payload["repo_path_hint"] = repo_binding["repo_path_hint"]
+    project_payload["repo_available"] = repo_binding["repo_available"]
+    project_payload["repo_binding"] = repo_binding["repo_binding"]
+    project_payload["project_root_relative"] = repo_binding["project_root_relative"]
     project_payload["current_status"] = current_status
     snapshot = {
         "project": deepcopy(project_payload),
@@ -2164,7 +2236,9 @@ def _build_project_detail_base_payload(
         "snapshot_sources": snapshot_sources,
         "files": {
             "project_root": str(project.paths.project_root),
+            "project_root_relative": repo_binding["project_root_relative"],
             "repo_dir": str(project.paths.repo_dir),
+            "repo_dir_hint": repo_binding["repo_path_hint"],
             "execution_plan_file": str(project.paths.execution_plan_file),
             "ui_control_file": str(project.paths.ui_control_file),
             "ui_event_log_file": str(project.paths.ui_event_log_file),

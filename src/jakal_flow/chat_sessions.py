@@ -20,7 +20,7 @@ from .platform_defaults import default_codex_path
 from .planning import load_source_prompt_template
 from .runtime_config import runtime_from_payload
 from .step_models import provider_execution_preflight_error
-from .utils import append_text, compact_text, decode_process_output, ensure_dir, now_utc_iso, parse_json_text, read_text, sanitized_subprocess_env, write_text
+from .utils import append_text, compact_text, compact_text_balanced, decode_process_output, ensure_dir, now_utc_iso, parse_json_text, read_text, sanitized_subprocess_env, write_text
 
 
 CHAT_CONVERSATION_PROMPT_FILENAME = "CHAT_CONVERSATION_PROMPT.txt"
@@ -840,6 +840,37 @@ def _recent_transcript_for_prompt(messages: list[ChatMessageEntry]) -> str:
     return "\n".join(lines).strip() or "No prior messages."
 
 
+def _chat_execution_state(plan_state: ExecutionPlanState) -> str:
+    steps = list(plan_state.steps)
+    completed = sum(1 for step in steps if step.status == "completed")
+    running = [step.step_id for step in steps if step.status in {"running", "integrating"}]
+    failed = [step.step_id for step in steps if step.status == "failed"]
+    pending = [step.step_id for step in steps if step.status == "pending"]
+    lines = [
+        f"Workflow mode: {plan_state.workflow_mode or 'standard'}",
+        "Execution mode: parallel",
+        f"Closeout status: {plan_state.closeout_status}",
+        f"Progress: {completed}/{len(steps)} completed",
+        f"Running steps: {', '.join(running) if running else 'none'}",
+        f"Failed steps: {', '.join(failed) if failed else 'none'}",
+        f"Pending steps: {', '.join(pending[:8]) if pending else 'none'}",
+        "",
+        "Saved steps:",
+    ]
+    if not steps:
+        lines.append("- No saved execution steps.")
+        return "\n".join(lines)
+    for step in steps[:10]:
+        dependency_text = ", ".join(step.depends_on) if step.depends_on else "none"
+        lines.append(
+            f"- {step.step_id} [{step.status}] {step.title} | depends_on: {dependency_text} | "
+            f"success: {compact_text(step.success_criteria, max_chars=140) or 'n/a'}"
+        )
+    if len(steps) > 10:
+        lines.append(f"- ... {len(steps) - 10} more step(s) omitted.")
+    return "\n".join(lines)
+
+
 def build_conversation_prompt(
     context: ProjectContext,
     *,
@@ -857,12 +888,13 @@ def build_conversation_prompt(
         summary_file=session.summary_file,
         transcript_file=session.transcript_file,
         project_summary=_chat_project_summary(context, plan_state),
-        plan_snapshot=compact_text(read_text(context.paths.plan_file), max_chars=3000) or "No saved plan snapshot.",
-        scope_guard=compact_text(read_text(context.paths.scope_guard_file), max_chars=2500) or "No scope guard recorded.",
-        research_notes=compact_text(read_text(context.paths.research_notes_file), max_chars=2500) or "No research notes recorded.",
-        prior_summary=compact_text(prior_summary, max_chars=3500) or "No prior conversation summary.",
+        execution_state=_chat_execution_state(plan_state),
+        plan_snapshot=compact_text_balanced(read_text(context.paths.plan_file), max_chars=3000) or "No saved plan snapshot.",
+        scope_guard=compact_text_balanced(read_text(context.paths.scope_guard_file), max_chars=2500) or "No scope guard recorded.",
+        research_notes=compact_text_balanced(read_text(context.paths.research_notes_file), max_chars=2500) or "No research notes recorded.",
+        prior_summary=compact_text_balanced(prior_summary, max_chars=3500) or "No prior conversation summary.",
         recent_transcript=_recent_transcript_for_prompt(recent_messages),
-        user_message=compact_text(user_message, max_chars=2500) or "No user message provided.",
+        user_message=compact_text_balanced(user_message, max_chars=2500) or "No user message provided.",
     )
 
 

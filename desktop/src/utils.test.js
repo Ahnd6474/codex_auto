@@ -11,6 +11,7 @@ import {
   defaultModelForRuntime,
   failureReasonCode,
   failureReasonLabel,
+  buildProjectPayload,
   isDuplicateProjectJobError,
   filterModelCatalogByProvider,
   groupedModelCatalogOptions,
@@ -839,6 +840,38 @@ test("projectFormFromDetail still falls back to program defaults for missing run
   assert.equal(form.runtime.model_slug_input, "gpt-5.5");
   assert.equal(form.runtime.effort, "xhigh");
   assert.equal(form.runtime.planning_effort, "high");
+});
+
+test("projectFormFromDetail keeps repo identity and repo_path_hint for disconnected projects", () => {
+  const form = projectFormFromDetail(
+    {
+      project: {
+        repo_id: "repo-1",
+        repo_path: "",
+        repo_path_hint: "C:/stale-repo",
+        display_name: "Repo",
+        branch: "main",
+      },
+      runtime: {
+        model_provider: "openai",
+        model: "gpt-5.4",
+      },
+    },
+    {
+      model_provider: "openai",
+      model: "gpt-5.5",
+      model_slug_input: "gpt-5.5",
+      effort: "high",
+      planning_effort: "high",
+    },
+  );
+
+  const payload = buildProjectPayload(form);
+
+  assert.equal(form.repo_id, "repo-1");
+  assert.equal(form.project_dir, "C:/stale-repo");
+  assert.equal(payload.repo_id, "repo-1");
+  assert.equal(payload.project_dir, "C:/stale-repo");
 });
 
 test("projectDetailStatus prefers backend execution_state and sanitizeProjectDetailForJobState preserves mirrored surfaces", () => {

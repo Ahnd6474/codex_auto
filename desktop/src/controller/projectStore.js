@@ -71,9 +71,15 @@ function projectEventMatchesDetail(detail = null, project = null) {
   if (detailRepoId && eventRepoId) {
     return detailRepoId === eventRepoId;
   }
-  const detailProjectDir = String(detail?.project?.repo_path || "").trim();
-  const eventProjectDir = String(project?.project_dir || "").trim();
-  return Boolean(detailProjectDir) && Boolean(eventProjectDir) && detailProjectDir === eventProjectDir;
+  const detailProjectDirs = [
+    String(detail?.project?.repo_path || "").trim(),
+    String(detail?.project?.repo_path_hint || "").trim(),
+  ].filter(Boolean);
+  const eventProjectDirs = [
+    String(project?.project_dir || "").trim(),
+    String(project?.project_dir_hint || "").trim(),
+  ].filter(Boolean);
+  return detailProjectDirs.some((detailProjectDir) => eventProjectDirs.includes(detailProjectDir));
 }
 
 function projectListKey(item = null) {
@@ -83,6 +89,7 @@ function projectListKey(item = null) {
   return String(
     item.archive_id
     || item.repo_id
+    || item.repo_path_hint
     || item.repo_path
     || item.project_dir
     || item.slug
@@ -855,6 +862,12 @@ function projectListItemFromDetail(detail, fallbackProject = null) {
     slug: project.slug || fallbackProject?.slug || "",
     display_name: project.display_name || project.slug || fallbackProject?.display_name || "",
     repo_path: project.repo_path || fallbackProject?.repo_path || "",
+    repo_path_hint: project.repo_path_hint || fallbackProject?.repo_path_hint || "",
+    repo_available:
+      typeof project?.repo_available === "boolean"
+        ? project.repo_available
+        : (typeof fallbackProject?.repo_available === "boolean" ? fallbackProject.repo_available : undefined),
+    repo_binding: project.repo_binding || fallbackProject?.repo_binding || "",
     origin_url: project.origin_url || fallbackProject?.origin_url || "",
     branch,
     status: project.current_status || fallbackProject?.status || "",
@@ -911,15 +924,26 @@ export function applyProjectEventListingState({
 }) {
   const repoId = String(project?.repo_id || "").trim();
   const projectDir = String(project?.project_dir || "").trim();
+  const projectDirHint = String(project?.project_dir_hint || "").trim();
   const status = String(project?.status || project?.project_status || "").trim();
-  if (!repoId && !projectDir && !status) {
+  const hasProjectDir = hasOwnValue(project, "project_dir");
+  const hasProjectDirHint = hasOwnValue(project, "project_dir_hint");
+  const hasRepoAvailable = hasOwnValue(project, "repo_available");
+  const hasRepoBinding = hasOwnValue(project, "repo_binding");
+  const repoAvailable = hasRepoAvailable ? Boolean(project?.repo_available) : undefined;
+  const repoBinding = String(project?.repo_binding || "").trim();
+  const effectiveProjectDir = projectDirHint || projectDir;
+  if (!repoId && !effectiveProjectDir && !status && !hasRepoAvailable && !hasRepoBinding) {
     return null;
   }
 
   let changed = false;
   const nextProjects = (projects || []).map((item) => {
     const sameRepoId = repoId && String(item?.repo_id || "").trim() === repoId;
-    const sameProjectDir = projectDir && String(item?.repo_path || "").trim() === projectDir;
+    const sameProjectDir = effectiveProjectDir && [
+      String(item?.repo_path || "").trim(),
+      String(item?.repo_path_hint || "").trim(),
+    ].filter(Boolean).includes(effectiveProjectDir);
     if (!sameRepoId && !sameProjectDir) {
       return item;
     }
@@ -927,9 +951,12 @@ export function applyProjectEventListingState({
     return {
       ...item,
       repo_id: repoId || item?.repo_id || "",
-      repo_path: projectDir || item?.repo_path || "",
+      ...(hasProjectDir ? { repo_path: projectDir } : {}),
+      ...(hasProjectDirHint ? { repo_path_hint: projectDirHint } : {}),
+      ...(hasRepoAvailable ? { repo_available: repoAvailable } : {}),
+      ...(hasRepoBinding ? { repo_binding: repoBinding } : {}),
       status: status || item?.status || "",
-      detail: item?.detail || (projectDir ? `Path ${projectDir}` : ""),
+      detail: item?.detail || (effectiveProjectDir ? `Path ${effectiveProjectDir}` : ""),
     };
   });
 
@@ -951,26 +978,54 @@ export function applyProjectEventDetailState(detail, project) {
     return null;
   }
   const nextStatus = String(project?.status || project?.project_status || "").trim();
+  const hasProjectDir = hasOwnValue(project, "project_dir");
+  const hasProjectDirHint = hasOwnValue(project, "project_dir_hint");
+  const hasRepoAvailable = hasOwnValue(project, "repo_available");
+  const hasRepoBinding = hasOwnValue(project, "repo_binding");
+  const hasProjectRootRelative = hasOwnValue(project, "project_root_relative");
   const nextRepoPath = String(project?.project_dir || "").trim();
+  const nextRepoPathHint = String(project?.project_dir_hint || "").trim();
+  const nextRepoAvailable = hasRepoAvailable ? Boolean(project?.repo_available) : undefined;
+  const nextRepoBinding = String(project?.repo_binding || "").trim();
+  const nextProjectRootRelative = String(project?.project_root_relative || "").trim();
   const currentStatus = String(detail?.project?.current_status || "").trim();
   const currentRepoPath = String(detail?.project?.repo_path || "").trim();
-  if (!nextStatus && !nextRepoPath) {
+  const currentRepoPathHint = String(detail?.project?.repo_path_hint || "").trim();
+  const currentRepoAvailable = hasRepoAvailable ? Boolean(detail?.project?.repo_available) : undefined;
+  const currentRepoBinding = String(detail?.project?.repo_binding || "").trim();
+  const currentProjectRootRelative = String(detail?.project?.project_root_relative || "").trim();
+  if (!nextStatus && !hasProjectDir && !hasProjectDirHint && !hasRepoAvailable && !hasRepoBinding && !hasProjectRootRelative) {
     return null;
   }
-  if (nextStatus === currentStatus && (!nextRepoPath || nextRepoPath === currentRepoPath)) {
+  if (
+    nextStatus === currentStatus
+    && (!hasProjectDir || nextRepoPath === currentRepoPath)
+    && (!hasProjectDirHint || nextRepoPathHint === currentRepoPathHint)
+    && (!hasRepoAvailable || nextRepoAvailable === currentRepoAvailable)
+    && (!hasRepoBinding || nextRepoBinding === currentRepoBinding)
+    && (!hasProjectRootRelative || nextProjectRootRelative === currentProjectRootRelative)
+  ) {
     return detail;
   }
 
   const nextProject = {
     ...(detail?.project || {}),
     ...(nextStatus ? { current_status: nextStatus } : {}),
-    ...(nextRepoPath ? { repo_path: nextRepoPath } : {}),
+    ...(hasProjectDir ? { repo_path: nextRepoPath } : {}),
+    ...(hasProjectDirHint ? { repo_path_hint: nextRepoPathHint } : {}),
+    ...(hasRepoAvailable ? { repo_available: nextRepoAvailable } : {}),
+    ...(hasRepoBinding ? { repo_binding: nextRepoBinding } : {}),
+    ...(hasProjectRootRelative ? { project_root_relative: nextProjectRootRelative } : {}),
   };
   const nextSnapshotProject = detail?.snapshot?.project
     ? {
         ...detail.snapshot.project,
         ...(nextStatus ? { current_status: nextStatus } : {}),
-        ...(nextRepoPath ? { repo_path: nextRepoPath } : {}),
+        ...(hasProjectDir ? { repo_path: nextRepoPath } : {}),
+        ...(hasProjectDirHint ? { repo_path_hint: nextRepoPathHint } : {}),
+        ...(hasRepoAvailable ? { repo_available: nextRepoAvailable } : {}),
+        ...(hasRepoBinding ? { repo_binding: nextRepoBinding } : {}),
+        ...(hasProjectRootRelative ? { project_root_relative: nextProjectRootRelative } : {}),
       }
     : detail?.snapshot?.project;
   return {

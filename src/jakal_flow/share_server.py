@@ -52,6 +52,15 @@ _SHARE_API_RATE_LIMIT_RULES: dict[str, TokenBucketRule] = {
 }
 
 
+def _path_is_accessible_dir(path: Path | None) -> bool:
+    if path is None:
+        return False
+    try:
+        return path.exists() and path.is_dir()
+    except OSError:
+        return False
+
+
 class ShareRemoteControlManager:
     def __init__(self, workspace_root: Path):
         self.workspace_root = workspace_root
@@ -137,13 +146,25 @@ class ShareRemoteControlManager:
         if not can_resume_from_remote(project, plan_state):
             raise RuntimeError("No remaining paused or pending work is available to resume.")
         repo_id = project.metadata.repo_id
-        project_dir = Path(project.metadata.repo_path)
+        project_dir = Path(str(project.paths.repo_dir or project.metadata.repo_path or "")).expanduser()
+        if not _path_is_accessible_dir(project_dir):
+            self._append_project_event(
+                project,
+                "remote-resume-rejected",
+                "Remote resume is blocked until the repository path is rebound or repaired.",
+                {
+                    "repo_path_hint": str(project.metadata.repo_path or ""),
+                    "project_dir": str(project_dir),
+                },
+            )
+            raise RuntimeError("The project repository is not accessible. Rebind or repair it before resuming.")
         if self.is_resume_starting(repo_id):
             raise RuntimeError("A remote resume request is already starting.")
         self._ensure_resume_slot_available(repo_id=repo_id, project_dir=project_dir)
 
         requested_at = now_utc_iso()
         payload = {
+            "repo_id": repo_id,
             "project_dir": str(project.metadata.repo_path),
             "display_name": project.metadata.display_name,
             "branch": project.metadata.branch,

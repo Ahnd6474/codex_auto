@@ -62,6 +62,7 @@ class WorkspaceManager:
             self._path_cache_token(paths.metadata_file),
             self._path_cache_token(paths.project_config_file),
             self._path_cache_token(paths.loop_state_file),
+            self._path_cache_token(paths.block_log_file),
         )
 
     def _project_root_has_required_files(self, project_root: Path) -> bool:
@@ -81,8 +82,48 @@ class WorkspaceManager:
         except OSError:
             return Path(text)
 
-    def _resolve_registry_item_project_root(self, item: dict[str, str], base_dir: Path) -> Path | None:
+    def _workspace_relative_path_text(self, path: Path | None) -> str:
+        if path is None:
+            return ""
+        try:
+            return path.resolve().relative_to(self.workspace_root).as_posix()
+        except ValueError:
+            return ""
+        except OSError:
+            return ""
+
+    def _registry_project_root_fields(self, project_root: Path) -> dict[str, str]:
+        resolved_root = project_root.resolve()
+        item = {
+            "project_root": str(resolved_root),
+        }
+        project_root_relative = self._workspace_relative_path_text(resolved_root)
+        if project_root_relative:
+            item["project_root_relative"] = project_root_relative
+        return item
+
+    @staticmethod
+    def _path_is_accessible_dir(path: Path | None) -> bool:
+        if path is None:
+            return False
+        try:
+            return path.exists() and path.is_dir()
+        except OSError:
+            return False
+
+    def _local_repo_available(self, repo_path: Path | None) -> bool:
+        return self._path_is_accessible_dir(repo_path)
+
+    def _resolve_registry_item_root_hint(self, item: dict[str, str]) -> Path | None:
+        project_root_relative = str(item.get("project_root_relative", "")).strip()
+        if project_root_relative:
+            return (self.workspace_root / project_root_relative).resolve()
         project_root_text = str(item.get("project_root", "")).strip()
+        if project_root_text:
+            return Path(project_root_text)
+        return None
+
+    def _resolve_registry_item_project_root(self, item: dict[str, str], base_dir: Path) -> Path | None:
         slug = str(item.get("slug", "")).strip()
         repo_id = str(item.get("repo_id", "")).strip() or str(item.get("source_repo_id", "")).strip()
         repo_path_text = str(item.get("repo_path", "")).strip()
@@ -113,9 +154,14 @@ class WorkspaceManager:
                 best_match = candidate.resolve()
                 best_score = score
 
-        for candidate_text in (project_root_text, str(base_dir / slug).strip() if slug else ""):
-            if candidate_text:
-                consider(Path(candidate_text))
+        root_hint = self._resolve_registry_item_root_hint(item)
+        candidate_roots: list[Path] = []
+        if root_hint is not None:
+            candidate_roots.append(root_hint)
+        if slug:
+            candidate_roots.append(base_dir / slug)
+        for candidate_root in candidate_roots:
+            consider(candidate_root)
 
         if base_dir.exists():
             for child in base_dir.iterdir():
@@ -533,8 +579,11 @@ class WorkspaceManager:
         context.paths = self.build_paths_from_root(resolved_root)
         if context.metadata.repo_kind == "local":
             context.paths.repo_dir = context.metadata.repo_path
-            context.paths = self._apply_local_repo_log_paths(context.paths, context.metadata.repo_path)
-            self._migrate_local_project_logs(resolved_root, context.metadata.repo_path)
+            if str(context.metadata.local_logs_mode or "repo").strip().lower() == "workspace" or not self._local_repo_available(context.metadata.repo_path):
+                context.paths = self._apply_workspace_project_log_paths(context.paths)
+            else:
+                context.paths = self._apply_local_repo_log_paths(context.paths, context.metadata.repo_path)
+                self._migrate_local_project_logs(resolved_root, context.metadata.repo_path)
         else:
             context.metadata.repo_path = context.paths.repo_dir
         self._invalidate_project_context_cache(previous_root)
@@ -549,30 +598,32 @@ class WorkspaceManager:
         remove_tree(resolved_root)
 
     def _active_registry_item(self, context: ProjectContext) -> dict[str, str]:
-        return {
+        item = {
             "repo_id": context.metadata.repo_id,
             "slug": context.metadata.slug,
             "repo_url": context.metadata.repo_url,
             "branch": context.metadata.branch,
-            "project_root": str(context.metadata.project_root),
             "repo_kind": context.metadata.repo_kind,
             "repo_path": str(context.metadata.repo_path),
         }
+        item.update(self._registry_project_root_fields(context.metadata.project_root))
+        return item
 
     def _history_registry_item(self, context: ProjectContext) -> dict[str, str]:
-        return {
+        item = {
             "archive_id": str(context.metadata.archive_id or ""),
             "repo_id": context.metadata.repo_id,
             "source_repo_id": str(context.metadata.source_repo_id or context.metadata.repo_id),
             "slug": context.metadata.slug,
             "repo_url": context.metadata.repo_url,
             "branch": context.metadata.branch,
-            "project_root": str(context.metadata.project_root),
             "repo_kind": context.metadata.repo_kind,
             "repo_path": str(context.metadata.repo_path),
             "archived_at": str(context.metadata.archived_at or ""),
             "display_name": str(context.metadata.display_name or context.metadata.slug),
         }
+        item.update(self._registry_project_root_fields(context.metadata.project_root))
+        return item
 
     def _should_emit_project_state_sync(self, context: ProjectContext) -> bool:
         status = str(context.metadata.current_status or "").strip().lower()
@@ -586,11 +637,18 @@ class WorkspaceManager:
     def _emit_project_state_sync(self, context: ProjectContext) -> None:
         if not self._should_emit_project_state_sync(context):
             return
+        repo_path_hint = str(context.metadata.repo_path or "").strip()
+        repo_available = self._local_repo_available(context.metadata.repo_path)
+        repo_kind = str(context.metadata.repo_kind or "").strip().lower() or "remote"
+        repo_binding = "bound" if repo_kind == "local" and repo_available else "missing" if repo_kind == "local" else "managed" if repo_available else "missing"
         emit_bridge_event(
             "project.ui_event",
             {
                 "repo_id": context.metadata.repo_id,
-                "project_dir": str(context.metadata.repo_path),
+                "project_dir": repo_path_hint if repo_available else "",
+                "project_dir_hint": repo_path_hint,
+                "repo_available": repo_available,
+                "repo_binding": repo_binding,
                 "project_status": str(context.metadata.current_status or "").strip(),
                 "event": {
                     "timestamp": now_utc_iso(),
@@ -622,8 +680,7 @@ class WorkspaceManager:
         self._emit_project_state_sync(context)
 
     @_workspace_locked
-    def _cached_registered_context(self, registry_root_text: str) -> ProjectContext | None:
-        registry_root = self._normalized_path(registry_root_text)
+    def _cached_registered_context(self, registry_root: Path | None) -> ProjectContext | None:
         if registry_root is None:
             return None
         cache_key = self._project_cache_key(registry_root)
@@ -662,13 +719,16 @@ class WorkspaceManager:
         item = registry[registry_section].get(entry_id)
         if not item:
             raise KeyError(f"Unknown {missing_error_label}: {entry_id}")
-        registry_root_text = str(item.get("project_root", "")).strip()
-        cached = self._cached_registered_context(registry_root_text)
-        if cached is not None:
-            return transform_context(cached, item) if transform_context is not None else cached
         resolved_root = self._resolve_registry_item_project_root(item, base_dir)
         if resolved_root is None:
-            resolved_root = Path(registry_root_text)
+            resolved_root = self._resolve_registry_item_root_hint(item)
+        cached = self._cached_registered_context(resolved_root)
+        if cached is not None:
+            if sync_registry_root is not None:
+                sync_registry_root(entry_id, cached)
+            return transform_context(cached, item) if transform_context is not None else cached
+        if resolved_root is None:
+            raise FileNotFoundError(f"Managed project root is not available for {entry_id}")
         context = self.load_project_from_root(resolved_root)
         if transform_context is not None:
             context = transform_context(context, item)
@@ -710,12 +770,14 @@ class WorkspaceManager:
         if legacy_logs_dir.exists():
             metadata_data = read_json(paths.metadata_file)
             if isinstance(metadata_data, dict) and str(metadata_data.get("repo_kind", "remote")).strip() == "local":
-                repo_path_hint = Path(str(metadata_data.get("repo_path", "")).strip())
-                paths.repo_dir = repo_path_hint
+                repo_path_hint = self._normalized_path(str(metadata_data.get("repo_path", "")).strip())
+                if repo_path_hint is not None:
+                    paths.repo_dir = repo_path_hint
                 logs_mode = str(metadata_data.get("local_logs_mode", "repo")).strip() or "repo"
-                if logs_mode == "workspace":
+                if logs_mode == "workspace" or not self._local_repo_available(repo_path_hint):
                     paths = self._apply_workspace_project_log_paths(paths)
                 else:
+                    assert repo_path_hint is not None
                     paths = self._apply_local_repo_log_paths(paths, repo_path_hint)
                     self._migrate_local_project_logs(paths.project_root, repo_path_hint)
         cache_key = self._project_cache_key(paths.project_root)
@@ -751,12 +813,15 @@ class WorkspaceManager:
             source_repo_id=metadata_data.get("source_repo_id"),
         )
         if metadata.repo_kind == "local":
+            repo_path_hint = self._normalized_path(metadata.repo_path)
+            metadata.repo_path = repo_path_hint or metadata.repo_path
             paths.repo_dir = metadata.repo_path
-            if metadata.local_logs_mode == "workspace":
+            if metadata.local_logs_mode == "workspace" or not self._local_repo_available(repo_path_hint):
                 paths = self._apply_workspace_project_log_paths(paths)
             else:
-                paths = self._apply_local_repo_log_paths(paths, metadata.repo_path)
-                self._migrate_local_project_logs(paths.project_root, metadata.repo_path)
+                assert repo_path_hint is not None
+                paths = self._apply_local_repo_log_paths(paths, repo_path_hint)
+                self._migrate_local_project_logs(paths.project_root, repo_path_hint)
         else:
             metadata.repo_path = paths.repo_dir
         runtime = runtime_from_payload(runtime_data)
@@ -861,6 +926,22 @@ class WorkspaceManager:
                 return project
         return None
 
+    @_workspace_locked
+    def rebind_local_project_repo_path(self, context: ProjectContext, repo_path: Path) -> ProjectContext:
+        if str(context.metadata.repo_kind or "").strip().lower() != "local":
+            raise ValueError("Only local projects can be rebound to a new repository path.")
+        resolved_repo_path = repo_path.resolve()
+        context.metadata.repo_path = resolved_repo_path
+        context.paths.repo_dir = resolved_repo_path
+        if str(context.metadata.local_logs_mode or "repo").strip().lower() == "workspace":
+            context.paths = self._apply_workspace_project_log_paths(context.paths)
+        else:
+            context.paths = self._apply_local_repo_log_paths(context.paths, resolved_repo_path)
+            self._migrate_local_project_logs(context.paths.project_root, resolved_repo_path)
+        ensure_dir(context.paths.logs_dir)
+        self.save_project(context)
+        return context
+
     def _archive_slug(self, slug: str, archived_at: str, repo_id: str) -> str:
         compact_timestamp = (
             archived_at.replace("-", "")
@@ -879,7 +960,12 @@ class WorkspaceManager:
         if not item:
             raise KeyError(f"Unknown repository id: {repo_id}")
 
-        source_root = Path(str(item.get("project_root", "")).strip()).resolve()
+        source_root = self._resolve_registry_item_project_root(item, self.projects_root)
+        if source_root is None:
+            source_root = self._resolve_registry_item_root_hint(item)
+        if source_root is None:
+            self._write_registry(registry)
+            raise FileNotFoundError(f"Managed project root is not available for {repo_id}")
         if not source_root.exists():
             self._write_registry(registry)
             raise FileNotFoundError(f"Managed project root does not exist: {source_root}")
@@ -915,7 +1001,12 @@ class WorkspaceManager:
         if not item:
             raise KeyError(f"Unknown repository id: {repo_id}")
 
-        source_root = Path(str(item.get("project_root", "")).strip()).resolve()
+        source_root = self._resolve_registry_item_project_root(item, self.projects_root)
+        if source_root is None:
+            source_root = self._resolve_registry_item_root_hint(item)
+        if source_root is None:
+            self._write_registry(registry)
+            raise FileNotFoundError(f"Managed project root is not available for {repo_id}")
         if not source_root.exists():
             self._write_registry(registry)
             raise FileNotFoundError(f"Managed project root does not exist: {source_root}")
@@ -949,7 +1040,12 @@ class WorkspaceManager:
         if not item:
             raise KeyError(f"Unknown archive id: {archive_id}")
 
-        archive_root = Path(str(item.get("project_root", "")).strip()).resolve()
+        archive_root = self._resolve_registry_item_project_root(item, self.history_root)
+        if archive_root is None:
+            archive_root = self._resolve_registry_item_root_hint(item)
+        if archive_root is None:
+            self._write_registry(registry)
+            raise FileNotFoundError(f"Archived project root is not available for {archive_id}")
         if not archive_root.exists():
             self._write_registry(registry)
             raise FileNotFoundError(f"Archived project root does not exist: {archive_root}")

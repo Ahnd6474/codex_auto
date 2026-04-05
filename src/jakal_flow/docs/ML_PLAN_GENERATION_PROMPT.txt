@@ -40,7 +40,10 @@ Planning goals:
 - If a task needs broad repo-wide refactors or shared-file churn, isolate it instead of pretending it is parallel-safe.
 - Do not include the final aggregation/closeout sweep inside the normal task list. The app runs a separate closeout block after the planned tasks finish.
 
-Return exactly one JSON object with a top-level "tasks" array containing 3 to {max_steps} items.
+Primary user request:
+{user_prompt}
+
+Return exactly one JSON object with a top-level "tasks" array containing 1 to {max_steps} items.
 
 JSON shape:
 {{
@@ -114,6 +117,3 @@ Source inventory:
 
 Planner Agent A decomposition artifact:
 {planner_outline}
-
-User request:
-{user_prompt}

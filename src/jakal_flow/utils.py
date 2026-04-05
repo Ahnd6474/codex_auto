@@ -331,6 +331,29 @@ def compact_text(value: str, max_chars: int = 3_000) -> str:
     return f"{stripped[: max_chars - 3].rstrip()}..."
 
 
+def compact_text_balanced(
+    value: str,
+    max_chars: int = 3_000,
+    *,
+    tail_ratio: float = 0.55,
+    separator: str = "\n...\n",
+) -> str:
+    stripped = value.strip()
+    if len(stripped) <= max_chars:
+        return stripped
+    if max_chars <= len(separator) + 2:
+        return compact_text(stripped, max_chars)
+    normalized_tail_ratio = min(0.8, max(0.2, float(tail_ratio)))
+    content_budget = max_chars - len(separator)
+    tail_chars = max(1, int(content_budget * normalized_tail_ratio))
+    head_chars = max(1, content_budget - tail_chars)
+    if head_chars + tail_chars >= len(stripped):
+        return stripped
+    head = stripped[:head_chars].rstrip()
+    tail = stripped[-tail_chars:].lstrip()
+    return f"{head}{separator}{tail}"
+
+
 def wrap_svg_text(value: str, max_chars_per_line: int, max_lines: int = 2) -> list[str]:
     normalized = re.sub(r"\s+", " ", value).strip()
     if not normalized or max_chars_per_line <= 0 or max_lines <= 0:

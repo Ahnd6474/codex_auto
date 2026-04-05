@@ -244,11 +244,50 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(event_name, "project.ui_event")
             self.assertEqual(payload["repo_id"], context.metadata.repo_id)
             self.assertEqual(payload["project_dir"], str(context.metadata.repo_path))
+            self.assertEqual(payload["project_dir_hint"], str(context.metadata.repo_path))
+            self.assertTrue(payload["repo_available"])
+            self.assertEqual(payload["repo_binding"], "bound")
             self.assertEqual(payload["project_status"], "running:st1")
             self.assertEqual(payload["event"]["event_type"], "project-state-synced")
             self.assertEqual(payload["event"]["details"]["current_task"], "Execute ST1")
             self.assertEqual(payload["event"]["details"]["current_checkpoint_id"], "CP2")
             self.assertTrue(payload["event"]["details"]["last_run_at"])
+
+    def test_workspace_save_project_emits_repo_hint_for_disconnected_local_project(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            project_dir = temp_dir / "repo"
+            workspace = WorkspaceManager(workspace_root)
+            context = workspace.initialize_local_project(project_dir, "main", runtime_from_payload({}), display_name="Demo")
+            stale_repo = temp_dir / "missing-repo"
+            metadata_path = context.paths.project_root / "metadata.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["repo_path"] = str(stale_repo)
+            metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
+            registry = json.loads(workspace.registry_file.read_text(encoding="utf-8"))
+            registry["projects"][context.metadata.repo_id]["repo_path"] = str(stale_repo)
+            workspace.registry_file.write_text(json.dumps(registry, indent=2, sort_keys=True), encoding="utf-8")
+            disconnected = WorkspaceManager(workspace_root).load_project_by_id(context.metadata.repo_id)
+            disconnected.metadata.current_status = "running:st1"
+            disconnected.loop_state.current_task = "Execute ST1"
+
+            events: list[tuple[str, dict]] = []
+
+            class Sink:
+                def emit(self, event: str, payload: dict | None = None) -> None:
+                    events.append((event, payload or {}))
+
+            with bridge_event_context(Sink()):
+                WorkspaceManager(workspace_root).save_project(disconnected)
+
+            self.assertEqual(len(events), 1)
+            event_name, payload = events[0]
+            self.assertEqual(event_name, "project.ui_event")
+            self.assertEqual(payload["repo_id"], disconnected.metadata.repo_id)
+            self.assertEqual(payload["project_dir"], "")
+            self.assertEqual(payload["project_dir_hint"], str(stale_repo.resolve()))
+            self.assertFalse(payload["repo_available"])
+            self.assertEqual(payload["repo_binding"], "missing")
 
     def test_workspace_save_project_skips_bridge_ui_event_for_idle_state(self) -> None:
         with TemporaryTestDir() as temp_dir:
@@ -1744,6 +1783,127 @@ class UIBridgeTests(unittest.TestCase):
                 )
             self.assertIn("Demo Project", loaded["summary"])
             self.assertEqual(loaded["stats"]["total_steps"], 0)
+
+    def test_save_project_setup_rebinds_existing_project_when_repo_id_is_provided(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            original_repo = temp_dir / "repo-old"
+            rebound_repo = temp_dir / "repo-new"
+            original_repo.mkdir(parents=True, exist_ok=True)
+            rebound_repo.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(original_repo),
+                "display_name": "Demo Project",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.Orchestrator._resolve_local_repo_backend", return_value="git"), mock.patch(
+                "jakal_flow.orchestrator.ensure_virtualenv",
+                return_value=original_repo / ".venv",
+            ), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            rebound_payload = {
+                **payload,
+                "repo_id": detail["project"]["repo_id"],
+                "project_dir": str(rebound_repo),
+                "display_name": "Demo Project Rebound",
+            }
+
+            with mock.patch("jakal_flow.orchestrator.Orchestrator._resolve_local_repo_backend", return_value="git"), mock.patch(
+                "jakal_flow.orchestrator.ensure_virtualenv",
+                return_value=rebound_repo / ".venv",
+            ), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                rebound = run_command("save-project-setup", workspace_root, rebound_payload)
+
+            listing = run_command("list-projects", workspace_root)
+
+            self.assertEqual(rebound["project"]["repo_id"], detail["project"]["repo_id"])
+            self.assertEqual(rebound["project"]["display_name"], "Demo Project Rebound")
+            self.assertEqual(rebound["project"]["repo_path"], str(rebound_repo.resolve()))
+            self.assertEqual(rebound["project"]["repo_path_hint"], str(rebound_repo.resolve()))
+            self.assertTrue(rebound["project"]["repo_available"])
+            self.assertEqual(rebound["project"]["repo_binding"], "bound")
+            self.assertEqual(len(listing["projects"]), 1)
+            self.assertEqual(listing["projects"][0]["repo_id"], detail["project"]["repo_id"])
+            self.assertEqual(listing["projects"][0]["repo_path"], str(rebound_repo.resolve()))
+            self.assertEqual(listing["projects"][0]["project_root_relative"], f"projects/{rebound['project']['slug']}")
+
+    def test_load_project_marks_missing_local_repo_binding_without_hiding_project(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Missing Repo Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+
+            with mock.patch("jakal_flow.orchestrator.Orchestrator._resolve_local_repo_backend", return_value="git"), mock.patch(
+                "jakal_flow.orchestrator.ensure_virtualenv",
+                return_value=repo_dir / ".venv",
+            ), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ):
+                detail = run_command("save-project-setup", workspace_root, payload)
+
+            stale_repo = temp_dir / "missing-repo"
+            metadata_path = Path(detail["project"]["project_root"]) / "metadata.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["repo_path"] = str(stale_repo)
+            metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
+            workspace = WorkspaceManager(workspace_root)
+            registry = json.loads(workspace.registry_file.read_text(encoding="utf-8"))
+            registry["projects"][detail["project"]["repo_id"]]["repo_path"] = str(stale_repo)
+            workspace.registry_file.write_text(json.dumps(registry, indent=2, sort_keys=True), encoding="utf-8")
+
+            loaded = run_command(
+                "load-project",
+                workspace_root,
+                {
+                    "repo_id": detail["project"]["repo_id"],
+                    "refresh_codex_status": False,
+                },
+            )
+            listing = run_command("list-projects", workspace_root)
+
+            self.assertEqual(loaded["project"]["repo_path"], "")
+            self.assertEqual(loaded["project"]["repo_path_hint"], str(stale_repo.resolve()))
+            self.assertFalse(loaded["project"]["repo_available"])
+            self.assertEqual(loaded["project"]["repo_binding"], "missing")
+            self.assertEqual(loaded["project"]["project_root_relative"], f"projects/{loaded['project']['slug']}")
+            self.assertTrue(loaded["workspace_tree"])
+            self.assertEqual(loaded["workspace_tree"][0]["path"], loaded["project"]["project_root"])
+            self.assertIn("managed workspace", loaded["workspace_tree"][0]["label"].lower())
+            self.assertEqual(listing["projects"][0]["repo_path"], "")
+            self.assertEqual(listing["projects"][0]["repo_path_hint"], str(stale_repo.resolve()))
+            self.assertFalse(listing["projects"][0]["repo_available"])
 
     def test_load_project_summary_includes_word_report_path_when_present(self) -> None:
         with TemporaryTestDir() as temp_dir:
@@ -7180,6 +7340,10 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(
                 refreshed_registry["projects"][context.metadata.repo_id]["project_root"],
                 str(actual_root),
+            )
+            self.assertEqual(
+                refreshed_registry["projects"][context.metadata.repo_id]["project_root_relative"],
+                f"projects/{context.metadata.slug}",
             )
             self.assertEqual(
                 refreshed_registry["projects"][context.metadata.repo_id]["repo_path"],

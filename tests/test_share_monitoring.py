@@ -49,10 +49,10 @@ from jakal_flow.public_tunnel import (
     process_is_running as tunnel_process_is_running,
 )
 from jakal_flow.rate_limiter import TokenBucketRule
-from jakal_flow.share_server import ShareHTTPServer, ShareRequestHandler
+from jakal_flow.share_server import ShareHTTPServer, ShareRemoteControlManager, ShareRequestHandler
 from jakal_flow.ui_bridge import run_command
 from jakal_flow.ui_bridge_commands.share import verify_local_share_session_access
-from jakal_flow.utils import append_jsonl
+from jakal_flow.utils import append_jsonl, read_jsonl_tail
 
 
 def local_temp_root() -> Path:
@@ -85,7 +85,10 @@ def create_project(workspace_root: Path, repo_dir: Path) -> tuple[Orchestrator, 
             "max_blocks": 4,
         },
     }
-    with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+    with mock.patch("jakal_flow.orchestrator.Orchestrator._resolve_local_repo_backend", return_value="git"), mock.patch(
+        "jakal_flow.orchestrator.ensure_virtualenv",
+        return_value=repo_dir / ".venv",
+    ), mock.patch(
         "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
         side_effect=lambda *args, **kwargs: _fake_codex_snapshot(),
     ):
@@ -1147,6 +1150,59 @@ class ShareMonitoringTests(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
                 thread.join(timeout=2)
+
+    def test_remote_resume_rejects_disconnected_local_project(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            orchestrator, project = create_project(workspace_root, repo_dir)
+            save_plan_payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Share Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": project.runtime.to_dict(),
+                "plan": {
+                    "execution_mode": "parallel",
+                    "workflow_mode": "standard",
+                    "steps": [
+                        {
+                            "step_id": "ST1",
+                            "title": "Resume me",
+                            "display_description": "Resume the saved run.",
+                            "codex_description": "Continue the saved run.",
+                            "test_command": "python -m pytest",
+                            "success_criteria": "The saved plan can continue.",
+                            "reasoning_effort": "high",
+                            "depends_on": [],
+                            "owned_paths": ["src/jakal_flow/share_server.py"],
+                            "status": "pending",
+                        }
+                    ],
+                },
+            }
+            with mock.patch("jakal_flow.ui_bridge.fetch_codex_backend_snapshot", side_effect=lambda *args, **kwargs: _fake_codex_snapshot()):
+                run_command("save-plan", workspace_root, save_plan_payload)
+
+            stale_repo = temp_dir / "missing-repo"
+            metadata_path = project.paths.project_root / "metadata.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["repo_path"] = str(stale_repo)
+            metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
+            registry = json.loads(orchestrator.workspace.registry_file.read_text(encoding="utf-8"))
+            registry["projects"][project.metadata.repo_id]["repo_path"] = str(stale_repo)
+            orchestrator.workspace.registry_file.write_text(json.dumps(registry, indent=2, sort_keys=True), encoding="utf-8")
+            disconnected = Orchestrator(workspace_root).workspace.load_project_by_id(project.metadata.repo_id)
+
+            manager = ShareRemoteControlManager(workspace_root)
+
+            with self.assertRaisesRegex(RuntimeError, "repository is not accessible"):
+                manager.queue_resume(disconnected, Orchestrator(workspace_root))
+
+            recent_events = [item for item in read_jsonl_tail(disconnected.paths.ui_event_log_file, 8) if isinstance(item, dict)]
+            self.assertTrue(recent_events)
+            self.assertEqual(recent_events[-1]["event_type"], "remote-resume-rejected")
 
     def test_share_status_api_returns_429_when_rate_limited(self) -> None:
         with TemporaryTestDir() as temp_dir:

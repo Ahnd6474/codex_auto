@@ -26,6 +26,9 @@ Hard ML rules:
 - Keep experiments traceable and reproducible.
 - Do not tune on the test set.
 
+Primary user request:
+{user_prompt}
+
 Return exactly one JSON object in this shape:
 {{
   "title": "short cycle title",
@@ -87,6 +90,3 @@ Docs:
 
 Source inventory:
 {source}
-
-User request:
-{user_prompt}

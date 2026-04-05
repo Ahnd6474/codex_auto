@@ -656,11 +656,17 @@ export function useDesktopController() {
   function applySelectedProjectDelta(projectLike) {
     const currentRepoId = String(projectDetailRef.current?.project?.repo_id || "").trim();
     const nextRepoId = String(projectLike?.repo_id || "").trim();
-    const currentRepoPath = String(projectDetailRef.current?.project?.repo_path || "").trim();
-    const nextRepoPath = String(projectLike?.project_dir || "").trim();
+    const currentRepoPaths = [
+      String(projectDetailRef.current?.project?.repo_path || "").trim(),
+      String(projectDetailRef.current?.project?.repo_path_hint || "").trim(),
+    ].filter(Boolean);
+    const nextRepoPaths = [
+      String(projectLike?.project_dir || "").trim(),
+      String(projectLike?.project_dir_hint || "").trim(),
+    ].filter(Boolean);
     if (
       (!currentRepoId || !nextRepoId || currentRepoId !== nextRepoId)
-      && (!currentRepoPath || !nextRepoPath || currentRepoPath !== nextRepoPath)
+      && !currentRepoPaths.some((currentRepoPath) => nextRepoPaths.includes(currentRepoPath))
     ) {
       return false;
     }
@@ -3189,11 +3195,11 @@ export function useDesktopController() {
     moveStep,
     setSelectedProjectId,
     openRepoInFolder: () => {
-      const path = projectDetail?.project?.repo_path || projectForm?.project_dir || "";
+      const path = projectDetail?.project?.repo_path || "";
       if (path) openInSystem(path).catch(() => {});
     },
     openRepoInVsCode: () => {
-      const path = projectDetail?.project?.repo_path || projectForm?.project_dir || "";
+      const path = projectDetail?.project?.repo_path || "";
       if (path) openInVsCode(path).catch(() => {});
     },
     openRepoOnGithub: () => {

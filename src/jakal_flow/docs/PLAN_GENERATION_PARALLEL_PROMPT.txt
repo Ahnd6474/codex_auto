@@ -24,6 +24,9 @@ Use the following priority order while planning:
 4. Use README.md and other repository docs to align with the existing structure.
 5. Fall back to generic defaults only if the repository sources above do not decide the issue.
 
+Primary user request:
+{user_prompt}
+
 Requested execution mode:
 {execution_mode}
 
@@ -59,7 +62,7 @@ Do not include the final closeout sweep inside the normal task list. The app run
 Model routing guidance for this run:
 {model_selection_guidance}
 
-Return exactly one JSON object with a top-level "tasks" array containing 3 to {max_steps} items.
+Return exactly one JSON object with a top-level "tasks" array containing 1 to {max_steps} items.
 
 JSON shape:
 {{
@@ -157,6 +160,3 @@ Current shared contract state:
 
 Planner Agent A decomposition artifact:
 {planner_outline}
-
-User request:
-{user_prompt}

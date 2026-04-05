@@ -260,7 +260,7 @@ export default function App() {
         runActionDisabled={controller.runActionDisabled}
         runActionRunning={controller.runActionRunning}
         activeCenterTab={controller.centerTab}
-        projectPath={detail?.project?.repo_path || controller.projectForm?.project_dir || ""}
+        projectPath={detail?.project ? (detail.project.repo_path || "") : (controller.projectForm?.project_dir || "")}
         githubUrl={detail?.github?.origin_url || detail?.github?.repo_url || controller.projectForm?.origin_url || ""}
         shareUrl={
           controller.workspaceShareDetail?.active_session?.share_url

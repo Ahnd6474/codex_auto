@@ -31,6 +31,75 @@ class TemporaryTestDir:
 
 
 class WorkspaceManagerTests(unittest.TestCase):
+    def test_registry_persists_workspace_relative_project_root_and_supports_workspace_move(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            workspace = WorkspaceManager(workspace_root)
+
+            context = workspace.initialize_local_project(repo_dir, "main", RuntimeOptions(), display_name="Repo")
+            registry = json.loads(workspace.registry_file.read_text(encoding="utf-8"))
+            item = registry["projects"][context.metadata.repo_id]
+
+            self.assertEqual(
+                item["project_root_relative"],
+                f"projects/{context.metadata.slug}",
+            )
+
+            moved_workspace_root = temp_dir / "workspace-moved"
+            shutil.copytree(workspace_root, moved_workspace_root)
+            moved_workspace = WorkspaceManager(moved_workspace_root)
+
+            moved = moved_workspace.load_project_by_id(context.metadata.repo_id)
+
+            self.assertEqual(
+                moved.paths.project_root.resolve(),
+                (moved_workspace_root / "projects" / context.metadata.slug).resolve(),
+            )
+
+    def test_local_project_falls_back_to_workspace_logs_when_repo_path_is_unavailable(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace = WorkspaceManager(temp_dir / "workspace")
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            created = workspace.initialize_local_project(repo_dir, "main", RuntimeOptions(), display_name="Repo")
+            stale_repo = temp_dir / "stale-repo"
+            metadata = json.loads(created.paths.metadata_file.read_text(encoding="utf-8"))
+            metadata["repo_path"] = str(stale_repo)
+            created.paths.metadata_file.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
+            registry = json.loads(workspace.registry_file.read_text(encoding="utf-8"))
+            registry["projects"][created.metadata.repo_id]["repo_path"] = str(stale_repo)
+            workspace.registry_file.write_text(json.dumps(registry, indent=2, sort_keys=True), encoding="utf-8")
+
+            loaded = workspace.load_project_by_id(created.metadata.repo_id)
+
+            self.assertEqual(loaded.metadata.repo_id, created.metadata.repo_id)
+            self.assertEqual(loaded.paths.logs_dir.resolve(), (loaded.paths.project_root / "logs").resolve())
+            self.assertEqual(loaded.paths.block_log_file.resolve(), (loaded.paths.project_root / "logs" / "blocks.jsonl").resolve())
+            self.assertEqual(loaded.metadata.repo_path, stale_repo.resolve())
+
+    def test_rebind_local_project_repo_path_updates_existing_entry(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace = WorkspaceManager(temp_dir / "workspace")
+            original_repo = temp_dir / "repo-one"
+            rebound_repo = temp_dir / "repo-two"
+            original_repo.mkdir(parents=True, exist_ok=True)
+            rebound_repo.mkdir(parents=True, exist_ok=True)
+
+            created = workspace.initialize_local_project(original_repo, "main", RuntimeOptions(), display_name="Repo")
+            rebound = workspace.rebind_local_project_repo_path(workspace.load_project_by_id(created.metadata.repo_id), rebound_repo)
+            registry = json.loads(workspace.registry_file.read_text(encoding="utf-8"))
+
+            self.assertEqual(rebound.metadata.repo_path, rebound_repo.resolve())
+            self.assertEqual(rebound.paths.repo_dir, rebound_repo.resolve())
+            self.assertEqual(registry["projects"][created.metadata.repo_id]["repo_path"], str(rebound_repo.resolve()))
+            found = workspace.find_project_by_repo_path(rebound_repo)
+            self.assertIsNotNone(found)
+            assert found is not None
+            self.assertEqual(found.metadata.repo_id, created.metadata.repo_id)
+
     def test_list_projects_skips_inaccessible_registry_entries(self) -> None:
         with TemporaryTestDir() as temp_dir:
             workspace = WorkspaceManager(temp_dir / "workspace")

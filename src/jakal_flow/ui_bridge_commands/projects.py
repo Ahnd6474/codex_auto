@@ -96,12 +96,14 @@ def build_project_command_handlers(
 
     def save_project_setup(ctx: BridgeCommandContext) -> dict:
         project_dir, runtime, branch, origin_url, display_name = common_project_inputs(ctx.payload, ctx.orchestrator)
+        repo_id = str(ctx.payload.get("repo_id", "")).strip()
         project = ctx.orchestrator.setup_local_project(
             project_dir=project_dir,
             runtime=runtime,
             branch=branch,
             origin_url=origin_url,
             display_name=display_name,
+            repo_id=repo_id,
         )
         save_run_control(project, default_run_control())
         append_ui_event(project, "project-saved", "Saved project setup from the desktop shell.")

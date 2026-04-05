@@ -152,7 +152,14 @@ export function DetailsPane({ detail, planDraft, selectedStepId, modelPresets, a
           </div>
           <div>
             <dt>Path</dt>
-            <dd>{detail?.project?.repo_path || t("common.unknown")}</dd>
+            <dd>
+              {detail?.project?.repo_path
+                || detail?.project?.repo_path_hint
+                || t("common.unknown")}
+              {detail?.project?.repo_available === false && detail?.project?.repo_path_hint
+                ? ` (${t("common.unavailable")})`
+                : ""}
+            </dd>
           </div>
           <div>
             <dt>Model</dt>

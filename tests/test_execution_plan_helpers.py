@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import jakal_flow.planning as planning_module
 import jakal_flow.execution_plan_support as execution_plan_support
+from jakal_flow.chat_sessions import ChatSessionMeta, build_conversation_prompt
 from jakal_flow.environment import ensure_gitignore
 from jakal_flow.errors import (
     AgentPassExecutionError,
@@ -85,9 +86,11 @@ from jakal_flow.planning import (
     source_prompt_template_path,
 )
 from jakal_flow.reporting import Reporter
+from jakal_flow.runtime_config import normalize_runtime_payload
 from jakal_flow.step_models import CLAUDE_DEFAULT_MODEL, GEMINI_DEFAULT_MODEL, resolve_step_model_choice
 import jakal_flow.ui_bridge_payloads as ui_bridge_payloads
-from jakal_flow.utils import append_jsonl, read_json, read_jsonl_tail, read_last_jsonl, write_json
+from jakal_flow.ui_bridge import parse_plan_state
+from jakal_flow.utils import append_jsonl, compact_text_balanced, read_json, read_jsonl_tail, read_last_jsonl, write_json
 from jakal_flow.verification import VerificationRunner
 
 

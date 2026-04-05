@@ -52,6 +52,7 @@ from .planning import (
     PlanItem,
     attempt_history_entry,
     assess_repository_maturity,
+    build_direct_execution_plan,
     build_fast_planner_outline,
     build_mid_term_plan,
     build_mid_term_plan_from_plan_items,
@@ -518,6 +519,7 @@ class Orchestrator(
         branch: str = "main",
         origin_url: str = "",
         display_name: str = "",
+        repo_id: str = "",
     ) -> ProjectContext:
         runtime.execution_mode = self._normalize_execution_mode(runtime.execution_mode)
         resolved_dir = project_dir.resolve()
@@ -531,7 +533,12 @@ class Orchestrator(
         if repo_backend == "git":
             self._sync_local_setup_branch_from_origin(resolved_dir, active_branch)
 
-        existing = self.workspace.find_project_by_repo_path(resolved_dir)
+        normalized_repo_id = str(repo_id or "").strip()
+        existing = self.workspace.load_project_by_id(normalized_repo_id) if normalized_repo_id else self.workspace.find_project_by_repo_path(resolved_dir)
+        if existing is not None and normalized_repo_id:
+            conflicting = self.workspace.find_project_by_repo_path(resolved_dir)
+            if conflicting is not None and conflicting.metadata.repo_id != existing.metadata.repo_id:
+                raise ValueError(f"Working directory is already managed by another project: {resolved_dir}")
         if existing is None:
             context = self.workspace.initialize_local_project(
                 project_dir=resolved_dir,
@@ -544,6 +551,7 @@ class Orchestrator(
         else:
             context = existing
             context.runtime = runtime
+            self.workspace.rebind_local_project_repo_path(context, resolved_dir)
             context.metadata.branch = active_branch
             context.metadata.repo_path = resolved_dir
             context.metadata.repo_url = detected_origin or origin_url.strip() or str(resolved_dir)
@@ -801,7 +809,18 @@ class Orchestrator(
             started_at=context_scan_started_at,
             details={"cache_file": str(context.paths.planning_inputs_cache_file)},
         )
+        skip_full_planning = self._should_bypass_full_planning(
+            planning_effort,
+            workflow_mode,
+            repo_inputs=repo_inputs,
+            project_prompt=project_prompt,
+            previous_plan_state=previous_plan_state,
+            max_steps=max_steps,
+        )
         runner = CodexRunner(context.runtime.codex_path)
+        plan_title = ""
+        summary = ""
+        steps: list[ExecutionStep] = []
         skip_planner_a = self._should_skip_planner_decomposition(
             context,
             planning_effort,
@@ -812,7 +831,76 @@ class Orchestrator(
             max_steps=max_steps,
         )
         planner_outline = ""
-        if skip_planner_a:
+        if skip_full_planning:
+            direct_step_type = self._direct_execution_step_type(project_prompt)
+            report_progress(
+                "planner-agent-started",
+                "Direct execution bypass is synthesizing a single focused block.",
+                {
+                    "stage_key": "planner_a",
+                    "stage_index": 2,
+                    "stage_count": planning_stage_count,
+                    "status": "running",
+                    "agent_key": "planner_a",
+                    "agent_label": "Planner Agent A",
+                },
+            )
+            direct_plan_started_at = perf_counter()
+            plan_title, summary, steps, planner_outline = build_direct_execution_plan(
+                project_prompt,
+                test_command=runtime.test_cmd,
+                reasoning_effort=normalize_reasoning_effort(runtime.effort, fallback="high"),
+                spine_version=current_spine_version(context.paths),
+                step_type=direct_step_type,
+            )
+            steps = self._materialize_generated_step_models(steps, runtime)
+            self._log_planning_metric(
+                context,
+                "planner_direct_bypass",
+                started_at=direct_plan_started_at,
+                details={"step_type": direct_step_type, "step_count": len(steps)},
+            )
+            report_progress(
+                "planner-agent-finished",
+                "Planner Agent A was bypassed for a narrow direct-execution request.",
+                {
+                    "stage_key": "planner_a",
+                    "stage_index": 2,
+                    "stage_count": planning_stage_count,
+                    "status": "completed",
+                    "agent_key": "planner_a",
+                    "agent_label": "Planner Agent A",
+                    "skipped": True,
+                    "bypass_reason": "small_task_direct_execution",
+                },
+            )
+            report_progress(
+                "planner-agent-started",
+                "Planner Agent B was bypassed because the request was collapsed to one direct execution block.",
+                {
+                    "stage_key": "planner_b",
+                    "stage_index": 3,
+                    "stage_count": planning_stage_count,
+                    "status": "running",
+                    "agent_key": "planner_b",
+                    "agent_label": "Planner Agent B",
+                },
+            )
+            report_progress(
+                "planner-agent-finished",
+                "Planner Agent B was bypassed for a narrow direct-execution request.",
+                {
+                    "stage_key": "planner_b",
+                    "stage_index": 3,
+                    "stage_count": planning_stage_count,
+                    "status": "completed",
+                    "agent_key": "planner_b",
+                    "agent_label": "Planner Agent B",
+                    "skipped": True,
+                    "bypass_reason": "small_task_direct_execution",
+                },
+            )
+        elif skip_planner_a:
             report_progress(
                 "planner-agent-started",
                 "Planner Agent A fast lane is synthesizing a compact heuristic outline.",
@@ -905,79 +993,77 @@ class Orchestrator(
             context.paths.docs_dir / "PLAN_AGENT_A_OUTLINE.md",
             planner_outline or "Planner Agent A did not return a reusable decomposition artifact.",
         )
-        prompt = prompt_to_execution_plan_prompt(
-            context=context,
-            repo_inputs=repo_inputs,
-            user_prompt=project_prompt,
-            max_steps=max_steps,
-            execution_mode=normalized_execution_mode,
-            planner_outline=planner_outline,
-            template_text=planning_prompt_template,
-        )
-        planner_b_started_at = perf_counter()
-        report_progress(
-            "planner-agent-started",
-            "Planner Agent B is packing the final execution plan.",
-            {
-                "stage_key": "planner_b",
-                "stage_index": 3,
-                "stage_count": planning_stage_count,
-                "status": "running",
-                "agent_key": "planner_b",
-                "agent_label": "Planner Agent B",
-            },
-        )
-        result = self._run_pass_with_provider_fallback(
-            context=context,
-            runner=runner,
-            prompt=prompt,
-            pass_type="plan-agent-b-packing",
-            block_index=max(0, context.loop_state.block_index),
-            search_enabled=False,
-            reasoning_effort=planning_effort,
-        )
-        self._log_planning_metric(
-            context,
-            "planner_b_packing",
-            started_at=planner_b_started_at,
-            details={"returncode": result.returncode},
-        )
-        report_progress(
-            "planner-agent-finished",
-            "Planner Agent B finished the execution plan draft.",
-            {
-                "stage_key": "planner_b",
-                "stage_index": 3,
-                "stage_count": planning_stage_count,
-                "status": "completed" if result.returncode == 0 else "failed",
-                "agent_key": "planner_b",
-                "agent_label": "Planner Agent B",
-                "returncode": result.returncode,
-            },
-        )
-        plan_title = ""
-        summary = ""
-        steps: list[ExecutionStep] = []
-        if result.returncode == 0:
-            parse_started_at = perf_counter()
-            plan_title, summary, steps = parse_execution_plan_response(
-                result.last_message or "",
-                runtime.test_cmd,
-                runtime.effort,
-                limit=max_steps,
-            )
-            steps = self._postprocess_generated_plan_steps(
-                steps,
-                planner_outline=planner_outline,
+        if not skip_full_planning:
+            prompt = prompt_to_execution_plan_prompt(
+                context=context,
+                repo_inputs=repo_inputs,
+                user_prompt=project_prompt,
+                max_steps=max_steps,
                 execution_mode=normalized_execution_mode,
+                planner_outline=planner_outline,
+                template_text=planning_prompt_template,
             )
-            steps = self._materialize_generated_step_models(steps, runtime)
+            planner_b_started_at = perf_counter()
+            report_progress(
+                "planner-agent-started",
+                "Planner Agent B is packing the final execution plan.",
+                {
+                    "stage_key": "planner_b",
+                    "stage_index": 3,
+                    "stage_count": planning_stage_count,
+                    "status": "running",
+                    "agent_key": "planner_b",
+                    "agent_label": "Planner Agent B",
+                },
+            )
+            result = self._run_pass_with_provider_fallback(
+                context=context,
+                runner=runner,
+                prompt=prompt,
+                pass_type="plan-agent-b-packing",
+                block_index=max(0, context.loop_state.block_index),
+                search_enabled=False,
+                reasoning_effort=planning_effort,
+            )
             self._log_planning_metric(
                 context,
-                "plan_response_parse",
-                started_at=parse_started_at,
-                details={"step_count": len(steps)},
+                "planner_b_packing",
+                started_at=planner_b_started_at,
+                details={"returncode": result.returncode},
             )
+            report_progress(
+                "planner-agent-finished",
+                "Planner Agent B finished the execution plan draft.",
+                {
+                    "stage_key": "planner_b",
+                    "stage_index": 3,
+                    "stage_count": planning_stage_count,
+                    "status": "completed" if result.returncode == 0 else "failed",
+                    "agent_key": "planner_b",
+                    "agent_label": "Planner Agent B",
+                    "returncode": result.returncode,
+                },
+            )
+            if result.returncode == 0:
+                parse_started_at = perf_counter()
+                plan_title, summary, steps = parse_execution_plan_response(
+                    result.last_message or "",
+                    runtime.test_cmd,
+                    runtime.effort,
+                    limit=max_steps,
+                )
+                steps = self._postprocess_generated_plan_steps(
+                    steps,
+                    planner_outline=planner_outline,
+                    execution_mode=normalized_execution_mode,
+                )
+                steps = self._materialize_generated_step_models(steps, runtime)
+                self._log_planning_metric(
+                    context,
+                    "plan_response_parse",
+                    started_at=parse_started_at,
+                    details={"step_count": len(steps)},
+                )
         if not steps:
             steps = [
                 ExecutionStep(
@@ -1055,6 +1141,82 @@ class Orchestrator(
             max_steps=max_steps,
             planning_effort=planning_effort,
         )
+
+    @staticmethod
+    def _should_bypass_full_planning(
+        planning_effort: str,
+        workflow_mode: str,
+        *,
+        repo_inputs: dict[str, str],
+        project_prompt: str,
+        previous_plan_state: ExecutionPlanState,
+        max_steps: int,
+    ) -> bool:
+        if workflow_mode == "ml":
+            return False
+        if planning_effort not in {"low", "medium"}:
+            return False
+        if max_steps > 3:
+            return False
+        normalized_prompt = " ".join(str(project_prompt or "").split()).strip().lower()
+        if not normalized_prompt:
+            return False
+        if len(normalized_prompt) > 160 or len(normalized_prompt.split()) > 24:
+            return False
+        broad_scope_markers = (
+            "new feature",
+            "new screen",
+            "new page",
+            "new workflow",
+            "redesign",
+            "architecture",
+            "migrate",
+            "multi-step",
+            "end-to-end",
+            "from scratch",
+            "refactor the",
+            "overhaul",
+            "dashboard",
+            "desktop app",
+            "tauri",
+        )
+        if any(marker in normalized_prompt for marker in broad_scope_markers):
+            return False
+        direct_execution_markers = (
+            "fix",
+            "debug",
+            "bug",
+            "broken",
+            "failing",
+            "failure",
+            "issue",
+            "error",
+            "regression",
+            "repair",
+            "adjust",
+            "tweak",
+            "rename",
+            "update",
+            "remove",
+            "clean up",
+            "wire",
+            "align",
+        )
+        if not any(marker in normalized_prompt for marker in direct_execution_markers):
+            return False
+        repo_size = sum(len(str(repo_inputs.get(key, ""))) for key in ("readme", "agents", "docs", "source"))
+        if repo_size > 7_500:
+            return False
+        active_statuses = {"running", "integrating"}
+        if any(step.status in active_statuses for step in previous_plan_state.steps):
+            return False
+        return True
+
+    @staticmethod
+    def _direct_execution_step_type(project_prompt: str) -> str:
+        normalized_prompt = " ".join(str(project_prompt or "").split()).strip().lower()
+        debug_markers = ("fix", "debug", "bug", "broken", "failing", "failure", "issue", "error", "regression", "repair")
+        return "debug" if any(marker in normalized_prompt for marker in debug_markers) else "feature"
 
     @staticmethod
     def _should_use_adaptive_single_pass(

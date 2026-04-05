@@ -440,3 +440,74 @@ class BridgeServerTests(unittest.TestCase):
             self.assertEqual(result["bottom_panels"]["git_status"]["current_status"], "running:run-plan")
             self.assertEqual(result["execution_state"]["project_status"], "running:run-plan")
             self.assertEqual(result["execution_state"]["display_status"], "running:run-plan")
+
+    def test_bridge_request_emits_project_changed_with_repo_hint_for_disconnected_project(self) -> None:
+        with TemporaryTestDir() as workspace_root:
+            workspace_root.mkdir(parents=True, exist_ok=True)
+            server = CaptureBridgeServer()
+
+            with mock.patch(
+                "jakal_flow.bridge_server.run_command",
+                return_value={
+                    "project": {
+                        "repo_id": "repo-1",
+                        "repo_path": "",
+                        "repo_path_hint": "C:/stale-repo",
+                        "repo_available": False,
+                        "repo_binding": "missing",
+                        "project_root_relative": "projects/repo-1",
+                        "current_status": "plan_ready",
+                    },
+                },
+            ):
+                server._handle_request(
+                    "req-save-plan",
+                    "bridge_request",
+                    {
+                        "command": "save-plan",
+                        "workspace_root": str(workspace_root),
+                        "payload": {
+                            "repo_id": "repo-1",
+                            "project_dir": "C:/stale-repo",
+                        },
+                    },
+                )
+
+            project_events = [item for item in server.envelopes if item.get("event") == "project.changed"]
+            self.assertEqual(len(project_events), 1)
+            project = project_events[0]["payload"]["project"]
+            self.assertEqual(project["repo_id"], "repo-1")
+            self.assertEqual(project["project_dir"], "")
+            self.assertEqual(project["project_dir_hint"], "C:/stale-repo")
+            self.assertFalse(project["repo_available"])
+            self.assertEqual(project["repo_binding"], "missing")
+            self.assertEqual(project["project_root_relative"], "projects/repo-1")
+
+    def test_bridge_request_uses_request_path_as_hint_only_when_result_has_no_project_payload(self) -> None:
+        with TemporaryTestDir() as workspace_root:
+            workspace_root.mkdir(parents=True, exist_ok=True)
+            server = CaptureBridgeServer()
+
+            with mock.patch(
+                "jakal_flow.bridge_server.run_command",
+                return_value={"run_control": {"stop_after_current_step": True}},
+            ):
+                server._handle_request(
+                    "req-stop",
+                    "bridge_request",
+                    {
+                        "command": "request-stop",
+                        "workspace_root": str(workspace_root),
+                        "payload": {
+                            "repo_id": "repo-1",
+                            "project_dir": "C:/repo",
+                        },
+                    },
+                )
+
+            project_events = [item for item in server.envelopes if item.get("event") == "project.changed"]
+            self.assertEqual(len(project_events), 1)
+            project = project_events[0]["payload"]["project"]
+            self.assertEqual(project["repo_id"], "repo-1")
+            self.assertNotIn("project_dir", project)
+            self.assertEqual(project["project_dir_hint"], "C:/repo")

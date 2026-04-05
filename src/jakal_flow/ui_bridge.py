@@ -336,8 +336,6 @@ def runtime_from_payload(payload: dict[str, Any]) -> RuntimeOptions:
 
 def parse_plan_state(payload: dict[str, Any]) -> ExecutionPlanState:
     state = ExecutionPlanState.from_dict(payload)
-    if "execution_mode" not in payload:
-        state.execution_mode = ""
     if "workflow_mode" not in payload:
         state.workflow_mode = ""
     state.default_test_command = payload.get("default_test_command", state.default_test_command) or state.default_test_command
@@ -380,6 +378,31 @@ def best_effort_project(
         return None
 
 
+def _path_is_accessible_dir(path: Path | str | None) -> bool:
+    if not path:
+        return False
+    try:
+        candidate = path if isinstance(path, Path) else Path(str(path))
+        return candidate.exists() and candidate.is_dir()
+    except OSError:
+        return False
+
+
+def _project_event_selector_payload(context: ProjectContext) -> dict[str, Any]:
+    repo_path_hint = str(context.metadata.repo_path or "").strip()
+    repo_available = _path_is_accessible_dir(context.metadata.repo_path)
+    repo_kind = str(context.metadata.repo_kind or "").strip().lower() or "remote"
+    repo_binding = "bound" if repo_kind == "local" and repo_available else "missing" if repo_kind == "local" else "managed" if repo_available else "missing"
+    return {
+        "repo_id": context.metadata.repo_id,
+        "project_dir": repo_path_hint if repo_available else "",
+        "project_dir_hint": repo_path_hint,
+        "repo_available": repo_available,
+        "repo_binding": repo_binding,
+        "project_status": context.metadata.current_status,
+    }
+
+
 def append_ui_event(context: ProjectContext, event_type: str, message: str, details: dict[str, Any] | None = None) -> None:
     payload = {
         "timestamp": now_utc_iso(),
@@ -403,9 +426,7 @@ def append_ui_event(context: ProjectContext, event_type: str, message: str, deta
     emit_bridge_event(
         "project.ui_event",
         {
-            "repo_id": context.metadata.repo_id,
-            "project_dir": str(context.metadata.repo_path),
-            "project_status": context.metadata.current_status,
+            **_project_event_selector_payload(context),
             "event": payload,
         },
     )

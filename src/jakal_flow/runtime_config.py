@@ -224,7 +224,7 @@ def normalize_runtime_payload(
     merged["repo_backend"] = str(merged.get("repo_backend", default_values.get("repo_backend", "auto"))).strip().lower() or "auto"
     if merged["repo_backend"] not in {"auto", "git", "lit"}:
         merged["repo_backend"] = str(default_values.get("repo_backend", "auto")).strip().lower() or "auto"
-    merged["execution_mode"] = force_execution_mode or str(merged.get("execution_mode", default_values.get("execution_mode", "parallel"))).strip() or "parallel"
+    merged["execution_mode"] = "parallel"
     merged["workflow_mode"] = normalize_workflow_mode(merged.get("workflow_mode", default_values.get("workflow_mode", "standard")))
     merged["test_cmd"] = str(merged.get("test_cmd", default_values.get("test_cmd", "python -m pytest"))).strip() or "python -m pytest"
     merged["model_provider"] = normalize_model_provider(

@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  applyProjectEventDetailState,
+  applyProjectEventListingState,
   applyProjectDetailState,
   clearSelectedProjectState,
   mergeProjectDetailSupplement,
@@ -250,6 +252,84 @@ test("applyProjectDetailState preserves the current project_dir when a sparse de
   assert.equal(capturedProjectForm.display_name, "Existing Repo");
   assert.equal(capturedProjectForm.runtime.model_provider, "openai");
   assert.equal(capturedProjectForm.runtime.execution_model, "gpt-5.4");
+});
+
+test("applyProjectEventListingState clears repo_path and preserves hint when an event marks the repo unavailable", () => {
+  let capturedProjects = null;
+  let capturedWorkspaceStats = null;
+
+  const nextProjects = applyProjectEventListingState({
+    projects: [
+      {
+        repo_id: "repo-1",
+        repo_path: "C:/repo",
+        repo_path_hint: "C:/repo",
+        repo_available: true,
+        repo_binding: "bound",
+        status: "plan_ready",
+        detail: "",
+      },
+    ],
+    project: {
+      repo_id: "repo-1",
+      project_dir: "",
+      project_dir_hint: "C:/repo",
+      repo_available: false,
+      repo_binding: "missing",
+      status: "failed",
+    },
+    setProjects: (value) => {
+      capturedProjects = value;
+    },
+    setWorkspaceStats: (value) => {
+      capturedWorkspaceStats = value;
+    },
+  });
+
+  assert.ok(Array.isArray(nextProjects));
+  assert.equal(capturedProjects[0].repo_path, "");
+  assert.equal(capturedProjects[0].repo_path_hint, "C:/repo");
+  assert.equal(capturedProjects[0].repo_available, false);
+  assert.equal(capturedProjects[0].repo_binding, "missing");
+  assert.equal(capturedProjects[0].status, "failed");
+  assert.equal(capturedWorkspaceStats.failed, 1);
+});
+
+test("applyProjectEventDetailState matches disconnected projects by repo_path_hint", () => {
+  const updated = applyProjectEventDetailState(
+    {
+      project: {
+        repo_id: "",
+        repo_path: "",
+        repo_path_hint: "C:/stale-repo",
+        repo_available: false,
+        repo_binding: "missing",
+        current_status: "plan_ready",
+      },
+      snapshot: {
+        project: {
+          repo_path: "",
+          repo_path_hint: "C:/stale-repo",
+          repo_available: false,
+          repo_binding: "missing",
+          current_status: "plan_ready",
+        },
+      },
+    },
+    {
+      project_dir: "",
+      project_dir_hint: "C:/stale-repo",
+      repo_available: false,
+      repo_binding: "missing",
+      status: "running:run-plan",
+    },
+  );
+
+  assert.equal(updated?.project?.current_status, "running:run-plan");
+  assert.equal(updated?.project?.repo_path, "");
+  assert.equal(updated?.project?.repo_path_hint, "C:/stale-repo");
+  assert.equal(updated?.project?.repo_available, false);
+  assert.equal(updated?.snapshot?.project?.repo_path_hint, "C:/stale-repo");
 });
 
 test("applyProjectDetailState keeps the selected project's saved AI settings instead of defaultRuntime values", () => {

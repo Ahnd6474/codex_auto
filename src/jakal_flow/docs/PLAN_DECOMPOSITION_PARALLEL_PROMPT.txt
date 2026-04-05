@@ -16,6 +16,9 @@ Current spine version:
 Current shared contract snapshot:
 {shared_contracts_snapshot}
 
+Primary user request:
+{user_prompt}
+
 Required planning workflow:
 1. Decompose the request into the smallest meaningful implementation ideas.
 2. Identify any shared contracts, schemas, interfaces, entrypoints, or file skeletons that are genuinely missing or that must be tightened in existing code before broad fan-out work starts.
@@ -105,6 +108,3 @@ Source inventory:
 
 Current shared contract state:
 {shared_contracts_snapshot}
-
-User request:
-{user_prompt}

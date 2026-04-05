@@ -22,13 +22,28 @@ export function bridgeEventProject(eventPayload) {
   }
   const repoId = String(payload.repo_id || "").trim();
   const projectDir = String(payload.project_dir || "").trim();
+  const projectDirHint = String(payload.project_dir_hint || "").trim();
   const status = String(payload.status || payload.project_status || "").trim();
-  if (!repoId && !projectDir && !status) {
+  if (!repoId && !projectDir && !projectDirHint && !status) {
     return null;
   }
   return {
     repo_id: repoId,
-    project_dir: projectDir,
+    ...(Object.prototype.hasOwnProperty.call(payload, "project_dir")
+      ? { project_dir: projectDir }
+      : {}),
+    ...(Object.prototype.hasOwnProperty.call(payload, "project_dir_hint")
+      ? { project_dir_hint: projectDirHint }
+      : {}),
+    ...(Object.prototype.hasOwnProperty.call(payload, "repo_available")
+      ? { repo_available: Boolean(payload.repo_available) }
+      : {}),
+    ...(String(payload.repo_binding || "").trim()
+      ? { repo_binding: String(payload.repo_binding || "").trim() }
+      : {}),
+    ...(String(payload.project_root_relative || "").trim()
+      ? { project_root_relative: String(payload.project_root_relative || "").trim() }
+      : {}),
     status,
   };
 }
@@ -62,7 +77,7 @@ function bridgeEventProjectKey(eventPayload) {
   return [
     eventType,
     String(project.repo_id || "").trim(),
-    String(project.project_dir || "").trim(),
+    String(project.project_dir || project.project_dir_hint || "").trim(),
     detailKey,
   ].join("|");
 }

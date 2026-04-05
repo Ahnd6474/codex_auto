@@ -81,7 +81,7 @@ export function shouldForceCodexRefreshForManualRefresh(centerTab = "") {
 }
 
 export function shouldImmediatelyRefreshProjectEvent(selectedProjectId = "", project = null) {
-  if (!project || !shouldRefreshSelectedProject(selectedProjectId, project.repo_id || project.project_dir || "")) {
+  if (!project || !shouldRefreshSelectedProject(selectedProjectId, project.repo_id || project.project_dir || project.project_dir_hint || "")) {
     return false;
   }
   const status = normalizedStatus(project.current_status || project.status || project.project_status);
