@@ -41,6 +41,8 @@ Install from the repository root:
 python -m pip install -e .
 ```
 
+This install now brings in the published `jakal-lit` package automatically, so the local `lit` backend is available through either `lit` or `python -m lit`.
+
 Installed entrypoints:
 
 - `jakal-flow`
@@ -51,6 +53,7 @@ Requirements:
 
 - Python 3.11+
 - Codex CLI on `PATH`
+- `lit` backend support is provided by the `jakal-lit` dependency installed with `jakal-flow`
 - Optional for desktop: Node.js 20+, Rust, and Tauri prerequisites
 
 ## Quick start
@@ -121,7 +124,7 @@ jakal-flow run --repo-url https://github.com/Ahnd6474/lit.git --branch main --wo
 jakal-flow run --repo-url https://github.com/Ahnd6474/lit.git --branch main --workspace-root .jakal-flow-workspace --plan-file PLAN.md
 ```
 
-Local `lit` repositories are also supported in local-project flows. Set `repo_backend = "lit"` in `[runtime]`, or leave it as `auto`: local setup now chooses Git when a `.git/` repository is present and falls back to lit otherwise. Remote clone/push and Git worktree flows remain Git-only for now.
+Local `lit` repositories are also supported in local-project flows. Set `repo_backend = "lit"` in `[runtime]`, or leave it as `auto`: local setup now chooses Git when a `.git/` repository is present and falls back to lit otherwise. The `lit` backend comes from the published `jakal-lit` package, and `jakal-flow` will invoke `python -m lit` when the console script is not directly on `PATH`. Remote clone/push and Git worktree flows remain Git-only for now.
 
 ## What jakal-flow is
 

@@ -94,12 +94,34 @@ class GitOpsLitTests(unittest.TestCase):
 
         self.assertEqual(changed, ["src/app.py", "README.md", "stale.txt", "notes.txt"])
 
+    def test_lit_run_falls_back_to_python_module_when_script_is_missing(self) -> None:
+        repo_dir = self._prepare_lit_repo()
+        ops = LitOps()
+
+        with mock.patch("jakal_flow.lit_ops.importlib.util.find_spec", return_value=object()), mock.patch(
+            "jakal_flow.lit_ops.run_subprocess",
+            side_effect=[
+                FileNotFoundError("missing lit"),
+                subprocess.CompletedProcess(
+                    [sys.executable, "-m", "lit", "status"],
+                    0,
+                    stdout="nothing to commit, working tree clean\n",
+                    stderr="",
+                ),
+            ],
+        ) as run_subprocess_mock:
+            result = ops.run(["status"], cwd=repo_dir)
+
+        self.assertEqual(result.command, [sys.executable, "-m", "lit", "status"])
+        self.assertEqual(run_subprocess_mock.call_args_list[0].args[0], ["lit", "status"])
+        self.assertEqual(run_subprocess_mock.call_args_list[1].args[0], [sys.executable, "-m", "lit", "status"])
+
     def test_lit_run_wraps_missing_executable_as_lit_command_error(self) -> None:
         repo_dir = self._prepare_lit_repo()
         ops = LitOps(command="lit-missing")
 
         with mock.patch("jakal_flow.lit_ops.run_subprocess", side_effect=FileNotFoundError("missing lit")):
-            with self.assertRaisesRegex(LitCommandError, "executable could not be started"):
+            with self.assertRaisesRegex(LitCommandError, "jakal-lit"):
                 ops.run(["status"], cwd=repo_dir)
 
 

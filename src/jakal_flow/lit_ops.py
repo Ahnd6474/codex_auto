@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 from pathlib import Path
+import sys
 
 from .models import CommandResult
 from .subprocess_utils import run_subprocess
@@ -24,6 +26,23 @@ class LitOps:
     def __init__(self, command: str = "lit") -> None:
         self.command = str(command or "lit").strip() or "lit"
 
+    def _candidate_commands(self) -> list[list[str]]:
+        candidates: list[list[str]] = [[self.command]]
+        module_command = self._module_command()
+        if module_command and module_command not in candidates:
+            candidates.append(module_command)
+        return candidates
+
+    def _module_command(self) -> list[str] | None:
+        if self.command != "lit":
+            return None
+        python_executable = str(sys.executable or "").strip()
+        if not python_executable:
+            return None
+        if importlib.util.find_spec("lit") is None:
+            return None
+        return [python_executable, "-m", "lit"]
+
     def run(
         self,
         args: list[str],
@@ -36,34 +55,40 @@ class LitOps:
         if env:
             process_env = os.environ.copy()
             process_env.update(env)
-        command = [self.command, *args]
-        try:
-            completed = run_subprocess(
-                command,
-                cwd=cwd,
-                capture_output=True,
-                check=False,
-                env=process_env,
-                timeout_seconds=self._timeout_seconds_for_args(args, timeout_seconds),
+        launch_errors: list[OSError] = []
+        for prefix in self._candidate_commands():
+            command = [*prefix, *args]
+            try:
+                completed = run_subprocess(
+                    command,
+                    cwd=cwd,
+                    capture_output=True,
+                    check=False,
+                    env=process_env,
+                    timeout_seconds=self._timeout_seconds_for_args(args, timeout_seconds),
+                )
+            except OSError as exc:
+                launch_errors.append(exc)
+                continue
+            stdout = completed.stdout if isinstance(completed.stdout, str) else decode_process_output(completed.stdout)
+            stderr = completed.stderr if isinstance(completed.stderr, str) else decode_process_output(completed.stderr)
+            result = CommandResult(
+                command=command,
+                returncode=completed.returncode,
+                stdout=stdout,
+                stderr=stderr,
             )
-        except OSError as exc:
-            raise LitCommandError(
-                f"{self.command} executable could not be started: {exc}"
-            ) from exc
-        stdout = completed.stdout if isinstance(completed.stdout, str) else decode_process_output(completed.stdout)
-        stderr = completed.stderr if isinstance(completed.stderr, str) else decode_process_output(completed.stderr)
-        result = CommandResult(
-            command=command,
-            returncode=completed.returncode,
-            stdout=stdout,
-            stderr=stderr,
-        )
-        if check and completed.returncode != 0:
-            detail = stderr.strip() or stdout.strip()
-            raise LitCommandError(
-                f"lit {' '.join(args)} failed with code {completed.returncode}: {detail}"
-            )
-        return result
+            if check and completed.returncode != 0:
+                detail = stderr.strip() or stdout.strip()
+                raise LitCommandError(
+                    f"lit {' '.join(args)} failed with code {completed.returncode}: {detail}"
+                )
+            return result
+        detail = str(launch_errors[-1]).strip() if launch_errors else "unknown error"
+        raise LitCommandError(
+            f"{self.command} executable could not be started. Install the published package with "
+            f"'python -m pip install jakal-lit' or ensure 'lit' is on PATH: {detail}"
+        ) from (launch_errors[-1] if launch_errors else None)
 
     def _timeout_seconds_for_args(self, args: list[str], override: float | None = None) -> float:
         if override is not None:

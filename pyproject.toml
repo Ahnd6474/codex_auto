@@ -11,7 +11,9 @@ requires-python = ">=3.11"
 authors = [
   { name = "OpenAI Codex" }
 ]
-dependencies = []
+dependencies = [
+  "jakal-lit>=1.0.0",
+]
 
 [project.scripts]
 jakal-flow = "jakal_flow.cli:main"
