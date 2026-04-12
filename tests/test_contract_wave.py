@@ -38,6 +38,19 @@ from jakal_flow.workspace import WorkspaceManager
 
 
 class ContractWaveTests(unittest.TestCase):
+    def test_normalize_execution_step_policy_infers_adapter_profile_from_paths(self) -> None:
+        step = normalize_execution_step_policy(
+            ExecutionStep(
+                step_id="ST1",
+                title="Harden shared payments bridge",
+                owned_paths=["src/payments/adapter.py"],
+            )
+        )
+
+        self.assertEqual(step.verification_profile, "adapter")
+        self.assertEqual(step.metadata.get("verification_profile_source"), "inferred")
+        self.assertEqual(step.metadata.get("verification_profile_reason"), "adapter signal")
+
     def test_execution_step_from_dict_hydrates_policy_fields_from_metadata(self) -> None:
         step = ExecutionStep.from_dict(
             {

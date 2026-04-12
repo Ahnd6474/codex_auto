@@ -10,7 +10,7 @@ import zipfile
 from .contract_wave import load_lineage_manifest_payloads
 from .failure_logs import collect_failure_artifacts
 from .github_api import GitHubAPIError, GitHubClient, parse_github_repository_url
-from .models import ProjectContext, TestRunResult
+from .models import ExecutionPlanState, ProjectContext, TestRunResult
 from .utils import append_jsonl, append_text, compact_text, now_utc_iso, read_json, read_jsonl_tail, read_text, write_json, write_text
 
 
@@ -112,12 +112,14 @@ class Reporter:
     def write_status_report(self) -> Path:
         passes = read_jsonl_tail(self.context.paths.pass_log_file, 20)
         blocks = read_jsonl_tail(self.context.paths.block_log_file, 20)
+        verification_profile_metrics = self._verification_profile_metrics()
         report = {
             "generated_at": now_utc_iso(),
             "repository": self.context.metadata.to_dict(),
             "loop_state": self.context.loop_state.to_dict(),
             "recent_passes": passes,
             "recent_blocks": blocks,
+            "verification_profiles": verification_profile_metrics,
             "planning_metrics": read_jsonl_tail(self.context.paths.planning_metrics_file, 40),
             "spine": read_json(self.context.paths.spine_file, default={}),
             "common_requirements": read_json(self.context.paths.common_requirements_file, default={}),
@@ -456,6 +458,43 @@ class Reporter:
         payload["block_index"] = block_index
         payload["label"] = label
         append_jsonl(self.context.paths.logs_dir / "test_runs.jsonl", payload)
+
+    def _verification_profile_metrics(self) -> dict[str, object]:
+        execution_plan_payload = read_json(self.context.paths.execution_plan_file, default=None)
+        execution_plan = (
+            ExecutionPlanState.from_dict(execution_plan_payload)
+            if isinstance(execution_plan_payload, dict)
+            else ExecutionPlanState(default_test_command=str(self.context.runtime.test_cmd or "").strip())
+        )
+        profile_counts: dict[str, int] = {}
+        source_counts: dict[str, int] = {}
+        for step in execution_plan.steps:
+            profile = str(step.verification_profile or "").strip().lower() or "default"
+            profile_counts[profile] = profile_counts.get(profile, 0) + 1
+            metadata = step.metadata if isinstance(step.metadata, dict) else {}
+            source = str(metadata.get("verification_profile_source", "")).strip().lower() or "unknown"
+            source_counts[source] = source_counts.get(source, 0) + 1
+
+        recent_test_runs = read_jsonl_tail(self.context.paths.logs_dir / "test_runs.jsonl", 200)
+        command_source_counts: dict[str, int] = {}
+        for entry in recent_test_runs:
+            if not isinstance(entry, dict):
+                continue
+            source = str(entry.get("verification_command_source", "")).strip().lower()
+            if not source:
+                continue
+            command_source_counts[source] = command_source_counts.get(source, 0) + 1
+
+        total_steps = sum(profile_counts.values())
+        fallback_default_count = int(source_counts.get("fallback_default", 0))
+        return {
+            "total_steps": total_steps,
+            "profile_counts": profile_counts,
+            "profile_source_counts": source_counts,
+            "fallback_default_count": fallback_default_count,
+            "fallback_default_rate": round(fallback_default_count / total_steps, 4) if total_steps else 0.0,
+            "recent_command_source_counts": command_source_counts,
+        }
 
     def write_failure_bundle(
         self,

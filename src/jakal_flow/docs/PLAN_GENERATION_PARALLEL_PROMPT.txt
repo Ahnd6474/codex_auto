@@ -81,7 +81,7 @@ JSON shape:
       "scope_class": "hard_owned, shared_reviewed, or free_owned",
       "spine_version": "the contract-wave spine version this step expects to build against",
       "shared_contracts": ["shared contracts/helpers/APIs/config/schema surfaces this step uses or changes"],
-      "verification_profile": "short verification policy label such as default",
+      "verification_profile": "one of default, contracts, adapter, integration, schema, or migration",
       "promotion_class": "optional planner expectation only; runtime computes the authoritative class",
       "depends_on": ["step ids that must complete first"],
       "owned_paths": ["repo-relative paths or directories this step primarily owns"],
@@ -120,7 +120,13 @@ Field requirements:
 - "scope_class": use `free_owned` by default, `shared_reviewed` when the step deliberately touches shared-review surfaces, and `hard_owned` only when the step must enter protected shared core paths.
 - "spine_version": default to the current spine version shown above unless this step intentionally advances contract-wave state.
 - "shared_contracts": list the shared contracts/helpers/APIs/config/schema surfaces that this step depends on or changes. Use an empty array when none apply.
-- "verification_profile": keep this short and concrete. Use `default` when there is no special requirement.
+- "verification_profile": choose one of `default`, `contracts`, `adapter`, `integration`, `schema`, or `migration`.
+- Use `contracts` for shared contract or API freeze/evolution work.
+- Use `adapter` for adapters, bridges, gateways, wrappers, or compatibility layers.
+- Use `integration` for merge, reconciliation, or explicit integration checkpoints.
+- Use `schema` for schema/type/interface shape changes that are not primarily contract-freeze work.
+- Use `migration` for database or state migration work.
+- Use `default` only when no stronger verification shape applies.
 - "promotion_class": you may include the likely class for operator readability, but treat it as a planner estimate. The runtime recomputes the real guarded-overlap promotion class.
 - "depends_on": in parallel mode, use this to encode the DAG.
 - "owned_paths": in parallel mode, list the main repo-relative files or directories each step owns so independently ready steps can be batched safely. Prefer narrow exact files or leaf directories. Use an empty array only when the step should run alone.

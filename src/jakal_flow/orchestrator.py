@@ -112,6 +112,7 @@ from .utils import (
     write_text_if_changed,
 )
 from .verification import VerificationRunner
+from .verification_profiles import resolve_verification_command
 from .workspace import WorkspaceManager
 from .orchestrator_lineage import OrchestratorLineageMixin
 from .orchestrator_closeout import OrchestratorCloseoutMixin
@@ -2387,6 +2388,7 @@ class Orchestrator(
                                 close_block_index,
                                 "parallel-batch-pass",
                                 state_fingerprint=self._current_verify_state_fingerprint(context, batch_changed_files),
+                                execution_step=batch_merge_step,
                             )
                             reporter.save_test_result(close_block_index, "parallel-batch-pass", group_test_result)
                         else:
@@ -2395,6 +2397,7 @@ class Orchestrator(
                                 verification_block_index,
                                 "parallel-batch-pass",
                                 state_fingerprint=self._current_verify_state_fingerprint(context, batch_changed_files),
+                                execution_step=batch_merge_step,
                             )
                             reporter.save_test_result(verification_block_index, "parallel-batch-pass", group_test_result)
                         if group_test_result and group_test_result.returncode != 0:
@@ -3119,10 +3122,11 @@ class Orchestrator(
         sandbox_mode: str | None = None,
     ) -> RuntimeOptions:
         fallback_effort = normalize_reasoning_effort(runtime.effort, fallback="high")
+        verification_resolution = resolve_verification_command(step, runtime)
         merged: dict[str, object] = {
             **runtime.to_dict(),
             **self._step_model_runtime_overrides(runtime, step),
-            "test_cmd": step.test_command.strip() or runtime.test_cmd,
+            "test_cmd": verification_resolution.command,
             "effort": normalize_reasoning_effort(step.reasoning_effort, fallback=fallback_effort),
             "execution_mode": execution_mode,
             "max_blocks": max_blocks,
@@ -4529,6 +4533,7 @@ class Orchestrator(
                 block_index,
                 pass_name,
                 state_fingerprint=self._current_verify_state_fingerprint(context, run_result.changed_files),
+                execution_step=execution_step,
             )
         except ImmediateStopRequested:
             self.git.hard_reset(context.paths.repo_dir, safe_revision)
@@ -4648,14 +4653,21 @@ class Orchestrator(
         label: str,
         *,
         state_fingerprint: str | None = None,
+        execution_step: ExecutionStep | None = None,
     ) -> TestRunResult:
-        return self.verification.run(
+        verification_resolution = resolve_verification_command(execution_step, context.runtime)
+        result = self.verification.run(
             context=context,
             block_index=block_index,
             label=label,
-            command=context.runtime.test_cmd,
+            command=verification_resolution.command,
             state_fingerprint=state_fingerprint,
         )
+        result.verification_profile = verification_resolution.profile
+        result.verification_profile_source = verification_resolution.profile_source
+        result.verification_profile_reason = verification_resolution.profile_reason
+        result.verification_command_source = verification_resolution.command_source
+        return result
 
     def _stop_reason(self, context: ProjectContext) -> str | None:
         counters = context.loop_state.counters

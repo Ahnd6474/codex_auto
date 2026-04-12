@@ -36,6 +36,7 @@ from .step_models import (
     QWEN_CODE_DEFAULT_MODEL,
 )
 from .utils import normalize_workflow_mode, parse_json_text, read_text
+from .verification_profiles import normalize_verification_profiles_map
 
 
 def coerce_positive_int(value: Any, default: int, minimum: int = 1) -> int:
@@ -235,6 +236,11 @@ def normalize_runtime_payload(
     merged["execution_mode"] = "parallel"
     merged["workflow_mode"] = normalize_workflow_mode(merged.get("workflow_mode", default_values.get("workflow_mode", "standard")))
     merged["test_cmd"] = str(merged.get("test_cmd", default_values.get("test_cmd", "python -m pytest"))).strip() or "python -m pytest"
+    raw_verification_profiles = merged.get("verification_profiles", default_values.get("verification_profiles", {}))
+    if isinstance(raw_verification_profiles, str):
+        parsed_profiles = parse_json_text(raw_verification_profiles, default={})
+        raw_verification_profiles = parsed_profiles if isinstance(parsed_profiles, dict) else {}
+    merged["verification_profiles"] = normalize_verification_profiles_map(raw_verification_profiles)
     merged["model_provider"] = normalize_model_provider(
         str(merged.get("model_provider", DEFAULT_MODEL_PROVIDER)),
         fallback=DEFAULT_MODEL_PROVIDER,

@@ -6155,6 +6155,25 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertEqual(runtime_payload["execution_mode"], "parallel")
         self.assertEqual(plan_state.execution_mode, "parallel")
 
+    def test_normalize_runtime_payload_normalizes_verification_profile_map(self) -> None:
+        runtime_payload = normalize_runtime_payload(
+            {
+                "verification_profiles": {
+                    "Contracts": "python -m pytest tests/test_contracts.py",
+                    "db-migration": "python -m pytest tests/test_migrations.py",
+                    "": "ignored",
+                }
+            }
+        )
+
+        self.assertEqual(
+            runtime_payload["verification_profiles"],
+            {
+                "contracts": "python -m pytest tests/test_contracts.py",
+                "migration": "python -m pytest tests/test_migrations.py",
+            },
+        )
+
     def test_assess_direct_execution_bypass_scores_narrow_fix_highly(self) -> None:
         assessment = assess_direct_execution_bypass(
             repo_inputs={
@@ -6413,6 +6432,8 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("prefer editing or extending that code", decomposition_prompt)
         self.assertIn("Use the following priority order while planning:", plan_prompt)
         self.assertIn("Requested execution mode:", plan_prompt)
+        self.assertIn("choose from default, contracts, adapter, integration, schema, migration", decomposition_prompt)
+        self.assertIn("`migration`", plan_prompt)
         self.assertIn("Model routing guidance for this run:", plan_prompt)
         self.assertIn("Default routing for this run:", plan_prompt)
         self.assertIn("Current spine version:", plan_prompt)
@@ -6451,6 +6472,111 @@ class ExecutionPlanHelperTests(unittest.TestCase):
         self.assertIn("well-known algorithm", bootstrap_prompt)
         self.assertIn("finished, handoff-quality result", plan_prompt)
         self.assertIn("finished, handoff-quality implementation", bootstrap_prompt)
+
+    def test_build_execution_step_runtime_uses_verification_profile_command_map(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_profile_runtime_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        orchestrator = Orchestrator(temp_root)
+        runtime = RuntimeOptions(
+            test_cmd="python -m pytest",
+            verification_profiles={"adapter": "python -m pytest tests/test_adapter.py"},
+        )
+        step = ExecutionStep(
+            step_id="ST1",
+            title="Update payments adapter",
+            verification_profile="adapter",
+        )
+
+        try:
+            step_runtime = orchestrator._build_execution_step_runtime(
+                runtime,
+                step,
+                allow_push=False,
+                max_blocks=1,
+                require_checkpoint_approval=False,
+                checkpoint_interval_blocks=1,
+                execution_mode="parallel",
+            )
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(step_runtime.test_cmd, "python -m pytest tests/test_adapter.py")
+
+    def test_run_test_command_attaches_verification_profile_metadata(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_profile_command_resolution_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        (repo_dir / "README.md").write_text("README summary", encoding="utf-8")
+        (repo_dir / "AGENTS.md").write_text("AGENTS summary", encoding="utf-8")
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(
+            test_cmd="python -m pytest",
+            verification_profiles={"adapter": "python -m pytest tests/test_adapter.py"},
+        )
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(project_dir=repo_dir, branch="main", runtime=runtime)
+            result = TestRunResult(
+                command="python -m pytest tests/test_adapter.py",
+                returncode=0,
+                stdout_file=context.paths.logs_dir / "stdout.log",
+                stderr_file=context.paths.logs_dir / "stderr.log",
+                summary="ok",
+            )
+            result.stdout_file.write_text("", encoding="utf-8")
+            result.stderr_file.write_text("", encoding="utf-8")
+            step = ExecutionStep(step_id="ST1", title="Repair adapter bridge", verification_profile="adapter")
+            with mock.patch.object(orchestrator.verification, "run", return_value=result) as mocked_run:
+                resolved = orchestrator._run_test_command(context, 1, "block-pass", execution_step=step)
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        self.assertEqual(mocked_run.call_args.kwargs["command"], "python -m pytest tests/test_adapter.py")
+        self.assertEqual(resolved.verification_profile, "adapter")
+        self.assertEqual(resolved.verification_command_source, "verification_profile_map")
+
+    def test_reporter_write_status_report_includes_verification_profile_metrics(self) -> None:
+        temp_root = Path(__file__).resolve().parents[1] / ".tmp_verification_profile_report_test"
+        shutil.rmtree(temp_root, ignore_errors=True)
+        workspace_root = temp_root / "workspace"
+        repo_dir = temp_root / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        (repo_dir / "README.md").write_text("README summary", encoding="utf-8")
+        (repo_dir / "AGENTS.md").write_text("AGENTS summary", encoding="utf-8")
+        orchestrator = Orchestrator(workspace_root)
+        runtime = RuntimeOptions(test_cmd="python -m pytest")
+
+        try:
+            context = orchestrator.workspace.initialize_local_project(project_dir=repo_dir, branch="main", runtime=runtime)
+            plan_state = ExecutionPlanState(
+                plan_title="Profile report demo",
+                default_test_command=runtime.test_cmd,
+                steps=[
+                    ExecutionStep(step_id="ST1", title="Freeze API contract", verification_profile="contracts"),
+                    ExecutionStep(step_id="ST2", title="Implement feature"),
+                ],
+            )
+            orchestrator.save_execution_plan_state(context, plan_state)
+            append_jsonl(
+                context.paths.logs_dir / "test_runs.jsonl",
+                {
+                    "block_index": 1,
+                    "label": "block-pass",
+                    "verification_command_source": "verification_profile_map",
+                },
+            )
+            report_path = Reporter(context).write_status_report()
+            report_payload = json.loads(report_path.read_text(encoding="utf-8"))
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+        verification_profiles = report_payload["verification_profiles"]
+        self.assertEqual(verification_profiles["profile_counts"]["contracts"], 1)
+        self.assertEqual(verification_profiles["profile_source_counts"]["fallback_default"], 1)
+        self.assertEqual(verification_profiles["recent_command_source_counts"]["verification_profile_map"], 1)
+        self.assertEqual(verification_profiles["fallback_default_count"], 1)
 
     def test_implementation_prompt_embeds_agents_summary_and_shell_guidance(self) -> None:
         temp_root = Path(__file__).resolve().parents[1] / ".tmp_step_prompt_guidance_test"

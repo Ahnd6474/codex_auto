@@ -10,12 +10,12 @@ from typing import Any
 from .errors import ContractWaveLookupError, ContractWavePersistenceError, ContractWaveValidationError
 from .models import ExecutionStep, ProjectPaths
 from .utils import append_jsonl, ensure_dir, now_utc_iso, read_json, write_json, write_text
+from .verification_profiles import DEFAULT_VERIFICATION_PROFILE, select_verification_profile
 
 STEP_TYPES = {"contract", "feature", "integration", "debug", "closeout"}
 SCOPE_CLASSES = {"hard_owned", "shared_reviewed", "free_owned"}
 PROMOTION_CLASSES = {"green", "yellow", "red"}
 DEFAULT_SPINE_VERSION = "spine-v1"
-DEFAULT_VERIFICATION_PROFILE = "default"
 _SYMBOLIC_SOURCE_SUFFIXES = {".py", ".js", ".jsx", ".ts", ".tsx"}
 _UNCHANGED = object()
 _SPINE_STATE_CACHE: dict[str, tuple[tuple[int, int, int], "SpineState"]] = {}
@@ -190,7 +190,6 @@ def normalize_execution_step_policy(
         default_scope = "free_owned"
     step.scope_class = _normalize_choice(step.scope_class or metadata.get("scope_class", ""), SCOPE_CLASSES, default_scope)
     step.spine_version = str(step.spine_version or metadata.get("spine_version", "")).strip() or current_spine_version
-    step.verification_profile = str(step.verification_profile or metadata.get("verification_profile", "")).strip().lower() or DEFAULT_VERIFICATION_PROFILE
     step.primary_scope_paths = _normalize_paths(step.primary_scope_paths or metadata.get("primary_scope_paths", []) or step.owned_paths)
     step.shared_reviewed_paths = _normalize_paths(step.shared_reviewed_paths or metadata.get("shared_reviewed_paths", []))
     step.forbidden_core_paths = _normalize_paths(step.forbidden_core_paths or metadata.get("forbidden_core_paths", []))
@@ -199,6 +198,8 @@ def normalize_execution_step_policy(
         step.primary_scope_paths = list(step.owned_paths)
     allowed_scopes = list(step.primary_scope_paths) + list(step.shared_reviewed_paths) + list(step.owned_paths)
     step.forbidden_core_paths = _without_overlapping_scopes(step.forbidden_core_paths, allowed_scopes)
+    verification_selection = select_verification_profile(step, step_kind=normalized_step_kind)
+    step.verification_profile = verification_selection.profile
     step.promotion_class = declared_promotion_class(step, step_kind=normalized_step_kind)
 
     metadata["step_type"] = step.step_type
@@ -206,6 +207,8 @@ def normalize_execution_step_policy(
     metadata["spine_version"] = step.spine_version
     metadata["shared_contracts"] = list(step.shared_contracts)
     metadata["verification_profile"] = step.verification_profile
+    metadata["verification_profile_source"] = verification_selection.source
+    metadata["verification_profile_reason"] = verification_selection.reason
     metadata["promotion_class"] = step.promotion_class
     metadata["primary_scope_paths"] = list(step.primary_scope_paths)
     metadata["shared_reviewed_paths"] = list(step.shared_reviewed_paths)

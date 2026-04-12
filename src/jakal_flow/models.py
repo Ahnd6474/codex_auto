@@ -120,6 +120,7 @@ class RuntimeOptions:
     approval_mode: str = "never"
     sandbox_mode: str = "workspace-write"
     test_cmd: str = "python -m pytest"
+    verification_profiles: dict[str, str] = field(default_factory=dict)
     max_blocks: int = 1
     allow_push: bool = False
     auto_merge_pull_request: bool = False
@@ -468,6 +469,10 @@ class TestRunResult:
     cache_hit: bool = False
     state_fingerprint: str | None = None
     cache_key: str | None = None
+    verification_profile: str = ""
+    verification_profile_source: str = ""
+    verification_profile_reason: str = ""
+    verification_command_source: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return _normalize(self)
