@@ -198,6 +198,8 @@ def build_run_command_handlers(
             "status": saved.closeout_status,
             "commit_hash": saved.closeout_commit_hash,
             "notes": str(saved.closeout_notes or "").strip(),
+            "reviewer_b_decision": str(getattr(saved, "reviewer_b_decision", "") or "").strip(),
+            "next_cycle_prompt": str(getattr(saved, "next_cycle_prompt", "") or "").strip(),
         }
         word_report_path = ""
         report_path = getattr(project.paths, "closeout_report_docx_file", None)
@@ -394,15 +396,59 @@ def build_run_command_handlers(
                 if immediate_stop_requested(latest_project):
                     append_ui_event(latest_project, "run-paused", "Paused immediately because an immediate stop was requested.")
                     break
-                current_plan = ctx.orchestrator.load_execution_plan_state(latest_project)
+                latest_project, current_plan, continued, review_reason = ctx.orchestrator.prepare_pre_execution_cycle(
+                    project_dir=project_dir,
+                    runtime=runtime,
+                    branch=branch,
+                    origin_url=origin_url,
+                )
+                if continued:
+                    next_cycle_mode = normalize_workflow_mode(getattr(current_plan, "workflow_mode", "") or runtime.workflow_mode)
+                    append_ui_event(
+                        latest_project,
+                        "plan-generated",
+                        f"Generated the next execution cycle with {len(current_plan.steps)} step(s).",
+                        {"workflow_mode": next_cycle_mode, "step_count": len(current_plan.steps)},
+                    )
+                    clear_pending_events()
+                    continue
+                if review_reason == "plan_missing":
+                    raise RuntimeError("No saved execution plan exists for this project.")
+                if review_reason in {"reviewer_a_running", "reviewer_a_failed", "reviewer_a_blocked"}:
+                    append_ui_event(
+                        latest_project,
+                        "run-paused",
+                        f"Execution paused: {review_reason}.",
+                        {"reason": review_reason},
+                    )
+                    break
                 batches = ctx.orchestrator.pending_execution_batches(current_plan)
                 if not batches:
                     workflow_mode = normalize_workflow_mode(runtime.workflow_mode)
-                    saved = current_plan
-                    project = latest_project
-                    if str(current_plan.closeout_status).strip().lower() != "completed":
+                    project, saved, continued, closeout_reason = ctx.orchestrator.prepare_post_closeout_cycle(
+                        project_dir=project_dir,
+                        runtime=runtime,
+                        branch=branch,
+                        origin_url=origin_url,
+                    )
+                    if continued:
+                        append_ui_event(
+                            project,
+                            "plan-generated",
+                            f"Generated the next execution cycle with {len(saved.steps)} step(s).",
+                            {"workflow_mode": workflow_mode, "step_count": len(saved.steps)},
+                        )
+                        clear_pending_events()
+                        continue
+                    if closeout_reason == "closeout_running":
+                        append_ui_event(project, "run-paused", "Closeout is already running.", {"reason": closeout_reason})
+                        break
+                    if str(saved.closeout_status).strip().lower() != "completed":
                         closeout_message = "Started ML cycle closeout." if workflow_mode == "ml" else "Started project closeout."
-                        project, saved = run_closeout_pass(latest_project, closeout_message)
+                        project, saved = run_closeout_pass(project, closeout_message)
+                        if str(saved.closeout_status).strip().lower() == "replan_required":
+                            clear_pending_events()
+                            continue
                         if saved.closeout_status != "completed":
                             break
                     if workflow_mode == "ml":
@@ -692,6 +738,27 @@ def build_run_command_handlers(
         execution_stop_registry.clear(execution_scope_id(project))
         ctx.orchestrator.clear_latest_failure_status(project)
         try:
+            project, saved, continued, reason = ctx.orchestrator.prepare_post_closeout_cycle(
+                project_dir=project_dir,
+                runtime=runtime,
+                branch=branch,
+                origin_url=origin_url,
+            )
+            if continued:
+                next_cycle_mode = normalize_workflow_mode(getattr(saved, "workflow_mode", "") or runtime.workflow_mode)
+                append_ui_event(
+                    project,
+                    "plan-generated",
+                    f"Generated the next execution cycle with {len(saved.steps)} step(s).",
+                    {"workflow_mode": next_cycle_mode, "step_count": len(saved.steps)},
+                )
+                return ctx.detail_payload(project)
+            if reason == "closeout_completed":
+                event_message, event_details = closeout_finished_event_payload(project, saved)
+                append_ui_event(project, "closeout-finished", event_message, event_details)
+                return ctx.detail_payload(project)
+            if reason == "closeout_running":
+                raise RuntimeError("Closeout is already running.")
             append_ui_event(project, "closeout-started", "Started project closeout.")
             try:
                 project, saved = ctx.orchestrator.run_execution_closeout(

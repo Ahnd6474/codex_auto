@@ -160,8 +160,9 @@ class OrchestratorLineageMixin:
         logs_dir = WorkspaceManager.repo_logs_dir(worktree_dir)
         reports_dir = lineage_root / "reports"
         state_dir = lineage_root / "state"
+        review_dir = state_dir / "review"
         lineage_manifests_dir = state_dir / "lineage_manifests"
-        for directory in [lineage_root, docs_dir, memory_dir, logs_dir, reports_dir, state_dir, lineage_manifests_dir]:
+        for directory in [lineage_root, docs_dir, memory_dir, logs_dir, reports_dir, state_dir, review_dir, lineage_manifests_dir]:
             ensure_dir(directory)
         self.workspace.migrate_logs_dir(legacy_logs_dir, logs_dir)
         return ProjectPaths(
@@ -174,6 +175,7 @@ class OrchestratorLineageMixin:
             logs_dir=logs_dir,
             reports_dir=reports_dir,
             state_dir=state_dir,
+            review_dir=review_dir,
             metadata_file=lineage_root / "metadata.json",
             project_config_file=lineage_root / "project_config.json",
             loop_state_file=state_dir / "LOOP_STATE.json",
@@ -210,6 +212,12 @@ class OrchestratorLineageMixin:
             closeout_report_file=docs_dir / "CLOSEOUT_REPORT.md",
             closeout_report_docx_file=reports_dir / "CLOSEOUT_REPORT.docx",
             closeout_report_pptx_file=reports_dir / "CLOSEOUT_REPORT.pptx",
+            requirements_matrix_file=review_dir / "requirements_matrix.json",
+            global_test_plan_file=review_dir / "global_test_plan.json",
+            test_strength_report_file=review_dir / "test_strength_report.json",
+            reviewer_a_verdict_file=review_dir / "reviewer_a_verdict.json",
+            reviewer_b_decision_file=review_dir / "reviewer_b_decision.json",
+            replan_packet_file=review_dir / "replan_packet.json",
             ml_experiment_report_file=docs_dir / "ML_EXPERIMENT_REPORT.md",
             ml_experiment_results_svg_file=docs_dir / "ML_EXPERIMENT_RESULTS.svg",
             shared_contracts_file=docs_dir / "SHARED_CONTRACTS.md",
@@ -1305,8 +1313,9 @@ class OrchestratorLineageMixin:
         logs_dir = WorkspaceManager.repo_logs_dir(worktree_dir)
         reports_dir = integration_root / "reports"
         state_dir = integration_root / "state"
+        review_dir = state_dir / "review"
         lineage_manifests_dir = state_dir / "lineage_manifests"
-        for directory in [integration_root, docs_dir, memory_dir, logs_dir, reports_dir, state_dir, lineage_manifests_dir]:
+        for directory in [integration_root, docs_dir, memory_dir, logs_dir, reports_dir, state_dir, review_dir, lineage_manifests_dir]:
             ensure_dir(directory)
         self.workspace.migrate_logs_dir(legacy_logs_dir, logs_dir)
         return ProjectPaths(
@@ -1319,6 +1328,7 @@ class OrchestratorLineageMixin:
             logs_dir=logs_dir,
             reports_dir=reports_dir,
             state_dir=state_dir,
+            review_dir=review_dir,
             metadata_file=integration_root / "metadata.json",
             project_config_file=integration_root / "project_config.json",
             loop_state_file=state_dir / "LOOP_STATE.json",
@@ -1355,6 +1365,12 @@ class OrchestratorLineageMixin:
             closeout_report_file=docs_dir / "CLOSEOUT_REPORT.md",
             closeout_report_docx_file=reports_dir / "CLOSEOUT_REPORT.docx",
             closeout_report_pptx_file=reports_dir / "CLOSEOUT_REPORT.pptx",
+            requirements_matrix_file=review_dir / "requirements_matrix.json",
+            global_test_plan_file=review_dir / "global_test_plan.json",
+            test_strength_report_file=review_dir / "test_strength_report.json",
+            reviewer_a_verdict_file=review_dir / "reviewer_a_verdict.json",
+            reviewer_b_decision_file=review_dir / "reviewer_b_decision.json",
+            replan_packet_file=review_dir / "replan_packet.json",
             ml_experiment_report_file=docs_dir / "ML_EXPERIMENT_REPORT.md",
             ml_experiment_results_svg_file=docs_dir / "ML_EXPERIMENT_RESULTS.svg",
             shared_contracts_file=docs_dir / "SHARED_CONTRACTS.md",

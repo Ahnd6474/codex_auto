@@ -36,6 +36,8 @@ DEBUGGER_PROMPT_FILENAME = DEBUGGER_PARALLEL_PROMPT_FILENAME
 MERGER_PARALLEL_PROMPT_FILENAME = "MERGER_PARALLEL_PROMPT.txt"
 FINALIZATION_PROMPT_FILENAME = "FINALIZATION_PROMPT.txt"
 OPTIMIZATION_PROMPT_FILENAME = "OPTIMIZATION_PROMPT.txt"
+REVIEWER_A_PROMPT_FILENAME = "REVIEWER_A_PROMPT.txt"
+REVIEWER_B_PROMPT_FILENAME = "REVIEWER_B_PROMPT.txt"
 ML_PLAN_GENERATION_PROMPT_FILENAME = "ML_PLAN_GENERATION_PROMPT.txt"
 ML_STEP_EXECUTION_PROMPT_FILENAME = "ML_STEP_EXECUTION_PROMPT.txt"
 ML_FINALIZATION_PROMPT_FILENAME = "ML_FINALIZATION_PROMPT.txt"
@@ -308,6 +310,14 @@ def load_finalization_prompt_template(workflow_mode: str | None = None) -> str:
 
 def load_optimization_prompt_template() -> str:
     return load_source_prompt_template(OPTIMIZATION_PROMPT_FILENAME)
+
+
+def load_reviewer_a_prompt_template() -> str:
+    return load_source_prompt_template(REVIEWER_A_PROMPT_FILENAME)
+
+
+def load_reviewer_b_prompt_template() -> str:
+    return load_source_prompt_template(REVIEWER_B_PROMPT_FILENAME)
 
 
 @lru_cache(maxsize=1)
@@ -1706,6 +1716,82 @@ def finalization_prompt(
         )
     except KeyError as exc:
         raise ValueError(f"Unknown placeholder in finalization prompt template: {exc.args[0]}") from exc
+
+
+def _execution_steps_outline(plan_state: ExecutionPlanState) -> str:
+    return "\n".join(
+        f"- {step.step_id}: {step.title} :: {step.success_criteria or 'No explicit success criteria recorded.'}"
+        for step in plan_state.steps
+    ).strip() or "- No execution steps recorded."
+
+
+def reviewer_a_prompt(
+    context: ProjectContext,
+    plan_state: ExecutionPlanState,
+    repo_inputs: dict[str, str],
+    template_text: str | None = None,
+) -> str:
+    workflow_mode = normalize_workflow_mode(getattr(context.runtime, "workflow_mode", "standard"))
+    template = template_text or load_reviewer_a_prompt_template()
+    try:
+        return template.format(
+            repo_dir=context.paths.repo_dir,
+            docs_dir=context.paths.docs_dir,
+            workflow_mode=workflow_mode,
+            test_command=plan_state.default_test_command.strip() or context.runtime.test_cmd,
+            plan_title=plan_state.plan_title.strip() or context.metadata.display_name or context.metadata.slug,
+            project_prompt=plan_state.project_prompt.strip() or "No prompt recorded.",
+            plan_summary=plan_state.summary.strip() or "No execution summary recorded.",
+            execution_steps=_execution_steps_outline(plan_state),
+            readme=repo_inputs["readme"],
+            agents=repo_inputs["agents"],
+            docs=repo_inputs["docs"],
+            requirements_matrix_file=context.paths.requirements_matrix_file,
+            global_test_plan_file=context.paths.global_test_plan_file,
+            test_strength_report_file=context.paths.test_strength_report_file,
+            reviewer_a_verdict_file=context.paths.reviewer_a_verdict_file,
+            extra_prompt=context.runtime.extra_prompt.strip() or "None.",
+        )
+    except KeyError as exc:
+        raise ValueError(f"Unknown placeholder in reviewer A prompt template: {exc.args[0]}") from exc
+
+
+def reviewer_b_prompt(
+    context: ProjectContext,
+    plan_state: ExecutionPlanState,
+    template_text: str | None = None,
+) -> str:
+    workflow_mode = normalize_workflow_mode(getattr(context.runtime, "workflow_mode", "standard"))
+    template = template_text or load_reviewer_b_prompt_template()
+    reviewer_a_verdict_payload = read_json(context.paths.reviewer_a_verdict_file, default=None)
+    reviewer_a_verdict_text = (
+        json.dumps(reviewer_a_verdict_payload, ensure_ascii=False, indent=2, sort_keys=True)
+        if reviewer_a_verdict_payload is not None
+        else "Reviewer A verdict file is missing."
+    )
+    try:
+        return template.format(
+            repo_dir=context.paths.repo_dir,
+            docs_dir=context.paths.docs_dir,
+            workflow_mode=workflow_mode,
+            plan_title=plan_state.plan_title.strip() or context.metadata.display_name or context.metadata.slug,
+            project_prompt=plan_state.project_prompt.strip() or "No prompt recorded.",
+            plan_summary=plan_state.summary.strip() or "No execution summary recorded.",
+            execution_steps=_execution_steps_outline(plan_state),
+            reviewer_a_verdict=reviewer_a_verdict_text,
+            requirements_matrix_file=context.paths.requirements_matrix_file,
+            global_test_plan_file=context.paths.global_test_plan_file,
+            test_strength_report_file=context.paths.test_strength_report_file,
+            reviewer_a_verdict_file=context.paths.reviewer_a_verdict_file,
+            reviewer_b_decision_file=context.paths.reviewer_b_decision_file,
+            replan_packet_file=context.paths.replan_packet_file,
+            closeout_report_file=context.paths.closeout_report_file,
+            pass_log_file=context.paths.pass_log_file,
+            block_log_file=context.paths.block_log_file,
+            extra_prompt=context.runtime.extra_prompt.strip() or "None.",
+        )
+    except KeyError as exc:
+        raise ValueError(f"Unknown placeholder in reviewer B prompt template: {exc.args[0]}") from exc
 
 
 def optimization_prompt(

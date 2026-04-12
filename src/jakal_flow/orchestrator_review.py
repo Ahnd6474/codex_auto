@@ -19,12 +19,14 @@ class OrchestratorReviewMixin:
         return (
             str(plan_state.reviewer_a_status or "").strip().lower() == "completed"
             and self._normalize_reviewer_a_verdict(plan_state.reviewer_a_verdict) == "READY_TO_EXECUTE"
+            and str(plan_state.reviewer_a_plan_signature or "").strip() == self._plan_review_signature(plan_state)
         )
 
     def _execution_review_requested_replan(self, plan_state: ExecutionPlanState) -> bool:
         return (
             str(plan_state.reviewer_a_status or "").strip().lower() == "replan_required"
             and bool(str(plan_state.next_cycle_prompt or "").strip())
+            and str(plan_state.reviewer_a_plan_signature or "").strip() == self._plan_review_signature(plan_state)
         )
 
     def _completed_plan_needs_reviewer_a_backfill(self, plan_state: ExecutionPlanState) -> bool:
@@ -78,6 +80,7 @@ class OrchestratorReviewMixin:
         plan_state.reviewer_a_completed_at = None
         plan_state.reviewer_a_notes = "Recovered a stale Reviewer A state before retrying."
         plan_state.reviewer_a_verdict = ""
+        plan_state.reviewer_a_plan_signature = ""
         plan_state.replan_required = False
         plan_state.next_cycle_prompt = ""
         plan_state.last_updated_at = now_utc_iso()
@@ -135,6 +138,7 @@ class OrchestratorReviewMixin:
         plan_state.reviewer_a_completed_at = None
         plan_state.reviewer_a_notes = ""
         plan_state.reviewer_a_verdict = ""
+        plan_state.reviewer_a_plan_signature = ""
         plan_state.reviewer_b_decision = ""
         plan_state.replan_required = False
         plan_state.next_cycle_prompt = ""
@@ -184,6 +188,7 @@ class OrchestratorReviewMixin:
             if bool(review_result.get("success")):
                 verdict = self._normalize_reviewer_a_verdict(review_result.get("reviewer_a_verdict"))
                 plan_state.reviewer_a_verdict = verdict
+                plan_state.reviewer_a_plan_signature = self._plan_review_signature(plan_state)
                 plan_state.reviewer_a_completed_at = now_utc_iso()
                 plan_state.reviewer_a_notes = str(review_result.get("notes") or "").strip()
                 if verdict == "REPLAN":
@@ -197,6 +202,7 @@ class OrchestratorReviewMixin:
             else:
                 plan_state.reviewer_a_status = "failed"
                 plan_state.reviewer_a_notes = str(review_result.get("notes") or "").strip()
+                plan_state.reviewer_a_plan_signature = ""
                 plan_state.replan_required = False
                 plan_state.next_cycle_prompt = ""
         except ImmediateStopRequested as exc:
@@ -206,6 +212,7 @@ class OrchestratorReviewMixin:
             plan_state.reviewer_a_completed_at = None
             plan_state.reviewer_a_notes = str(exc).strip() or "Immediate stop requested."
             plan_state.reviewer_a_verdict = ""
+            plan_state.reviewer_a_plan_signature = ""
             plan_state.replan_required = False
             plan_state.next_cycle_prompt = ""
         except HANDLED_OPERATION_EXCEPTIONS as exc:
@@ -213,6 +220,7 @@ class OrchestratorReviewMixin:
             plan_state.reviewer_a_completed_at = None
             plan_state.reviewer_a_notes = str(exc).strip() or "Reviewer A failed."
             plan_state.reviewer_a_verdict = ""
+            plan_state.reviewer_a_plan_signature = ""
             plan_state.replan_required = False
             plan_state.next_cycle_prompt = ""
             raise

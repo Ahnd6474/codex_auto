@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from .planning import (
     attempt_history_entry,
     finalization_prompt,
     optimization_prompt,
+    reviewer_b_prompt,
     reflection_markdown,
     scan_repository_inputs,
 )
@@ -28,6 +30,199 @@ UTC = getattr(datetime, "UTC", timezone.utc)
 
 
 class OrchestratorCloseoutMixin:
+    def _clear_review_outputs(self, context: ProjectContext) -> None:
+        self._clear_reviewer_a_outputs(context)
+        self._clear_reviewer_b_outputs(context)
+
+    def _clear_reviewer_a_outputs(self, context: ProjectContext) -> None:
+        for path in (
+            context.paths.requirements_matrix_file,
+            context.paths.global_test_plan_file,
+            context.paths.test_strength_report_file,
+            context.paths.reviewer_a_verdict_file,
+        ):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                continue
+
+    def _clear_reviewer_b_outputs(self, context: ProjectContext) -> None:
+        for path in (
+            context.paths.reviewer_b_decision_file,
+            context.paths.replan_packet_file,
+        ):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                continue
+
+    def _load_reviewer_a_outputs(self, context: ProjectContext) -> dict[str, object]:
+        requirements_matrix = read_json(context.paths.requirements_matrix_file, default=None)
+        global_test_plan = read_json(context.paths.global_test_plan_file, default=None)
+        test_strength_report = read_json(context.paths.test_strength_report_file, default=None)
+        verdict_payload = read_json(context.paths.reviewer_a_verdict_file, default=None)
+        if not all(isinstance(item, dict) for item in (requirements_matrix, global_test_plan, test_strength_report, verdict_payload)):
+            raise ExecutionFailure("Reviewer A did not write all required structured outputs.")
+        verdict = self._normalize_reviewer_a_verdict(verdict_payload.get("verdict"))
+        if not verdict:
+            raise ExecutionFailure("Reviewer A verdict is missing or invalid.")
+        next_cycle_prompt = str(verdict_payload.get("next_cycle_prompt") or "").strip()
+        if verdict == "REPLAN" and not next_cycle_prompt:
+            raise ExecutionFailure("Reviewer A requested replanning but did not provide next_cycle_prompt.")
+        return {
+            "reviewer_a_verdict": verdict,
+            "next_cycle_prompt": next_cycle_prompt,
+            "notes": str(verdict_payload.get("summary") or verdict_payload.get("notes") or "").strip(),
+        }
+
+    def _load_reviewer_b_outputs(self, context: ProjectContext) -> dict[str, object]:
+        decision_payload = read_json(context.paths.reviewer_b_decision_file, default=None)
+        if not isinstance(decision_payload, dict):
+            raise ExecutionFailure("Reviewer B did not write reviewer_b_decision.json.")
+        decision = self._normalize_reviewer_b_decision(decision_payload.get("decision"))
+        if not decision:
+            raise ExecutionFailure("Reviewer B decision is missing or invalid.")
+        next_cycle_prompt = str(decision_payload.get("next_cycle_prompt") or "").strip()
+        if decision == "REPLAN":
+            replan_packet = read_json(context.paths.replan_packet_file, default=None)
+            if not isinstance(replan_packet, dict):
+                raise ExecutionFailure("Reviewer B requested replanning but did not write replan_packet.json.")
+            next_cycle_prompt = next_cycle_prompt or str(replan_packet.get("next_cycle_prompt") or "").strip()
+            if not next_cycle_prompt:
+                raise ExecutionFailure("Reviewer B requested replanning but did not provide next_cycle_prompt.")
+        return {
+            "reviewer_b_decision": decision,
+            "next_cycle_prompt": next_cycle_prompt,
+            "notes": str(decision_payload.get("summary") or decision_payload.get("notes") or "").strip(),
+        }
+
+    def _record_reviewer_pass(
+        self,
+        *,
+        context: ProjectContext,
+        reporter: Reporter,
+        block_index: int,
+        reviewer_role: str,
+        task_name: str,
+        pass_result: dict[str, object],
+    ) -> None:
+        run_result = pass_result.get("run_result")
+        test_result = pass_result.get("test_result")
+        changed_files = list(pass_result.get("changed_files") or [])
+        success = bool(pass_result.get("success"))
+        failure_type = str(pass_result.get("failure_type") or "").strip()
+        failure_reason_code = str(pass_result.get("failure_reason_code") or "").strip()
+        normalized_role = str(reviewer_role or "").strip().upper() or "A"
+        if normalized_role == "B" and success and self._normalize_reviewer_b_decision(pass_result.get("reviewer_b_decision")) == "REPLAN":
+            success_block_status = "reviewer_b_replan"
+        else:
+            success_block_status = f"reviewer_{normalized_role.lower()}_completed"
+        failure_block_status = f"reviewer_{normalized_role.lower()}_failed"
+        reporter.log_pass(
+            {
+                "repository_id": context.metadata.repo_id,
+                "repository_slug": context.metadata.slug,
+                "block_index": block_index,
+                "pass_type": f"project-reviewer-{normalized_role.lower()}-pass",
+                "selected_task": task_name,
+                "changed_files": changed_files,
+                "test_results": test_result.to_dict() if isinstance(test_result, TestRunResult) else None,
+                "usage": run_result.usage if run_result else {},
+                "duration_seconds": run_result.duration_seconds if run_result else 0.0,
+                "codex_attempt_count": run_result.attempt_count if run_result else 0,
+                "codex_diagnostics": run_result.diagnostics if run_result else {},
+                "codex_return_code": run_result.returncode if run_result else None,
+                "commit_hash": pass_result.get("commit_hash"),
+                "rollback_status": str(pass_result.get("rollback_status") or "not_needed"),
+                "search_enabled": False,
+                **(
+                    {
+                        "failure_type": failure_type,
+                        "failure_reason_code": failure_reason_code,
+                    }
+                    if failure_type
+                    else {}
+                ),
+            }
+        )
+        reporter.log_block(
+            {
+                "repository_id": context.metadata.repo_id,
+                "repository_slug": context.metadata.slug,
+                "block_index": block_index,
+                "status": success_block_status if success else failure_block_status,
+                "selected_task": task_name,
+                "changed_files": changed_files,
+                "test_summary": str(pass_result.get("notes") or "").strip(),
+                "commit_hashes": [],
+                "rollback_status": str(pass_result.get("rollback_status") or "not_needed"),
+                **(
+                    {
+                        "failure_type": failure_type,
+                        "failure_reason_code": failure_reason_code,
+                    }
+                    if failure_type
+                    else {}
+                ),
+            }
+        )
+
+    def _closeout_requested_replan(self, plan_state: ExecutionPlanState) -> bool:
+        return (
+            str(plan_state.closeout_status or "").strip().lower() == "replan_required"
+            and str(plan_state.reviewer_b_status or "").strip().lower() == "replan_required"
+            and self._normalize_reviewer_b_decision(plan_state.reviewer_b_decision) == "REPLAN"
+            and str(plan_state.reviewer_b_plan_signature or "").strip() == self._plan_review_signature(plan_state)
+            and bool(str(plan_state.next_cycle_prompt or "").strip())
+        )
+
+    def _resume_closeout_replan(
+        self,
+        *,
+        project_dir: Path,
+        runtime: RuntimeOptions,
+        plan_state: ExecutionPlanState,
+        branch: str,
+        origin_url: str,
+    ) -> tuple[ProjectContext, ExecutionPlanState]:
+        next_cycle_prompt = str(plan_state.next_cycle_prompt or "").strip()
+        if not next_cycle_prompt:
+            raise RuntimeError("Reviewer B requested replanning but did not persist a next-cycle prompt.")
+        return self.generate_execution_plan(
+            project_dir=project_dir,
+            runtime=runtime,
+            project_prompt=next_cycle_prompt,
+            branch=branch,
+            max_steps=max(1, runtime.max_blocks),
+            origin_url=origin_url,
+        )
+
+    def prepare_post_closeout_cycle(
+        self,
+        project_dir: Path,
+        runtime: RuntimeOptions,
+        branch: str = "main",
+        origin_url: str = "",
+    ) -> tuple[ProjectContext, ExecutionPlanState, bool, str]:
+        context = self.setup_local_project(project_dir=project_dir, runtime=runtime, branch=branch, origin_url=origin_url)
+        current_plan = self.load_execution_plan_state(context)
+        if not current_plan.steps:
+            return context, current_plan, False, "plan_missing"
+        if self._closeout_requested_replan(current_plan):
+            next_context, next_plan = self._resume_closeout_replan(
+                project_dir=project_dir,
+                runtime=runtime,
+                plan_state=current_plan,
+                branch=branch,
+                origin_url=origin_url,
+            )
+            return next_context, next_plan, True, ""
+        if str(current_plan.closeout_status or "").strip().lower() == "running" and not self._closeout_run_is_stale(context, current_plan):
+            return context, current_plan, False, "closeout_running"
+        if str(current_plan.closeout_status or "").strip().lower() == "completed":
+            return context, current_plan, False, "closeout_completed"
+        return context, current_plan, False, ""
+
     def _reusable_closeout_result(self, context: ProjectContext, safe_revision: str) -> dict[str, object] | None:
         try:
             current_revision = self.git.current_revision(context.paths.repo_dir)
@@ -126,6 +321,7 @@ class OrchestratorCloseoutMixin:
         block_index: int,
         task_name: str,
         safe_revision: str,
+        post_test_validation: Callable[[], dict[str, object] | None] | None = None,
     ) -> dict[str, object]:
         run_result = self._run_pass_with_provider_fallback(
             context=context,
@@ -147,6 +343,7 @@ class OrchestratorCloseoutMixin:
         success = False
         notes = ""
         failure: ExecutionFailure | None = None
+        validation_result: dict[str, object] = {}
 
         if run_result.returncode != 0:
             self.git.hard_reset(context.paths.repo_dir, safe_revision)
@@ -168,26 +365,41 @@ class OrchestratorCloseoutMixin:
                 )
                 notes = str(failure)
             else:
-                if self.git.has_changes(context.paths.repo_dir):
-                    commit_descriptor = build_commit_descriptor(context, pass_type, task_name)
-                    commit_hash = self.git.commit_all(
-                        context.paths.repo_dir,
-                        commit_descriptor.message,
-                        author_name=commit_descriptor.author_name,
-                    )
-                if commit_hash:
-                    context.metadata.current_safe_revision = commit_hash
-                    context.loop_state.current_safe_revision = commit_hash
-                    pushed, push_reason = self._push_if_ready(
-                        context,
-                        context.paths.repo_dir,
-                        context.metadata.branch,
-                        commit_hash=commit_hash,
-                    )
-                    if not pushed and push_reason not in {"already_up_to_date"}:
-                        notes = (notes + f" Push skipped: {push_reason}.").strip()
-                success = True
-                notes = test_result.summary
+                try:
+                    validation_result = post_test_validation() if post_test_validation is not None else {}
+                    if validation_result is None:
+                        validation_result = {}
+                    if not isinstance(validation_result, dict):
+                        raise ExecutionFailure("Post-pass validation returned an invalid result payload.")
+                except ImmediateStopRequested:
+                    self.git.hard_reset(context.paths.repo_dir, safe_revision)
+                    raise
+                except HANDLED_OPERATION_EXCEPTIONS as exc:
+                    self.git.hard_reset(context.paths.repo_dir, safe_revision)
+                    rollback_status = "rolled_back_to_safe_revision"
+                    failure = exc if isinstance(exc, ExecutionFailure) else ExecutionFailure(str(exc).strip() or "Post-pass validation failed.")
+                    notes = str(failure)
+                else:
+                    if self.git.has_changes(context.paths.repo_dir):
+                        commit_descriptor = build_commit_descriptor(context, pass_type, task_name)
+                        commit_hash = self.git.commit_all(
+                            context.paths.repo_dir,
+                            commit_descriptor.message,
+                            author_name=commit_descriptor.author_name,
+                        )
+                    if commit_hash:
+                        context.metadata.current_safe_revision = commit_hash
+                        context.loop_state.current_safe_revision = commit_hash
+                        pushed, push_reason = self._push_if_ready(
+                            context,
+                            context.paths.repo_dir,
+                            context.metadata.branch,
+                            commit_hash=commit_hash,
+                        )
+                        if not pushed and push_reason not in {"already_up_to_date"}:
+                            notes = (notes + f" Push skipped: {push_reason}.").strip()
+                    success = True
+                    notes = str(validation_result.get("notes") or "").strip() or test_result.summary
 
         return {
             "success": success,
@@ -198,6 +410,82 @@ class OrchestratorCloseoutMixin:
             "changed_files": changed_files,
             "rollback_status": rollback_status,
             "safe_revision": commit_hash or safe_revision,
+            **validation_result,
+            **failure_log_fields(failure),
+        }
+
+    def _execute_workspace_gate_pass(
+        self,
+        *,
+        context: ProjectContext,
+        runner: object,
+        reporter: Reporter,
+        prompt: str,
+        pass_type: str,
+        block_index: int,
+        task_name: str,
+        safe_revision: str,
+        post_run_validation: Callable[[], dict[str, object] | None] | None = None,
+    ) -> dict[str, object]:
+        run_result = self._run_pass_with_provider_fallback(
+            context=context,
+            runner=runner,
+            prompt=prompt,
+            pass_type=pass_type,
+            block_index=block_index,
+            search_enabled=False,
+            safe_revision=safe_revision,
+            execution_step=None,
+            provider_selection_source="auto",
+        )
+        changed_files = sorted(set(self.git.changed_files(context.paths.repo_dir)))
+        run_result.changed_files = changed_files
+
+        rollback_status = "not_needed"
+        success = False
+        notes = ""
+        failure: ExecutionFailure | None = None
+        validation_result: dict[str, object] = {}
+
+        if run_result.returncode != 0:
+            self.git.hard_reset(context.paths.repo_dir, safe_revision)
+            rollback_status = "rolled_back_to_safe_revision"
+            failure = AgentPassExecutionError(self._codex_failure_note(task_name, run_result))
+            notes = str(failure)
+        elif self.git.has_changes(context.paths.repo_dir):
+            self.git.hard_reset(context.paths.repo_dir, safe_revision)
+            rollback_status = "rolled_back_to_safe_revision"
+            failure = AgentPassExecutionError(f"{task_name} modified repository files and was rolled back.")
+            notes = str(failure)
+        else:
+            try:
+                validation_result = post_run_validation() if post_run_validation is not None else {}
+                if validation_result is None:
+                    validation_result = {}
+                if not isinstance(validation_result, dict):
+                    raise ExecutionFailure("Post-pass validation returned an invalid result payload.")
+            except ImmediateStopRequested:
+                self.git.hard_reset(context.paths.repo_dir, safe_revision)
+                raise
+            except HANDLED_OPERATION_EXCEPTIONS as exc:
+                self.git.hard_reset(context.paths.repo_dir, safe_revision)
+                rollback_status = "rolled_back_to_safe_revision"
+                failure = exc if isinstance(exc, ExecutionFailure) else ExecutionFailure(str(exc).strip() or "Workspace gate validation failed.")
+                notes = str(failure)
+            else:
+                success = True
+                notes = str(validation_result.get("notes") or "").strip() or f"{task_name} passed."
+
+        return {
+            "success": success,
+            "notes": notes,
+            "run_result": run_result,
+            "test_result": None,
+            "commit_hash": None,
+            "changed_files": changed_files,
+            "rollback_status": rollback_status,
+            "safe_revision": safe_revision,
+            **validation_result,
             **failure_log_fields(failure),
         }
 
@@ -475,6 +763,15 @@ class OrchestratorCloseoutMixin:
             context.metadata.current_status = self._status_from_plan_state(plan_state)
             self.save_execution_plan_state(context, plan_state)
             self.workspace.save_project(context)
+        context, plan_state = self._require_pre_execution_review_ready(
+            project_dir=project_dir,
+            runtime=runtime,
+            branch=branch,
+            origin_url=origin_url,
+        )
+        plan_state = self.load_execution_plan_state(context)
+        if self._closeout_requested_replan(plan_state):
+            raise RuntimeError("Closeout previously requested replanning. Resume the run loop to generate the next cycle.")
 
         previous_runtime = context.runtime
         closeout_model_provider = str(plan_state.closeout_model_provider or previous_runtime.model_provider or "").strip().lower()
@@ -501,9 +798,18 @@ class OrchestratorCloseoutMixin:
         plan_state.closeout_completed_at = None
         plan_state.closeout_commit_hash = None
         plan_state.closeout_notes = ""
+        plan_state.reviewer_b_status = "not_started"
+        plan_state.reviewer_b_started_at = None
+        plan_state.reviewer_b_completed_at = None
+        plan_state.reviewer_b_notes = ""
+        plan_state.reviewer_b_decision = ""
+        plan_state.reviewer_b_plan_signature = ""
+        plan_state.replan_required = False
+        plan_state.next_cycle_prompt = ""
         context.metadata.current_status = "running:closeout"
         context.metadata.last_run_at = closeout_started_at
         context.loop_state.current_task = "Project closeout"
+        self._clear_reviewer_b_outputs(context)
         self.save_execution_plan_state(context, plan_state)
         self.workspace.save_project(context)
 
@@ -527,6 +833,17 @@ class OrchestratorCloseoutMixin:
         }
         closeout_interrupted = False
         closeout_reused = reused_closeout is not None
+        reviewer_b_result: dict[str, object] = {
+            "success": False,
+            "notes": "",
+            "run_result": None,
+            "test_result": None,
+            "commit_hash": None,
+            "changed_files": [],
+            "rollback_status": "not_needed",
+            "safe_revision": safe_revision,
+        }
+        reviewer_b_block_index = closeout_block_index + (0 if closeout_reused else 1)
 
         try:
             if reused_closeout is not None:
@@ -557,10 +874,65 @@ class OrchestratorCloseoutMixin:
                     safe_revision=safe_revision,
                 )
             if bool(closeout_result.get("success")):
-                plan_state.closeout_status = "completed"
-                plan_state.closeout_completed_at = now_utc_iso()
-                plan_state.closeout_commit_hash = str(closeout_result.get("commit_hash") or "") or None
-                plan_state.closeout_notes = str(closeout_result.get("notes") or "").strip()
+                reviewer_b_started_at = now_utc_iso()
+                plan_state.reviewer_b_status = "running"
+                plan_state.reviewer_b_started_at = reviewer_b_started_at
+                plan_state.reviewer_b_completed_at = None
+                plan_state.reviewer_b_notes = ""
+                plan_state.reviewer_b_decision = ""
+                plan_state.reviewer_b_plan_signature = ""
+                context.metadata.last_run_at = reviewer_b_started_at
+                self.save_execution_plan_state(context, plan_state)
+                self.workspace.save_project(context)
+                self._clear_reviewer_b_outputs(context)
+                reviewer_b_result = self._execute_workspace_gate_pass(
+                    context=context,
+                    runner=runner,
+                    reporter=reporter,
+                    prompt=reviewer_b_prompt(context=context, plan_state=plan_state),
+                    pass_type="project-reviewer-b-pass",
+                    block_index=reviewer_b_block_index,
+                    task_name="Reviewer B shipping gate",
+                    safe_revision=str(closeout_result.get("safe_revision") or safe_revision),
+                    post_run_validation=lambda: self._load_reviewer_b_outputs(context),
+                )
+                self._record_reviewer_pass(
+                    context=context,
+                    reporter=reporter,
+                    block_index=reviewer_b_block_index,
+                    reviewer_role="B",
+                    task_name="Reviewer B shipping gate",
+                    pass_result=reviewer_b_result,
+                )
+                if bool(reviewer_b_result.get("success")):
+                    decision = self._normalize_reviewer_b_decision(reviewer_b_result.get("reviewer_b_decision"))
+                    plan_state.reviewer_b_decision = decision
+                    plan_state.reviewer_b_plan_signature = self._plan_review_signature(plan_state)
+                    plan_state.reviewer_b_completed_at = now_utc_iso()
+                    plan_state.reviewer_b_notes = str(reviewer_b_result.get("notes") or "").strip()
+                    plan_state.closeout_commit_hash = str(closeout_result.get("commit_hash") or "") or None
+                    if decision == "REPLAN":
+                        plan_state.reviewer_b_status = "replan_required"
+                        plan_state.replan_required = True
+                        plan_state.next_cycle_prompt = str(reviewer_b_result.get("next_cycle_prompt") or "").strip()
+                        plan_state.closeout_status = "replan_required"
+                        plan_state.closeout_completed_at = None
+                        plan_state.closeout_notes = str(reviewer_b_result.get("notes") or "").strip() or str(closeout_result.get("notes") or "").strip()
+                    else:
+                        plan_state.reviewer_b_status = "completed"
+                        plan_state.replan_required = False
+                        plan_state.next_cycle_prompt = ""
+                        plan_state.closeout_status = "completed"
+                        plan_state.closeout_completed_at = now_utc_iso()
+                        plan_state.closeout_notes = str(closeout_result.get("notes") or "").strip() or str(reviewer_b_result.get("notes") or "").strip()
+                else:
+                    plan_state.reviewer_b_status = "failed"
+                    plan_state.reviewer_b_notes = str(reviewer_b_result.get("notes") or "").strip()
+                    plan_state.reviewer_b_plan_signature = ""
+                    plan_state.replan_required = False
+                    plan_state.next_cycle_prompt = ""
+                    plan_state.closeout_status = "failed"
+                    plan_state.closeout_notes = str(reviewer_b_result.get("notes") or "").strip() or str(closeout_result.get("notes") or "").strip()
             else:
                 plan_state.closeout_status = "failed"
                 plan_state.closeout_notes = str(closeout_result.get("notes") or "").strip()

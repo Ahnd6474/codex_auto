@@ -118,6 +118,7 @@ from .orchestrator_closeout import OrchestratorCloseoutMixin
 from .orchestrator_ml import OrchestratorMlMixin
 from .orchestrator_parallel import OrchestratorParallelMixin
 from .orchestrator_recovery import OrchestratorRecoveryMixin
+from .orchestrator_review import OrchestratorReviewMixin
 
 UTC = getattr(datetime, "UTC", timezone.utc)
 
@@ -125,6 +126,7 @@ UTC = getattr(datetime, "UTC", timezone.utc)
 class Orchestrator(
     OrchestratorParallelMixin,
     OrchestratorLineageMixin,
+    OrchestratorReviewMixin,
     OrchestratorCloseoutMixin,
     OrchestratorMlMixin,
     OrchestratorRecoveryMixin,
@@ -252,6 +254,36 @@ class Orchestrator(
         payload = step.to_dict()
         for transient_key in ("status", "started_at", "completed_at", "commit_hash", "notes"):
             payload.pop(transient_key, None)
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+    @staticmethod
+    def _normalize_reviewer_a_verdict(value: object) -> str:
+        normalized = str(value or "").strip().upper()
+        if normalized in {"READY", "READY_TO_EXECUTE", "EXECUTION_READY"}:
+            return "READY_TO_EXECUTE"
+        if normalized == "REPLAN":
+            return "REPLAN"
+        return ""
+
+    @staticmethod
+    def _normalize_reviewer_b_decision(value: object) -> str:
+        normalized = str(value or "").strip().upper()
+        if normalized in {"SHIP", "READY"}:
+            return "SHIP"
+        if normalized == "REPLAN":
+            return "REPLAN"
+        return ""
+
+    def _plan_review_signature(self, plan_state: ExecutionPlanState) -> str:
+        payload = {
+            "plan_title": str(plan_state.plan_title or "").strip(),
+            "project_prompt": str(plan_state.project_prompt or "").strip(),
+            "summary": str(plan_state.summary or "").strip(),
+            "workflow_mode": normalize_workflow_mode(plan_state.workflow_mode),
+            "execution_mode": self._normalize_execution_mode(plan_state.execution_mode),
+            "default_test_command": str(plan_state.default_test_command or "").strip(),
+            "steps": [self._step_static_artifact_signature(step) for step in plan_state.steps],
+        }
         return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
     @staticmethod
@@ -1255,7 +1287,7 @@ class Orchestrator(
             if cached is not None and cached[0] == cache_signature:
                 cached_state = deepcopy(cached[1])
                 self._normalize_loaded_execution_plan_state(context, cached_state)
-                if not self._closeout_run_is_stale(context, cached_state):
+                if not self._closeout_run_is_stale(context, cached_state) and not self._reviewer_a_run_is_stale(context, cached_state):
                     self._cache_execution_plan_state(context, cached_state)
                     return cached_state
             payload = read_json(context.paths.execution_plan_file, default=None)
@@ -1284,6 +1316,7 @@ class Orchestrator(
         fallback_effort = normalize_reasoning_effort(context.runtime.effort, fallback="high")
         for step in state.steps:
             step.reasoning_effort = normalize_reasoning_effort(step.reasoning_effort, fallback=fallback_effort)
+        self._recover_stale_reviewer_a_state(context, state)
         self._recover_stale_closeout_state(context, state)
 
     def update_execution_plan(
@@ -1306,26 +1339,163 @@ class Orchestrator(
             execution_mode = self._normalize_execution_mode(plan_state.execution_mode or context.runtime.execution_mode)
             workflow_mode = normalize_workflow_mode(plan_state.workflow_mode or context.runtime.workflow_mode)
             normalized_steps = self._normalize_execution_steps(context, plan_state.steps, plan_state.default_test_command, execution_mode)
-            closeout_ready = self._all_steps_completed(normalized_steps)
-            closeout_status = plan_state.closeout_status.strip() or "not_started"
-            closeout_started_at = plan_state.closeout_started_at
-            closeout_completed_at = plan_state.closeout_completed_at
-            closeout_commit_hash = plan_state.closeout_commit_hash
-            closeout_notes = plan_state.closeout_notes.strip()
-            if not closeout_ready:
-                closeout_status = "not_started"
-                closeout_started_at = None
-                closeout_completed_at = None
-                closeout_commit_hash = None
-                closeout_notes = ""
-            state = ExecutionPlanState(
+            prior_state: ExecutionPlanState | None = None
+            cached_entry = self._execution_plan_state_cache.get(self._execution_plan_cache_key(context))
+            if cached_entry is not None:
+                prior_state = deepcopy(cached_entry[1])
+            else:
+                payload = read_json(context.paths.execution_plan_file, default=None)
+                if isinstance(payload, dict):
+                    prior_state = ExecutionPlanState.from_dict(payload)
+                    self._normalize_loaded_execution_plan_state(context, prior_state)
+
+            candidate_state = ExecutionPlanState(
                 plan_title=plan_state.plan_title.strip() or context.metadata.display_name or context.metadata.slug,
                 project_prompt=plan_state.project_prompt.strip(),
                 summary=plan_state.summary.strip(),
                 workflow_mode=workflow_mode,
                 execution_mode=execution_mode,
                 default_test_command=plan_state.default_test_command.strip() or context.runtime.test_cmd,
+                steps=normalized_steps,
+            )
+            current_plan_signature = self._plan_review_signature(candidate_state)
+            prior_plan_signature = self._plan_review_signature(prior_state) if prior_state is not None else ""
+            plan_structure_changed = prior_state is not None and prior_plan_signature != current_plan_signature
+            closeout_ready = self._all_steps_completed(normalized_steps)
+            closeout_status = plan_state.closeout_status.strip() or "not_started"
+            closeout_started_at = plan_state.closeout_started_at
+            closeout_completed_at = plan_state.closeout_completed_at
+            closeout_commit_hash = plan_state.closeout_commit_hash
+            closeout_notes = plan_state.closeout_notes.strip()
+            reviewer_a_status = str(plan_state.reviewer_a_status or "not_started").strip().lower() or "not_started"
+            reviewer_a_started_at = plan_state.reviewer_a_started_at
+            reviewer_a_completed_at = plan_state.reviewer_a_completed_at
+            reviewer_a_notes = str(plan_state.reviewer_a_notes or "").strip()
+            reviewer_a_verdict = self._normalize_reviewer_a_verdict(plan_state.reviewer_a_verdict)
+            reviewer_a_plan_signature = str(plan_state.reviewer_a_plan_signature or "").strip()
+            reviewer_b_status = str(plan_state.reviewer_b_status or "not_started").strip().lower() or "not_started"
+            reviewer_b_started_at = plan_state.reviewer_b_started_at
+            reviewer_b_completed_at = plan_state.reviewer_b_completed_at
+            reviewer_b_notes = str(plan_state.reviewer_b_notes or "").strip()
+            reviewer_b_decision = self._normalize_reviewer_b_decision(plan_state.reviewer_b_decision)
+            reviewer_b_plan_signature = str(plan_state.reviewer_b_plan_signature or "").strip()
+            replan_required = bool(plan_state.replan_required)
+            next_cycle_prompt = str(plan_state.next_cycle_prompt or "").strip()
+
+            if plan_structure_changed:
+                reviewer_a_status = "not_started"
+                reviewer_a_started_at = None
+                reviewer_a_completed_at = None
+                reviewer_a_notes = ""
+                reviewer_a_verdict = ""
+                reviewer_a_plan_signature = ""
+                reviewer_b_status = "not_started"
+                reviewer_b_started_at = None
+                reviewer_b_completed_at = None
+                reviewer_b_notes = ""
+                reviewer_b_decision = ""
+                reviewer_b_plan_signature = ""
+                replan_required = False
+                next_cycle_prompt = ""
+                closeout_status = "not_started"
+                closeout_started_at = None
+                closeout_completed_at = None
+                closeout_commit_hash = None
+                closeout_notes = ""
+                self._clear_review_outputs(context)
+
+            if reviewer_a_status in {"completed", "replan_required"} and reviewer_a_plan_signature != current_plan_signature:
+                self._clear_review_outputs(context)
+                reviewer_a_status = "not_started"
+                reviewer_a_started_at = None
+                reviewer_a_completed_at = None
+                reviewer_a_notes = ""
+                reviewer_a_verdict = ""
+                reviewer_a_plan_signature = ""
+                reviewer_b_status = "not_started"
+                reviewer_b_started_at = None
+                reviewer_b_completed_at = None
+                reviewer_b_notes = ""
+                reviewer_b_decision = ""
+                reviewer_b_plan_signature = ""
+                if not closeout_ready:
+                    replan_required = False
+                    next_cycle_prompt = ""
+
+            if reviewer_b_status in {"completed", "replan_required"} and reviewer_b_plan_signature != current_plan_signature:
+                self._clear_reviewer_b_outputs(context)
+                reviewer_b_status = "not_started"
+                reviewer_b_started_at = None
+                reviewer_b_completed_at = None
+                reviewer_b_notes = ""
+                reviewer_b_decision = ""
+                reviewer_b_plan_signature = ""
+                replan_required = False
+                next_cycle_prompt = ""
+                closeout_status = "not_started"
+                closeout_started_at = None
+                closeout_completed_at = None
+                closeout_commit_hash = None
+                closeout_notes = ""
+
+            if not closeout_ready:
+                closeout_status = "not_started"
+                closeout_started_at = None
+                closeout_completed_at = None
+                closeout_commit_hash = None
+                closeout_notes = ""
+                reviewer_b_status = "not_started"
+                reviewer_b_started_at = None
+                reviewer_b_completed_at = None
+                reviewer_b_notes = ""
+                reviewer_b_decision = ""
+                reviewer_b_plan_signature = ""
+                if reviewer_a_status != "replan_required":
+                    replan_required = False
+                    next_cycle_prompt = ""
+
+            if reviewer_a_status not in {"running", "completed", "failed", "replan_required"}:
+                reviewer_a_status = "not_started"
+            if reviewer_a_status not in {"completed", "replan_required"}:
+                reviewer_a_verdict = ""
+                reviewer_a_plan_signature = ""
+            if reviewer_a_status == "not_started":
+                reviewer_a_started_at = None
+                reviewer_a_completed_at = None
+                reviewer_a_notes = ""
+
+            if reviewer_b_status not in {"running", "completed", "failed", "replan_required"}:
+                reviewer_b_status = "not_started"
+            if reviewer_b_status not in {"completed", "replan_required"}:
+                reviewer_b_decision = ""
+                reviewer_b_plan_signature = ""
+            if reviewer_b_status == "not_started":
+                reviewer_b_started_at = None
+                reviewer_b_completed_at = None
+                reviewer_b_notes = ""
+
+            state = ExecutionPlanState(
+                plan_title=candidate_state.plan_title,
+                project_prompt=candidate_state.project_prompt,
+                summary=candidate_state.summary,
+                workflow_mode=workflow_mode,
+                execution_mode=execution_mode,
+                default_test_command=candidate_state.default_test_command,
                 last_updated_at="",
+                reviewer_a_status=reviewer_a_status,
+                reviewer_a_started_at=reviewer_a_started_at,
+                reviewer_a_completed_at=reviewer_a_completed_at,
+                reviewer_a_notes=reviewer_a_notes,
+                reviewer_a_verdict=reviewer_a_verdict,
+                reviewer_a_plan_signature=reviewer_a_plan_signature,
+                reviewer_b_status=reviewer_b_status,
+                reviewer_b_started_at=reviewer_b_started_at,
+                reviewer_b_completed_at=reviewer_b_completed_at,
+                reviewer_b_notes=reviewer_b_notes,
+                reviewer_b_decision=reviewer_b_decision,
+                reviewer_b_plan_signature=reviewer_b_plan_signature,
+                replan_required=replan_required,
+                next_cycle_prompt=next_cycle_prompt,
                 closeout_status=closeout_status,
                 closeout_title=plan_state.closeout_title.strip() or "Closeout",
                 closeout_display_description=plan_state.closeout_display_description.strip() or "Closeout",
@@ -1344,8 +1514,7 @@ class Orchestrator(
                 closeout_notes=closeout_notes,
                 steps=normalized_steps,
             )
-            cached_entry = self._execution_plan_state_cache.get(self._execution_plan_cache_key(context))
-            cached_state = cached_entry[1] if cached_entry else None
+            cached_state = prior_state
             if cached_state is not None and self._plan_state_content_signature(cached_state) == self._plan_state_content_signature(state):
                 state.last_updated_at = cached_state.last_updated_at
             else:
@@ -1855,7 +2024,12 @@ class Orchestrator(
         branch: str = "main",
         origin_url: str = "",
     ) -> tuple[ProjectContext, ExecutionPlanState, ExecutionStep]:
-        context = self.setup_local_project(project_dir=project_dir, runtime=runtime, branch=branch, origin_url=origin_url)
+        context, _plan_state = self._require_pre_execution_review_ready(
+            project_dir=project_dir,
+            runtime=runtime,
+            branch=branch,
+            origin_url=origin_url,
+        )
         return self._run_saved_execution_step_with_context(context=context, runtime=runtime, step_id=step_id)
 
     def _run_execution_step_attempts(
@@ -1907,7 +2081,12 @@ class Orchestrator(
         branch: str = "main",
         origin_url: str = "",
     ) -> tuple[ProjectContext, ExecutionPlanState, list[ExecutionStep]]:
-        context = self.setup_local_project(project_dir=project_dir, runtime=runtime, branch=branch, origin_url=origin_url)
+        context, _plan_state = self._require_pre_execution_review_ready(
+            project_dir=project_dir,
+            runtime=runtime,
+            branch=branch,
+            origin_url=origin_url,
+        )
         return self._run_parallel_execution_batch_with_context(
             context=context,
             runtime=runtime,
@@ -2512,7 +2691,12 @@ class Orchestrator(
         branch: str = "main",
         origin_url: str = "",
     ) -> tuple[ProjectContext, ExecutionPlanState, ExecutionStep]:
-        context = self.setup_local_project(project_dir=project_dir, runtime=runtime, branch=branch, origin_url=origin_url)
+        context, _plan_state = self._require_pre_execution_review_ready(
+            project_dir=project_dir,
+            runtime=runtime,
+            branch=branch,
+            origin_url=origin_url,
+        )
         plan_state = self.load_execution_plan_state(context)
         if not plan_state.steps:
             raise RuntimeError("No saved execution plan exists for this project.")
@@ -3961,6 +4145,7 @@ class Orchestrator(
 
 
     def _ensure_project_documents(self, context: ProjectContext) -> None:
+        ensure_dir(context.paths.review_dir)
         ensure_dir(context.paths.ml_experiment_reports_dir)
         ensure_dir(context.paths.lineage_manifests_dir)
         ensure_contract_wave_artifacts(context.paths)

@@ -73,6 +73,29 @@ def _run_result(root: Path, pass_type: str, returncode: int = 0) -> CodexRunResu
     )
 
 
+def _mark_reviewer_a_ready(orchestrator: Orchestrator, context) -> None:
+    state = orchestrator.load_execution_plan_state(context)
+    state.reviewer_a_status = "completed"
+    state.reviewer_a_verdict = "READY_TO_EXECUTE"
+    state.reviewer_a_plan_signature = orchestrator._plan_review_signature(state)
+    orchestrator.save_execution_plan_state(context, state)
+
+
+def _reviewer_b_ship_result(safe_revision: str = "safe-revision") -> dict[str, object]:
+    return {
+        "success": True,
+        "notes": "ship",
+        "run_result": None,
+        "test_result": None,
+        "commit_hash": None,
+        "changed_files": [],
+        "rollback_status": "not_needed",
+        "safe_revision": safe_revision,
+        "reviewer_b_decision": "SHIP",
+        "next_cycle_prompt": "",
+    }
+
+
 class OptimizationTests(unittest.TestCase):
     def test_scan_optimization_candidates_flags_large_file_and_long_function(self) -> None:
         with _TemporaryTestDir() as temp_root:
@@ -137,6 +160,7 @@ class OptimizationTests(unittest.TestCase):
                     ],
                 ),
             )
+            _mark_reviewer_a_ready(orchestrator, context)
 
             with mock.patch.object(orchestrator, "setup_local_project", return_value=context), mock.patch(
                 "jakal_flow.orchestrator.CodexRunner.run_pass",
@@ -169,6 +193,10 @@ class OptimizationTests(unittest.TestCase):
                 return_value=None,
             ), mock.patch.object(
                 orchestrator,
+                "_execute_workspace_gate_pass",
+                return_value=_reviewer_b_ship_result("opt-commit"),
+            ), mock.patch.object(
+                orchestrator,
                 "_publish_closeout_pull_request",
                 return_value={"created": False, "reason": "non_github_origin"},
             ) as mocked_publish_closeout:
@@ -179,7 +207,10 @@ class OptimizationTests(unittest.TestCase):
         self.assertEqual(plan_state.closeout_status, "completed")
         self.assertEqual(context.metadata.current_safe_revision, "opt-commit")
         self.assertEqual([call.kwargs["pass_type"] for call in mocked_run_pass.call_args_list], ["project-optimization-pass", "project-closeout-pass"])
-        self.assertEqual([item["status"] for item in block_entries], ["optimization_completed", "closeout_completed"])
+        block_statuses = [item["status"] for item in block_entries]
+        self.assertIn("optimization_completed", block_statuses)
+        self.assertIn("closeout_completed", block_statuses)
+        self.assertIn("reviewer_b_completed", block_statuses)
         mocked_publish_closeout.assert_called_once()
 
     def test_publish_closeout_pull_request_uses_temporary_branch_when_head_matches_base(self) -> None:
@@ -268,6 +299,7 @@ class OptimizationTests(unittest.TestCase):
                     ],
                 ),
             )
+            _mark_reviewer_a_ready(orchestrator, context)
 
             with mock.patch.object(orchestrator, "setup_local_project", return_value=context), mock.patch(
                 "jakal_flow.orchestrator.CodexRunner.run_pass",
@@ -292,6 +324,10 @@ class OptimizationTests(unittest.TestCase):
                 "remote_url",
                 return_value=None,
             ), mock.patch.object(
+                orchestrator,
+                "_execute_workspace_gate_pass",
+                return_value=_reviewer_b_ship_result("safe-revision"),
+            ), mock.patch.object(
                 orchestrator.git,
                 "hard_reset",
             ) as mocked_reset:
@@ -301,9 +337,12 @@ class OptimizationTests(unittest.TestCase):
 
         self.assertEqual(plan_state.closeout_status, "completed")
         self.assertGreaterEqual(mocked_reset.call_count, 1)
+        pass_types = [entry["pass_type"] for entry in pass_entries]
+        self.assertIn("project-optimization-pass", pass_types)
+        self.assertIn("project-closeout-pass", pass_types)
+        self.assertIn("project-reviewer-b-pass", pass_types)
         self.assertEqual(pass_entries[0]["pass_type"], "project-optimization-pass")
         self.assertEqual(pass_entries[0]["rollback_status"], "rolled_back_to_safe_revision")
-        self.assertEqual(pass_entries[1]["pass_type"], "project-closeout-pass")
 
     def test_run_execution_closeout_recovers_stale_running_state(self) -> None:
         with _TemporaryTestDir() as temp_root:
@@ -337,6 +376,7 @@ class OptimizationTests(unittest.TestCase):
                     steps=[ExecutionStep(step_id="ST1", title="Finish implementation", status="completed")],
                 ),
             )
+            _mark_reviewer_a_ready(orchestrator, context)
 
             with mock.patch.object(orchestrator, "setup_local_project", return_value=context), mock.patch(
                 "jakal_flow.orchestrator.CodexRunner.run_pass",
@@ -357,6 +397,10 @@ class OptimizationTests(unittest.TestCase):
                 orchestrator.git,
                 "remote_url",
                 return_value=None,
+            ), mock.patch.object(
+                orchestrator,
+                "_execute_workspace_gate_pass",
+                return_value=_reviewer_b_ship_result("safe-revision"),
             ):
                 _, plan_state = orchestrator.run_execution_closeout(repo_dir, runtime)
 
@@ -393,6 +437,7 @@ class OptimizationTests(unittest.TestCase):
                     steps=[ExecutionStep(step_id="ST1", title="Finish implementation", status="completed")],
                 ),
             )
+            _mark_reviewer_a_ready(orchestrator, context)
 
             with mock.patch.object(orchestrator, "setup_local_project", return_value=context):
                 with self.assertRaisesRegex(RuntimeError, "Closeout is already running."):

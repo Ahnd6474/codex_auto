@@ -278,6 +278,7 @@ class ProjectPaths:
     logs_dir: Path
     reports_dir: Path
     state_dir: Path
+    review_dir: Path
     metadata_file: Path
     project_config_file: Path
     loop_state_file: Path
@@ -314,6 +315,12 @@ class ProjectPaths:
     closeout_report_file: Path
     closeout_report_docx_file: Path
     closeout_report_pptx_file: Path
+    requirements_matrix_file: Path
+    global_test_plan_file: Path
+    test_strength_report_file: Path
+    reviewer_a_verdict_file: Path
+    reviewer_b_decision_file: Path
+    replan_packet_file: Path
     ml_experiment_report_file: Path
     ml_experiment_results_svg_file: Path
     shared_contracts_file: Path
@@ -588,6 +595,20 @@ class ExecutionPlanState:
     execution_mode: str = "parallel"
     default_test_command: str = "python -m pytest"
     last_updated_at: str | None = None
+    reviewer_a_status: str = "not_started"
+    reviewer_a_started_at: str | None = None
+    reviewer_a_completed_at: str | None = None
+    reviewer_a_notes: str = ""
+    reviewer_a_verdict: str = ""
+    reviewer_a_plan_signature: str = ""
+    reviewer_b_status: str = "not_started"
+    reviewer_b_started_at: str | None = None
+    reviewer_b_completed_at: str | None = None
+    reviewer_b_notes: str = ""
+    reviewer_b_decision: str = ""
+    reviewer_b_plan_signature: str = ""
+    replan_required: bool = False
+    next_cycle_prompt: str = ""
     closeout_status: str = "not_started"
     closeout_title: str = "Closeout"
     closeout_display_description: str = "Closeout"
@@ -625,6 +646,20 @@ class ExecutionPlanState:
             execution_mode="parallel",
             default_test_command=str(data.get("default_test_command", "python -m pytest")).strip() or "python -m pytest",
             last_updated_at=data.get("last_updated_at"),
+            reviewer_a_status=str(data.get("reviewer_a_status", "not_started")).strip() or "not_started",
+            reviewer_a_started_at=data.get("reviewer_a_started_at"),
+            reviewer_a_completed_at=data.get("reviewer_a_completed_at"),
+            reviewer_a_notes=str(data.get("reviewer_a_notes", "")).strip(),
+            reviewer_a_verdict=str(data.get("reviewer_a_verdict", "")).strip(),
+            reviewer_a_plan_signature=str(data.get("reviewer_a_plan_signature", "")).strip(),
+            reviewer_b_status=str(data.get("reviewer_b_status", "not_started")).strip() or "not_started",
+            reviewer_b_started_at=data.get("reviewer_b_started_at"),
+            reviewer_b_completed_at=data.get("reviewer_b_completed_at"),
+            reviewer_b_notes=str(data.get("reviewer_b_notes", "")).strip(),
+            reviewer_b_decision=str(data.get("reviewer_b_decision", "")).strip(),
+            reviewer_b_plan_signature=str(data.get("reviewer_b_plan_signature", "")).strip(),
+            replan_required=bool(data.get("replan_required", False)),
+            next_cycle_prompt=str(data.get("next_cycle_prompt", "")).strip(),
             closeout_status=str(data.get("closeout_status", "not_started")).strip() or "not_started",
             closeout_title=str(data.get("closeout_title", "Closeout")).strip() or "Closeout",
             closeout_display_description=str(data.get("closeout_display_description", "Closeout")).strip() or "Closeout",

@@ -134,9 +134,10 @@ def build_test_project_context(
     logs_dir = project_root / "logs"
     reports_dir = project_root / "reports"
     state_dir = project_root / "state"
+    review_dir = state_dir / "review"
     lineage_manifests_dir = state_dir / "lineage_manifests"
 
-    for directory in (workspace_root, project_root, repo_dir, docs_dir, memory_dir, logs_dir, reports_dir, state_dir, lineage_manifests_dir):
+    for directory in (workspace_root, project_root, repo_dir, docs_dir, memory_dir, logs_dir, reports_dir, state_dir, review_dir, lineage_manifests_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
     for path, content in (
@@ -168,6 +169,7 @@ def build_test_project_context(
         logs_dir=logs_dir,
         reports_dir=reports_dir,
         state_dir=state_dir,
+        review_dir=review_dir,
         metadata_file=project_root / "metadata.json",
         project_config_file=project_root / "project_config.json",
         loop_state_file=state_dir / "LOOP_STATE.json",
@@ -204,6 +206,12 @@ def build_test_project_context(
         closeout_report_file=docs_dir / "CLOSEOUT_REPORT.md",
         closeout_report_docx_file=reports_dir / "CLOSEOUT_REPORT.docx",
         closeout_report_pptx_file=reports_dir / "CLOSEOUT_REPORT.pptx",
+        requirements_matrix_file=review_dir / "requirements_matrix.json",
+        global_test_plan_file=review_dir / "global_test_plan.json",
+        test_strength_report_file=review_dir / "test_strength_report.json",
+        reviewer_a_verdict_file=review_dir / "reviewer_a_verdict.json",
+        reviewer_b_decision_file=review_dir / "reviewer_b_decision.json",
+        replan_packet_file=review_dir / "replan_packet.json",
         ml_experiment_report_file=docs_dir / "ML_EXPERIMENT_REPORT.md",
         ml_experiment_results_svg_file=docs_dir / "ML_EXPERIMENT_RESULTS.svg",
         shared_contracts_file=docs_dir / "SHARED_CONTRACTS.md",
@@ -3649,9 +3657,17 @@ class UIBridgeTests(unittest.TestCase):
                 self.workspace.save_project(context)
                 return context, saved
 
+            def fake_prepare_pre_execution_cycle(self, project_dir, runtime, branch="main", origin_url=""):
+                context = self.local_project(project_dir)
+                assert context is not None
+                return context, self.load_execution_plan_state(context), False, "all_steps_completed"
+
             with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
                 "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
                 side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ), mock.patch(
+                "jakal_flow.orchestrator.Orchestrator.prepare_pre_execution_cycle",
+                new=fake_prepare_pre_execution_cycle,
             ), mock.patch(
                 "jakal_flow.orchestrator.Orchestrator.run_execution_closeout",
                 new=fake_run_execution_closeout,
@@ -3669,6 +3685,180 @@ class UIBridgeTests(unittest.TestCase):
             self.assertEqual(result["project"]["current_status"], "closed_out")
             self.assertTrue(any("closeout-started" in line for line in result["activity"]))
             self.assertTrue(any("closeout-finished" in line for line in result["activity"]))
+
+    def test_run_plan_consumes_reviewer_a_replan_without_running_steps(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Reviewer A Replan Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+            initial_plan = {
+                "plan_title": "Initial plan",
+                "project_prompt": "Implement the first cut",
+                "summary": "A Reviewer A replan should be resumed before execution.",
+                "workflow_mode": "standard",
+                "execution_mode": "parallel",
+                "default_test_command": "python -m unittest",
+                "steps": [
+                    {
+                        "step_id": "ST1",
+                        "title": "Initial step",
+                        "display_description": "Needs replanning",
+                        "codex_description": "Needs replanning",
+                        "success_criteria": "Not ready yet",
+                        "test_command": "python -m unittest",
+                        "reasoning_effort": "high",
+                        "status": "pending",
+                    }
+                ],
+            }
+
+            def fake_prepare_pre_execution_cycle(self, project_dir, runtime, branch="main", origin_url=""):
+                context = self.local_project(project_dir)
+                assert context is not None
+                plan_state = self.load_execution_plan_state(context)
+                if not getattr(fake_prepare_pre_execution_cycle, "_continued", False):
+                    fake_prepare_pre_execution_cycle._continued = True
+                    plan_state.plan_title = "Replanned plan"
+                    plan_state.project_prompt = "Implement the narrower follow-up."
+                    plan_state.summary = "Replanned before execution."
+                    plan_state.steps = [
+                        ExecutionStep(
+                            step_id="ST1",
+                            title="Follow-up step",
+                            success_criteria="Reviewer A has not approved this new cycle yet.",
+                            status="pending",
+                        )
+                    ]
+                    plan_state.replan_required = False
+                    plan_state.next_cycle_prompt = ""
+                    saved_state = self.save_execution_plan_state(context, plan_state)
+                    context.metadata.current_status = self._status_from_plan_state(saved_state)
+                    self.workspace.save_project(context)
+                    return context, saved_state, True, ""
+                return context, plan_state, False, "reviewer_a_blocked"
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ), mock.patch(
+                "jakal_flow.orchestrator.Orchestrator.prepare_pre_execution_cycle",
+                new=fake_prepare_pre_execution_cycle,
+            ), mock.patch(
+                "jakal_flow.orchestrator.Orchestrator.run_saved_execution_step",
+                side_effect=AssertionError("Execution should not start before the resumed replan is consumed."),
+            ):
+                result = run_command(
+                    "run-plan",
+                    workspace_root,
+                    {
+                        **payload,
+                        "plan": initial_plan,
+                    },
+                )
+
+            self.assertEqual(result["plan"]["plan_title"], "Replanned plan")
+            self.assertTrue(any("plan-generated" in line for line in result["activity"]))
+            self.assertFalse(any("step-started" in line for line in result["activity"]))
+
+    def test_run_closeout_consumes_reviewer_b_replan_without_rerunning_closeout(self) -> None:
+        with TemporaryTestDir() as temp_dir:
+            workspace_root = temp_dir / "workspace"
+            repo_dir = temp_dir / "repo"
+            repo_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "project_dir": str(repo_dir),
+                "display_name": "Reviewer B Replan Demo",
+                "branch": "main",
+                "origin_url": "",
+                "runtime": {
+                    "model": "gpt-5.4",
+                    "model_preset": "high",
+                    "effort": "high",
+                    "test_cmd": "python -m unittest",
+                    "max_blocks": 5,
+                },
+            }
+            completed_plan = {
+                "plan_title": "Completed cycle",
+                "project_prompt": "Ship the completed work",
+                "summary": "A Reviewer B replan should be resumed instead of rerunning closeout.",
+                "workflow_mode": "standard",
+                "execution_mode": "parallel",
+                "default_test_command": "python -m unittest",
+                "steps": [
+                    {
+                        "step_id": "ST1",
+                        "title": "Already finished",
+                        "display_description": "Completed previously",
+                        "codex_description": "Completed previously",
+                        "success_criteria": "Nothing left to do.",
+                        "test_command": "python -m unittest",
+                        "reasoning_effort": "high",
+                        "status": "completed",
+                    }
+                ],
+            }
+
+            def fake_prepare_post_closeout_cycle(self, project_dir, runtime, branch="main", origin_url=""):
+                context = self.local_project(project_dir)
+                assert context is not None
+                plan_state = self.load_execution_plan_state(context)
+                plan_state.plan_title = "Reviewer B follow-up"
+                plan_state.project_prompt = "Plan the narrower follow-up cycle."
+                plan_state.summary = "Replanned after Reviewer B requested another cycle."
+                plan_state.steps = [
+                    ExecutionStep(
+                        step_id="ST1",
+                        title="Follow-up task",
+                        success_criteria="Address Reviewer B gaps.",
+                        status="pending",
+                    )
+                ]
+                plan_state.closeout_status = "not_started"
+                plan_state.replan_required = False
+                plan_state.next_cycle_prompt = ""
+                saved_state = self.save_execution_plan_state(context, plan_state)
+                context.metadata.current_status = self._status_from_plan_state(saved_state)
+                self.workspace.save_project(context)
+                return context, saved_state, True, ""
+
+            with mock.patch("jakal_flow.orchestrator.ensure_virtualenv", return_value=repo_dir / ".venv"), mock.patch(
+                "jakal_flow.ui_bridge.fetch_codex_backend_snapshot",
+                side_effect=lambda *args, **kwargs: fake_codex_snapshot(),
+            ), mock.patch(
+                "jakal_flow.orchestrator.Orchestrator.prepare_post_closeout_cycle",
+                new=fake_prepare_post_closeout_cycle,
+            ), mock.patch(
+                "jakal_flow.orchestrator.Orchestrator.run_execution_closeout",
+                side_effect=AssertionError("Closeout should not rerun when a persisted Reviewer B replan is present."),
+            ):
+                result = run_command(
+                    "run-closeout",
+                    workspace_root,
+                    {
+                        **payload,
+                        "plan": completed_plan,
+                    },
+                )
+
+            self.assertEqual(result["plan"]["plan_title"], "Reviewer B follow-up")
+            self.assertTrue(any("plan-generated" in line for line in result["activity"]))
+            self.assertFalse(any("closeout-started" in line for line in result["activity"]))
 
     def test_run_closeout_reports_generated_word_report_path_in_activity(self) -> None:
         with TemporaryTestDir() as temp_dir:
